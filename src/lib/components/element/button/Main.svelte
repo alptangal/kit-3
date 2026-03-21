@@ -56,7 +56,12 @@
 							};
 						}
 						if (props.width) {
-							if (!props.parentRef && configs.root.ref?.parentElement) {
+							if (
+								!props.parentRef &&
+								configs.root.ref &&
+								configs.root.ref instanceof HTMLElement &&
+								configs.root.ref.parentElement instanceof HTMLElement
+							) {
 								const propWidth = props.width == 'full' ? 100 : parseFloat(props.width);
 								const parentWidth = configs.root.ref.parentElement.clientWidth;
 								configs.root.ref.style.width = `${(parentWidth * propWidth) / 100}px`;

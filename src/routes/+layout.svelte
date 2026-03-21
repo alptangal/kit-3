@@ -5,7 +5,7 @@
 	import '../app.css';
 	import { Container, Footer, Header } from '$components/layout';
 	import { browser } from '$app/environment';
-	import { Button } from '$components/element/index.js';
+	import { Button, Tooltip } from '$components/element/index.js';
 	import { iconify } from '$assets/icons/iconify.js';
 
 	let { data, children } = $props();
@@ -57,19 +57,21 @@
 	{#snippet snippet()}
 		<Header>
 			{#snippet left()}
-				<Button
-					label="Button"
-					loading
-					disabled
-					variant="shadow"
-					color="secondary"
-					leading={iconify['mdi:loading']}
-					trailing={iconify['mdi:loading']}
-					loadingAnimation={{
-						style: 'style-3',
-						duration: '100s'
-					}}
-				></Button>
+				<Tooltip portal="body" offset={10} position="top">
+					<Button
+						label="Button"
+						loading
+						disabled
+						variant="shadow"
+						color="secondary"
+						leading={iconify['mdi:loading']}
+						trailing={iconify['mdi:loading']}
+						loadingAnimation={{
+							style: 'style-3',
+							duration: '100s'
+						}}
+					></Button>
+				</Tooltip>
 			{/snippet}
 		</Header>
 		{@render children()}

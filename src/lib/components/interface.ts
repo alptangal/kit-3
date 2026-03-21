@@ -643,6 +643,7 @@ export type Size =
 	| '8xl'
 	| '9xl';
 export interface BasicProps {
+	children?: SvelteSlots;
 	snippet?: SvelteSlots;
 	touchActionDisabled?: boolean;
 	events?: { event: EventListener[]; target?: HTMLElement | Window | Document };
