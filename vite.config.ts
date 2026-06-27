@@ -5,18 +5,28 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import UnoCSS from '@unocss/svelte-scoped/vite';
 import UnoCSSVite from 'unocss/vite';
 import extractorSvelte from '@unocss/extractor-svelte';
+import path from 'node:path';
+import fs from 'fs';
 
 export default defineConfig({
 	plugins: [
 		sveltekit(),
 		//tailwindcss()
 		UnoCSS({
+			onlyGlobal: true,
 			injectReset: '@unocss/reset/tailwind.css'
 		}),
 		UnoCSSVite({
 			extractors: [extractorSvelte()]
 		})
 	],
+	css: {
+		preprocessorOptions: {
+			scss: {
+				loadPaths: [path.resolve('src/lib/assets')]
+			}
+		}
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
@@ -44,5 +54,27 @@ export default defineConfig({
 				}
 			}
 		]
+	},
+	resolve: {
+		alias: {
+			'@': path.resolve('./src'),
+			'@components': path.resolve('./src/lib/components'),
+			'@lib': path.resolve('./src/lib'),
+			$lib: path.resolve('./src/lib'),
+			$styles: path.resolve('./src/lib/assets/styles'),
+			$modules: path.resolve('./src/lib/modules'),
+			$plugins: path.resolve('./src/lib/plugins'),
+			$assets: path.resolve('./src/lib/assets')
+		}
+	},
+	build: {
+		// Safari 15 = WebKit 15 → target safari15
+		target: ['es2020', 'safari15']
+	},
+	server: {
+		https: {
+			key: fs.readFileSync('localhost-key.pem'),
+			cert: fs.readFileSync('localhost.pem')
+		}
 	}
 });

@@ -50,4 +50,5 @@ export interface TooltipProps extends BasicProps {
 	radius?: 'full' | 'none' | Size;
 	size?: Size;
 	parentRef?: HTMLElement;
+	withArrow?: boolean;
 }

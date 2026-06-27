@@ -1,4 +1,14 @@
-html[theme='dark'] {
-	background: black;
-	color: white;
+html,
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%; /* hoặc 100dvh */
+	min-height: 100dvh; /* Khuyến nghị dùng dvh trên iOS mới */
+	background-color: hsl(var(--background)) !important;
+	background-size: cover;
+	isolation: isolate;
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: env(safe-area-inset-bottom);
+	padding-left: env(safe-area-inset-left);
+	padding-right: env(safe-area-inset-right);
 }

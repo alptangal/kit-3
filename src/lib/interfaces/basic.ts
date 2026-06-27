@@ -15,8 +15,27 @@ export type Size =
 	| '8xl'
 	| '9xl';
 export type Theme = 'dark' | 'light' | 'system';
+export type Color = 'default' | 'accent' | 'success' | 'warning' | 'danger';
+export type Variant =
+	| 'outline'
+	| 'solid'
+	| 'outline'
+	| 'soft'
+	| 'subtle'
+	| 'ghost'
+	| 'link'
+	| 'shadow'
+	| 'flat'
+	| 'faded'
+	| 'light';
 export interface Browser {
-	type?: 'mobile' | 'desktop';
+	type?:
+		| 'mobile/android'
+		| 'mobile/ios'
+		| 'desktop/window'
+		| 'desktop/macos'
+		| 'desktop/linux'
+		| 'desktop/chromeos';
 	userAgent?: string;
 	dimensions?: {
 		/**Pixel units */
@@ -28,4 +47,9 @@ export interface Browser {
 	timezone?: Timezone;
 	region?: string;
 	OS?: string;
+	safariBrowser?: {
+		addressBarMinimized?: boolean;
+		visualKeyboardDisplay?: boolean;
+	};
 }
+export type AppTheme = 'system' | 'dark' | 'light';

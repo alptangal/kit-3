@@ -12,7 +12,7 @@
 		root: {
 			ref: undefined as undefined | HTMLElement,
 			events: {
-				event: [
+				events: [
 					{
 						load: {
 							handler() {
@@ -59,7 +59,7 @@
 
 <svelte:element
 	this={props.as ?? 'div'}
-	{@attach handleEvents([configs.root.events])}
+	{@attach handleEvents([configs.root.events, props.events])}
 	bind:this={configs.root.ref}
 	class={props.overwriteDefaultStyles
 		? props.class

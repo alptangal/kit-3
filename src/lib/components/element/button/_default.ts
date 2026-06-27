@@ -1,5 +1,5 @@
-import type { ButtonProps } from './_interface';
+import type { Button } from './_interface';
 
-export const defaultButton: ButtonProps = {
+export const defaultButton: Button = {
 	class: 'flex gap-1 justify-center items-center'
 };

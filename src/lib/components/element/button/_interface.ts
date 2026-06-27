@@ -1,27 +1,40 @@
 import type { BasicProps, Color, Size } from '$components/interface';
+import type { Variant } from '$interfaces/basic';
 
-export interface ButtonProps extends BasicProps {
+export interface Button extends BasicProps {
 	label?:
 		| string
 		| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
 				text?: string;
 		  });
-	leading?:
+	description?:
 		| string
 		| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
 				text?: string;
-				icon?: string;
 		  });
-	trailing?:
+	// leading?:
+	// 	| string
+	// 	| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
+	// 			text?: string;
+	// 			icon?: string;
+	// 	  });
+	// trailing?:
+	// 	| string
+	// 	| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
+	// 			text?: string;
+	// 			icon?: string;
+	// 	  });
+	directive?: 'ltr' | 'rtl';
+	icon?:
 		| string
 		| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
-				text?: string;
-				icon?: string;
+				string?: string;
 		  });
-	variant?: 'ghost' | 'solid' | 'faded' | 'bordered' | 'light' | 'flat' | 'shadow';
+	variant?: Variant;
 	color?: Color;
 	loading?: boolean;
 	loadingIcon?: string;
+	loadingLoop?: 'infinite' | `${number}` | number;
 	loadingAnimation?:
 		| 'style-1'
 		| 'style-2'
@@ -39,4 +52,6 @@ export interface ButtonProps extends BasicProps {
 	parentRef?: HTMLElement;
 	rippleAnimationDisabled?: boolean;
 	to?: string;
+	'aspect-ratio'?: 'square' | 'auto';
+	minWidthDisabled?: boolean;
 }

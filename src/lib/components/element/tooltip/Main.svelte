@@ -1,31 +1,175 @@
 <script lang="ts">
 	import type { BasicProps } from '$components/interface';
 	import { handleEvents } from '$modules/_attachments';
-	import { fade, fly } from 'svelte/transition';
+	import { fly } from 'svelte/transition';
 	import { defaultTooltip } from './_default';
 	import type { TooltipProps } from './_interface';
 	import { profile } from '$store/basic.svelte';
-	import { pick } from 'es-toolkit';
-	import { pickBy } from 'es-toolkit/compat';
+	import './_styles.scss';
 
-	let { children, portal = 'body', ...props }: TooltipProps = $props();
+	import { keys, mapValues, min, pickBy, values } from 'es-toolkit/compat';
+
+	let { children, ...props }: TooltipProps = $props();
 	let configs = $state({
 		root: {
 			ref: undefined as undefined | HTMLElement,
 			status: {
-				hover: false
+				initialized: false,
+				hover: false,
+				possition: undefined as TooltipProps['position'],
+				clientX: undefined as undefined | number,
+				clientY: undefined as undefined | number,
+				rectTop: undefined as undefined | number,
+				rectBottom: undefined as undefined | number,
+				rectLeft: undefined as undefined | number,
+				rectRight: undefined as undefined | number
 			},
 			events: {
-				event: [
+				events: [
 					{
-						mouseover: {
-							handler(e) {
-								configs.root.status.hover = true;
+						load: {
+							handler() {
+								if (!configs.root.status.initialized) {
+									configs.root.status.hover = true;
+								}
+							}
+						},
+						mousemove: {
+							handler(e: MouseEvent) {
+								if (configs.root.ref && configs.root.status.initialized) {
+									const rootRect = configs.root.ref.getBoundingClientRect();
+									configs.root.status.rectTop = rootRect.top;
+									configs.root.status.rectBottom = rootRect.bottom;
+									configs.root.status.rectLeft = rootRect.left;
+									configs.root.status.rectRight = rootRect.right;
+									configs.root.status.hover = true;
+									configs.root.status.clientX = (e as MouseEvent).clientX;
+									configs.root.status.clientY = (e as MouseEvent).clientY;
+
+									const readyArea = {
+										get top() {
+											return (
+												configs.tooltip.ref && rootRect.top >= configs.tooltip.ref.clientHeight
+											);
+										},
+										get bottom() {
+											return (
+												configs.tooltip.ref &&
+												window.innerHeight - rootRect.bottom >= configs.tooltip.ref.clientHeight
+											);
+										},
+										get left() {
+											return (
+												configs.tooltip.ref && rootRect.left >= configs.tooltip.ref.clientWidth
+											);
+										},
+										get right() {
+											return (
+												configs.tooltip.ref &&
+												window.innerWidth - rootRect.right >= configs.tooltip.ref.clientWidth
+											);
+										}
+									};
+									if (props.position) {
+										console.log(pickBy(readyArea, (k) => k));
+									} else if (keys(pickBy(readyArea, (k) => k)).length) {
+										const finalPosition = pickBy(
+											mapValues(
+												pickBy(readyArea, (k) => k),
+												(val, k) => {
+													switch (k) {
+														case 'top':
+															return e.clientY - rootRect.top;
+														case 'bottom':
+															return rootRect.bottom - e.clientY;
+														case 'left':
+															return e.clientX - rootRect.left;
+														case 'right':
+															return rootRect.right - e.clientX;
+													}
+												}
+											),
+											(val, key, obj) => {
+												return val == min(values(obj));
+											}
+										);
+										configs.tooltip.status.previousPosition =
+											configs.tooltip.status.currentPostition;
+										configs.tooltip.status.currentPostition = keys(
+											finalPosition
+										)[0] as keyof TooltipProps['position'];
+
+										if (configs.tooltip.ref) {
+											configs.tooltip.ref.style.transition = `all ease-in-out ${profile.transition.duration}ms`;
+											configs.tooltip.ref.style.removeProperty('left');
+											configs.tooltip.ref.style.removeProperty('top');
+
+											configs.tooltip.ref.style.removeProperty('right');
+											configs.tooltip.ref.style.removeProperty('transform');
+										}
+										if (
+											['top', 'bottom'].includes(configs.tooltip.status.currentPostition) &&
+											configs.tooltip.ref
+										) {
+											if (configs.tooltip.ref.clientWidth <= configs.root.ref.clientWidth) {
+												if (e.clientX - rootRect.left < rootRect.right - e.clientX) {
+													if (e.clientX - rootRect.left >= configs.tooltip.ref.clientWidth / 2) {
+														configs.tooltip.ref.style.left = `${e.clientX}px`;
+														configs.tooltip.ref.style.transform = `translateX(-50%)`;
+													} else {
+														configs.tooltip.ref.style.left = `${rootRect.left}px`;
+													}
+												} else {
+													if (rootRect.right - e.clientX >= configs.tooltip.ref.clientWidth / 2) {
+														configs.tooltip.ref.style.left = `${rootRect.right - e.clientX}px`;
+														configs.tooltip.ref.style.transform = `translateX(-50%)`;
+													} else {
+														configs.tooltip.ref.style.left = `${rootRect.right - configs.tooltip.ref.clientWidth}px`;
+													}
+												}
+											} else {
+												configs.tooltip.ref.style.left = `${rootRect.left}px`;
+											}
+										} else if (
+											['left', 'right'].includes(configs.tooltip.status.currentPostition) &&
+											configs.tooltip.ref
+										) {
+											console.log(22223335455);
+											configs.tooltip.ref.style.top = `${e.clientY}px`;
+											configs.tooltip.ref.style.transform = `translateY(-50%)`;
+											if (configs.tooltip.ref.clientWidth <= configs.root.ref.clientWidth) {
+												if (e.clientX - rootRect.left < rootRect.right - e.clientX) {
+													if (e.clientX - rootRect.left >= configs.tooltip.ref.clientWidth / 2) {
+														configs.tooltip.ref.style.left = `${e.clientX}px`;
+														configs.tooltip.ref.style.transform = `translateX(-50%)`;
+													} else {
+														configs.tooltip.ref.style.left = `${rootRect.left}px`;
+													}
+												} else {
+													if (rootRect.right - e.clientX >= configs.tooltip.ref.clientWidth / 2) {
+														configs.tooltip.ref.style.left = `${rootRect.right - e.clientX}px`;
+														configs.tooltip.ref.style.transform = `translateX(-50%)`;
+													} else {
+														configs.tooltip.ref.style.left = `${rootRect.right - configs.tooltip.ref.clientWidth}px`;
+													}
+												}
+											} else {
+												configs.tooltip.ref.style.left = `${rootRect.left}px`;
+											}
+										}
+									}
+								}
+							},
+							options: {
+								delay: 300
 							}
 						},
 						mouseout: {
-							handler(e) {
-								//configs.root.status.hover = false;
+							handler() {
+								configs.root.status.hover = false;
+							},
+							options: {
+								delay: 300
 							}
 						}
 					}
@@ -36,188 +180,43 @@
 			ref: undefined as undefined | HTMLElement,
 			status: {
 				display: false,
-				currentPostition: undefined as undefined | 'top' | 'bottom' | 'left' | 'right'
+				currentPostition: undefined as TooltipProps['position'],
+				offset: 0,
+				clientWidth: undefined as undefined | number,
+				clientHeight: undefined as undefined | number,
+				previousPosition: undefined as TooltipProps['position']
 			},
 			events: {
-				event: [
+				events: [
 					{
 						load: {
 							handler(e, data) {
-								if (data && data.node instanceof HTMLElement && configs.root.ref) {
-									data.node.style.position = 'fixed';
-									if (portal instanceof HTMLElement) {
-										portal.appendChild(data.node);
-									} else if (typeof portal == 'string') {
-										const ele = document.querySelector(portal) as HTMLElement | null;
-										if (ele) ele.appendChild(data.node);
-									}
-									const rect = data.node.getBoundingClientRect();
-									const rootRect = configs.root.ref.getBoundingClientRect();
-									const areaReady = {
-										get top() {
-											return {
-												status: rootRect.top >= rect.height,
-												maxWidth: window.innerWidth,
-												maxHeight: rootRect.top
-											};
-										},
-										get bottom() {
-											return {
-												status: window.innerHeight - rootRect.bottom >= rect.height,
-												maxWidth: window.innerWidth,
-												maxHeight: window.innerHeight - rootRect.bottom
-											};
-										},
-										get left() {
-											return {
-												status: rootRect.left >= rect.width,
-												maxWidth: rootRect.left,
-												maxHeight: window.innerHeight - rootRect.top
-											};
-										},
-										get right() {
-											return {
-												status: window.innerWidth - rootRect.right >= rect.width,
-												maxWidth: window.innerWidth - rootRect.right,
-												maxHeight: window.innerHeight - rootRect.top
-											};
-										}
-									};
-									const shouldPlace = pickBy(areaReady, (val) => {
-										return val.status;
-									});
-									if (!props.position) {
-										if (Object.keys(shouldPlace).length) {
-											const pos = Object.keys(shouldPlace)[0];
-											switch (pos) {
-												case 'top':
-													data.node.style.top = `${rootRect.top - rect.height}px`;
-													data.node.style.left = `${rootRect.left}px`;
-													break;
-												case 'bottom':
-													data.node.style.top = `${rootRect.bottom}px`;
-													data.node.style.left = `${rootRect.left}px`;
-													break;
-												case 'left':
-													data.node.style.top = `${rootRect.top}px`;
-													data.node.style.left = `${rootRect.left - rect.width}px`;
-													break;
-												case 'right':
-													data.node.style.top = `${rootRect.top}px`;
-													data.node.style.left = `${rootRect.right}px`;
-													break;
-											}
-											data.node.style.maxWidth = `${areaReady[pos as keyof typeof areaReady].maxWidth}px`;
-											data.node.style.maxHeight = `${areaReady[pos as keyof typeof areaReady].maxHeight}px`;
-										}
-									} else {
-										if (Object.keys(shouldPlace).length) {
-											const pos = Object.keys(shouldPlace).filter(
-												(k) => props.position && props.position.includes(k)
-											);
-											if (pos.length) {
-												const posKey = pos[0] as keyof typeof areaReady;
-												configs.tooltip.status.currentPostition = posKey;
-												if (['left-start', 'right-start'].includes(props.position)) {
-													data.node.style.top = `${rootRect.top}px`;
-												} else if (['left', 'right'].includes(props.position)) {
-													data.node.style.top = `${rootRect.top + rootRect.height / 2}px`;
-												} else if (['left-end', 'right-end'].includes(props.position)) {
-													data.node.style.top = `${rootRect.bottom}px`;
-												}
-												if (props.position.includes('left')) {
-													data.node.style.left = `${rootRect.left - rect.width}px`;
-												} else if (props.position.includes('right')) {
-													data.node.style.left = `${rootRect.right}px`;
-												}
-
-												if (['top', 'bottom'].includes(props.position)) {
-													data.node.style.left = `${rootRect.left + rootRect.width / 2 - rect.width / 2}px`;
-												} else if (['top-start', 'bottom-start'].includes(props.position)) {
-													data.node.style.left = `${rootRect.left}px`;
-												} else if (['top-end', 'bottom-end'].includes(props.position)) {
-													data.node.style.left = `${rootRect.right - rect.width}px`;
-												}
-												if (props.position.includes('top')) {
-													data.node.style.top = `${rootRect.top - rect.height}px`;
-												} else if (props.position.includes('bottom')) {
-													data.node.style.top = `${rootRect.bottom}px`;
-												}
-
-												data.node.style.maxWidth = `${areaReady[posKey].maxWidth}px`;
-												data.node.style.maxHeight = `${areaReady[posKey].maxHeight}px`;
-											} else {
-												configs.tooltip.status.currentPostition = (
-													props.position.includes('-')
-														? props.position.split('-')[0]
-														: props.position
-												) as 'top' | 'bottom' | 'left' | 'right';
-												if (['top', 'bottom'].includes(props.position)) {
-													data.node.style.left = `${rootRect.left + rootRect.width / 2 - rect.width / 2}px`;
-												} else if (['top-start', 'bottom-start'].includes(props.position)) {
-													data.node.style.left = `${rootRect.left}px`;
-												} else if (['top-end', 'bottom-end'].includes(props.position)) {
-													data.node.style.left = `${rootRect.right - rect.width}px`;
-												}
-												if (props.position.includes('top')) {
-													data.node.style.top = `${rootRect.top}px`;
-												} else if (props.position.includes('bottom')) {
-													data.node.style.top = `${rootRect.bottom - rect.height}px`;
-												}
-
-												if (['left-start', 'right-start'].includes(props.position)) {
-													data.node.style.top = `${rootRect.top}px`;
-												} else if (['left', 'right'].includes(props.position)) {
-													data.node.style.top = `${rootRect.top + rootRect.height / 2 - rect.height / 2}px`;
-												} else if (['left-end', 'right-end'].includes(props.position)) {
-													data.node.style.top = `${rootRect.bottom - rect.height}px`;
-												}
-												if (props.position.includes('left')) {
-													data.node.style.left = `${rootRect.left}px`;
-												} else if (props.position.includes('right')) {
-													data.node.style.left = `${rootRect.right - rect.width}px`;
-												}
-
-												data.node.style.maxWidth = `${rootRect.width}px`;
-												data.node.style.maxHeight = `${rootRect.height}px`;
-												console.log(3333, props.offset);
-												if (configs.tooltip.status.currentPostition && props.offset) {
-													switch (configs.tooltip.status.currentPostition) {
-														case 'top':
-															data.node.style.top = `calc(${window.getComputedStyle(data.node).getPropertyValue('top')}- ${props.offset}px)`;
-															break;
-														case 'bottom':
-															data.node.style.top = `${rootRect.bottom + props.offset}px`;
-															break;
-														case 'left':
-															data.node.style.left = `${rootRect.left - props.offset}px`;
-															break;
-														case 'right':
-															data.node.style.left = `${rootRect.right + props.offset}px`;
-															break;
-													}
-												}
-											}
-										}
-									}
-
-									return () => {
-										if (portal && data.node instanceof HTMLElement) {
-											if (portal instanceof HTMLElement && portal.contains(data.node)) {
-												portal.removeChild(data.node);
-											} else if (typeof portal == 'string') {
-												const ele = document.querySelector(portal) as HTMLElement | null;
-												if (ele && data.node instanceof HTMLElement && ele.contains(data.node))
-													ele.removeChild(data.node);
-											}
-										}
-									};
+								if (
+									!configs.root.status.initialized &&
+									configs.tooltip.ref &&
+									data?.node instanceof HTMLElement
+								) {
+									data.node.style.opacity = '0';
+									configs.tooltip.status.clientWidth = configs.tooltip.ref.clientWidth;
+									configs.tooltip.status.clientHeight = configs.tooltip.ref.clientHeight;
+									configs.root.status.initialized = true;
+									configs.root.status.hover = false;
 								}
 							}
 						}
 					}
 				]
-			} as BasicProps['events']
+			} as BasicProps['events'],
+			arrow: {
+				ref: undefined as undefined | HTMLElement,
+				status: {
+					loaded: false
+				},
+				size: {
+					width: 0,
+					height: 0
+				}
+			}
 		}
 	});
 </script>
@@ -225,6 +224,10 @@
 <svelte:element
 	this={props.as ?? 'div'}
 	bind:this={configs.root.ref}
+	style:--rect-top={`${configs.root.status.rectTop}px`}
+	style:--rect-bottom={`${configs.root.status.rectBottom}px`}
+	style:--rect-left={`${configs.root.status.rectLeft}px`}
+	style:--rect-right={`${configs.root.status.rectRight}px`}
 	{@attach handleEvents([configs.root.events])}
 	class={props.overwriteDefaultStyles
 		? props.class
@@ -243,12 +246,19 @@
 >
 	{#if configs.root.status.hover}
 		<div
-			class=""
+			class="bg-red-400 flex gap-2 px-2 w-fit"
+			class:flex-col={configs.root.status.possition &&
+				['bottom', 'top'].includes(configs.root.status.possition)}
 			bind:this={configs.tooltip.ref}
 			transition:fly={profile.transition.templates.flyY}
+			data-position={configs.tooltip.status.currentPostition}
+			data-with-arrow={props.withArrow}
 			{@attach handleEvents([configs.tooltip.events])}
 		>
-			11
+			{#if props.withArrow}
+				<div class="tooltip-arrow w-0 h-0 my-auto" bind:this={configs.tooltip.arrow.ref}></div>
+			{/if}
+			<div>{props.label}</div>
 		</div>
 	{/if}
 	{#if typeof children == 'function'}

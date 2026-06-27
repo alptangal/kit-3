@@ -1,0 +1,1 @@
+import '$lib/plugins/polyfill';

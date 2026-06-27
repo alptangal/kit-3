@@ -1,3 +1,5 @@
+import type { Snippet } from 'svelte';
+
 export type elementTagName =
 	| 'div'
 	| 'section'
@@ -575,6 +577,7 @@ export interface EventListener {
 	touchcancel?: EventDefault;
 	touchend?: EventDefault;
 	destroy?: EventDefault;
+	scroll?: EventDefault;
 }
 export type FieldSupported =
 	| 'text'
@@ -592,7 +595,11 @@ export type Positions =
 	| 'bottom-right'
 	| 'bottom-center'
 	| 'left-center'
+	| 'left-top'
+	| 'left-bottom'
 	| 'right-center'
+	| 'right-top'
+	| 'right-bottom'
 	| 'center-center';
 export type Directions = 'top' | 'bottom' | 'left' | 'right';
 export type ThemeTypes = 'system' | 'light' | 'dark' | 'auto';
@@ -616,22 +623,12 @@ export interface StatusEvents {
 	blur?: boolean;
 	dblclick?: boolean;
 }
-export type Variant =
-	| 'solid'
-	| 'outline'
-	| 'soft'
-	| 'subtle'
-	| 'ghost'
-	| 'link'
-	| 'shadow'
-	| 'flat'
-	| 'faded'
-	| 'light';
+
 export type SizeScreen = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null;
 export type Size =
 	| 'xs'
 	| 'sm'
-	| 'base'
+	| 'md'
 	| 'lg'
 	| 'xl'
 	| '2xl'
@@ -641,12 +638,13 @@ export type Size =
 	| '6xl'
 	| '7xl'
 	| '8xl'
-	| '9xl';
+	| '9xl'
+	| 'full-width';
 export interface BasicProps {
-	children?: SvelteSlots;
-	snippet?: SvelteSlots;
+	children?: Snippet;
+	snippet?: Snippet;
 	touchActionDisabled?: boolean;
-	events?: { event: EventListener[]; target?: HTMLElement | Window | Document };
+	events?: { events: EventListener[]; target?: HTMLElement | Window | Document };
 	as?: elementTagName;
 	class?: string[] | string;
 	overwriteDefaultStyles?: boolean;

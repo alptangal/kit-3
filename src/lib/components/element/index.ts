@@ -1,2 +1,5 @@
+import * as Tooltip from './tooltip';
+
 export { default as Button } from './button/Main.svelte';
-export { default as Tooltip } from './tooltip/Main.svelte';
+export { Tooltip };
+export { default as Input } from './input/Input.svelte';

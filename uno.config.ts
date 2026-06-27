@@ -3,7 +3,7 @@ import { defineConfig, transformerDirectives, presetMini, presetWind4, presetWin
 import extractorSvelte from '@unocss/extractor-svelte';
 
 export default defineConfig({
-	transformers: [transformerDirectives()],
+	cssFileTransformers: [transformerDirectives()],
 	extractors: [extractorSvelte()],
 	presets: [presetWind3()],
 	content: {
@@ -17,5 +17,14 @@ export default defineConfig({
 			// exclude files
 			// exclude: []
 		}
+	},
+	theme: {
+		colors: {
+			// Ví dụ override nếu bạn dùng màu custom
+			primary: '#3b82f6' // thay vì oklch(...)
+		}
+	},
+	extendTheme(theme) {
+		return theme;
 	}
 });

@@ -1,4 +1,4 @@
-import type { HeaderProps } from './interface';
+import type { HeaderProps } from './_interface';
 
 export const defaultHeader: HeaderProps = {
 	class: ''
