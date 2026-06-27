@@ -1,4 +1,4 @@
-import * as Tooltip from './tooltip/index';
+import * as Tooltip from './tooltip/index.ts';
 
 export { default as Button } from './button/Main.svelte';
 export { Tooltip };
