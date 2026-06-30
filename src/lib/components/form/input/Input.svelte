@@ -480,12 +480,17 @@
 			event: {
 				touchstart: {
 					async handler() {
-						actionFocus();
-						// if (props.type == 'text' || profile.browser.type?.includes('desktop')) {
-						// 	configs.status.focus = true;
-						// 	configs.input.ref?.focus();
-						// }
-						const data = await navigator.clipboard.readText();
+						let data;
+						try {
+							data = await navigator.clipboard.readText();
+
+							// if (props.type == 'text' || profile.browser.type?.includes('desktop')) {
+							// 	configs.status.focus = true;
+							// 	configs.input.ref?.focus();
+							// }
+						} catch (e) {
+							data = await pasteFromClipboard();
+						}
 						if (data) {
 							value = data;
 							if (props.type == 'password') configs.passwordMask = value;
@@ -508,6 +513,7 @@
 								}
 							}
 						}
+						actionFocus();
 					},
 					options: {
 						get delay() {

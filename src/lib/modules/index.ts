@@ -6,14 +6,18 @@ export async function copyToClipboard(content: string) {
 		await navigator.clipboard.writeText(content);
 		return true;
 	} catch {
-		const el = document.createElement('textarea');
-		el.value = content;
-		el.style.position = 'fixed';
-		el.style.opacity = '0';
-		document.body.appendChild(el);
-		el.select();
-		document.execCommand('copy');
-		document.body.removeChild(el);
+		if (profile.browser.type?.includes('mobile')) {
+			localStorage.setItem('clipboard', content);
+		} else {
+			const el = document.createElement('textarea');
+			el.value = content;
+			el.style.position = 'fixed';
+			el.style.opacity = '0';
+			document.body.appendChild(el);
+			el.select();
+			document.execCommand('copy');
+			document.body.removeChild(el);
+		}
 		return true;
 	}
 }
@@ -21,6 +25,9 @@ export async function pasteFromClipboard() {
 	try {
 		return await navigator.clipboard.readText();
 	} catch {
+		if (profile.browser.type?.includes('mobile')) {
+			return localStorage.getItem('clipboard');
+		}
 		return null;
 	}
 }

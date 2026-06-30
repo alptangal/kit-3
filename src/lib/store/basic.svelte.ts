@@ -200,7 +200,8 @@ export const profile = $state({
 	clipboard: {
 		status: {
 			get hasData() {
-				return profile.clipboard.value;
+				if (browser) return profile.clipboard.value ?? localStorage.getItem('clipboard');
+				return false;
 			}
 		},
 		value: undefined as undefined | string | null
