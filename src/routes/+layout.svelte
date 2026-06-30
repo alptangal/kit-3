@@ -8,9 +8,10 @@
 	import { Button, Tooltip } from '$components/element/index.js';
 	import { iconify } from '$assets/icons/iconify.js';
 	import Icon from '@iconify/svelte';
-	import Input from '$components/element/input/Input.svelte';
+	import Input from '$components/form/input/Input.svelte';
 	import { detectBrowserType, updateResizeWindow, watchClipboard } from '$modules';
 	import Numberic from '$components/keyboard/numberic/Numberic.svelte';
+	import { Description, Form, Label, TextField } from '$components/form/index.js';
 
 	let { data, children } = $props();
 
@@ -123,18 +124,40 @@
 					loadingAnimation={{ style: 'style-1', duration: 3000 }}
 					loading
 				></Button>
-				<Input
-					placeholder="Please enter your keys"
-					clearButtonEnabled
-					type="number"
-					loading
-					loadingAnimation={{ style: 'style-4', duration: '1s' }}
-					focusAtStart
-				/>
+
+				<Form method="get" action="/">
+					<TextField required isInvalid={false}>
+						<Label>Username</Label>
+						<Input
+							class="border border-solid border-gray-500"
+							overwriteDefaultStyles
+							placeholder="Please enter your keys"
+							clearButtonEnabled
+							type="number"
+							loading
+							loadingAnimation={{ style: 'style-4', duration: '1s' }}
+						/>
+						<Description>Here is username field very large</Description>
+					</TextField>
+					<TextField required>
+						<Label>Password</Label>
+						<Input
+							class="border border-solid border-gray-500"
+							overwriteDefaultStyles
+							placeholder="Please enter your keys"
+							clearButtonEnabled
+							type="password"
+							loading
+							loadingAnimation={{ style: 'style-4', duration: '1s' }}
+							focusAtStart
+							showPassword
+							showPasswordButtonEnabled
+						/>
+						<Description>Here is username field very large</Description>
+					</TextField>
+				</Form>
 			{/snippet}
 		</Header>
-		<div class="bg-red-500 h-96 w-full"></div>
-		<div class="bg-red-500 h-96 w-full"></div>
 		{@render children()}
 		<Footer></Footer>
 	{/snippet}
@@ -147,7 +170,7 @@
 		output={(val) => {
 			if (profile.visualKeyboard.onKeyup) profile.visualKeyboard.onKeyup(val);
 		}}
-		disableKeys={['AC', 'Del', '=']}
+		disableKeys={[]}
 	/>
 {/if}
 

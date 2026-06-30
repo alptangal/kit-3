@@ -6,6 +6,7 @@
 	import type { KeyboardNumberic } from './_interface';
 	import { iconify } from '$assets/icons/iconify';
 	import type { SvelteComponent } from 'svelte';
+	import { handleEvents } from '$modules/_attachments';
 
 	let { ...props }: KeyboardNumberic = $props();
 	let configs = $state({
@@ -15,6 +16,7 @@
 				handler(e) {
 					if (configs.ref) {
 						document.body.appendChild(configs.ref);
+
 						return () => {
 							configs.ref?.remove();
 						};
@@ -41,6 +43,7 @@
 	style:height={`${profile.visualKeyboard.height ?? 0}px`}
 	style:left="50%"
 	style:transform="translateX(-50%)"
+	{@attach handleEvents([{ events: [configs.event] }])}
 >
 	{#if props.otherFieldsButtonEnabled || props.doneButtonEnabled}
 		<div class="flex justify-between items-end backdrop-blur-md pb-1">

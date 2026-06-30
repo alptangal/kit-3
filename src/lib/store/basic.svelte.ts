@@ -123,6 +123,12 @@ export const profile = $state({
 	set theme(val: AppTheme) {
 		this._theme = val;
 		localStorage.setItem('theme', val);
+		profile.preferColor =
+			val != 'system'
+				? val
+				: window.matchMedia('(prefers-color-scheme: dark)').matches
+					? 'dark'
+					: 'light';
 		document.documentElement.setAttribute('data-theme', val);
 		const startAt = performance.now();
 		const duration = profile.delay ?? 300;
@@ -147,6 +153,7 @@ export const profile = $state({
 			});
 		}
 	},
+	preferColor: 'dark' as AppTheme,
 	cursor: {
 		x: 0,
 		y: 0

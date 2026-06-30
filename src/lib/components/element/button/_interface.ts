@@ -54,4 +54,5 @@ export interface Button extends BasicProps {
 	to?: string;
 	'aspect-ratio'?: 'square' | 'auto';
 	minWidthDisabled?: boolean;
+	alt?: string;
 }

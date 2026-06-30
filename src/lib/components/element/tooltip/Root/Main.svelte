@@ -194,7 +194,7 @@
 
 <style lang="scss">
 	.tooltip-root {
-		@apply fixed flex;
+		@apply fixed flex z-[9999];
 		&[data-placement='top'] {
 			@apply flex-col-reverse;
 		}

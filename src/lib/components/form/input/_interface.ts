@@ -7,7 +7,7 @@ export interface InputProps extends BasicProps {
 	size?: Size | 'full-width';
 	disabled?: boolean;
 	value?: string | number;
-	type?: 'text' | 'number' | 'phone' | 'email';
+	type?: 'text' | 'number' | 'phone' | 'email' | 'password';
 	clearButtonEnabled?: boolean;
 	loading?: boolean;
 	loadingAnimation?:
@@ -17,4 +17,6 @@ export interface InputProps extends BasicProps {
 				duration: number | `${number}` | `${number}s` | `${number}ms`;
 		  };
 	focusAtStart?: boolean;
+	showPassword?: boolean;
+	showPasswordButtonEnabled?: boolean;
 }

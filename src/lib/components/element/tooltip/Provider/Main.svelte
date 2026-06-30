@@ -92,7 +92,7 @@
 	this={props.as ?? 'div'}
 	bind:this={ref}
 	{@attach handleEvents([{ events: [event] }])}
-	class="w-full relative"
+	class="relative"
 >
 	{@render children?.()}
 </svelte:element>

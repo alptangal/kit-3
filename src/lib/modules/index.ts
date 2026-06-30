@@ -104,3 +104,26 @@ export function detectBrowserType(userAgent: string, maxTouchPoints = 0): Browse
 
 	return undefined;
 }
+export function styleSynced(
+	params: {
+		defaultStyles?: string | string[];
+		propStyles?: string | string[];
+	},
+	overwriteDefaultStyles = false
+) {
+	const { defaultStyles, propStyles } = params;
+	const _defaultStyles =
+		typeof defaultStyles == 'object'
+			? defaultStyles
+			: typeof defaultStyles == 'string'
+				? [defaultStyles]
+				: [];
+	const _propsStyles =
+		typeof propStyles == 'object' ? propStyles : typeof propStyles == 'string' ? [propStyles] : [];
+
+	if (overwriteDefaultStyles) {
+		return _propsStyles;
+	} else {
+		return [..._defaultStyles, ..._propsStyles];
+	}
+}

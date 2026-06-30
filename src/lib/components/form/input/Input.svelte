@@ -4,14 +4,16 @@
 	import { handleEvents } from '$modules/_attachments';
 	import { profile } from '$store/basic.svelte';
 	import Icon from '@iconify/svelte';
-	import { Button } from '../index.ts';
+	import { Button, Tooltip } from '$components/element/index';
 	import type { InputProps } from './_interface.ts';
 	import { fade } from 'svelte/transition';
 	import { copyToClipboard, pasteFromClipboard, watchClipboard } from '$modules';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { browser } from '$app/environment';
 	import { every } from 'es-toolkit/compat';
-	import type { KeyboardNumberic, NumbericKey } from '$components/keyboard/numberic/_interface';
+	import type { NumbericKey } from '$components/keyboard/numberic/_interface';
+	import { getTextfieldCtx } from '../textField/index.ts';
+	import { getFormContext } from '../form/index.ts';
 	// import Numberic from '$components/keyboard/numberic/Numberic.svelte';
 	// import { every, some } from 'es-toolkit/compat';
 
@@ -31,6 +33,20 @@
 		}
 	};
 	const numberKeysAllowedRegEx = /[0-9.+\-*/()]/;
+	const notAllowKeysForPassword = [
+		'Alt',
+		'Backspace',
+		'Ctrl',
+		'Capslock',
+		'Enter',
+		'Shift',
+		'Control',
+		'Tab',
+		'ArrowLeft',
+		'ArrowRight',
+		'ArrowUp',
+		'ArrowDown'
+	];
 	let configs = $state({
 		status: {
 			focusFirstTime: false,
@@ -66,7 +82,26 @@
 				}
 				return profile.delay;
 			},
-			loadingStartAt: undefined as undefined | number
+			loadingStartAt: undefined as undefined | number,
+			showPassword: undefined as undefined | boolean
+		},
+		_passwordMask: undefined as undefined | string,
+		get passwordMask() {
+			if (this._passwordMask?.length)
+				return this._passwordMask
+					.split('')
+					.map((_, idx) =>
+						this._passwordMask && configs.status.focus
+							? idx < this._passwordMask.split('').length - 1
+								? '⬤'
+								: _
+							: '⬤'
+					)
+					.join('');
+			return '';
+		},
+		set passwordMask(val) {
+			this._passwordMask = val;
 		},
 		ref: undefined as undefined | HTMLElement,
 		get style() {
@@ -77,7 +112,7 @@
 						? props.class
 						: [];
 			return [
-				'input-root',
+				'input-root justify-between',
 				...(props.overwriteDefaultStyles ? propsClass : [...propsClass, defaults.root.style])
 			];
 		},
@@ -115,32 +150,32 @@
 							// profile.visualKeyboard.focusOn = data.node;
 							// profile.visualKeyboard.onKeyup = visualKbOnKeyup;
 						}
-						function processFocus() {
-							if (
-								profile.browser.type &&
-								profile.browser.type.includes('mobile') &&
-								props.type == 'number' &&
-								!configs.status.focus
-							) {
-								configs.status.focus = true;
-								if (configs.status.timeId.animationId) {
-									cancelAnimationFrame(configs.status.timeId.animationId);
-									if (configs.ref) {
-										const refRect = configs.ref.getBoundingClientRect();
-										if (window.innerHeight - refRect.bottom < profile.visualKeyboard.height) {
-											document.body.setAttribute(
-												'height-bu',
-												document.body.style.getPropertyValue('height')
-											);
-											document.body.style.height = `${document.body.offsetHeight + (profile.visualKeyboard.height - (window.innerHeight - refRect.bottom))}px`;
-											window.scrollTo({ top: document.body.offsetHeight, behavior: 'smooth' });
-										}
-									}
-								}
+						// function processFocus() {
+						// 	if (
+						// 		profile.browser.type &&
+						// 		profile.browser.type.includes('mobile') &&
+						// 		props.type == 'number' &&
+						// 		!configs.status.focus
+						// 	) {
+						// 		configs.status.focus = true;
+						// 		if (configs.status.timeId.animationId) {
+						// 			cancelAnimationFrame(configs.status.timeId.animationId);
+						// 			if (configs.ref) {
+						// 				const refRect = configs.ref.getBoundingClientRect();
+						// 				if (window.innerHeight - refRect.bottom < profile.visualKeyboard.height) {
+						// 					document.body.setAttribute(
+						// 						'height-bu',
+						// 						document.body.style.getPropertyValue('height')
+						// 					);
+						// 					document.body.style.height = `${document.body.offsetHeight + (profile.visualKeyboard.height - (window.innerHeight - refRect.bottom))}px`;
+						// 					window.scrollTo({ top: document.body.offsetHeight, behavior: 'smooth' });
+						// 				}
+						// 			}
+						// 		}
 
-								configs.status.focusFirstTime = true;
-							}
-						}
+						// 		configs.status.focusFirstTime = true;
+						// 	}
+						// }
 						//if (props.focusAtStart && !configs.status.focusFirstTime) processFocus();
 						return () => {
 							mutationObs.disconnect();
@@ -150,8 +185,17 @@
 					}
 				}
 			},
-			get mousedown() {
-				if (!profile.browser.type?.includes('mobile')) return undefined;
+			get touchstart() {
+				if (!profile.browser.type?.includes('mobile'))
+					return {
+						handler() {
+							actionFocus();
+							// configs.status.focus = true;
+							// requestAnimationFrame(() => {
+							// 	configs.input.ref?.focus();
+							// });
+						}
+					};
 				return {
 					handler(e: MouseEvent) {
 						if (
@@ -160,14 +204,17 @@
 							profile.visualKeyboard.height
 						) {
 							e.preventDefault();
-							configs.status.focus = true;
-							if (configs.ref) {
-								profile.visualKeyboard.focusOn = configs.ref;
-								profile.visualKeyboard.onKeyup = visualKbOnKeyup;
-								requestAnimationFrame(() => {
-									if (props.type == 'text') configs.input.ref?.focus();
-								});
-							}
+							actionFocus();
+							// configs.status.focus = true;
+							// if (configs.ref) {
+							// 	profile.visualKeyboard.focusOn = configs.ref;
+							// 	profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+							// 	requestAnimationFrame(() => {
+							// 		if (props.type == 'text') configs.input.ref?.focus();
+							// 	});
+							// }
+						} else if (props.type && ['password'].includes(props.type)) {
+							actionFocus();
 						}
 					}
 				};
@@ -181,7 +228,7 @@
 			},
 			ref: undefined as undefined | HTMLElement,
 			get style() {
-				return ['input-input min-w-0 px-2', defaults.input.style];
+				return ['input-input min-w-0 px-2  bg-transparent', defaults.input.style];
 			},
 			event: {
 				load: {
@@ -190,6 +237,12 @@
 							//data.node.focus();
 							if (profile.browser.type?.includes('mobile')) profile.visualKeyboard.isShow = false;
 						}
+					}
+				},
+				focus: {
+					handler() {
+						configs.status.focus = true;
+						if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 					}
 				},
 				// focus: {
@@ -223,50 +276,97 @@
 					}
 				},
 				get keydown() {
-					if (configs.status.type !== 'number') return undefined;
-					return {
-						handler(e: KeyboardEvent) {
-							const allowedKeys = ['Backspace'];
-							if (allowedKeys.includes(e.key)) return;
-							if (!numberKeysAllowedRegEx.test(e.key)) e.preventDefault();
-							if (
-								/[+\-*/]/.test(e.key) &&
-								value != undefined &&
-								/[+\-*/]/.test(value?.toString().slice(-1))
-							)
+					if (configs.status.type == 'text')
+						return {
+							handler(e) {
+								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
+							}
+						};
+					if (configs.status.type == 'password')
+						return {
+							handler(e: KeyboardEvent) {
+								if (e.key.toLowerCase() == 'backspace' && value) {
+									const inputElement = e.target as HTMLInputElement;
+									const currentSelection = inputElement.selectionStart;
+									if (currentSelection) {
+										value =
+											value.toString().slice(0, currentSelection - 1) +
+											value.toString().slice(currentSelection, value.toString().length);
+										requestAnimationFrame(() => {
+											inputElement.selectionStart = currentSelection - 1;
+											inputElement.selectionEnd = currentSelection - 1;
+										});
+										configs.passwordMask = value;
+									}
+
+									e.preventDefault();
+								}
+								if (notAllowKeysForPassword.includes(e.key)) return;
+								if (!value) value = '';
+								if (!configs.passwordMask) configs.passwordMask = '';
+								value += e.key;
+								configs.passwordMask += e.key;
 								e.preventDefault();
-							if (
-								/[()]/.test(e.key) &&
-								value &&
-								/[()]/.test(value?.toString().slice(-1)) &&
-								value &&
-								configs.input.status.openParen &&
-								value.toString().split(')').length >= configs.input.status.openParen
-							)
-								e.preventDefault();
-							if (
-								value &&
-								value.toString().length &&
-								!/[+\-*/]/.test(value.toString().slice(-1)) &&
-								/[(]/.test(e.key)
-							)
-								e.preventDefault();
-							if (
-								value &&
-								value.toString().length &&
-								/[+\-*/]/.test(value.toString().slice(-1)) &&
-								/[)]/.test(e.key)
-							)
-								e.preventDefault();
-						}
-					};
+								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
+							}
+						};
+					if (configs.status.type == 'number')
+						return {
+							handler(e: KeyboardEvent) {
+								const inputElement = e.target as HTMLInputElement;
+								const allowedKeys = ['Backspace'];
+								if (allowedKeys.includes(e.key)) return;
+								if (e.ctrlKey && e.key == 'v') return;
+								if (
+									['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(e.key.toLowerCase())
+								)
+									return;
+								if (!numberKeysAllowedRegEx.test(e.key)) e.preventDefault();
+								if (
+									/[+\-*/]/.test(e.key) &&
+									value != undefined &&
+									/[+\-*/]/.test(value?.toString().slice(-1))
+								)
+									e.preventDefault();
+								if (
+									/[()]/.test(e.key) &&
+									value &&
+									/[()]/.test(value?.toString().slice(-1)) &&
+									value &&
+									configs.input.status.openParen &&
+									value.toString().split(')').length >= configs.input.status.openParen
+								)
+									e.preventDefault();
+								if (
+									value &&
+									value.toString().length &&
+									!/[+\-*/]/.test(value.toString().slice(-1)) &&
+									/[(]/.test(e.key)
+								)
+									e.preventDefault();
+								if (
+									value &&
+									value.toString().length &&
+									/[+\-*/]/.test(value.toString().slice(-1)) &&
+									/[)]/.test(e.key)
+								)
+									e.preventDefault();
+								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
+							}
+						};
+					return undefined;
 				},
 				get blur() {
-					if (configs.status.type != 'number')
+					if (configs.status.type != 'number' || profile.browser.type?.includes('desktop'))
 						return {
 							handler() {
 								if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
 									profile.visualKeyboard.isShow = false;
+								configs.status.focus = false;
+								if (props.type == 'number') calculatorString();
+								if (textFieldCtx.onBlur) {
+									textFieldCtx.onBlur(configs.status.focus);
+								}
 							}
 						};
 					return {
@@ -296,10 +396,19 @@
 		},
 		clearBtn: {
 			event: {
-				click: {
+				touchstart: {
 					handler() {
 						value = undefined;
-						if (props.type == 'text') configs.input.ref?.focus();
+						if (props.type == 'password') {
+							configs.passwordMask = '';
+						}
+						if (props.type == 'text' || profile.browser.type?.includes('desktop')) {
+							actionFocus();
+							// setTimeout(() => {
+							// 	configs.input.ref?.focus();
+							// 	configs.status.focus = true;
+							// });
+						}
 					}
 				}
 			} as EventListener
@@ -309,7 +418,7 @@
 				copied: false
 			},
 			event: {
-				click: {
+				touchstart: {
 					async handler() {
 						if (
 							(typeof value == 'string' && value.length) ||
@@ -331,7 +440,7 @@
 										configs.copyBtn.status.copied = false;
 										disabled = undefined;
 										requestAnimationFrame(() => {
-											if (configs.input.ref) {
+											if (configs.input.ref && props.type == 'text') {
 												if (configs.input.status.currentSelected) {
 													(configs.input.ref as HTMLInputElement).setSelectionRange(
 														configs.input.status.currentSelected,
@@ -347,6 +456,8 @@
 															: (value?.toString().length ?? 0)
 													);
 												}
+											} else {
+												actionFocus();
 											}
 										});
 									}, profile.delay);
@@ -367,15 +478,24 @@
 				hasData: false
 			},
 			event: {
-				click: {
+				touchstart: {
 					async handler() {
-						if (props.type == 'text') configs.input.ref?.focus();
+						actionFocus();
+						// if (props.type == 'text' || profile.browser.type?.includes('desktop')) {
+						// 	configs.status.focus = true;
+						// 	configs.input.ref?.focus();
+						// }
 						const data = await navigator.clipboard.readText();
 						if (data) {
 							value = data;
-							if (configs.input.ref) {
+							if (props.type == 'password') configs.passwordMask = value;
+							if (configs.input.ref && props.type == 'text') {
 								if (configs.input.status.currentSelected) {
-									if (props.type == 'text') configs.input.ref?.focus();
+									if (props.type == 'text') {
+										actionFocus();
+										// configs.status.focus = true;
+										// configs.input.ref?.focus();
+									}
 									(configs.input.ref as HTMLInputElement).setSelectionRange(
 										configs.input.status.currentSelected,
 										configs.input.status.currentSelected
@@ -393,6 +513,19 @@
 						get delay() {
 							return profile.delay ?? 300;
 						}
+					}
+				}
+			} as EventListener
+		},
+		showPasswordBtn: {
+			event: {
+				touchstart: {
+					handler() {
+						configs.status.focus = true;
+						configs.status.showPassword = !configs.status.showPassword;
+						setTimeout(() => {
+							if (configs.input.ref) configs.input.ref.focus();
+						}, 1000);
 					}
 				}
 			} as EventListener
@@ -444,12 +577,21 @@
 			if ((e.target as HTMLElement).classList.contains('copy-btn')) {
 				//configs.virualInput.ref.focus();
 			} else if ((e.target as HTMLElement).classList.contains('paste-btn')) {
-				if (props.type == 'text') configs.input.ref?.focus();
+				actionFocus();
+				// if (props.type == 'text') {
+				// 	configs.status.focus = true;
+				// 	configs.input.ref?.focus();
+				// }
 			}
 			// configs.virualInput.ref.focus();
 			// if ((e.target as HTMLElement).classList.contains('paste-btn')) {
 			// 	configs.input.ref?.focus();
 			// }
+		}
+		if (textFieldCtx && textFieldCtx.ref?.contains(e.target as HTMLElement) && !disabled) {
+			//actionFocus();
+			// configs.status.focus = true;
+			// configs.input.ref?.focus();
 		}
 	}
 	function visualKbOnKeyup(key: NumbericKey) {
@@ -603,6 +745,7 @@
 			case 'Done':
 				profile.visualKeyboard.focusOn = null;
 				configs.status.focus = false;
+				if (textFieldCtx.onblur) textFieldCtx.onblur(configs.status.focus);
 		}
 
 		//configs.input.ref?.focus();
@@ -618,10 +761,37 @@
 				)();
 				configs.input.status.previousValue = value;
 				configs.status.focus = false;
+				if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 			} catch {
 				if (configs.input.status.previousValue) value = configs.input.status.previousValue;
 			}
 		});
+	}
+	function actionFocus() {
+		if (disabled || !browser) return;
+		configs.status.focus = true;
+		// if (configs.status.timeId.animationId) cancelAnimationFrame(configs.status.timeId.animationId);
+		// configs.status.timeId.animationId = requestAnimationFrame(() => {
+		if (profile.browser.type?.includes('mobile') && props.type == 'number' && configs.ref) {
+			profile.visualKeyboard.focusOn = configs.ref;
+			profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+		}
+		if (configs.input.ref) {
+			configs.input.ref.focus();
+		}
+		// });
+	}
+	function actionBlur() {
+		if (configs.input.ref) {
+			configs.input.ref.dispatchEvent(new Event('blur'));
+			configs.input.ref.blur();
+		}
+	}
+
+	const textFieldCtx = getTextfieldCtx();
+	const formCtx = getFormContext();
+	if (textFieldCtx.onFocus) {
+		textFieldCtx.onFocus('input', actionFocus);
 	}
 
 	$effect(() => {
@@ -636,6 +806,14 @@
 				configs.ref.style.removeProperty('--process-deg');
 			}
 		}
+		// if (textFieldCtx.status?.focus && !disabled) {
+		// 	configs.status.focus = true;
+		// 	if (profile.browser.type?.includes('desktop') && configs.input.ref) {
+		// 		requestAnimationFrame(() => {
+		// 			configs.input.ref?.focus();
+		// 		});
+		// 	}
+		// }
 		// if (configs.status.focus && configs.ref && !props.focusAtStart) {
 		// 	const refRect = configs.ref.getBoundingClientRect();
 		// 	if (window.innerHeight - refRect.bottom < profile.visualKeyboard.height) {
@@ -658,6 +836,8 @@
 			configs.pasteBtn.status.hasData = e;
 		});
 		profile.clipboard.value = await pasteFromClipboard();
+		if (props.showPassword && props.type == 'password')
+			configs.status.showPassword = props.showPassword;
 	});
 	onDestroy(() => {
 		if (browser) {
@@ -671,10 +851,12 @@
 	bind:this={configs.ref}
 	class={configs.style}
 	data-variant={props.variant ?? 'primary'}
-	data-size={props.size ?? 'md'}
+	data-size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
 	data-disabled={disabled}
 	data-loading={loading && !configs.status.focus}
 	data-loading-animation-style={configs.status.loadingAnimationStyle}
+	data-is-invalid={textFieldCtx.isInvalid}
+	data-focus={configs.status.focus}
 	style:--loading-animation-duration={configs.status.loadingAnimationDuration}
 	{@attach handleEvents([
 		...(disabled
@@ -684,19 +866,24 @@
 					{
 						events: [
 							{
-								mousedown: {
+								touchstart: {
 									handler(e) {
+										if (!textFieldCtx.ref?.contains(e.target)) {
+											actionBlur();
+										}
 										if (
 											configs.ref &&
 											!configs.ref.contains(e.target) &&
 											profile.visualKeyboard.ref &&
 											!profile.visualKeyboard.ref.contains(e.target) &&
-											configs.ref.contains(profile.visualKeyboard.focusOn)
+											configs.ref.contains(profile.visualKeyboard.focusOn) &&
+											textFieldCtx.ref &&
+											!textFieldCtx.ref.contains(e.target) &&
+											props.type == 'number'
 										) {
 											if (configs.input.ref) {
 												//configs.input.ref.dispatchEvent(new Event('blur'));
 											}
-											configs.status.focus = false;
 											calculatorString();
 											profile.visualKeyboard.focusOn = null;
 										}
@@ -715,12 +902,24 @@
 		</div>
 	{/if}
 	{#if !disabled}
-		{#if props.type == 'text'}
+		{#if (props.type && ['text'].includes(props.type)) || (props.type && props.type == 'number' && profile.browser.type?.includes('desktop'))}
 			<input
 				class={[...configs.input.style]}
 				bind:this={configs.input.ref}
 				type="text"
 				bind:value
+				placeholder={props.placeholder}
+				{@attach handleEvents([
+					{ events: [configs.event, configs.input.event] },
+					props.events ? props.events : undefined
+				])}
+			/>
+		{:else if props.type && ['password'].includes(props.type)}
+			<input
+				class={[...configs.input.style]}
+				bind:this={configs.input.ref}
+				type="text"
+				value={configs.status.showPassword ? value : configs.passwordMask}
 				placeholder={props.placeholder}
 				{@attach handleEvents([
 					{ events: [configs.event, configs.input.event] },
@@ -743,16 +942,16 @@
 							? value
 							: props.placeholder}
 				</div>
-				{#if configs.status.focus}
+				{#if configs.status.focus && profile.visualKeyboard.focusOn && configs.ref.contains(profile.visualKeyboard.focusOn)}
 					<div class="input-visual-cursor"></div>
 				{/if}
 			</div>
 		{/if}
 		{#if props.clearButtonEnabled && value != undefined}
 			<Button
-				class="aspect-square"
+				class="aspect-square z-[9999] relative"
 				color="danger"
-				size={props.size ?? 'md'}
+				size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
 				icon={iconify['close-rounded']}
 				variant="light"
 				events={{ events: [configs.clearBtn.event] }}
@@ -763,9 +962,9 @@
 	{/if}
 	{#if value != undefined}
 		<Button
-			class="aspect-square copy-btn"
+			class="aspect-square copy-btn z-10 relative"
 			color="success"
-			size={props.size ?? 'md'}
+			size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
 			icon={configs.copyBtn.status.copied
 				? iconify['check-rounded']
 				: iconify['content-copy-outline-rounded']}
@@ -775,13 +974,40 @@
 	{/if}
 	{#if ((typeof value == 'number' && value == null) || (typeof value == 'string' && !value.length) || !value) && profile.clipboard.status.hasData}
 		<Button
-			class="aspect-square paste-btn"
+			class="aspect-square paste-btn z-10 relative"
 			color="success"
-			size={props.size ?? 'md'}
+			size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
 			icon={iconify['content-paste-rounded']}
 			variant="light"
 			events={{ events: [configs.pasteBtn.event] }}
 		/>
+	{/if}
+	{#if props.type && props.type == 'password' && props.showPasswordButtonEnabled}
+		<Tooltip.Provider>
+			{#if profile.browser.type?.includes('desktop')}
+				<Tooltip.Root class="">
+					<Tooltip.Content class="capitalize border-solid border border-gray-500 bg-gray-400 px-2"
+						>{configs.status.showPassword ? 'Show' : 'Hidden'} password</Tooltip.Content
+					>
+					<Tooltip.Arrow></Tooltip.Arrow>
+				</Tooltip.Root>
+			{/if}
+			<Tooltip.Trigger>
+				<Button
+					class="aspect-square paste-btn z-10 relative"
+					color="primary"
+					size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
+					icon={configs.status.showPassword
+						? iconify['password-2-off-rounded']
+						: iconify['password-2-rounded']}
+					variant="light"
+					events={{ events: [configs.showPasswordBtn.event] }}
+					alt={profile.browser.type?.includes('mobile')
+						? `${configs.status.showPassword ? 'Show' : 'Hidden'} Password`
+						: undefined}
+				/>
+			</Tooltip.Trigger>
+		</Tooltip.Provider>
 	{/if}
 </svelte:element>
 
@@ -1063,6 +1289,25 @@
 				z-index: 1;
 			}
 		}
+		&[data-is-invalid='true'] {
+			--color: hsl(var(--danger-100));
+			border-color: hsl(var(--danger-100));
+			&[data-focus='true'] {
+				--color: hsl(var(--danger));
+				border-color: hsl(var(--danger));
+			}
+		}
+		&[data-is-invalid='false'] {
+			--color: hsl(var(--success-100));
+			border-color: hsl(var(--success-100));
+			&[data-focus='true'] {
+				--color: hsl(var(--success));
+				border-color: hsl(var(--success));
+			}
+		}
+		&[data-focus='true'] {
+			border-color: hsl(var(--primary));
+		}
 		transition: all linear 0.3s;
 		display: flex;
 		align-items: center;
@@ -1099,15 +1344,15 @@
 			left: 0px;
 			width: 100%;
 			height: 100%;
-			z-index: 999;
+			z-index: 1;
 			background-image: -webkit-linear-gradient(
 				left,
 				transparent 0%,
-				rgba(255, 255, 255, 0.6) 50%,
+				hsl(var(--background-invert)),
 				transparent 100%
 			);
 			animation: shimper calc(var(--loading-animation-duration) * 1ms) linear infinite;
-			opacity: 0.5;
+			opacity: 0.2;
 		}
 	}
 	@keyframes shimper {

@@ -350,6 +350,7 @@
 			: `${props.loadingAnimation.duration ?? profile.delay}`
 		: `${configs.default.duration}ms`}
 	transition:fly={profile.transition.templates.flyY}
+	title={props.alt}
 	{@attach handleEvents([
 		{
 			events: [

@@ -9,5 +9,9 @@ export const iconify = {
 	'content-copy-outline-rounded': 'material-symbols-light:content-copy-outline-rounded',
 	'content-paste-rounded': 'material-symbols-light:content-paste-rounded',
 	'check-rounded': 'material-symbols-light:check-rounded',
-	'backspace-outline-rounded': 'material-symbols-light:backspace-outline-rounded'
+	'backspace-outline-rounded': 'material-symbols-light:backspace-outline-rounded',
+	'dangerous-outline-rounded': 'material-symbols-light:dangerous-outline-rounded',
+	'warning-outline-rounded': 'material-symbols-light:warning-outline-rounded',
+	'password-2-off-rounded': 'material-symbols-light:password-2-off-rounded',
+	'password-2-rounded': 'material-symbols-light:password-2-rounded'
 };
