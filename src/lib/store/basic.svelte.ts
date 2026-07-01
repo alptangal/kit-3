@@ -24,7 +24,7 @@ export const profile = $state({
 		isShow: false,
 		_height: null as null | number,
 		get height() {
-			if (browser) return window.innerHeight / 3;
+			if (browser) return (visualViewport?.height ?? 0) / 3;
 			return 0; //this._height;
 		},
 		set height(val) {
@@ -205,5 +205,10 @@ export const profile = $state({
 			}
 		},
 		value: undefined as undefined | string | null
+	},
+	visualNodes: {
+		input: {
+			ref: undefined as undefined | HTMLInputElement
+		}
 	}
 });

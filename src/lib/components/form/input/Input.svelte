@@ -134,8 +134,7 @@
 							props.focusAtStart
 						) {
 							profile.visualKeyboard.fallbackFocusOn = () => {
-								if (configs.ref?.contains(profile.visualKeyboard.focusOn))
-									configs.status.focus = true;
+								if (configs.ref?.contains(profile.visualKeyboard.focusOn)) actionFocus();
 							};
 							if (!configs.status.focusFirstTime) {
 								configs.status.focusFirstTime = true;
@@ -189,7 +188,9 @@
 				if (!profile.browser.type?.includes('mobile'))
 					return {
 						handler() {
-							actionFocus();
+							if (!configs.status.focus) {
+								actionFocus();
+							}
 							// configs.status.focus = true;
 							// requestAnimationFrame(() => {
 							// 	configs.input.ref?.focus();
@@ -198,13 +199,13 @@
 					};
 				return {
 					handler(e: MouseEvent) {
+						e.preventDefault();
 						if (
 							props.type &&
 							['phone', 'number'].includes(props.type) &&
 							profile.visualKeyboard.height
 						) {
-							e.preventDefault();
-							actionFocus();
+							configs.status.focus = true;
 							// configs.status.focus = true;
 							// if (configs.ref) {
 							// 	profile.visualKeyboard.focusOn = configs.ref;
@@ -214,8 +215,9 @@
 							// 	});
 							// }
 						} else if (props.type && ['password'].includes(props.type)) {
-							actionFocus();
+							if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 						}
+						actionFocus();
 					}
 				};
 			}
@@ -228,7 +230,7 @@
 			},
 			ref: undefined as undefined | HTMLElement,
 			get style() {
-				return ['input-input min-w-0 px-2  bg-transparent', defaults.input.style];
+				return ['input-input min-w-0  bg-transparent', defaults.input.style];
 			},
 			event: {
 				load: {
@@ -239,10 +241,20 @@
 						}
 					}
 				},
+				touchstart: {
+					handler(e) {}
+				},
 				focus: {
-					handler() {
+					handler(e) {
 						configs.status.focus = true;
 						if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+						const scrollY = window.scrollY;
+						const myInterval = setInterval(() => {
+							window.scrollTo(0, scrollY);
+						});
+						return () => {
+							clearInterval(myInterval);
+						};
 					}
 				},
 				// focus: {
@@ -396,13 +408,19 @@
 		},
 		clearBtn: {
 			event: {
+				get click() {
+					return this.touchstart;
+				},
 				touchstart: {
 					handler() {
 						value = undefined;
 						if (props.type == 'password') {
 							configs.passwordMask = '';
 						}
-						if (props.type == 'text' || profile.browser.type?.includes('desktop')) {
+						if (
+							(props.type == 'text' || profile.browser.type?.includes('desktop')) &&
+							!configs.status.focus
+						) {
 							actionFocus();
 							// setTimeout(() => {
 							// 	configs.input.ref?.focus();
@@ -414,12 +432,23 @@
 			} as EventListener
 		},
 		copyBtn: {
+			component: undefined as
+				| undefined
+				| typeof import('$components/form/input/Input.svelte').configs,
+			get ref() {
+				if (this.component && this.component.configs.ref) return this.component.configs.ref;
+				return undefined;
+			},
 			status: {
 				copied: false
 			},
 			event: {
+				get click() {
+					return this.touchstart;
+				},
 				touchstart: {
 					async handler() {
+						// actionBlur();
 						if (
 							(typeof value == 'string' && value.length) ||
 							(typeof value == 'number' && value != null)
@@ -432,12 +461,15 @@
 							configs.copyBtn.status.copied = await copyToClipboard(
 								typeof value == 'number' ? value.toString() : value
 							);
+							if (profile.visualNodes.input.ref) profile.visualNodes.input.ref.focus();
 							disabled = true;
 							if (configs.copyBtn.status.copied) {
 								profile.clipboard.value = typeof value == 'number' ? value.toString() : value;
+
 								requestAnimationFrame(() => {
 									setTimeout(() => {
 										configs.copyBtn.status.copied = false;
+										if (configs.input.ref) configs.input.ref.focus();
 										disabled = undefined;
 										requestAnimationFrame(() => {
 											if (configs.input.ref && props.type == 'text') {
@@ -457,7 +489,13 @@
 													);
 												}
 											} else {
-												actionFocus();
+												setTimeout(() => {
+													try {
+														actionFocus();
+													} catch (e) {
+														console.log(e);
+													}
+												}, profile.delay);
 											}
 										});
 									}, profile.delay);
@@ -478,6 +516,9 @@
 				hasData: false
 			},
 			event: {
+				get click() {
+					return this.touchstart;
+				},
 				touchstart: {
 					async handler() {
 						let data;
@@ -513,7 +554,7 @@
 								}
 							}
 						}
-						actionFocus();
+						if (!configs.status.focus) actionFocus();
 					},
 					options: {
 						get delay() {
@@ -525,12 +566,18 @@
 		},
 		showPasswordBtn: {
 			event: {
+				get click() {
+					return this.touchstart;
+				},
 				touchstart: {
 					handler() {
-						configs.status.focus = true;
+						//configs.status.focus = true;
 						configs.status.showPassword = !configs.status.showPassword;
+						if (!configs.status.focus) {
+							actionFocus();
+						}
 						setTimeout(() => {
-							if (configs.input.ref) configs.input.ref.focus();
+							//if (configs.input.ref) configs.input.ref.focus();
 						}, 1000);
 					}
 				}
@@ -774,17 +821,33 @@
 		});
 	}
 	function actionFocus() {
-		if (disabled || !browser) return;
-		configs.status.focus = true;
-		// if (configs.status.timeId.animationId) cancelAnimationFrame(configs.status.timeId.animationId);
-		// configs.status.timeId.animationId = requestAnimationFrame(() => {
-		if (profile.browser.type?.includes('mobile') && props.type == 'number' && configs.ref) {
-			profile.visualKeyboard.focusOn = configs.ref;
-			profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+		try {
+			if (profile.visualNodes.input.ref && props.type == 'number') {
+				profile.visualNodes.input.ref.focus();
+				requestAnimationFrame(() => {
+					if (profile.visualNodes.input.ref) profile.visualNodes.input.ref.blur();
+
+					configs.status.focus = true;
+					if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+				});
+			}
+
+			if (disabled || !browser) return;
+			//configs.status.focus = true;
+			// if (configs.status.timeId.animationId) cancelAnimationFrame(configs.status.timeId.animationId);
+			// configs.status.timeId.animationId = requestAnimationFrame(() => {
+
+			if (profile.browser.type?.includes('mobile') && props.type == 'number' && configs.ref) {
+				profile.visualKeyboard.focusOn = configs.ref;
+				profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+			}
+			if (configs.input.ref) {
+				configs.input.ref.focus();
+			}
+		} catch (e) {
+			console.log(e);
 		}
-		if (configs.input.ref) {
-			configs.input.ref.focus();
-		}
+
 		// });
 	}
 	function actionBlur() {
@@ -844,6 +907,12 @@
 		profile.clipboard.value = await pasteFromClipboard();
 		if (props.showPassword && props.type == 'password')
 			configs.status.showPassword = props.showPassword;
+		if (!profile.visualNodes.input.ref) {
+			const visualInput = document.createElement('input');
+			visualInput.classList.add('h-0', 'w-0', 'fixed', 'top-0', 'left-0', 'opacity-0');
+			document.body.appendChild(visualInput);
+			profile.visualNodes.input.ref = visualInput;
+		}
 	});
 	onDestroy(() => {
 		if (browser) {
@@ -875,7 +944,7 @@
 								touchstart: {
 									handler(e) {
 										if (!textFieldCtx.ref?.contains(e.target)) {
-											actionBlur();
+											//actionBlur();
 										}
 										if (
 											configs.ref &&
@@ -890,6 +959,8 @@
 											if (configs.input.ref) {
 												//configs.input.ref.dispatchEvent(new Event('blur'));
 											}
+											configs.status.focus = false;
+											if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 											calculatorString();
 											profile.visualKeyboard.focusOn = null;
 										}
@@ -968,6 +1039,7 @@
 	{/if}
 	{#if value != undefined}
 		<Button
+			bind:this={configs.copyBtn.component}
 			class="aspect-square copy-btn z-10 relative"
 			color="success"
 			size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
@@ -1054,7 +1126,7 @@
 	}
 
 	.input-root {
-		--color: hsl(var(--foreground));
+		--color: hsl(var(--foreground-200));
 		&[data-disabled] {
 			--cursor: not-allowed;
 			--opacity: var(--disabled-opacity);
@@ -1206,7 +1278,7 @@
 			--min-height: 240px;
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
-		&:not([data-loading='true'][data-loading-animation-style='style-1']) > input {
+		&:not([data-loading='true'][data-loading-animation-style='style-1']) > * {
 			padding-inline: var(--padding);
 			padding-block: calc(var(--padding) / 2);
 		}
@@ -1312,6 +1384,7 @@
 			}
 		}
 		&[data-focus='true'] {
+			--color: hsl(var(--foreground));
 			border-color: hsl(var(--primary));
 		}
 		transition: all linear 0.3s;

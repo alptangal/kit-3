@@ -5,7 +5,7 @@
 	import { fly } from 'svelte/transition';
 	import type { KeyboardNumberic } from './_interface';
 	import { iconify } from '$assets/icons/iconify';
-	import type { SvelteComponent } from 'svelte';
+	import { onMount, type SvelteComponent } from 'svelte';
 	import { handleEvents } from '$modules/_attachments';
 
 	let { ...props }: KeyboardNumberic = $props();

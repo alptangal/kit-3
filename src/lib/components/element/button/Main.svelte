@@ -50,6 +50,18 @@
 				get y() {
 					return configs.status.borderWidthInit ?? 0;
 				}
+			},
+			_tapped: undefined as undefined | boolean,
+			get tapped() {
+				return this._tapped;
+			},
+			set tapped(val) {
+				if (val) {
+					this._tapped = val;
+					setTimeout(() => {
+						this._tapped = false;
+					}, profile.delay);
+				}
 			}
 		},
 		rippleAnimation: {
@@ -83,8 +95,12 @@
 					}
 				}
 			},
-			click: {
+			get click() {
+				return this.touchstart;
+			},
+			touchstart: {
 				handler(e: MouseEvent, data) {
+					configs.status.tapped = true;
 					if (data?.node instanceof HTMLElement) {
 						function cleaning() {
 							if (configs.status.timeId.requestAnimation && data?.node instanceof HTMLElement) {
@@ -342,6 +358,7 @@
 		? (props.loadingAnimation.style ?? 'style-1')
 		: (props.loadingAnimation ?? 'style-1')}
 	data-min-width-disabled={props.minWidthDisabled ?? true}
+	data-tapped={profile.browser.type?.includes('mobile') ? configs.status.tapped : undefined}
 	style:--loading-loop={props.loadingLoop ?? 'infinite'}
 	style:--loading-duration={typeof props.loadingAnimation == 'object'
 		? !`${props.loadingAnimation.duration ?? profile.delay}`.includes('ms') &&
@@ -645,7 +662,8 @@
 				--background-color: transparent;
 				--border-style: solid;
 				--border-color: hsl(var(--primary));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--primary-600));
 					--border-color: hsl(var(--primary-600));
 				}
@@ -656,7 +674,8 @@
 				--border-style: solid;
 				--border-color: hsl(var(--primary));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--primary));
 					--color: var(--white);
 				}
@@ -664,21 +683,24 @@
 			&[data-variant='solid'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--primary));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--primary-600));
 				}
 			}
 			&[data-variant='link'] {
 				--color: hsl(var(--primary));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--primary-600));
 				}
 			}
 			&[data-variant='shadow'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--primary));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--primary-600));
 				}
 				--shadow-color: hsl(var(--primary));
@@ -687,7 +709,8 @@
 			&[data-variant='light'] {
 				--color: hsl(var(--primary));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--primary-200));
 				}
 			}
@@ -697,7 +720,8 @@
 				--border-color: hsl(var(--default));
 				--border-style: solid;
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -705,7 +729,8 @@
 				--color: hsl(var(--primary-600));
 				--background-color: hsl(var(--primary-100));
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -717,7 +742,8 @@
 				--background-color: transparent;
 				--border-style: solid;
 				--border-color: hsl(var(--secondary));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--secondary-600));
 					--border-color: hsl(var(--secondary-600));
 				}
@@ -728,7 +754,8 @@
 				--border-style: solid;
 				--border-color: hsl(var(--secondary));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--secondary));
 					--color: var(--white);
 				}
@@ -736,21 +763,24 @@
 			&[data-variant='solid'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--secondary));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--secondary-600));
 				}
 			}
 			&[data-variant='link'] {
 				--color: hsl(var(--secondary));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--secondary-600));
 				}
 			}
 			&[data-variant='shadow'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--secondary));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--secondary-600));
 				}
 				--shadow-color: hsl(var(--secondary));
@@ -759,7 +789,8 @@
 			&[data-variant='light'] {
 				--color: hsl(var(--secondary));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--secondary-200));
 				}
 			}
@@ -769,7 +800,8 @@
 				--border-color: hsl(var(--secondary));
 				--border-style: solid;
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -777,7 +809,8 @@
 				--color: hsl(var(--secondary-600));
 				--background-color: hsl(var(--secondary-100));
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -789,7 +822,8 @@
 				--background-color: transparent;
 				--border-style: solid;
 				--border-color: hsl(var(--success));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--success-600));
 					--border-color: hsl(var(--success-600));
 				}
@@ -800,7 +834,8 @@
 				--border-style: solid;
 				--border-color: hsl(var(--success));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--success));
 					--color: var(--white);
 				}
@@ -808,21 +843,24 @@
 			&[data-variant='solid'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--success));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--success-600));
 				}
 			}
 			&[data-variant='link'] {
 				--color: hsl(var(--success));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--success-600));
 				}
 			}
 			&[data-variant='shadow'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--success));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--success-600));
 				}
 				--shadow-color: hsl(var(--success));
@@ -831,9 +869,13 @@
 			&[data-variant='light'] {
 				--color: hsl(var(--success));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--success-200));
 				}
+				/* &[data-tapped] {
+					--background-color: hsl(var(--success-200));
+				} */
 			}
 			&[data-variant='faded'] {
 				--color: hsl(var(--success));
@@ -841,7 +883,8 @@
 				--border-color: hsl(var(--success));
 				--border-style: solid;
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -849,7 +892,8 @@
 				--color: hsl(var(--success-600));
 				--background-color: hsl(var(--success-100));
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -861,7 +905,8 @@
 				--background-color: transparent;
 				--border-style: solid;
 				--border-color: hsl(var(--warning));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--warning-600));
 					--border-color: hsl(var(--warning-600));
 				}
@@ -872,7 +917,8 @@
 				--border-style: solid;
 				--border-color: hsl(var(--warning));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--warning));
 					--color: var(--white);
 				}
@@ -880,21 +926,24 @@
 			&[data-variant='solid'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--warning));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--warning-600));
 				}
 			}
 			&[data-variant='link'] {
 				--color: hsl(var(--warning));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--warning-600));
 				}
 			}
 			&[data-variant='shadow'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--warning));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--warning-600));
 				}
 				--shadow-color: hsl(var(--warning));
@@ -903,7 +952,8 @@
 			&[data-variant='light'] {
 				--color: hsl(var(--warning));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--warning-200));
 				}
 			}
@@ -913,7 +963,8 @@
 				--border-color: hsl(var(--warning));
 				--border-style: solid;
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -921,7 +972,8 @@
 				--color: hsl(var(--warning-600));
 				--background-color: hsl(var(--warning-100));
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -933,7 +985,8 @@
 				--background-color: transparent;
 				--border-style: solid;
 				--border-color: hsl(var(--danger));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--danger-600));
 					--border-color: hsl(var(--danger-600));
 				}
@@ -944,7 +997,8 @@
 				--border-style: solid;
 				--border-color: hsl(var(--danger));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--danger));
 					--color: var(--white);
 				}
@@ -952,21 +1006,24 @@
 			&[data-variant='solid'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--danger));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--danger-600));
 				}
 			}
 			&[data-variant='link'] {
 				--color: hsl(var(--danger));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--color: hsl(var(--danger-600));
 				}
 			}
 			&[data-variant='shadow'] {
 				--color: hsl(var(--white));
 				--background-color: hsl(var(--danger));
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--danger-600));
 				}
 				--shadow-color: hsl(var(--danger));
@@ -975,7 +1032,8 @@
 			&[data-variant='light'] {
 				--color: hsl(var(--danger));
 				--background-color: transparent;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--background-color: hsl(var(--danger-200));
 				}
 			}
@@ -985,7 +1043,8 @@
 				--border-color: hsl(var(--danger));
 				--border-style: solid;
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}
@@ -994,7 +1053,8 @@
 				--color: hsl(var(--danger-600));
 				--background-color: hsl(var(--danger-100));
 				--opacity: 1;
-				&:hover:not(.loading, [data-disabled='true']) {
+				&:hover:not(.loading, [data-disabled='true'], [data-tapped='false']),
+				&[data-tapped='true'] {
 					--opacity: 0.9;
 				}
 			}

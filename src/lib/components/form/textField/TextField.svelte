@@ -18,14 +18,17 @@
 		events: {
 			touchstart: {
 				handler(e: MouseEvent) {
-					if (
-						(e.target as HTMLElement).tagName != 'INPUT' &&
-						configs.ref?.contains(e.target as HTMLElement)
-					) {
-						e.preventDefault();
-					}
-					if (configs.status.focus) return;
+					e.preventDefault();
 					configs.status.focus = true;
+					// if (
+					// 	(e.target as HTMLElement).tagName != 'INPUT' &&
+					// 	configs.ref?.contains(e.target as HTMLElement)
+					// ) {
+					// 	if (configs.status.focus) configs.status.focus = false;
+					// 	return;
+					// }
+					// if (!configs.status.focus) configs.status.focus = true;
+					//if (configs.status.focus) return;
 					if (configs.onFocus) {
 						configs.onFocus.forEach((fallback) => {
 							fallback();
