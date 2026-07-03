@@ -65,13 +65,15 @@ export const profile = $state({
 					el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
 				}, profile.delay);
 				if (
+					profile.visualKeyboard.height &&
 					window.innerHeight - refRect.bottom < profile.visualKeyboard.height &&
 					bodyH - el.scrollTop < profile.visualKeyboard.height
 				) {
 					document.body.setAttribute('height-bu', document.body.style.getPropertyValue('height'));
-					document.body.style.height = `${document.body.offsetHeight + (profile.visualKeyboard.height - (window.innerHeight - refRect.bottom))}px`;
+					document.body.style.height = `${document.body.offsetHeight + (profile.visualKeyboard.height ?? 0 - (window.innerHeight - refRect.bottom))}px`;
 					window.scrollTo({ top: document.body.offsetHeight, behavior: 'smooth' });
 				} else if (
+					profile.visualKeyboard.height &&
 					window.innerHeight - refRect.bottom < profile.visualKeyboard.height &&
 					bodyH - el.scrollTop > profile.visualKeyboard.height
 				) {
