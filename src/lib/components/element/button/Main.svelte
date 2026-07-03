@@ -1243,7 +1243,7 @@
 		box-shadow: var(--shadow);
 		opacity: var(--opacity);
 		position: relative;
-		transition: all ease-in-out 0.3s;
+		transition: all ease-in-out 0.01s;
 		max-width: 100%;
 		&:not(.only-icon):not([data-min-width-disabled='true']) {
 			min-width: var(--min-width);

@@ -56,7 +56,7 @@
 						events={{
 							events: [
 								{
-									click: {
+									touchstart: {
 										handler() {
 											if (props.output) {
 												props.output('PrevField');
@@ -74,7 +74,7 @@
 						events={{
 							events: [
 								{
-									click: {
+									touchstart: {
 										handler() {
 											if (props.output) {
 												props.output('NextField');
@@ -96,7 +96,7 @@
 					events={{
 						events: [
 							{
-								click: {
+								touchstart: {
 									handler() {
 										if (props.output) {
 											props.output('Done');
@@ -120,7 +120,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('AC');
@@ -144,7 +144,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('(');
@@ -164,7 +164,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(')');
@@ -185,7 +185,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('Del');
@@ -207,7 +207,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(':');
@@ -230,7 +230,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(7);
@@ -251,7 +251,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(8);
@@ -272,7 +272,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(9);
@@ -293,7 +293,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('*');
@@ -316,7 +316,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(4);
@@ -337,7 +337,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(5);
@@ -358,7 +358,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(6);
@@ -379,7 +379,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('-');
@@ -402,7 +402,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(1);
@@ -423,7 +423,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(2);
@@ -444,7 +444,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(3);
@@ -465,7 +465,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('+');
@@ -488,7 +488,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output(0);
@@ -509,7 +509,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('.');
@@ -530,7 +530,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('%');
@@ -551,7 +551,7 @@
 				events={{
 					events: [
 						{
-							click: {
+							touchstart: {
 								handler() {
 									if (props.output) {
 										props.output('=');

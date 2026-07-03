@@ -7,6 +7,7 @@
 	import { getFormContext } from '../form';
 	import { styleSynced } from '$modules';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { profile } from '$store/basic.svelte';
 
 	let { children, ...props }: TextField = $props();
 	let configs = $state({
@@ -16,6 +17,27 @@
 		onFocus: undefined as undefined | SvelteMap<string, () => void>,
 		ref: undefined as undefined | HTMLElement,
 		events: {
+			click: {
+				handler(e: MouseEvent) {
+					console.log(4444);
+					e.preventDefault();
+					configs.status.focus = true;
+					// if (
+					// 	(e.target as HTMLElement).tagName != 'INPUT' &&
+					// 	configs.ref?.contains(e.target as HTMLElement)
+					// ) {
+					// 	if (configs.status.focus) configs.status.focus = false;
+					// 	return;
+					// }
+					// if (!configs.status.focus) configs.status.focus = true;
+					//if (configs.status.focus) return;
+					if (configs.onFocus) {
+						configs.onFocus.forEach((fallback) => {
+							fallback();
+						});
+					}
+				}
+			},
 			touchstart: {
 				handler(e: MouseEvent) {
 					e.preventDefault();

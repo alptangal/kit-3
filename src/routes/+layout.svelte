@@ -81,7 +81,6 @@
 			} catch (e) {}
 		}
 	});
-	let t = $state('');
 </script>
 
 <svelte:head>
@@ -164,25 +163,6 @@
 						<Description>Here is username field very large</Description>
 					</TextField>
 				</Form>
-				<p>{t}</p>
-				<button
-					class="w-12 h-12"
-					onclick={() => {
-						t += 1;
-					}}>1</button
-				>
-				<button
-					class="w-12 h-12"
-					onclick={() => {
-						t += 2;
-					}}>2</button
-				>
-				<button
-					class="w-12 h-12"
-					onclick={() => {
-						t += 3;
-					}}>3</button
-				>
 			{/snippet}
 		</Header>
 		{@render children()}

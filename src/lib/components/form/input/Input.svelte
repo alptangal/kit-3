@@ -184,43 +184,87 @@
 					}
 				}
 			},
-			get touchstart() {
-				if (!profile.browser.type?.includes('mobile'))
-					return {
-						handler() {
-							if (!configs.status.focus) {
-								actionFocus();
-							}
-							// configs.status.focus = true;
-							// requestAnimationFrame(() => {
-							// 	configs.input.ref?.focus();
-							// });
+			...(profile.browser.type?.includes('desktop')
+				? {
+						get click() {
+							if (!profile.browser.type?.includes('mobile'))
+								return {
+									handler() {
+										console.log(23333);
+										if (!configs.status.focus) {
+											actionFocus();
+										}
+										// configs.status.focus = true;
+										// requestAnimationFrame(() => {
+										// 	configs.input.ref?.focus();
+										// });
+									}
+								};
+							return {
+								handler(e: MouseEvent) {
+									e.preventDefault();
+									if (
+										props.type &&
+										['phone', 'number'].includes(props.type) &&
+										profile.visualKeyboard.height
+									) {
+										configs.status.focus = true;
+										// configs.status.focus = true;
+										// if (configs.ref) {
+										// 	profile.visualKeyboard.focusOn = configs.ref;
+										// 	profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+										// 	requestAnimationFrame(() => {
+										// 		if (props.type == 'text') configs.input.ref?.focus();
+										// 	});
+										// }
+									} else if (props.type && ['password'].includes(props.type)) {
+										if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+									}
+									actionFocus();
+								}
+							};
 						}
-					};
-				return {
-					handler(e: MouseEvent) {
-						e.preventDefault();
-						if (
-							props.type &&
-							['phone', 'number'].includes(props.type) &&
-							profile.visualKeyboard.height
-						) {
-							configs.status.focus = true;
-							// configs.status.focus = true;
-							// if (configs.ref) {
-							// 	profile.visualKeyboard.focusOn = configs.ref;
-							// 	profile.visualKeyboard.onKeyup = visualKbOnKeyup;
-							// 	requestAnimationFrame(() => {
-							// 		if (props.type == 'text') configs.input.ref?.focus();
-							// 	});
-							// }
-						} else if (props.type && ['password'].includes(props.type)) {
-							if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
-						}
-						actionFocus();
 					}
-				};
-			}
+				: {
+						get touchstart() {
+							if (!profile.browser.type?.includes('mobile'))
+								return {
+									handler() {
+										if (!configs.status.focus) {
+											actionFocus();
+										}
+										// configs.status.focus = true;
+										// requestAnimationFrame(() => {
+										// 	configs.input.ref?.focus();
+										// });
+									}
+								};
+							return {
+								handler(e: MouseEvent) {
+									e.preventDefault();
+									if (
+										props.type &&
+										['phone', 'number'].includes(props.type) &&
+										profile.visualKeyboard.height
+									) {
+										console.log(4444);
+										configs.status.focus = true;
+										// configs.status.focus = true;
+										// if (configs.ref) {
+										// 	profile.visualKeyboard.focusOn = configs.ref;
+										// 	profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+										// 	requestAnimationFrame(() => {
+										// 		if (props.type == 'text') configs.input.ref?.focus();
+										// 	});
+										// }
+									} else if (props.type && ['password'].includes(props.type)) {
+										if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+									}
+									actionFocus();
+								}
+							};
+						}
+					})
 		} as EventListener,
 		input: {
 			status: {
