@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import type { NumbericKey } from '$components/keyboard/numberic/_interface';
-import type { AppTheme, Browser } from '$interfaces/basic';
+import type { AppTheme, Browser, Screen } from '$interfaces/basic';
 import { detectBrowserType } from '$modules';
 import type { SvelteComponent } from 'svelte';
 import type { FlyParams } from 'svelte/transition';
@@ -24,11 +24,15 @@ export const profile = $state({
 		isShow: false,
 		_height: null as null | number,
 		get height() {
-			if (browser) return (visualViewport?.height ?? 0) / 3;
-			return 0; //this._height;
+			if (browser && !this._height) return (visualViewport?.height ?? 0) / 3;
+			return this._height;
 		},
+		hasHeightValue: false,
 		set height(val) {
-			this._height = val;
+			if (val && val > 0) {
+				this._height = val;
+				this.hasHeightValue = true;
+			}
 		},
 		_focusOn: null as null | HTMLElement,
 		get focusOn() {
@@ -77,6 +81,10 @@ export const profile = $state({
 		},
 		input: null as null | ((input: string) => void)
 	},
+	screen: {
+		height: null,
+		width: null
+	} as Screen,
 	browser: {
 		userAgent: undefined as undefined | string,
 		get type() {

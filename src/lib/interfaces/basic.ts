@@ -50,6 +50,12 @@ export interface Browser {
 	safariBrowser?: {
 		addressBarMinimized?: boolean;
 		visualKeyboardDisplay?: boolean;
+		visualKeyboardDurationShow?: number;
+		onDurationDetected?: () => void;
 	};
 }
 export type AppTheme = 'system' | 'dark' | 'light';
+export interface Screen {
+	width: number | null;
+	height: number | null;
+}

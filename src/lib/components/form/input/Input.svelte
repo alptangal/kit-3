@@ -798,7 +798,7 @@
 			case 'Done':
 				profile.visualKeyboard.focusOn = null;
 				configs.status.focus = false;
-				if (textFieldCtx.onblur) textFieldCtx.onblur(configs.status.focus);
+				if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 		}
 
 		//configs.input.ref?.focus();
@@ -822,24 +822,39 @@
 	}
 	function actionFocus() {
 		try {
-			if (profile.visualNodes.input.ref && props.type == 'number') {
-				profile.visualNodes.input.ref.focus();
-				requestAnimationFrame(() => {
-					if (profile.visualNodes.input.ref) profile.visualNodes.input.ref.blur();
-
-					configs.status.focus = true;
-					if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
-				});
-			}
-
 			if (disabled || !browser) return;
 			//configs.status.focus = true;
 			// if (configs.status.timeId.animationId) cancelAnimationFrame(configs.status.timeId.animationId);
 			// configs.status.timeId.animationId = requestAnimationFrame(() => {
 
 			if (profile.browser.type?.includes('mobile') && props.type == 'number' && configs.ref) {
-				profile.visualKeyboard.focusOn = configs.ref;
-				profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+				if (profile.visualNodes.input.ref && !profile.visualKeyboard.hasHeightValue) {
+					profile.visualNodes.input.ref.focus();
+					profile.visualNodes.input.ref.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+					requestAnimationFrame(() => {
+						if (visualViewport && profile.screen.height) {
+							setTimeout(() => {
+								if (profile.screen.height && visualViewport)
+									profile.visualKeyboard.height = profile.screen.height - visualViewport.height;
+								if (profile.visualNodes.input.ref) profile.visualNodes.input.ref.blur();
+								configs.status.focus = true;
+								if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+								if (configs.ref) {
+									profile.visualKeyboard.focusOn = configs.ref;
+									profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+								}
+							}, 30);
+						}
+					});
+				} else {
+					configs.status.focus = true;
+					if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+					if (configs.ref) {
+						profile.visualKeyboard.focusOn = configs.ref;
+						profile.visualKeyboard.onKeyup = visualKbOnKeyup;
+					}
+				}
 			}
 			if (configs.input.ref) {
 				configs.input.ref.focus();
@@ -875,6 +890,21 @@
 				configs.ref.style.removeProperty('--process-deg');
 			}
 		}
+		// if (props.type == 'password' && configs.status.focus) {
+		// 	let lastValue: number;
+		// 	let timeId: number;
+		// 	const startAt = performance.now();
+		// 	console.log(visualViewport.height);
+		// 	function myCalculator() {
+		// 		if (visualViewport && visualViewport.height == lastValue) {
+		// 			console.log('end at', performance.now() - startAt, visualViewport.height);
+		// 		} else {
+		// 			if (visualViewport) lastValue = visualViewport.height;
+		// 			setTimeout(myCalculator, 0);
+		// 		}
+		// 	}
+		// 	setTimeout(myCalculator, 500);
+		// }
 		// if (textFieldCtx.status?.focus && !disabled) {
 		// 	configs.status.focus = true;
 		// 	if (profile.browser.type?.includes('desktop') && configs.input.ref) {
@@ -907,9 +937,23 @@
 		profile.clipboard.value = await pasteFromClipboard();
 		if (props.showPassword && props.type == 'password')
 			configs.status.showPassword = props.showPassword;
-		if (!profile.visualNodes.input.ref) {
+		if (
+			(!profile.visualNodes.input.ref && props.type != 'number') ||
+			(profile.browser.type?.includes('mobile') &&
+				!profile.browser.safariBrowser?.visualKeyboardDurationShow)
+		) {
 			const visualInput = document.createElement('input');
-			visualInput.classList.add('h-0', 'w-0', 'fixed', 'top-0', 'left-0', 'opacity-0');
+			visualInput.classList.add(
+				'h-12',
+				'w-12',
+				'bottom-0',
+				'left-0',
+				'opacity-1',
+				'bg-white',
+				'z-50',
+				'text-white'
+			);
+			visualInput.type = 'password';
 			document.body.appendChild(visualInput);
 			profile.visualNodes.input.ref = visualInput;
 		}
@@ -917,6 +961,10 @@
 	onDestroy(() => {
 		if (browser) {
 			window.removeEventListener('click', autoFocus);
+			if (profile.visualNodes.input.ref) {
+				profile.visualNodes.input.ref.remove();
+				profile.visualNodes.input.ref = undefined;
+			}
 		}
 	});
 </script>
@@ -944,7 +992,8 @@
 								touchstart: {
 									handler(e) {
 										if (!textFieldCtx.ref?.contains(e.target)) {
-											//actionBlur();
+											actionBlur();
+											//console.log('blur');
 										}
 										if (
 											configs.ref &&

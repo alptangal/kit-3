@@ -59,7 +59,26 @@ export function watchClipboard(callback: (status: boolean, data: string | null) 
 		document.removeEventListener('visibilitychange', check);
 	};
 }
+let visualViewportLastSize: { height: number; width: number };
+let startAt: number;
 export function updateResizeWindow() {
+	if (
+		!visualViewportLastSize ||
+		(visualViewport && visualViewport.height != visualViewportLastSize.height) ||
+		(visualViewport && visualViewport.width == visualViewportLastSize.width)
+	) {
+		if (!startAt) startAt = performance.now();
+		visualViewportLastSize = {
+			height: visualViewport?.height ?? 0,
+			width: visualViewport?.width ?? 0
+		};
+	} else {
+		if (!profile.browser.safariBrowser) {
+			profile.browser.safariBrowser = { visualKeyboardDurationShow: performance.now() - startAt };
+		} else {
+			profile.browser.safariBrowser.visualKeyboardDurationShow = performance.now() - startAt;
+		}
+	}
 	if (profile.browser.dimensions) {
 		profile.browser.dimensions.width = window.visualViewport?.width ?? 0;
 		profile.browser.dimensions.height = window.visualViewport?.height ?? 0;
@@ -69,9 +88,9 @@ export function updateResizeWindow() {
 			height: window.visualViewport?.height ?? 0
 		};
 	}
-	if (profile.visualKeyboard.isShow && !profile.visualKeyboard.height) {
-		profile.visualKeyboard.height = window.innerHeight - (profile.browser.dimensions.height ?? 0);
-	}
+	// if (profile.visualKeyboard.isShow && !profile.visualKeyboard.height) {
+	// 	profile.visualKeyboard.height = window.innerHeight - (profile.browser.dimensions.height ?? 0);
+	// }
 }
 export function detectBrowserType(userAgent: string, maxTouchPoints = 0): Browser['type'] {
 	const ua = userAgent.toLowerCase();
