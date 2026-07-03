@@ -19,4 +19,5 @@ export interface InputProps extends BasicProps {
 	focusAtStart?: boolean;
 	showPassword?: boolean;
 	showPasswordButtonEnabled?: boolean;
+	onEnter?: () => void;
 }

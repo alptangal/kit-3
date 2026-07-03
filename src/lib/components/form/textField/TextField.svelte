@@ -19,7 +19,6 @@
 		events: {
 			click: {
 				handler(e: MouseEvent) {
-					console.log(4444);
 					e.preventDefault();
 					configs.status.focus = true;
 					// if (

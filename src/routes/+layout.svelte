@@ -95,10 +95,8 @@
 					handler() {
 						if (profile.theme == 'system') {
 							profile.theme = 'dark';
-							//document.documentElement.style.backgroundColor = 'hsl(var(--black))';
 						} else if (profile.theme == 'dark') {
 							profile.theme = 'light';
-							//document.documentElement.style.backgroundColor = 'hsl(var(--white))';
 						} else if (profile.theme == 'light') {
 							profile.theme = 'system';
 						}
@@ -157,7 +155,6 @@
 							loading
 							loadingAnimation={{ style: 'style-4', duration: '1s' }}
 							focusAtStart
-							showPassword
 							showPasswordButtonEnabled
 						/>
 						<Description>Here is username field very large</Description>

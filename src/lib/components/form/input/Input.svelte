@@ -190,7 +190,6 @@
 							if (!profile.browser.type?.includes('mobile'))
 								return {
 									handler() {
-										console.log(23333);
 										if (!configs.status.focus) {
 											actionFocus();
 										}
@@ -247,7 +246,6 @@
 										['phone', 'number'].includes(props.type) &&
 										profile.visualKeyboard.height
 									) {
-										console.log(4444);
 										configs.status.focus = true;
 										// configs.status.focus = true;
 										// if (configs.ref) {
@@ -336,6 +334,9 @@
 						return {
 							handler(e) {
 								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
+								if (e.key == 'Enter' && configs.status.focus) {
+									actionBlur();
+								}
 							}
 						};
 					if (configs.status.type == 'password')
@@ -357,7 +358,12 @@
 
 									e.preventDefault();
 								}
-								if (notAllowKeysForPassword.includes(e.key)) return;
+								if (notAllowKeysForPassword.includes(e.key)) {
+									if (e.key == 'Enter' && configs.status.focus) {
+										actionBlur();
+									}
+									return;
+								}
 								if (!value) value = '';
 								if (!configs.passwordMask) configs.passwordMask = '';
 								value += e.key;
@@ -879,8 +885,9 @@
 					requestAnimationFrame(() => {
 						if (visualViewport && profile.screen.height) {
 							setTimeout(() => {
-								if (profile.screen.height && visualViewport)
+								if (profile.screen.height && visualViewport) {
 									profile.visualKeyboard.height = profile.screen.height - visualViewport.height;
+								}
 								if (profile.visualNodes.input.ref) profile.visualNodes.input.ref.blur();
 								configs.status.focus = true;
 								if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
@@ -888,7 +895,7 @@
 									profile.visualKeyboard.focusOn = configs.ref;
 									profile.visualKeyboard.onKeyup = visualKbOnKeyup;
 								}
-							}, 30);
+							}, 50);
 						}
 					});
 				} else {
@@ -913,6 +920,9 @@
 		if (configs.input.ref) {
 			configs.input.ref.dispatchEvent(new Event('blur'));
 			configs.input.ref.blur();
+		}
+		if (props.onEnter) {
+			props.onEnter();
 		}
 	}
 
