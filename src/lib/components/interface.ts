@@ -578,6 +578,9 @@ export interface EventListener {
 	touchend?: EventDefault;
 	destroy?: EventDefault;
 	scroll?: EventDefault;
+	submit?: EventDefault;
+	reset?: EventDefault;
+	pointerover?: EventDefault;
 }
 export type FieldSupported =
 	| 'text'

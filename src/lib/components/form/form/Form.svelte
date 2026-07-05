@@ -1,14 +1,62 @@
 <script lang="ts">
 	import type { EventListener } from '$components/interface';
 	import { handleEvents } from '$modules/_attachments';
-	import { setFormContext } from '.';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { setFormContext, type TextfieldToForm } from '.';
 	import type { Form } from './_interface';
+	import { every, some } from 'es-toolkit/compat';
 
 	let { children, disabled = $bindable(), ...props }: Form = $props();
 	let configs = $state({
-		status: {},
+		status: {
+			get valid() {
+				if (configs.childrens) {
+					if (every([...configs.childrens.values()], (node) => !node.loading)) {
+						console.log(
+							every([...configs.childrens.values()], (node) =>
+								node.isValid ? node.isValid() : true
+							)
+						);
+						return every([...configs.childrens.values()], (node) =>
+							node.isValid ? node.isValid() : true
+						);
+					} else {
+						return undefined;
+					}
+				}
+				return true;
+			},
+			get loading() {
+				if (configs.childrens)
+					return some([...configs.childrens.values()].map((node) => node.loading));
+				return false;
+			}
+		},
 		ref: undefined as undefined | HTMLElement,
-		events: {} as EventListener,
+		events: {
+			submit: {
+				handler(e: MouseEvent) {
+					if (configs.childrens?.size) {
+						// configs.status.valid = every(
+						// 	[...configs.childrens.values()].map((item) =>
+						// 		item.isValid ? item.isValid() : undefined
+						// 	)
+						// );
+					}
+					if (!configs.status.valid) e.preventDefault();
+				}
+			},
+			reset: {
+				handler(e) {
+					// configs.status.valid = undefined;
+					if (configs.childrens) {
+						configs.childrens.values().forEach((field) => {
+							if (field.reset) field.reset();
+						});
+					}
+				}
+			}
+		} as EventListener,
 		get style() {
 			const defaultStyles: string[] = [];
 			if (typeof props.class == 'object') {
@@ -18,15 +66,27 @@
 				return [...defaultStyles, props.class];
 			}
 			return defaultStyles;
-		}
+		},
+		childrens: undefined as undefined | SvelteMap<string, TextfieldToForm>
 	});
 	setFormContext({
+		get valid() {
+			return configs.status.valid;
+		},
+		get loading() {
+			return configs.status.loading;
+		},
 		get size() {
 			return props.size;
+		},
+		insertMetaNode: (field) => {
+			if (!configs.childrens) configs.childrens = new SvelteMap();
+			configs.childrens.set(field.name, field);
 		}
 	});
 </script>
 
+{configs.status.valid}
 {#if typeof children == 'function'}
 	<svelte:element
 		this={props.as ?? 'form'}

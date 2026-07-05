@@ -10,10 +10,11 @@
 	import { copyToClipboard, pasteFromClipboard, watchClipboard } from '$modules';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { browser } from '$app/environment';
-	import { every } from 'es-toolkit/compat';
+	import { every, keys, mapValues } from 'es-toolkit/compat';
 	import type { NumbericKey } from '$components/keyboard/numberic/_interface';
 	import { getTextfieldCtx } from '../textField/index.ts';
 	import { getFormContext } from '../form/index.ts';
+	import { v7 as uuidV7 } from 'uuid';
 	// import Numberic from '$components/keyboard/numberic/Numberic.svelte';
 	// import { every, some } from 'es-toolkit/compat';
 
@@ -53,7 +54,8 @@
 			focus: false,
 			timeId: {
 				timeout: undefined as undefined | NodeJS.Timeout,
-				animationId: undefined as undefined | number
+				animationId: undefined as undefined | number,
+				calculate: undefined as undefined | NodeJS.Timeout
 			},
 			showClearBtn: false,
 			get type() {
@@ -83,7 +85,19 @@
 				return profile.delay;
 			},
 			loadingStartAt: undefined as undefined | number,
-			showPassword: undefined as undefined | boolean
+			showPassword: undefined as undefined | boolean,
+			get changed() {
+				if (
+					(configs.initValue && configs.initValue != value) ||
+					configs.input.status.previousValue != value
+				)
+					return true;
+				return false;
+			}
+		},
+		initValue: undefined as undefined | number | string,
+		get name() {
+			return props.name ?? textFieldCtx.name ?? `input_${uuidV7()}`;
 		},
 		_passwordMask: undefined as undefined | string,
 		get passwordMask() {
@@ -264,6 +278,7 @@
 						}
 					})
 		} as EventListener,
+		eventValidate: undefined as undefined | EventListener,
 		input: {
 			status: {
 				openParen: undefined as undefined | number,
@@ -297,6 +312,13 @@
 						return () => {
 							clearInterval(myInterval);
 						};
+					}
+				},
+				change: {
+					handler() {
+						if (textFieldCtx.updateValue) {
+							textFieldCtx.updateValue(value);
+						}
 					}
 				},
 				// focus: {
@@ -421,36 +443,45 @@
 				get blur() {
 					if (configs.status.type != 'number' || profile.browser.type?.includes('desktop'))
 						return {
-							handler() {
+							async handler() {
 								if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
 									profile.visualKeyboard.isShow = false;
 								configs.status.focus = false;
-								if (props.type == 'number') calculatorString();
+								if (props.type == 'number') await calculatorString();
 								if (textFieldCtx.onBlur) {
 									textFieldCtx.onBlur(configs.status.focus);
 								}
+								if (textFieldCtx.updateValue && configs.status.changed)
+									textFieldCtx.updateValue(value);
+								if (configs.input.status.previousValue != value)
+									configs.input.status.previousValue = value;
 							}
 						};
 					return {
-						handler() {
-							requestAnimationFrame(() => {
-								try {
-									if (
-										!configs.status.focus ||
-										(configs.ref && configs.ref.contains(profile.visualKeyboard.focusOn))
-									)
-										return;
-									if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
-										profile.visualKeyboard.isShow = true;
-									value = Function(
-										`'use strict'; return (${value?.toString().replace('x', '*').replace(':', '/')})`
-									)();
-									configs.input.status.previousValue = value;
-								} catch {
-									if (configs.input.status.previousValue)
-										value = configs.input.status.previousValue;
-								}
-							});
+						async handler(e) {
+							await calculatorString();
+							// requestAnimationFrame(() => {
+							// 	let calculated: number;
+							// 	try {
+							// 		if (
+							// 			!configs.status.focus ||
+							// 			(configs.ref && configs.ref.contains(profile.visualKeyboard.focusOn))
+							// 		)
+							// 			return;
+							// 		if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
+							// 			profile.visualKeyboard.isShow = true;
+							// 		calculated = Function(
+							// 			`'use strict'; return (${value?.toString().replace('x', '*').replace(':', '/')})`
+							// 		)();
+							// 		if (calculated != null) {
+							// 			configs.input.status.previousValue = calculated;
+							// 			value = calculated;
+							// 		}
+							// 	} catch {
+							// 		if (configs.input.status.previousValue)
+							// 			value = configs.input.status.previousValue;
+							// 	}
+							// });
 						}
 					};
 				}
@@ -464,6 +495,7 @@
 				touchstart: {
 					handler() {
 						value = undefined;
+						if (textFieldCtx.updateValue) textFieldCtx.updateValue(value);
 						if (props.type == 'password') {
 							configs.passwordMask = '';
 						}
@@ -854,20 +886,35 @@
 		//configs.input.ref?.focus();
 		configs.input.ref?.scrollTo({ left: configs.input.ref.scrollWidth, behavior: 'smooth' });
 	}
-	function calculatorString() {
-		requestAnimationFrame(() => {
-			try {
-				if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
-					profile.visualKeyboard.isShow = true;
-				value = Function(
-					`'use strict'; return (${value?.toString().replace('x', '*').replace(':', '/')})`
-				)();
-				configs.input.status.previousValue = value;
-				configs.status.focus = false;
-				if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
-			} catch {
-				if (configs.input.status.previousValue) value = configs.input.status.previousValue;
-			}
+	async function calculatorString() {
+		loading = true;
+		let calculated: number;
+		if (configs.status.focus) return;
+		if (configs.status.timeId.calculate) clearTimeout(configs.status.timeId.calculate);
+		return new Promise<void>((resolve) => {
+			configs.status.timeId.calculate = setTimeout(() => {
+				try {
+					if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
+						profile.visualKeyboard.isShow = true;
+
+					calculated = Function(
+						`'use strict'; return (${value?.toString().replaceAll('x', '*').replaceAll(':', '/')})`
+					)();
+
+					configs.status.focus = false;
+					if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+					if (calculated != null) {
+						if (value != calculated) configs.input.status.previousValue = value;
+						value = calculated;
+					}
+					resolve();
+					loading = false;
+				} catch (e) {
+					if (configs.input.status.previousValue) value = configs.input.status.previousValue;
+					resolve();
+					loading = false;
+				}
+			}, 300);
 		});
 	}
 	function actionFocus() {
@@ -924,6 +971,11 @@
 		if (props.onEnter) {
 			props.onEnter();
 		}
+	}
+	function reset() {
+		configs.status.focus = false;
+		value = undefined;
+		if (props.type == 'password') configs.passwordMask = '';
 	}
 
 	const textFieldCtx = getTextfieldCtx();
@@ -1011,6 +1063,37 @@
 			document.body.appendChild(visualInput);
 			profile.visualNodes.input.ref = visualInput;
 		}
+		if (textFieldCtx.validate) {
+			configs.eventValidate = mapValues(textFieldCtx.validate, (item, k) => ({
+				handler() {
+					if (item) {
+						const isValid = item.isValid(value);
+						textFieldCtx.isInvalid = !isValid;
+						if (textFieldCtx.insertErrorMessage) {
+							textFieldCtx.insertErrorMessage({
+								eventName: k as keyof EventListener,
+								message: item.message
+									? isValid
+										? item.message.valid
+										: item.message.invalid
+									: undefined
+							});
+						}
+					}
+				}
+			}));
+		}
+		if (textFieldCtx.insertMetaNode) {
+			textFieldCtx.insertMetaNode({
+				name: configs.name,
+				ref: configs.ref,
+				reset: reset,
+				get loading() {
+					return loading;
+				}
+			});
+		}
+		configs.initValue = value;
 	});
 	onDestroy(() => {
 		if (browser) {
@@ -1044,7 +1127,7 @@
 						events: [
 							{
 								touchstart: {
-									handler(e) {
+									async handler(e) {
 										if (!textFieldCtx.ref?.contains(e.target)) {
 											actionBlur();
 											//console.log('blur');
@@ -1064,8 +1147,12 @@
 											}
 											configs.status.focus = false;
 											if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
-											calculatorString();
+											await calculatorString();
 											profile.visualKeyboard.focusOn = null;
+											configs.input.ref?.dispatchEvent(new CustomEvent('blur'));
+											if (configs.input.status.previousValue != value) {
+												configs.input.ref?.dispatchEvent(new CustomEvent('change'));
+											}
 										}
 									}
 								}
@@ -1090,7 +1177,13 @@
 				bind:value
 				placeholder={props.placeholder}
 				{@attach handleEvents([
-					{ events: [configs.event, configs.input.event] },
+					{
+						events: [
+							configs.event,
+							configs.input.event,
+							...(configs.eventValidate ? [configs.eventValidate] : [])
+						]
+					},
 					props.events ? props.events : undefined
 				])}
 			/>
@@ -1102,7 +1195,13 @@
 				value={configs.status.showPassword ? value : configs.passwordMask}
 				placeholder={props.placeholder}
 				{@attach handleEvents([
-					{ events: [configs.event, configs.input.event] },
+					{
+						events: [
+							configs.event,
+							configs.input.event,
+							...(configs.eventValidate ? [configs.eventValidate] : [])
+						]
+					},
 					props.events ? props.events : undefined
 				])}
 			/>
@@ -1115,6 +1214,16 @@
 						? 'text-gray-400'
 						: ''}"
 					bind:this={configs.input.ref}
+					{@attach handleEvents([
+						{
+							events: [
+								configs.event,
+								configs.input.event,
+								...(configs.eventValidate ? [configs.eventValidate] : [])
+							]
+						},
+						props.events ? props.events : undefined
+					])}
 				>
 					{configs.status.focus
 						? value

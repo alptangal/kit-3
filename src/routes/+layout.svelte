@@ -12,6 +12,7 @@
 	import { detectBrowserType, updateResizeWindow, watchClipboard } from '$modules';
 	import Numberic from '$components/keyboard/numberic/Numberic.svelte';
 	import { Description, Form, Label, TextField } from '$components/form/index.js';
+	import { getFormContext } from '$components/form/form/index.js';
 
 	let { data, children } = $props();
 
@@ -81,6 +82,26 @@
 			} catch (e) {}
 		}
 	});
+
+	const formTest = {
+		get context() {
+			return getFormContext();
+		},
+		username: {
+			value: null,
+			required: true,
+			isInvalid: undefined,
+			errorMessages: {
+				required: 'This field is required'
+			}
+		},
+		password: {
+			value: null,
+			required: true,
+			isInvalid: undefined,
+			message: null
+		}
+	};
 </script>
 
 <svelte:head>
@@ -130,8 +151,23 @@
 					loading
 				></Button>
 
-				<Form method="get" action="/">
-					<TextField required isInvalid={false}>
+				<Form method="get" action="/33">
+					<TextField
+						required
+						errorMessages={formTest.username.errorMessages}
+						validate={{
+							change: {
+								isValid(v) {
+									if (v == 3) return true;
+									return false;
+								},
+								message: {
+									valid: ' equal 3',
+									invalid: 'not equal 3'
+								}
+							}
+						}}
+					>
 						<Label>Username</Label>
 						<Input
 							class="border border-solid border-gray-500"
@@ -152,13 +188,15 @@
 							placeholder="Please enter your keys"
 							clearButtonEnabled
 							type="password"
-							loading
 							loadingAnimation={{ style: 'style-4', duration: '1s' }}
 							focusAtStart
 							showPasswordButtonEnabled
 						/>
 						<Description>Here is username field very large</Description>
 					</TextField>
+					<Button type="submit" disabled={formTest.context.loading && formTest.context.valid}
+						>Submit</Button
+					><Button type="reset">Reset</Button>
 				</Form>
 			{/snippet}
 		</Header>

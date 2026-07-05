@@ -1,5 +1,14 @@
 import { getContext, setContext } from 'svelte';
 import type { TextField } from './_interface';
+import type { EventListener } from '$components/interface';
+
+export type MetaNode = {
+	name?: string;
+	ref?: HTMLElement;
+	isValid?: () => void;
+	reset?: () => void;
+	loading?: boolean;
+};
 interface TextFieldContext extends TextField {
 	ref?: HTMLElement;
 	status?: {
@@ -11,6 +20,9 @@ interface TextFieldContext extends TextField {
 		id: string,
 		fallback: () => void
 	) => void;
+	insertErrorMessage?: (messageObj: { eventName: keyof EventListener; message?: string }) => void;
+	updateValue?: (value?: number | string) => void;
+	insertMetaNode?: (data: MetaNode) => void;
 }
 
 const TEXT_FIELD = Symbol('textfield-context');

@@ -7,6 +7,7 @@
 	import { iconify } from '$assets/icons/iconify';
 	import { fly } from 'svelte/transition';
 	import { pick } from 'es-toolkit/compat';
+	import { getFormContext } from '$components/form/form';
 
 	let { children, ...props }: Button = $props();
 
@@ -16,6 +17,9 @@
 			style: ['w-fit max-w-full flex justify-center items-center'],
 			/**duration in miliseconds */
 			duration: 3000
+		},
+		get type() {
+			return props.type ?? 'button';
 		},
 		status: {
 			get onlyIcon() {
@@ -96,6 +100,7 @@
 				}
 			},
 			get click() {
+				if (!profile.browser.type?.includes('desktop')) return undefined;
 				return this.touchstart;
 			},
 			touchstart: {
@@ -134,6 +139,13 @@
 							}
 						}
 						configs.status.timeId.requestAnimation = requestAnimationFrame(processing);
+
+						if (configs.type == 'submit' && formCtx.onSubmit) {
+							formCtx.onSubmit();
+						}
+						if (configs.type == 'reset' && formCtx.onReset) {
+							formCtx.onReset();
+						}
 						return () => {
 							if (configs.status.timeId.requestAnimation) {
 								cancelAnimationFrame(configs.status.timeId.requestAnimation);
@@ -155,6 +167,8 @@
 			}
 		}
 	});
+
+	const formCtx = getFormContext();
 
 	//-----------------------------------------------BEGIN METHODS--------------------------------------------
 	function updateOffset(element: HTMLElement) {
@@ -368,6 +382,7 @@
 		: `${configs.default.duration}ms`}
 	transition:fly={profile.transition.templates.flyY}
 	title={props.alt}
+	type={configs.type}
 	{@attach handleEvents([
 		{
 			events: [
