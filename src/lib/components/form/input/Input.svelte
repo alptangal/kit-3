@@ -166,37 +166,7 @@
 									}
 								});
 							}
-
-							// profile.visualKeyboard.focusOn = data.node;
-							// profile.visualKeyboard.onKeyup = visualKbOnKeyup;
 						}
-						// function processFocus() {
-						// 	if (
-						// 		profile.browser.type &&
-						// 		profile.browser.type.includes('mobile') &&
-						// 		props.type == 'number' &&
-						// 		!configs.status.focus
-						// 	) {
-						// 		configs.status.focus = true;
-						// 		if (configs.status.timeId.animationId) {
-						// 			cancelAnimationFrame(configs.status.timeId.animationId);
-						// 			if (configs.ref) {
-						// 				const refRect = configs.ref.getBoundingClientRect();
-						// 				if (window.innerHeight - refRect.bottom < profile.visualKeyboard.height) {
-						// 					document.body.setAttribute(
-						// 						'height-bu',
-						// 						document.body.style.getPropertyValue('height')
-						// 					);
-						// 					document.body.style.height = `${document.body.offsetHeight + (profile.visualKeyboard.height - (window.innerHeight - refRect.bottom))}px`;
-						// 					window.scrollTo({ top: document.body.offsetHeight, behavior: 'smooth' });
-						// 				}
-						// 			}
-						// 		}
-
-						// 		configs.status.focusFirstTime = true;
-						// 	}
-						// }
-						//if (props.focusAtStart && !configs.status.focusFirstTime) processFocus();
 						return () => {
 							mutationObs.disconnect();
 							if (configs.status.timeId.animationId)
@@ -214,10 +184,6 @@
 										if (!configs.status.focus) {
 											actionFocus();
 										}
-										// configs.status.focus = true;
-										// requestAnimationFrame(() => {
-										// 	configs.input.ref?.focus();
-										// });
 									}
 								};
 							return {
@@ -229,14 +195,6 @@
 										profile.visualKeyboard.height
 									) {
 										configs.status.focus = true;
-										// configs.status.focus = true;
-										// if (configs.ref) {
-										// 	profile.visualKeyboard.focusOn = configs.ref;
-										// 	profile.visualKeyboard.onKeyup = visualKbOnKeyup;
-										// 	requestAnimationFrame(() => {
-										// 		if (props.type == 'text') configs.input.ref?.focus();
-										// 	});
-										// }
 									} else if (props.type && ['password'].includes(props.type)) {
 										if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 									}
@@ -253,10 +211,6 @@
 										if (!configs.status.focus) {
 											actionFocus();
 										}
-										// configs.status.focus = true;
-										// requestAnimationFrame(() => {
-										// 	configs.input.ref?.focus();
-										// });
 									}
 								};
 							return {
@@ -268,14 +222,6 @@
 										profile.visualKeyboard.height
 									) {
 										configs.status.focus = true;
-										// configs.status.focus = true;
-										// if (configs.ref) {
-										// 	profile.visualKeyboard.focusOn = configs.ref;
-										// 	profile.visualKeyboard.onKeyup = visualKbOnKeyup;
-										// 	requestAnimationFrame(() => {
-										// 		if (props.type == 'text') configs.input.ref?.focus();
-										// 	});
-										// }
 									} else if (props.type && ['password'].includes(props.type)) {
 										if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 									}
@@ -328,29 +274,6 @@
 						}
 					}
 				},
-				// focus: {
-				// 	handler() {
-				// 		if (profile.browser.type?.includes('mobile')) {
-				// 			profile.visualKeyboard.isShow = true;
-				// 			function watchKb() {
-				// 				if (profile.visualKeyboard.height && configs.status.timeId.animationId) {
-				// 					cancelAnimationFrame(configs.status.timeId.animationId);
-				// 					configs.input.ref?.blur();
-				// 					configs.status.focus = true;
-				// 				} else {
-				// 					configs.status.timeId.animationId = requestAnimationFrame(watchKb);
-				// 				}
-				// 			}
-				// 			configs.status.timeId.animationId = requestAnimationFrame(watchKb);
-				// 			// setTimeout(() => {
-				// 			// 	if (props.type == 'number' && configs.input.ref && profile.visualKeyboard.height) {
-				// 			// 	}
-				// 			// 	configs.input.ref.blur();
-				// 			// 	configs.status.focus = true;
-				// 			// }, 700);
-				// 		}
-				// 	}
-				// },
 				keyup: {
 					handler() {
 						if (configs.status.type == 'number' && value != undefined) {
@@ -359,18 +282,18 @@
 					}
 				},
 				get keydown() {
-					if (configs.status.type == 'text')
-						return {
-							handler(e) {
+					return {
+						handler(e: KeyboardEvent) {
+							if (e.key == 'Enter' && textFieldCtx.onEnter) {
+								textFieldCtx.onEnter();
+							}
+							if (configs.status.type == 'text') {
 								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
 								if (e.key == 'Enter' && configs.status.focus) {
 									actionBlur();
 								}
 							}
-						};
-					if (configs.status.type == 'password')
-						return {
-							handler(e: KeyboardEvent) {
+							if (configs.status.type == 'password') {
 								if (e.key.toLowerCase() == 'backspace' && value) {
 									const inputElement = e.target as HTMLInputElement;
 									const currentSelection = inputElement.selectionStart;
@@ -402,10 +325,7 @@
 								e.preventDefault();
 								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
 							}
-						};
-					if (configs.status.type == 'number')
-						return {
-							handler(e: KeyboardEvent) {
+							if (configs.status.type == 'number') {
 								const inputElement = e.target as HTMLInputElement;
 								const allowedKeys = ['Backspace'];
 								if (allowedKeys.includes(e.key)) return;
@@ -446,8 +366,8 @@
 									e.preventDefault();
 								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
 							}
-						};
-					return undefined;
+						}
+					};
 				},
 				get blur() {
 					if (configs.status.type != 'number' || profile.browser.type?.includes('desktop'))
@@ -467,28 +387,6 @@
 					return {
 						async handler(e) {
 							await calculatorString();
-							// requestAnimationFrame(() => {
-							// 	let calculated: number;
-							// 	try {
-							// 		if (
-							// 			!configs.status.focus ||
-							// 			(configs.ref && configs.ref.contains(profile.visualKeyboard.focusOn))
-							// 		)
-							// 			return;
-							// 		if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
-							// 			profile.visualKeyboard.isShow = true;
-							// 		calculated = Function(
-							// 			`'use strict'; return (${value?.toString().replace('x', '*').replace(':', '/')})`
-							// 		)();
-							// 		if (calculated != null) {
-							// 			configs.input.status.previousValue = calculated;
-							// 			value = calculated;
-							// 		}
-							// 	} catch {
-							// 		if (configs.input.status.previousValue)
-							// 			value = configs.input.status.previousValue;
-							// 	}
-							// });
 						}
 					};
 				}
@@ -511,10 +409,6 @@
 							!configs.status.focus
 						) {
 							actionFocus();
-							// setTimeout(() => {
-							// 	configs.input.ref?.focus();
-							// 	configs.status.focus = true;
-							// });
 						}
 					}
 				}
@@ -613,11 +507,6 @@
 						let data;
 						try {
 							data = await navigator.clipboard.readText();
-
-							// if (props.type == 'text' || profile.browser.type?.includes('desktop')) {
-							// 	configs.status.focus = true;
-							// 	configs.input.ref?.focus();
-							// }
 						} catch (e) {
 							data = await pasteFromClipboard();
 						}
@@ -628,8 +517,6 @@
 								if (configs.input.status.currentSelected) {
 									if (props.type == 'text') {
 										actionFocus();
-										// configs.status.focus = true;
-										// configs.input.ref?.focus();
 									}
 									(configs.input.ref as HTMLInputElement).setSelectionRange(
 										configs.input.status.currentSelected,
@@ -660,14 +547,11 @@
 				},
 				touchstart: {
 					handler() {
-						//configs.status.focus = true;
 						configs.status.showPassword = !configs.status.showPassword;
 						if (!configs.status.focus) {
 							actionFocus();
 						}
-						setTimeout(() => {
-							//if (configs.input.ref) configs.input.ref.focus();
-						}, 1000);
+						setTimeout(() => {}, 1000);
 					}
 				}
 			} as EventListener
@@ -717,23 +601,11 @@
 			configs.virualInput.ref
 		) {
 			if ((e.target as HTMLElement).classList.contains('copy-btn')) {
-				//configs.virualInput.ref.focus();
 			} else if ((e.target as HTMLElement).classList.contains('paste-btn')) {
 				actionFocus();
-				// if (props.type == 'text') {
-				// 	configs.status.focus = true;
-				// 	configs.input.ref?.focus();
-				// }
 			}
-			// configs.virualInput.ref.focus();
-			// if ((e.target as HTMLElement).classList.contains('paste-btn')) {
-			// 	configs.input.ref?.focus();
-			// }
 		}
 		if (textFieldCtx && textFieldCtx.ref?.contains(e.target as HTMLElement) && !disabled) {
-			//actionFocus();
-			// configs.status.focus = true;
-			// configs.input.ref?.focus();
 		}
 	}
 	function visualKbOnKeyup(key: NumbericKey) {
@@ -889,8 +761,6 @@
 				configs.status.focus = false;
 				if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
 		}
-
-		//configs.input.ref?.focus();
 		configs.input.ref?.scrollTo({ left: configs.input.ref.scrollWidth, behavior: 'smooth' });
 	}
 	async function calculatorString() {
@@ -919,7 +789,6 @@
 						value = calculated;
 					}
 					configs.status.loading = false;
-					console.log('calcu', configs.status.loading);
 					resolve();
 				} catch (e) {
 					if (configs.input.status.previousValue) value = configs.input.status.previousValue;
@@ -932,10 +801,6 @@
 	function actionFocus() {
 		try {
 			if (disabled || !browser) return;
-			//configs.status.focus = true;
-			// if (configs.status.timeId.animationId) cancelAnimationFrame(configs.status.timeId.animationId);
-			// configs.status.timeId.animationId = requestAnimationFrame(() => {
-
 			if (profile.browser.type?.includes('mobile') && props.type == 'number' && configs.ref) {
 				if (profile.visualNodes.input.ref && !profile.visualKeyboard.hasHeightValue) {
 					profile.visualNodes.input.ref.focus();
@@ -972,8 +837,6 @@
 		} catch (e) {
 			console.log(e);
 		}
-
-		// });
 	}
 	function actionBlur() {
 		if (configs.input.ref) {
@@ -1008,43 +871,6 @@
 				configs.ref.style.removeProperty('--process-deg');
 			}
 		}
-		// if (props.type == 'password' && configs.status.focus) {
-		// 	let lastValue: number;
-		// 	let timeId: number;
-		// 	const startAt = performance.now();
-		// 	console.log(visualViewport.height);
-		// 	function myCalculator() {
-		// 		if (visualViewport && visualViewport.height == lastValue) {
-		// 			console.log('end at', performance.now() - startAt, visualViewport.height);
-		// 		} else {
-		// 			if (visualViewport) lastValue = visualViewport.height;
-		// 			setTimeout(myCalculator, 0);
-		// 		}
-		// 	}
-		// 	setTimeout(myCalculator, 500);
-		// }
-		// if (textFieldCtx.status?.focus && !disabled) {
-		// 	configs.status.focus = true;
-		// 	if (profile.browser.type?.includes('desktop') && configs.input.ref) {
-		// 		requestAnimationFrame(() => {
-		// 			configs.input.ref?.focus();
-		// 		});
-		// 	}
-		// }
-		// if (configs.status.focus && configs.ref && !props.focusAtStart) {
-		// 	const refRect = configs.ref.getBoundingClientRect();
-		// 	if (window.innerHeight - refRect.bottom < profile.visualKeyboard.height) {
-		// 		document.body.setAttribute('height-bu', document.body.style.getPropertyValue('height'));
-		// 		document.body.style.height = `${document.body.offsetHeight + (profile.visualKeyboard.height - (window.innerHeight - refRect.bottom))}px`;
-		// 		window.scrollTo({
-		// 			top: profile.visualKeyboard.height - (window.innerHeight - refRect.bottom),
-		// 			behavior: 'smooth'
-		// 		});
-		// 	}
-		// } else if (!configs.status.focus) {
-		// 	document.body.style.height = `${document.body.getAttribute('height-bu')}px`;
-		// 	document.body.removeAttribute('height-bu');
-		// }
 	});
 	onMount(async () => {
 		window.addEventListener('click', autoFocus);
@@ -1126,7 +952,8 @@
 				reset: reset,
 				get loading() {
 					return configs.status.loading;
-				}
+				},
+				focus: actionFocus
 			});
 		}
 		configs.initValue = value;

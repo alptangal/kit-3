@@ -8,6 +8,7 @@ export type MetaNode = {
 	isValid?: () => void;
 	reset?: () => void;
 	loading?: boolean;
+	focus?: () => void;
 };
 interface TextFieldContext extends TextField {
 	ref?: HTMLElement;

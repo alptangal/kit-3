@@ -8,7 +8,6 @@
 	import { styleSynced } from '$modules';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { v7 as uuidV7 } from 'uuid';
-	import { profile } from '$store/basic.svelte';
 	import { some } from 'es-toolkit/compat';
 
 	let { children, ...props }: TextField = $props();
@@ -36,10 +35,11 @@
 							name: configs.name,
 							ref: configs.ref,
 							isValid: isValid,
-							reset: reset,
+							reset,
 							get loading() {
 								return configs.status.loading;
-							}
+							},
+							focus
 						});
 					}
 				}
@@ -59,15 +59,6 @@
 					e.preventDefault();
 					configs.status.focus = true;
 					if (!configs.status.firstAction) configs.status.firstAction = true;
-					// if (
-					// 	(e.target as HTMLElement).tagName != 'INPUT' &&
-					// 	configs.ref?.contains(e.target as HTMLElement)
-					// ) {
-					// 	if (configs.status.focus) configs.status.focus = false;
-					// 	return;
-					// }
-					// if (!configs.status.focus) configs.status.focus = true;
-					//if (configs.status.focus) return;
 					if (configs.onFocus) {
 						configs.onFocus.forEach((fallback) => {
 							fallback();
@@ -102,15 +93,6 @@
 		},
 		get isInvalid() {
 			return configs.status.isInvalid;
-			// if (props.isInvalid) return props.isInvalid;
-
-			// if (props.validate && configs.status.firstAction) {
-			// 	console.log(props.validate);
-			// 	return configs.status.validateOperator == 'AND'
-			// 		? every(values(props.validate).map((item) => !item.result))
-			// 		: some(values(props.validate).map((item) => !item.result));
-			// }
-			// return undefined;
 		},
 		set isInvalid(val) {
 			configs.status.isInvalid = val;
@@ -137,6 +119,9 @@
 		insertMetaNode(data) {
 			if (!configs.childrens) configs.childrens = new SvelteMap();
 			configs.childrens.set(data.name ?? uuidV7(), data);
+		},
+		onEnter() {
+			if (configs.ref) formCtx.nextNode?.(configs.ref);
 		}
 	});
 
@@ -163,6 +148,15 @@
 		}
 		configs.value = undefined;
 		configs.errorMessages = undefined;
+	}
+	function focus() {
+		if (configs.childrens) {
+			for (const node of configs.childrens.values()) {
+				if (node && node.focus) {
+					node.focus();
+				}
+			}
+		}
 	}
 
 	//=---------------------------------------------

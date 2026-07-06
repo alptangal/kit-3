@@ -7,6 +7,7 @@ export interface TextfieldToForm extends MetaNode {
 interface FormContext extends Form {
 	insertMetaNode?: (childrenNode: TextfieldToForm) => void;
 	valid?: boolean;
+	nextNode?: (currentNode: HTMLElement | HTMLInputElement | HTMLDivElement) => void;
 }
 
 const FORM_CONTEXT = Symbol('form-context');

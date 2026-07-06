@@ -81,6 +81,24 @@
 		insertMetaNode: (field) => {
 			if (!configs.childrens) configs.childrens = new SvelteMap();
 			configs.childrens.set(field.name, field);
+		},
+		nextNode(currentNode) {
+			if (!configs.childrens) return;
+			const currentIndex = [...configs.childrens.values()].findIndex((item) =>
+				item.ref?.contains(currentNode)
+			);
+			let nextIndex = currentIndex + 1;
+			if (nextIndex == configs.childrens.size && configs.status.valid) {
+				configs.ref?.dispatchEvent(new Event('submit'));
+			} else {
+				if (nextIndex == configs.childrens.size) nextIndex = 0;
+				const nextNode = [...configs.childrens.values()].find((_, idx) => idx == nextIndex);
+				if (nextNode && nextNode.focus) {
+					nextNode.focus();
+				}
+			}
+
+			// [...configs.childrens.values()].find((_, idx) => idx == nextIndex)?.focus();
 		}
 	});
 </script>

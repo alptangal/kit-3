@@ -27,4 +27,5 @@ export interface TextField extends BasicProps {
 			result?: boolean;
 		};
 	};
+	onEnter?: () => void;
 }
