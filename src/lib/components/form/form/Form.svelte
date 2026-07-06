@@ -12,11 +12,6 @@
 			get valid() {
 				if (configs.childrens) {
 					if (every([...configs.childrens.values()], (node) => !node.loading)) {
-						console.log(
-							every([...configs.childrens.values()], (node) =>
-								node.isValid ? node.isValid() : true
-							)
-						);
 						return every([...configs.childrens.values()], (node) =>
 							node.isValid ? node.isValid() : true
 						);
@@ -36,6 +31,7 @@
 		events: {
 			submit: {
 				handler(e: MouseEvent) {
+					console.log(configs.status.valid);
 					if (configs.childrens?.size) {
 						// configs.status.valid = every(
 						// 	[...configs.childrens.values()].map((item) =>
@@ -44,6 +40,9 @@
 						// );
 					}
 					if (!configs.status.valid) e.preventDefault();
+					setTimeout(() => {
+						console.log(configs.status.valid);
+					}, 3000);
 				}
 			},
 			reset: {
@@ -86,7 +85,6 @@
 	});
 </script>
 
-{configs.status.valid}
 {#if typeof children == 'function'}
 	<svelte:element
 		this={props.as ?? 'form'}

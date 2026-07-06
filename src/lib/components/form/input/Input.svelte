@@ -18,12 +18,7 @@
 	// import Numberic from '$components/keyboard/numberic/Numberic.svelte';
 	// import { every, some } from 'es-toolkit/compat';
 
-	let {
-		value = $bindable(),
-		loading = $bindable(),
-		disabled = $bindable(),
-		...props
-	}: InputProps = $props();
+	let { value = $bindable(), disabled = $bindable(), ...props }: InputProps = $props();
 
 	const defaults = {
 		root: {
@@ -55,14 +50,15 @@
 			timeId: {
 				timeout: undefined as undefined | NodeJS.Timeout,
 				animationId: undefined as undefined | number,
-				calculate: undefined as undefined | NodeJS.Timeout
+				calculate: undefined as undefined | NodeJS.Timeout,
+				validation: undefined as undefined | NodeJS.Timeout | number
 			},
 			showClearBtn: false,
 			get type() {
 				return props.type ?? 'text';
 			},
 			get loadingAnimationStyle(): `style-${number}` | undefined {
-				if (!loading) return undefined;
+				if (!this.loading) return undefined;
 				return typeof props.loadingAnimation == 'string'
 					? props.loadingAnimation
 					: typeof props.loadingAnimation == 'object'
@@ -70,7 +66,7 @@
 						: 'style-1';
 			},
 			get loadingAnimationDuration(): number | undefined {
-				if (!loading) return undefined;
+				if (!this.loading) return undefined;
 				if (typeof props.loadingAnimation == 'string') return profile.delay;
 				if (typeof props.loadingAnimation == 'object') {
 					if (props.loadingAnimation.duration) {
@@ -93,6 +89,17 @@
 				)
 					return true;
 				return false;
+			},
+			_loading: false,
+			get loading() {
+				return this._loading ?? props.loading;
+			},
+			set loading(val) {
+				this._loading = val;
+			},
+			resolver: {
+				calculate: undefined as undefined | (() => void),
+				validate: undefined as undefined | (() => void)
 			}
 		},
 		initValue: undefined as undefined | number | string,
@@ -368,6 +375,7 @@
 									const inputElement = e.target as HTMLInputElement;
 									const currentSelection = inputElement.selectionStart;
 									if (currentSelection) {
+										configs.input.status.previousValue = value;
 										value =
 											value.toString().slice(0, currentSelection - 1) +
 											value.toString().slice(currentSelection, value.toString().length);
@@ -388,6 +396,7 @@
 								}
 								if (!value) value = '';
 								if (!configs.passwordMask) configs.passwordMask = '';
+								configs.input.status.previousValue = value;
 								value += e.key;
 								configs.passwordMask += e.key;
 								e.preventDefault();
@@ -443,7 +452,7 @@
 				get blur() {
 					if (configs.status.type != 'number' || profile.browser.type?.includes('desktop'))
 						return {
-							async handler() {
+							async handler(e) {
 								if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
 									profile.visualKeyboard.isShow = false;
 								configs.status.focus = false;
@@ -453,8 +462,6 @@
 								}
 								if (textFieldCtx.updateValue && configs.status.changed)
 									textFieldCtx.updateValue(value);
-								if (configs.input.status.previousValue != value)
-									configs.input.status.previousValue = value;
 							}
 						};
 					return {
@@ -887,11 +894,15 @@
 		configs.input.ref?.scrollTo({ left: configs.input.ref.scrollWidth, behavior: 'smooth' });
 	}
 	async function calculatorString() {
-		loading = true;
+		configs.status.loading = true;
 		let calculated: number;
 		if (configs.status.focus) return;
-		if (configs.status.timeId.calculate) clearTimeout(configs.status.timeId.calculate);
+		if (configs.status.timeId.calculate) {
+			clearTimeout(configs.status.timeId.calculate);
+		}
+		if (configs.status.resolver.calculate) configs.status.resolver.calculate();
 		return new Promise<void>((resolve) => {
+			configs.status.resolver.calculate = resolve;
 			configs.status.timeId.calculate = setTimeout(() => {
 				try {
 					if (profile.browser.type?.includes('mobile') && profile.visualKeyboard.isShow)
@@ -907,12 +918,13 @@
 						if (value != calculated) configs.input.status.previousValue = value;
 						value = calculated;
 					}
+					configs.status.loading = false;
+					console.log('calcu', configs.status.loading);
 					resolve();
-					loading = false;
 				} catch (e) {
 					if (configs.input.status.previousValue) value = configs.input.status.previousValue;
+					configs.status.loading = false;
 					resolve();
-					loading = false;
 				}
 			}, 300);
 		});
@@ -985,7 +997,7 @@
 	}
 
 	$effect(() => {
-		if (loading) {
+		if (configs.status.loading) {
 			configs.status.loadingStartAt = performance.now();
 			configs.status.timeId.animationId = requestAnimationFrame(processLoadingAnimation);
 		} else {
@@ -1064,24 +1076,48 @@
 			profile.visualNodes.input.ref = visualInput;
 		}
 		if (textFieldCtx.validate) {
-			configs.eventValidate = mapValues(textFieldCtx.validate, (item, k) => ({
-				handler() {
-					if (item) {
-						const isValid = item.isValid(value);
-						textFieldCtx.isInvalid = !isValid;
-						if (textFieldCtx.insertErrorMessage) {
-							textFieldCtx.insertErrorMessage({
-								eventName: k as keyof EventListener,
-								message: item.message
-									? isValid
-										? item.message.valid
-										: item.message.invalid
-									: undefined
+			configs.eventValidate = mapValues(
+				textFieldCtx.validate,
+				(item, eventName: keyof EventListener) => ({
+					async handler() {
+						if (item) {
+							if (
+								props.type == 'number' &&
+								eventName == 'change' &&
+								configs.status.timeId.calculate
+							)
+								clearTimeout(configs.status.timeId.calculate);
+							if (configs.status.resolver.validate) configs.status.resolver.validate();
+							await calculatorString();
+							configs.status.loading = true;
+							if (
+								configs.status.timeId.validation &&
+								typeof configs.status.timeId.validation == 'number'
+							)
+								clearTimeout(configs.status.timeId.validation);
+							await new Promise<void>((resolve) => {
+								configs.status.resolver.validate = resolve;
+								configs.status.timeId.validation = setTimeout(async () => {
+									const isValid = await item.isValid(value);
+									textFieldCtx.isInvalid = !isValid;
+									if (textFieldCtx.insertErrorMessage) {
+										textFieldCtx.insertErrorMessage({
+											eventName: eventName,
+											message: item.message
+												? isValid
+													? item.message.valid
+													: item.message.invalid
+												: undefined
+										});
+									}
+									configs.status.loading = false;
+									resolve();
+								}, 300);
 							});
 						}
 					}
-				}
-			}));
+				})
+			);
 		}
 		if (textFieldCtx.insertMetaNode) {
 			textFieldCtx.insertMetaNode({
@@ -1089,7 +1125,7 @@
 				ref: configs.ref,
 				reset: reset,
 				get loading() {
-					return loading;
+					return configs.status.loading;
 				}
 			});
 		}
@@ -1113,7 +1149,7 @@
 	data-variant={props.variant ?? 'primary'}
 	data-size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
 	data-disabled={disabled}
-	data-loading={loading && !configs.status.focus}
+	data-loading={configs.status.loading && !configs.status.focus}
 	data-loading-animation-style={configs.status.loadingAnimationStyle}
 	data-is-invalid={textFieldCtx.isInvalid}
 	data-focus={configs.status.focus}
@@ -1128,8 +1164,8 @@
 							{
 								touchstart: {
 									async handler(e) {
-										if (!textFieldCtx.ref?.contains(e.target)) {
-											actionBlur();
+										if (!textFieldCtx.ref?.contains(e.target) && configs.status.focus) {
+											//actionBlur();
 											//console.log('blur');
 										}
 										if (
@@ -1147,12 +1183,16 @@
 											}
 											configs.status.focus = false;
 											if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
-											await calculatorString();
 											profile.visualKeyboard.focusOn = null;
 											configs.input.ref?.dispatchEvent(new CustomEvent('blur'));
 											if (configs.input.status.previousValue != value) {
 												configs.input.ref?.dispatchEvent(new CustomEvent('change'));
 											}
+											if (
+												configs.input.status.previousValue != value &&
+												!keys(textFieldCtx.validate).includes('change')
+											)
+												await calculatorString();
 										}
 									}
 								}
@@ -1163,7 +1203,7 @@
 				])
 	])}
 >
-	{#if loading && configs.status.loadingAnimationStyle == 'style-1'}
+	{#if configs.status.loading && configs.status.loadingAnimationStyle == 'style-1'}
 		<div transition:fade={profile.transition.templates.fade} class="input-loading-icon">
 			<Icon icon={iconify.loading} />
 		</div>

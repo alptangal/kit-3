@@ -19,7 +19,7 @@ export interface TextField extends BasicProps {
 	};
 	validate?: {
 		[event in keyof EventListener]: {
-			isValid: (value: object | number | string | undefined | null) => boolean;
+			isValid: (value: object | number | string | undefined | null) => Promise<boolean> | boolean;
 			message?: {
 				valid?: string;
 				invalid?: string;

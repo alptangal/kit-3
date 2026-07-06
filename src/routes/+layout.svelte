@@ -174,7 +174,7 @@
 							overwriteDefaultStyles
 							placeholder="Please enter your keys"
 							clearButtonEnabled
-							type="number"
+							type="text"
 							loading
 							loadingAnimation={{ style: 'style-4', duration: '1s' }}
 						/>
@@ -194,8 +194,10 @@
 						/>
 						<Description>Here is username field very large</Description>
 					</TextField>
-					<Button type="submit" disabled={formTest.context.loading && formTest.context.valid}
-						>Submit</Button
+					<Button
+						type="submit"
+						disabled={formTest.context.loading || !formTest.context.valid}
+						loading={formTest.context.loading}>Submit</Button
 					><Button type="reset">Reset</Button>
 				</Form>
 			{/snippet}
