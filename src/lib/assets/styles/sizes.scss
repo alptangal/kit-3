@@ -1,0 +1,162 @@
+.size-xs {
+	--font-size: var(--font-size-xs);
+	--line-height: var(--line-height-xs);
+	--border-width: var(--border-width-xs);
+	--min-width: var(--min-width-xs);
+	--padding: var(--padding-xs);
+	--border-radius: var(--border-radius-xs);
+	--gap: var(--gap-xs);
+}
+.size-sm {
+	--font-size: var(--font-size-sm);
+	--line-height: var(--line-height-sm);
+	--border-width: var(--border-width-sm);
+	--min-width: var(--min-width-sm);
+	--padding: var(--padding-sm);
+	--border-radius: var(--border-radius-sm);
+	--gap: var(--gap-sm);
+}
+.size-md {
+	--font-size: var(--font-size-md);
+	--line-height: var(--line-height-md);
+	--border-width: var(--border-width-md);
+	--min-width: var(--min-width-md);
+	--padding: var(--padding-md);
+	--border-radius: var(--border-radius-md);
+	--gap: var(--gap-md);
+}
+.size-lg {
+	--font-size: var(--font-size-lg);
+	--line-height: var(--line-height-lg);
+	--border-width: var(--border-width-lg);
+	--min-width: var(--min-width-lg);
+	--padding: var(--padding-lg);
+	--border-radius: var(--border-radius-lg);
+	--gap: var(--gap-lg);
+}
+.size-xl {
+	--font-size: var(--font-size-xl);
+	--line-height: var(--line-height-xl);
+	--border-width: var(--border-width-xl);
+	--min-width: var(--min-width-xl);
+	--padding: var(--padding-xl);
+	--border-radius: var(--border-radius-xl);
+	--gap: var(--gap-xl);
+}
+.size-2xl {
+	--font-size: var(--font-size-2xl);
+	--line-height: var(--line-height-2xl);
+	--border-width: var(--border-width-2xl);
+	--min-width: var(--min-width-2xl);
+	--padding: var(--padding-2xl);
+	--border-radius: var(--border-radius-2xl);
+	--gap: var(--gap-2xl);
+}
+.size-3xl {
+	--font-size: var(--font-size-3xl);
+	--line-height: var(--line-height-3xl);
+	--border-width: var(--border-width-3xl);
+	--min-width: var(--min-width-3xl);
+	--padding: var(--padding-3xl);
+	--border-radius: var(--border-radius-3xl);
+	--gap: var(--gap-3xl);
+}
+.size-4xl {
+	--font-size: var(--font-size-4xl);
+	--line-height: var(--line-height-4xl);
+	--border-width: var(--border-width-4xl);
+	--min-width: var(--min-width-4xl);
+	--padding: var(--padding-4xl);
+	--border-radius: var(--border-radius-4xl);
+	--gap: var(--gap-4xl);
+}
+.size-5xl {
+	--font-size: var(--font-size-5xl);
+	--line-height: var(--line-height-5xl);
+	--border-width: var(--border-width-5xl);
+	--min-width: var(--min-width-5xl);
+	--padding: var(--padding-5xl);
+	--border-radius: var(--border-radius-5xl);
+	--gap: var(--gap-5xl);
+}
+.size-6xl {
+	--font-size: var(--font-size-6xl);
+	--line-height: var(--line-height-6xl);
+	--border-width: var(--border-width-6xl);
+	--min-width: var(--min-width-6xl);
+	--padding: var(--padding-6xl);
+	--border-radius: var(--border-radius-6xl);
+	--gap: var(--gap-6xl);
+}
+.size-7xl {
+	--font-size: var(--font-size-7xl);
+	--line-height: var(--line-height-7xl);
+	--border-width: var(--border-width-7xl);
+	--min-width: var(--min-width-7xl);
+	--padding: var(--padding-7xl);
+	--border-radius: var(--border-radius-7xl);
+	--gap: var(--gap-7xl);
+}
+.size-8xl {
+	--font-size: var(--font-size-8xl);
+	--line-height: var(--line-height-8xl);
+	--border-width: var(--border-width-8xl);
+	--min-width: var(--min-width-8xl);
+	--padding: var(--padding-8xl);
+	--border-radius: var(--border-radius-8xl);
+	--gap: var(--gap-8xl);
+}
+.size-9xl {
+	--font-size: var(--font-size-9xl);
+	--line-height: var(--line-height-9xl);
+	--border-width: var(--border-width-9xl);
+	--min-width: var(--min-width-9xl);
+	--padding: var(--padding-9xl);
+	--border-radius: var(--border-radius-9xl);
+	--gap: var(--gap-9xl);
+}
+.rounded-xs {
+	--border-radius: var(--border-radius-xs);
+}
+.rounded-sm {
+	--border-radius: var(--border-radius-sm);
+}
+.rounded-md {
+	--border-radius: var(--border-radius-md);
+}
+.rounded-lg {
+	--border-radius: var(--border-radius-lg);
+}
+.rounded-xl {
+	--border-radius: var(--border-radius-xl);
+}
+.rounded-2xl {
+	--border-radius: var(--border-radius-2xl);
+}
+.rounded-3xl {
+	--border-radius: var(--border-radius-3xl);
+}
+.rounded-4xl {
+	--border-radius: var(--border-radius-4xl);
+}
+.rounded-5xl {
+	--border-radius: var(--border-radius-5xl);
+}
+.rounded-6xl {
+	--border-radius: var(--border-radius-6xl);
+}
+.rounded-7xl {
+	--border-radius: var(--border-radius-7xl);
+}
+.rounded-8xl {
+	--border-radius: var(--border-radius-8xl);
+}
+.rounded-9xl {
+	--border-radius: var(--border-radius-9xl);
+}
+.rounded-full {
+	--border-radius: 9999999px;
+}
+.rounded-none {
+	--border-radius: none;
+}

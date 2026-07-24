@@ -1,5 +1,6 @@
+import type { DistanceUnits, TimeUnits } from '$components/interface';
 import type { Browser } from '$interfaces/basic';
-import { profile } from '$store/basic.svelte';
+import { client, profile } from '$store/basic.svelte';
 
 export async function copyToClipboard(content: string) {
 	try {
@@ -62,32 +63,49 @@ export function watchClipboard(callback: (status: boolean, data: string | null) 
 let visualViewportLastSize: { height: number; width: number };
 let startAt: number;
 export function updateResizeWindow() {
-	if (
-		!visualViewportLastSize ||
-		(visualViewport && visualViewport.height != visualViewportLastSize.height) ||
-		(visualViewport && visualViewport.width == visualViewportLastSize.width)
-	) {
-		if (!startAt) startAt = performance.now();
-		visualViewportLastSize = {
-			height: visualViewport?.height ?? 0,
-			width: visualViewport?.width ?? 0
-		};
-	} else {
-		if (!profile.browser.safariBrowser) {
-			profile.browser.safariBrowser = { visualKeyboardDurationShow: performance.now() - startAt };
-		} else {
-			profile.browser.safariBrowser.visualKeyboardDurationShow = performance.now() - startAt;
-		}
-	}
-	if (profile.browser.dimensions) {
-		profile.browser.dimensions.width = window.visualViewport?.width ?? 0;
-		profile.browser.dimensions.height = window.visualViewport?.height ?? 0;
-	} else {
-		profile.browser.dimensions = {
-			width: window.visualViewport?.width ?? 0,
-			height: window.visualViewport?.height ?? 0
-		};
-	}
+	const WINDOW_RESIZE = 'window_resize';
+	let delay = client.browser?.duration ?? 300;
+	delay = typeof delay == 'number' ? delay : parseFloat(delay);
+	const timeId = client.timeId.get(WINDOW_RESIZE);
+	if (timeId) clearTimeout(timeId);
+	client.timeId.set(
+		WINDOW_RESIZE,
+		setTimeout(() => {
+			if (
+				!visualViewportLastSize ||
+				(visualViewport && visualViewport.height != visualViewportLastSize.height) ||
+				(visualViewport && visualViewport.width == visualViewportLastSize.width)
+			) {
+				if (!startAt) startAt = performance.now();
+				visualViewportLastSize = {
+					height: visualViewport?.height ?? 0,
+					width: visualViewport?.width ?? 0
+				};
+			} else {
+				if (!profile.browser.safariBrowser) {
+					profile.browser.safariBrowser = {
+						visualKeyboardDurationShow: performance.now() - startAt
+					};
+				} else {
+					profile.browser.safariBrowser.visualKeyboardDurationShow = performance.now() - startAt;
+				}
+			}
+			if (profile.browser.dimensions) {
+				profile.browser.dimensions.width = window.visualViewport?.width ?? 0;
+				profile.browser.dimensions.height = window.visualViewport?.height ?? 0;
+			} else {
+				profile.browser.dimensions = {
+					width: window.visualViewport?.width ?? 0,
+					height: window.visualViewport?.height ?? 0
+				};
+			}
+			client.updateMetaBrowser({
+				width: window.visualViewport?.width ?? 0,
+				height: window.visualViewport?.height ?? 0
+			});
+		}, delay)
+	);
+
 	// if (profile.visualKeyboard.isShow && !profile.visualKeyboard.height) {
 	// 	profile.visualKeyboard.height = window.innerHeight - (profile.browser.dimensions.height ?? 0);
 	// }
@@ -113,13 +131,13 @@ export function detectBrowserType(userAgent: string, maxTouchPoints = 0): Browse
 
 	// Desktop OS detection
 	if (/macintosh|mac os x/.test(ua) && !/mobile/.test(ua)) {
-		return 'desktop/macos';
+		return 'desktop/mac';
 	}
 
 	if (/linux/.test(ua)) {
 		// ChromeOS thường có "cros" trong UA
 		if (/cros/.test(ua)) {
-			return 'desktop/chromeos';
+			return 'desktop/chrome';
 		}
 		return 'desktop/linux';
 	}
@@ -132,24 +150,52 @@ export function detectBrowserType(userAgent: string, maxTouchPoints = 0): Browse
 }
 export function styleSynced(
 	params: {
-		defaultStyles?: string | string[];
-		propStyles?: string | string[];
+		defaultStyles?: string | (string | undefined)[];
+		propStyles?: string | (string | undefined)[];
 	},
 	overwriteDefaultStyles = false
 ) {
 	const { defaultStyles, propStyles } = params;
 	const _defaultStyles =
 		typeof defaultStyles == 'object'
-			? defaultStyles
+			? defaultStyles.filter((item): item is string => !!item)
 			: typeof defaultStyles == 'string'
 				? [defaultStyles]
 				: [];
 	const _propsStyles =
-		typeof propStyles == 'object' ? propStyles : typeof propStyles == 'string' ? [propStyles] : [];
+		typeof propStyles == 'object'
+			? propStyles.filter((item): item is string => !!item)
+			: typeof propStyles == 'string'
+				? [propStyles]
+				: [];
 
 	if (overwriteDefaultStyles) {
-		return _propsStyles;
+		return [...new Set(_defaultStyles.flatMap((item) => item.trim().split(/\s+/).filter(Boolean)))];
 	} else {
-		return [..._defaultStyles, ..._propsStyles];
+		return [
+			...new Set(_defaultStyles.flatMap((item) => item.trim().split(/\s+/).filter(Boolean))),
+			...new Set(_propsStyles.flatMap((item) => item.trim().split(/\s+/).filter(Boolean)))
+		];
 	}
+}
+export function convertToMiliseconds(input?: TimeUnits): number | undefined {
+	if (input) {
+		return typeof input == 'number'
+			? input
+			: input.includes('ms')
+				? parseFloat(input)
+				: parseFloat(input) * 1000;
+	}
+	return undefined;
+}
+export function convertToPixels(input?: DistanceUnits): number | undefined {
+	if (input) {
+		const baseFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+		return typeof input == 'number'
+			? input
+			: input.includes('px')
+				? parseFloat(input)
+				: parseFloat(input) * baseFontSize;
+	}
+	return undefined;
 }

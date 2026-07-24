@@ -510,28 +510,30 @@ export type elementTagName =
 	| 'span'
 	| 'div';
 export type classProps = string[];
-export interface EventDefault {
+export type EventCompact = (
+	event?: Event | MouseEvents | TouchEvent | KeyboardEvent,
+	data?: {
+		node?: HTMLElement | Window | Document | Body | VisualViewport;
+	}
+) => (() => void) | Promise<() => void> | void | Promise<void>;
+export interface EventFull {
 	handler: (
-		event?:
-			| Event
-			| MouseEvent
-			| KeyboardEvent
-			| EventListener
-			| HTMLElement
-			| HTMLDivElement
-			| Window
-			| Document
-			| Element
-			| null,
+		event?: Event | MouseEvent | TouchEvent | KeyboardEvent,
 		data?: { node?: HTMLElement | Window | Document | Body | VisualViewport }
-	) => (() => void | Promise<void>) | void | Promise<void>;
+	) => (() => void) | Promise<() => void> | void | Promise<void>;
 	options?: {
 		stopPropagation?: boolean;
 		delay?: number;
 		passive?: boolean;
+		once?: boolean;
+		capture?: boolean;
+		signal?: AbortSignal;
+		stopImmediatePropagation?: boolean;
+		preventDefault?: boolean;
 	};
 	id?: string;
 }
+export type EventDefault = EventCompact | EventFull;
 export interface MouseEvents {
 	click?: EventDefault;
 	dblclick?: EventDefault;
@@ -641,18 +643,54 @@ export type Size =
 	| '6xl'
 	| '7xl'
 	| '8xl'
-	| '9xl'
-	| 'full-width';
+	| '9xl';
+export type TimeUnits = number | `${number}s` | `${number}ms`;
+export type DistanceUnits = number | `${number}px` | `${number}rem`;
 export interface BasicProps {
 	children?: Snippet;
 	snippet?: Snippet;
 	touchActionDisabled?: boolean;
-	events?: { events: EventListener[]; target?: HTMLElement | Window | Document };
+	events?: { events: EventListener; target?: HTMLElement | Window | Document }[];
 	as?: elementTagName;
 	class?: string[] | string;
 	overwriteDefaultStyles?: boolean;
 	transitionEnabled?: boolean;
 	/**Duration of the transition in milliseconds. */
-	transitionDuration?: number | string;
+	transitionDuration?: number | `${number}s` | `${number}ms`;
 	portal?: string | HTMLElement;
+	disabled?: boolean;
+	size?: Size;
+	onLoad?: (data: MetaChildren) => void;
+	onDestroy?: (data: MetaChildren) => void;
+	name?: string;
+}
+export interface MetaChildren {
+	status?: {
+		hover?: boolean;
+		focus?: boolean;
+		valid?: boolean;
+	};
+	childrens?: Map<HTMLElement, MetaChildren>;
+	value?: string | number;
+	width?: number;
+	height?: number;
+	ref?: HTMLElement;
+}
+interface NodeConfigs {
+	ref?: HTMLElement;
+	style?: (string | undefined)[];
+	event?: { events: EventListener; target?: HTMLElement | Window | Document }[];
+	size?: Size;
+	childrens?: Map<HTMLElement, MetaChildren>;
+	status?: {
+		hover?: boolean;
+		focus?: boolean;
+		loaded?: boolean;
+	};
+	value?: string | number;
+	timeId?: Map<string, NodeJS.Timeout | number>;
+}
+export interface BasicConfigs extends NodeConfigs {}
+export interface BasicComponent {
+	configs?: NodeConfigs;
 }

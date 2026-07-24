@@ -1,59 +1,53 @@
-import type { BasicProps, Color, Size } from '$components/interface';
-import type { Variant } from '$interfaces/basic';
-
-export interface Button extends BasicProps {
-	label?:
-		| string
-		| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
-				text?: string;
-		  });
-	description?:
-		| string
-		| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
-				text?: string;
-		  });
-	// leading?:
-	// 	| string
-	// 	| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
-	// 			text?: string;
-	// 			icon?: string;
-	// 	  });
-	// trailing?:
-	// 	| string
-	// 	| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
-	// 			text?: string;
-	// 			icon?: string;
-	// 	  });
-	directive?: 'ltr' | 'rtl';
+import type { BasicConfigs, BasicProps } from '$components/interface';
+import type { Color, Size } from '$interfaces/basic';
+type ButtonTypes = 'button' | 'submit' | 'reset';
+type ButtonVariants = 'solid' | 'outline' | 'soft' | 'subtle' | 'link' | 'ghost';
+export interface ButtonProps extends Omit<BasicProps, 'class'> {
+	type?: ButtonTypes;
+	variant?: ButtonVariants;
+	size?: Size;
 	icon?:
 		| string
-		| (Pick<BasicProps, 'events' | 'class' | 'snippet' | 'as' | 'overwriteDefaultStyles'> & {
-				string?: string;
-		  });
-	variant?: Variant;
-	color?: Color;
-	loading?: boolean;
-	loadingIcon?: string;
-	loadingLoop?: 'infinite' | `${number}` | number;
-	loadingAnimation?:
-		| 'style-1'
-		| 'style-2'
-		| 'style-3'
 		| {
-				/** Style of the loading animation. */
-				style?: 'style-1' | 'style-2' | 'style-3';
-				/** Duration of the loading animation in milliseconds. */
-				duration?: number | `${number}s` | `${number}ms`;
+				leading?: string;
+				trailing?: string;
 		  };
+	class?:
+		| string
+		| string[]
+		| {
+				root?: string | string[];
+				icon?:
+					| string
+					| string[]
+					| {
+							leading?: string | string[];
+							trailing?: string | string[];
+					  };
+		  };
+	'aspect-square'?: boolean;
+	rounded?: Size | 'full' | 'none';
 	disabled?: boolean;
-	radius?: 'full' | 'none' | Size;
-	size?: Size;
-	width?: `${number}%` | 'full' | 'auto';
-	parentRef?: HTMLElement;
-	rippleAnimationDisabled?: boolean;
-	to?: string;
-	'aspect-ratio'?: 'square' | 'auto';
-	minWidthDisabled?: boolean;
-	alt?: string;
-	type?: 'button' | 'submit' | 'reset';
+	transitionDisabled?: boolean;
+	color?: Color;
+	onClick?: () => void | Promise<void>;
+	delay?: number | `${number}s` | `${number}ms`;
+	loading?: boolean;
+	loadingDuration?: number | `${number}s` | `${number}ms`;
+}
+export interface ButtonConfigs extends BasicConfigs {
+	type: ButtonTypes;
+	style: string[];
+	variant: ButtonVariants;
+	size: Size;
+	'aspect-square'?: boolean;
+	disabled?: boolean;
+	color?: Color;
+	status?: {
+		hover?: boolean;
+		tap?: boolean;
+	};
+	delay: number;
+	transitionDuration: number;
+	loadingDuration: number;
 }

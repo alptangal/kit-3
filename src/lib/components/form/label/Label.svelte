@@ -34,6 +34,7 @@
 		bind:this={configs.ref}
 		data-is-invalid={textFieldCtx.isInvalid}
 		data-focus={textFieldCtx.status?.focus}
+		data-hover={textFieldCtx.status?.hover}
 		data-prefer-color={profile.preferColor}
 		data-size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
 	>
@@ -55,33 +56,38 @@
 		font-size: var(--font-size);
 		&[data-prefer-color='dark'] {
 			&[data-is-invalid='true'] {
-				--color: hsl(var(--danger-100));
-				&[data-focus='true'] {
+				--color: hsl(var(--danger-300));
+				&[data-focus='true'],
+				&[data-hover='true'] {
 					--color: hsl(var(--danger));
 				}
 			}
 			&[data-is-invalid='false'] {
-				--color: hsl(var(--success-100));
-				&[data-focus='true'] {
+				--color: hsl(var(--success-300));
+				&[data-focus='true'],
+				&[data-hover='true'] {
 					--color: hsl(var(--success));
 				}
 			}
 		}
 		&[data-prefer-color='light'] {
 			&[data-is-invalid='true'] {
-				--color: hsl(var(--danger-300));
-				&[data-focus='true'] {
+				--color: hsl(var(--danger-400));
+				&[data-focus='true'],
+				&[data-hover='true'] {
 					--color: hsl(var(--danger));
 				}
 			}
 			&[data-is-invalid='false'] {
-				--color: hsl(var(--success-300));
-				&[data-focus='true'] {
+				--color: hsl(var(--success-400));
+				&[data-focus='true'],
+				&[data-hover='true'] {
 					--color: hsl(var(--success));
 				}
 			}
 		}
-		&[data-focus='true'] {
+		&[data-focus='true'],
+		&[data-hover='true'] {
 			--color: hsl(var(--foreground));
 		}
 		&[data-focus='false'] {

@@ -1,20 +1,23 @@
 <script lang="ts">
 	import { iconify } from '$assets/icons/iconify';
-	import type { EventListener } from '$components/interface';
+	import type { BasicComponent, EventListener, MetaChildren } from '$components/interface';
 	import { handleEvents } from '$modules/_attachments';
-	import { profile } from '$store/basic.svelte';
-	import Icon from '@iconify/svelte';
-	import { Button, Tooltip } from '$components/element/index';
+	import { client, profile } from '$store/basic.svelte';
+	import Icon from '$components/element/icon/Main.svelte';
+
+	import { Button, Loading, Tooltip } from '$components/element/index';
 	import type { InputProps } from './_interface.ts';
 	import { fade } from 'svelte/transition';
 	import { copyToClipboard, pasteFromClipboard, watchClipboard } from '$modules';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { browser } from '$app/environment';
-	import { every, keys, mapValues } from 'es-toolkit/compat';
+	import { every, keys, mapValues, omit } from 'es-toolkit/compat';
 	import type { NumbericKey } from '$components/keyboard/numberic/_interface';
 	import { getTextfieldCtx } from '../textField/index.ts';
 	import { getFormContext } from '../form/index.ts';
 	import { v7 as uuidV7 } from 'uuid';
+	import type { Component } from 'vitest-browser-svelte';
+	import type { SvelteComponent } from 'svelte';
 	// import Numberic from '$components/keyboard/numberic/Numberic.svelte';
 	// import { every, some } from 'es-toolkit/compat';
 
@@ -90,7 +93,7 @@
 					return true;
 				return false;
 			},
-			_loading: false,
+			_loading: undefined as undefined | boolean,
 			get loading() {
 				return this._loading ?? props.loading;
 			},
@@ -102,9 +105,18 @@
 				validate: undefined as undefined | (() => void)
 			}
 		},
+		get delay() {
+			const browserDelay = client.browser?.delay;
+			if (!browserDelay) return 300;
+			return typeof browserDelay == 'number'
+				? browserDelay
+				: browserDelay.includes('ms')
+					? parseFloat(browserDelay)
+					: parseFloat(browserDelay) * 10;
+		},
 		initValue: undefined as undefined | number | string,
 		get name() {
-			return props.name ?? textFieldCtx.name ?? `input_${uuidV7()}`;
+			return props.name ?? textFieldCtx?.name ?? `input_${uuidV7()}`;
 		},
 		_passwordMask: undefined as undefined | string,
 		get passwordMask() {
@@ -137,11 +149,19 @@
 				...(props.overwriteDefaultStyles ? propsClass : [...propsClass, defaults.root.style])
 			];
 		},
+		childrens: undefined as undefined | Map<HTMLElement, MetaChildren>,
 		event: {
 			load: {
 				handler(e, data) {
 					if (data?.node instanceof HTMLElement) {
 						const mutationObs = new MutationObserver(() => {
+							if (data.node instanceof HTMLElement) {
+								const childrens = data.node.children;
+								if (childrens.length) {
+									const totalW = [...childrens].reduce((st, node) => st + node.offsetWidth, 0);
+									//data.node.style.minWidth = `${totalW}px`;
+								}
+							}
 							if (data.node instanceof HTMLElement) {
 								const styleComputed = window.getComputedStyle(data.node);
 								data.node.style.setProperty('--background-current', styleComputed.backgroundColor);
@@ -175,61 +195,63 @@
 					}
 				}
 			},
-			...(profile.browser.type?.includes('desktop')
-				? {
-						get click() {
-							if (!profile.browser.type?.includes('mobile'))
-								return {
-									handler() {
-										if (!configs.status.focus) {
-											actionFocus();
-										}
-									}
-								};
-							return {
-								handler(e: MouseEvent) {
-									e.preventDefault();
-									if (
-										props.type &&
-										['phone', 'number'].includes(props.type) &&
-										profile.visualKeyboard.height
-									) {
-										configs.status.focus = true;
-									} else if (props.type && ['password'].includes(props.type)) {
-										if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
-									}
-									actionFocus();
-								}
-							};
-						}
+			mousedown: {
+				handler(e: MouseEvent) {
+					if (configs.status.focus) {
+						e.preventDefault();
 					}
-				: {
-						get touchstart() {
-							if (!profile.browser.type?.includes('mobile'))
-								return {
-									handler() {
-										if (!configs.status.focus) {
-											actionFocus();
-										}
-									}
-								};
-							return {
-								handler(e: MouseEvent) {
-									e.preventDefault();
-									if (
-										props.type &&
-										['phone', 'number'].includes(props.type) &&
-										profile.visualKeyboard.height
-									) {
-										configs.status.focus = true;
-									} else if (props.type && ['password'].includes(props.type)) {
-										if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
-									}
-									actionFocus();
-								}
-							};
+				}
+			},
+			get click() {
+				if (!profile.browser.type?.includes('mobile'))
+					return {
+						handler() {
+							if (!configs.status.focus) {
+								actionFocus();
+							}
 						}
-					})
+					};
+				return {
+					handler(e: MouseEvent) {
+						e.preventDefault();
+						if (
+							props.type &&
+							['phone', 'number'].includes(props.type) &&
+							profile.visualKeyboard.height
+						) {
+							configs.status.focus = true;
+						} else if (props.type && ['password'].includes(props.type)) {
+							if (textFieldCtx?.onBlur) textFieldCtx?.onBlur(configs.status.focus);
+						}
+						actionFocus();
+					}
+				};
+			},
+			get touchstart() {
+				if (!profile.browser.type?.includes('mobile'))
+					return {
+						handler() {
+							if (!configs.status.focus) {
+								actionFocus();
+							}
+						}
+					};
+				return {
+					handler(e: MouseEvent) {
+						e.preventDefault();
+						if (
+							props.type &&
+							['phone', 'number'].includes(props.type) &&
+							profile.visualKeyboard.height
+						) {
+							configs.status.focus = true;
+						} else if (props.type && ['password'].includes(props.type)) {
+							if (textFieldCtx?.onBlur) textFieldCtx.onBlur(configs.status.focus);
+						}
+						actionFocus();
+					}
+				};
+			}
 		} as EventListener,
 		eventValidate: undefined as undefined | EventListener,
 		input: {
@@ -246,6 +268,15 @@
 				load: {
 					handler(e, data) {
 						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
 							//data.node.focus();
 							if (profile.browser.type?.includes('mobile')) profile.visualKeyboard.isShow = false;
 						}
@@ -257,20 +288,26 @@
 				focus: {
 					handler(e) {
 						configs.status.focus = true;
-						if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+						if (textFieldCtx?.onBlur) textFieldCtx.onBlur(configs.status.focus);
 						const scrollY = window.scrollY;
-						const myInterval = setInterval(() => {
+						const myTimeout = setTimeout(() => {
 							window.scrollTo(0, scrollY);
 						});
+						if (props.onFocus) {
+							props.onFocus(value);
+						}
 						return () => {
-							clearInterval(myInterval);
+							clearTimeout(myTimeout);
 						};
 					}
 				},
 				change: {
 					handler() {
-						if (textFieldCtx.updateValue) {
+						if (textFieldCtx?.updateValue) {
 							textFieldCtx.updateValue(value);
+						}
+						if (props.onChange) {
+							props.onChange(value);
 						}
 					}
 				},
@@ -279,12 +316,15 @@
 						if (configs.status.type == 'number' && value != undefined) {
 							configs.input.status.openParen = value.toString().split('(').length;
 						}
+						if (props.onKeyup) {
+							props.onKeyup(value);
+						}
 					}
 				},
 				get keydown() {
 					return {
 						handler(e: KeyboardEvent) {
-							if (e.key == 'Enter' && textFieldCtx.onEnter) {
+							if (e.key == 'Enter' && textFieldCtx?.onEnter) {
 								textFieldCtx.onEnter();
 							}
 							if (configs.status.type == 'text') {
@@ -366,6 +406,9 @@
 									e.preventDefault();
 								if (configs.input.ref) configs.input.ref.scrollLeft = configs.input.ref.clientWidth;
 							}
+							if (props.onKeydown) {
+								props.onKeydown(value);
+							}
 						}
 					};
 				},
@@ -377,30 +420,56 @@
 									profile.visualKeyboard.isShow = false;
 								configs.status.focus = false;
 								if (props.type == 'number') await calculatorString();
-								if (textFieldCtx.onBlur) {
+								if (textFieldCtx?.onBlur) {
 									textFieldCtx.onBlur(configs.status.focus);
 								}
-								if (textFieldCtx.updateValue && configs.status.changed)
+								if (textFieldCtx?.updateValue && configs.status.changed)
 									textFieldCtx.updateValue(value);
+								if (props.onBlur) {
+									props.onBlur(value);
+								}
 							}
 						};
 					return {
 						async handler(e) {
 							await calculatorString();
+							if (props.onBlur) {
+								props.onBlur(value);
+							}
 						}
 					};
 				}
 			} as EventListener
 		},
 		clearBtn: {
+			component: undefined as undefined | SvelteComponent,
+			get ref() {
+				return this.component?.configs?.ref;
+			},
 			event: {
+				load: {
+					handler(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
+						}
+					}
+				},
 				get click() {
 					return this.touchstart;
 				},
 				touchstart: {
 					handler() {
 						value = undefined;
-						if (textFieldCtx.updateValue) textFieldCtx.updateValue(value);
+						if (props.onClear) props.onClear(value);
+						if (textFieldCtx?.updateValue) textFieldCtx.updateValue(value);
 						if (props.type == 'password') {
 							configs.passwordMask = '';
 						}
@@ -415,27 +484,41 @@
 			} as EventListener
 		},
 		copyBtn: {
-			component: undefined as
-				| undefined
-				| typeof import('$components/form/input/Input.svelte').configs,
+			component: undefined as undefined | SvelteComponent,
 			get ref() {
-				if (this.component && this.component.configs.ref) return this.component.configs.ref;
-				return undefined;
+				return this.component?.configs?.ref;
 			},
 			status: {
 				copied: false
 			},
 			event: {
+				load: {
+					handler(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
+						}
+					}
+				},
 				get click() {
+					if (client.browser?.isMobile) return undefined;
 					return this.touchstart;
 				},
 				touchstart: {
-					async handler() {
+					async handler(e) {
 						// actionBlur();
 						if (
 							(typeof value == 'string' && value.length) ||
 							(typeof value == 'number' && value != null)
 						) {
+							let holdFocus: boolean;
 							if (configs.input.ref) {
 								configs.input.status.currentSelected = (
 									configs.input.ref as HTMLInputElement
@@ -444,17 +527,24 @@
 							configs.copyBtn.status.copied = await copyToClipboard(
 								typeof value == 'number' ? value.toString() : value
 							);
-							if (profile.visualNodes.input.ref) profile.visualNodes.input.ref.focus();
+							if (client.browser?.isMobile && configs.status.focus) {
+								if (profile.visualNodes.input.ref) {
+									profile.visualNodes.input.ref.focus();
+									holdFocus = true;
+								}
+							}
 							disabled = true;
 							if (configs.copyBtn.status.copied) {
 								profile.clipboard.value = typeof value == 'number' ? value.toString() : value;
-
-								requestAnimationFrame(() => {
-									setTimeout(() => {
-										configs.copyBtn.status.copied = false;
-										if (configs.input.ref) configs.input.ref.focus();
-										disabled = undefined;
+								setTimeout(() => {
+									configs.copyBtn.status.copied = false;
+									disabled = undefined;
+									if (
+										(configs.status.focus && !client.browser?.isMobile) ||
+										(client.browser?.isMobile && holdFocus)
+									) {
 										requestAnimationFrame(() => {
+											if (configs.input.ref) configs.input.ref.focus();
 											if (configs.input.ref && props.type == 'text') {
 												if (configs.input.status.currentSelected) {
 													(configs.input.ref as HTMLInputElement).setSelectionRange(
@@ -478,27 +568,48 @@
 													} catch (e) {
 														console.log(e);
 													}
-												}, profile.delay);
+												}, configs.delay);
 											}
 										});
-									}, profile.delay);
-								});
+									}
+								}, configs.delay);
 							}
 						}
 					},
 					options: {
 						get delay() {
-							return profile.delay ?? 300;
-						}
+							return configs.delay ?? 300;
+						},
+						stopPropagation: true,
+						preventDefault: true
 					}
 				}
 			} as EventListener
 		},
 		pasteBtn: {
+			component: undefined as undefined | BasicComponent,
+			get ref() {
+				return this.component?.configs?.ref;
+			},
 			status: {
 				hasData: false
 			},
 			event: {
+				load: {
+					handler(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
+						}
+					}
+				},
 				get click() {
 					return this.touchstart;
 				},
@@ -515,7 +626,7 @@
 							if (props.type == 'password') configs.passwordMask = value;
 							if (configs.input.ref && props.type == 'text') {
 								if (configs.input.status.currentSelected) {
-									if (props.type == 'text') {
+									if (props.type == 'text' && configs.status.focus) {
 										actionFocus();
 									}
 									(configs.input.ref as HTMLInputElement).setSelectionRange(
@@ -530,18 +641,38 @@
 								}
 							}
 						}
-						if (!configs.status.focus) actionFocus();
 					},
 					options: {
 						get delay() {
 							return profile.delay ?? 300;
-						}
+						},
+						preventDefault: true,
+						stopPropagation: true
 					}
 				}
 			} as EventListener
 		},
 		showPasswordBtn: {
+			component: undefined as undefined | BasicComponent,
+			get ref() {
+				return this.component?.configs?.ref;
+			},
 			event: {
+				load: {
+					handler(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
+						}
+					}
+				},
 				get click() {
 					return this.touchstart;
 				},
@@ -573,6 +704,75 @@
 				if (this.component?.configs.ref) return this.component.configs.ref;
 				return null;
 			}
+		},
+		trailingIcon: {
+			component: undefined as undefined | BasicComponent,
+			get ref() {
+				return this.component?.configs?.ref;
+			},
+			event: {
+				load: {
+					handler(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
+						}
+					}
+				}
+			} as EventListener
+		},
+		leadingIcon: {
+			component: undefined as undefined | BasicComponent,
+			get ref() {
+				return this.component?.configs?.ref;
+			},
+			event: {
+				load: {
+					handler(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
+						}
+					}
+				}
+			} as EventListener
+		},
+		loading: {
+			component: undefined as undefined | BasicComponent,
+			get ref() {
+				return this.component?.configs?.ref;
+			},
+			event: {
+				load: {
+					handler(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!configs.childrens) configs.childrens = new Map();
+							configs.childrens.set(data.node, {
+								get width() {
+									return (data.node as HTMLElement).offsetWidth;
+								},
+								get height() {
+									return (data.node as HTMLElement).offsetHeight;
+								}
+							});
+						}
+					}
+				}
+			} as EventListener
 		}
 	});
 
@@ -759,7 +959,7 @@
 			case 'Done':
 				profile.visualKeyboard.focusOn = null;
 				configs.status.focus = false;
-				if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+				if (textFieldCtx?.onBlur) textFieldCtx.onBlur(configs.status.focus);
 		}
 		configs.input.ref?.scrollTo({ left: configs.input.ref.scrollWidth, behavior: 'smooth' });
 	}
@@ -783,7 +983,7 @@
 					)();
 
 					configs.status.focus = false;
-					if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+					if (textFieldCtx?.onBlur) textFieldCtx.onBlur(configs.status.focus);
 					if (calculated != null) {
 						if (value != calculated) configs.input.status.previousValue = value;
 						value = calculated;
@@ -814,7 +1014,7 @@
 								}
 								if (profile.visualNodes.input.ref) profile.visualNodes.input.ref.blur();
 								configs.status.focus = true;
-								if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+								if (textFieldCtx?.onBlur) textFieldCtx.onBlur(configs.status.focus);
 								if (configs.ref) {
 									profile.visualKeyboard.focusOn = configs.ref;
 									profile.visualKeyboard.onKeyup = visualKbOnKeyup;
@@ -824,7 +1024,7 @@
 					});
 				} else {
 					configs.status.focus = true;
-					if (textFieldCtx.onBlur) textFieldCtx.onBlur(configs.status.focus);
+					if (textFieldCtx?.onBlur) textFieldCtx.onBlur(configs.status.focus);
 					if (configs.ref) {
 						profile.visualKeyboard.focusOn = configs.ref;
 						profile.visualKeyboard.onKeyup = visualKbOnKeyup;
@@ -855,7 +1055,7 @@
 
 	const textFieldCtx = getTextfieldCtx();
 	const formCtx = getFormContext();
-	if (textFieldCtx.onFocus) {
+	if (textFieldCtx && textFieldCtx.onFocus) {
 		textFieldCtx.onFocus('input', actionFocus);
 	}
 
@@ -872,6 +1072,27 @@
 			}
 		}
 	});
+
+	$effect(() => {
+		if (client.browser?.isMobile && !profile.visualNodes.input.ref && props.type != 'number') {
+			const visualInput = document.createElement('input');
+			visualInput.classList.add(
+				'h-12',
+				'w-12',
+				'bottom-0',
+				'left-0',
+				'opacity-1',
+				'bg-white',
+				'-z-50',
+				'text-white',
+				'absolute'
+			);
+			visualInput.type = 'password';
+			document.body.appendChild(visualInput);
+			profile.visualNodes.input.ref = visualInput;
+		}
+	});
+
 	onMount(async () => {
 		window.addEventListener('click', autoFocus);
 
@@ -881,27 +1102,8 @@
 		profile.clipboard.value = await pasteFromClipboard();
 		if (props.showPassword && props.type == 'password')
 			configs.status.showPassword = props.showPassword;
-		if (
-			(!profile.visualNodes.input.ref && props.type != 'number') ||
-			(profile.browser.type?.includes('mobile') &&
-				!profile.browser.safariBrowser?.visualKeyboardDurationShow)
-		) {
-			const visualInput = document.createElement('input');
-			visualInput.classList.add(
-				'h-12',
-				'w-12',
-				'bottom-0',
-				'left-0',
-				'opacity-1',
-				'bg-white',
-				'z-50',
-				'text-white'
-			);
-			visualInput.type = 'password';
-			document.body.appendChild(visualInput);
-			profile.visualNodes.input.ref = visualInput;
-		}
-		if (textFieldCtx.validate) {
+
+		if (textFieldCtx?.validate) {
 			configs.eventValidate = mapValues(
 				textFieldCtx.validate,
 				(item, eventName: keyof EventListener) => ({
@@ -945,7 +1147,7 @@
 				})
 			);
 		}
-		if (textFieldCtx.insertMetaNode) {
+		if (textFieldCtx?.insertMetaNode) {
 			textFieldCtx.insertMetaNode({
 				name: configs.name,
 				ref: configs.ref,
@@ -967,6 +1169,8 @@
 			}
 		}
 	});
+
+	export { configs };
 </script>
 
 <svelte:element
@@ -974,12 +1178,26 @@
 	bind:this={configs.ref}
 	class={configs.style}
 	data-variant={props.variant ?? 'primary'}
-	data-size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
+	data-size={props.size ?? textFieldCtx?.size ?? formCtx?.size ?? 'md'}
 	data-disabled={disabled}
-	data-loading={configs.status.loading && !configs.status.focus}
+	data-loading={configs.status.loading}
 	data-loading-animation-style={configs.status.loadingAnimationStyle}
-	data-is-invalid={textFieldCtx.isInvalid}
+	data-is-invalid={textFieldCtx?.isInvalid}
 	data-focus={configs.status.focus}
+	data-hover={textFieldCtx?.status?.hover}
+	data-has-leading={props.leadingIcon &&
+	((typeof props.loadingAnimation == 'string' && props.loadingAnimation == 'style-1') ||
+		(typeof props.loadingAnimation == 'object' && props.loadingAnimation.style == 'style-1') ||
+		!props.loadingAnimation)
+		? true
+		: undefined}
+	data-has-trailing={(props.trailingIcon &&
+		((typeof props.loadingAnimation == 'string' && props.loadingAnimation == 'style-1') ||
+			(typeof props.loadingAnimation == 'object' && props.loadingAnimation.style == 'style-1') ||
+			!props.loadingAnimation)) ||
+	value
+		? true
+		: undefined}
 	style:--loading-animation-duration={configs.status.loadingAnimationDuration}
 	{@attach handleEvents([
 		...(disabled
@@ -991,7 +1209,7 @@
 							{
 								touchstart: {
 									async handler(e) {
-										if (!textFieldCtx.ref?.contains(e.target) && configs.status.focus) {
+										if (!textFieldCtx?.ref?.contains(e.target) && configs.status.focus) {
 											//actionBlur();
 											//console.log('blur');
 										}
@@ -1001,7 +1219,7 @@
 											profile.visualKeyboard.ref &&
 											!profile.visualKeyboard.ref.contains(e.target) &&
 											configs.ref.contains(profile.visualKeyboard.focusOn) &&
-											textFieldCtx.ref &&
+											textFieldCtx?.ref &&
 											!textFieldCtx.ref.contains(e.target) &&
 											props.type == 'number'
 										) {
@@ -1030,10 +1248,36 @@
 				])
 	])}
 >
-	{#if configs.status.loading && configs.status.loadingAnimationStyle == 'style-1'}
-		<div transition:fade={profile.transition.templates.fade} class="input-loading-icon">
-			<Icon icon={iconify.loading} />
-		</div>
+	{#if props.leadingIcon && !configs.status.loading}
+		<Icon
+			bind:this={configs.leadingIcon.component}
+			icon={props.leadingIcon}
+			class="input-leading-icon"
+			onLoad={(metaChildren) => {
+				if (!configs.childrens) configs.childrens = new Map();
+				if (!metaChildren.ref) return;
+				configs.childrens.set(metaChildren.ref, omit(metaChildren, ['ref']));
+			}}
+			onDestroy={(metaChildren) => {
+				if (!configs.childrens || !metaChildren.ref) return;
+				configs.childrens.delete(metaChildren.ref);
+			}}
+		/>
+	{/if}
+	{#if configs.status.loading && configs.status.loadingAnimationStyle == 'style-1' && (props.leadingIcon || (!props.leadingIcon && !props.trailingIcon))}
+		<Loading.Rotate
+			class="mx-[var(--padding)]"
+			color="primary"
+			onLoad={(metaChildren) => {
+				if (!configs.childrens) configs.childrens = new Map();
+				if (!metaChildren.ref) return;
+				configs.childrens.set(metaChildren.ref, omit(metaChildren, ['ref']));
+			}}
+			onDestroy={(metaChildren) => {
+				if (!configs.childrens || !metaChildren.ref) return;
+				configs.childrens.delete(metaChildren.ref);
+			}}
+		/>
 	{/if}
 	{#if !disabled}
 		{#if (props.type && ['text'].includes(props.type)) || (props.type && props.type == 'number' && profile.browser.type?.includes('desktop'))}
@@ -1105,38 +1349,50 @@
 		{/if}
 		{#if props.clearButtonEnabled && value != undefined}
 			<Button
+				bind:this={configs.clearBtn.component}
 				class="aspect-square z-[9999] relative"
 				color="danger"
-				size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
+				size={props.size ?? textFieldCtx?.size ?? formCtx?.size ?? 'md'}
 				icon={iconify['close-rounded']}
 				variant="light"
 				events={{ events: [configs.clearBtn.event] }}
+				width={configs.ref?.clientHeight ??
+					0 - parseFloat(configs.ref?.style.getPropertyValue('--border-width') ?? 0)}
+				onDestroy={(metaChildren) => {
+					if (!configs.childrens || !metaChildren.ref) return;
+					configs.childrens.delete(metaChildren.ref);
+				}}
 			/>
 		{/if}
 	{:else}
-		<span>{value ? value : props.placeholder}</span>
+		<span class="flex-1 pl-[var(--padding-input-left)]">{value ? value : props.placeholder}</span>
 	{/if}
-	{#if value != undefined}
+
+	{#if value != undefined && props.copyButtonEnabled}
 		<Button
 			bind:this={configs.copyBtn.component}
 			class="aspect-square copy-btn z-10 relative"
 			color="success"
-			size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
+			size={props.size ?? textFieldCtx?.size ?? formCtx?.size ?? 'md'}
 			icon={configs.copyBtn.status.copied
 				? iconify['check-rounded']
 				: iconify['content-copy-outline-rounded']}
 			variant="light"
 			events={{ events: [configs.copyBtn.event] }}
+			width={configs.ref?.clientHeight ??
+				0 - parseFloat(configs.ref?.style.getPropertyValue('--border-width') ?? 0)}
 		/>
 	{/if}
 	{#if ((typeof value == 'number' && value == null) || (typeof value == 'string' && !value.length) || !value) && profile.clipboard.status.hasData}
 		<Button
 			class="aspect-square paste-btn z-10 relative"
 			color="success"
-			size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
+			size={props.size ?? textFieldCtx?.size ?? formCtx?.size ?? 'md'}
 			icon={iconify['content-paste-rounded']}
 			variant="light"
 			events={{ events: [configs.pasteBtn.event] }}
+			width={configs.ref?.clientHeight ??
+				0 - parseFloat(configs.ref?.style.getPropertyValue('--border-width') ?? 0)}
 		/>
 	{/if}
 	{#if props.type && props.type == 'password' && props.showPasswordButtonEnabled}
@@ -1153,7 +1409,7 @@
 				<Button
 					class="aspect-square paste-btn z-10 relative"
 					color="primary"
-					size={props.size ?? textFieldCtx.size ?? formCtx.size ?? 'md'}
+					size={props.size ?? textFieldCtx?.size ?? formCtx?.size ?? 'md'}
 					icon={configs.status.showPassword
 						? iconify['password-2-off-rounded']
 						: iconify['password-2-rounded']}
@@ -1162,9 +1418,42 @@
 					alt={profile.browser.type?.includes('mobile')
 						? `${configs.status.showPassword ? 'Show' : 'Hidden'} Password`
 						: undefined}
+					width={configs.ref?.clientHeight ??
+						0 - parseFloat(configs.ref?.style.getPropertyValue('--border-width') ?? 0)}
 				/>
 			</Tooltip.Trigger>
 		</Tooltip.Provider>
+	{/if}
+	{#if props.trailingIcon && !configs.status.loading}
+		<Icon
+			bind:this={configs.trailingIcon.component}
+			icon={props.trailingIcon}
+			class="input-leading-icon"
+			onLoad={(metaChildren) => {
+				if (!configs.childrens) configs.childrens = new Map();
+				if (!metaChildren.ref) return;
+				configs.childrens.set(metaChildren.ref, omit(metaChildren, ['ref']));
+			}}
+			onDestroy={(metaChildren) => {
+				if (!configs.childrens || !metaChildren.ref) return;
+				configs.childrens.delete(metaChildren.ref);
+			}}
+		/>
+	{/if}
+	{#if configs.status.loading && configs.status.loadingAnimationStyle == 'style-1' && props.trailingIcon}
+		<Loading.Rotate
+			class="mx-[var(--padding)]"
+			color="primary"
+			onLoad={(metaChildren) => {
+				if (!configs.childrens) configs.childrens = new Map();
+				if (!metaChildren.ref) return;
+				configs.childrens.set(metaChildren.ref, omit(metaChildren, ['ref']));
+			}}
+			onDestroy={(metaChildren) => {
+				if (!configs.childrens || !metaChildren.ref) return;
+				configs.childrens.delete(metaChildren.ref);
+			}}
+		/>
 	{/if}
 </svelte:element>
 
@@ -1199,19 +1488,46 @@
 					--box-shadow: 0 25px 50px -12px var(--shadow-color);
 				}
 				--shadow-color: hsl(var(--default));
-				box-shadow: var(--box-shadow);
 			}
+			&[data-variant='secondary'] {
+				&[data-size='xs'] {
+					--box-shadow: 0 1px 2px 0 var(--shadow-color);
+				}
+				&[data-size='sm'] {
+					--box-shadow: 0 1px 3px 0 var(--shadow-color), 0 1px 2px -1px var(--shadow-color);
+				}
+				&[data-size='md'] {
+					--box-shadow: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -2px var(--shadow-color);
+				}
+				&[data-size='lg'] {
+					--box-shadow: 0 10px 15px -3px var(--shadow-color), 0 4px 6px -4px var(--shadow-color);
+				}
+				&[data-size='xl'] {
+					--box-shadow: 0 20px 25px -5px var(--shadow-color), 0 8px 10px -6px var(--shadow-color);
+				}
+				&[data-size='2xl'],
+				&[data-size='3xl'],
+				&[data-size='4xl'],
+				&[data-size='5xl'],
+				&[data-size='6xl'],
+				&[data-size='7xl'],
+				&[data-size='8xl'],
+				&[data-size='9xl'],
+				&[data-size='full-width'] {
+					--box-shadow: 0 25px 50px -12px var(--shadow-color);
+				}
+				--shadow-color: hsl(var(--default));
+			}
+			box-shadow: var(--box-shadow);
 		}
 	}
 
 	.input-root {
-		--color: hsl(var(--foreground-200));
-		&[data-disabled] {
+		--color: hsl(var(--foreground-400));
+		&[data-disabled='true'] {
 			--cursor: not-allowed;
 			--opacity: var(--disabled-opacity);
 			position: relative;
-			padding-inline: var(--padding);
-			padding-block: calc(var(--padding) / 2);
 			&::before {
 				content: '';
 				width: 100%;
@@ -1222,12 +1538,12 @@
 			}
 		}
 		&[data-variant='primary'] {
-			--background-color: hsl(var(--field-background));
-			--shadow-color: hsl(var(--primary));
+			--background-color: hsl(var(--field-background-primary));
+			--shadow-color: hsl(var(--default-200));
 		}
 		&[data-variant='secondary'] {
-			--background-color: hsl(var(--default));
-			--shadow-color: hsl(var(--secondary));
+			--background-color: hsl(var(--field-background-secondary));
+			--shadow-color: hsl(var(--default-300));
 		}
 		&[data-size='xs'] {
 			--font-size: var(--font-size-xs);
@@ -1236,7 +1552,7 @@
 			--padding: var(--padding-xs);
 			--min-width: var(--min-width-xs);
 			--min-height: 28px;
-			--border-width: 1px;
+			--border-width: var(--border-width-xs);
 			--box-shadow: 0 1px 2px 0 var(--shadow-color);
 		}
 		&[data-size='sm'] {
@@ -1246,7 +1562,7 @@
 			--padding: var(--padding-sm);
 			--min-width: var(--min-width-sm);
 			--min-height: 40px;
-			--border-width: 2px;
+			--border-width: var(--border-width-sm);
 			--box-shadow: 0 1px 3px 0 var(--shadow-color), 0 1px 2px -1px var(--shadow-color);
 		}
 		&[data-size='md'] {
@@ -1256,7 +1572,7 @@
 			--padding: var(--padding-md);
 			--min-width: var(--min-width-md);
 			--min-height: 48px;
-			--border-width: 3px;
+			--border-width: var(--border-width-md);
 			--box-shadow: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -2px var(--shadow-color);
 		}
 		&[data-size='lg'] {
@@ -1266,6 +1582,7 @@
 			--padding: var(--padding-lg);
 			--min-width: var(--min-width-lg);
 			--min-height: 58px;
+			--border-width: var(--border-width-lg);
 			--box-shadow: 0 10px 15px -3px var(--shadow-color), 0 4px 6px -4px var(--shadow-color);
 		}
 		&[data-size='xl'] {
@@ -1275,6 +1592,7 @@
 			--padding: var(--padding-xl);
 			--min-width: var(--min-width-xl);
 			--min-height: 68px;
+			--border-width: var(--border-width-xl);
 			--box-shadow: 0 20px 25px -5px var(--shadow-color), 0 8px 10px -6px var(--shadow-color);
 		}
 		&[data-size='2xl'] {
@@ -1284,6 +1602,7 @@
 			--padding: var(--padding-2xl);
 			--min-width: var(--min-width-2xl);
 			--min-height: 80px;
+			--border-width: var(--border-width-2xl);
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&[data-size='3xl'] {
@@ -1293,6 +1612,7 @@
 			--padding: var(--padding-3xl);
 			--min-width: var(--min-width-3xl);
 			--min-height: 94px;
+			--border-width: var(--border-width-3xl);
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&[data-size='4xl'] {
@@ -1302,6 +1622,7 @@
 			--padding: var(--padding-4xl);
 			--min-width: var(--min-width-4xl);
 			--min-height: 108px;
+			--border-width: var(--border-width-4xl);
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&[data-size='5xl'] {
@@ -1311,6 +1632,7 @@
 			--padding: var(--padding-5xl);
 			--min-width: var(--min-width-5xl);
 			--min-height: 128px;
+			--border-width: var(--border-width-5xl);
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&[data-size='6xl'] {
@@ -1320,6 +1642,7 @@
 			--padding: var(--padding-6xl);
 			--min-width: var(--min-width-6xl);
 			--min-height: 148px;
+			--border-width: var(--border-width-6xl);
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&[data-size='7xl'] {
@@ -1328,6 +1651,7 @@
 			--border-radius: var(--border-radius-7xl);
 			--padding: var(--padding-7xl);
 			--min-width: var(--min-width-7xl);
+			--border-width: var(--border-width-7xl);
 			--min-height: 168px;
 		}
 		&[data-size='8xl'] {
@@ -1337,6 +1661,7 @@
 			--padding: var(--padding-8xl);
 			--min-width: var(--min-width-9xl);
 			--min-height: 200px;
+			--border-width: var(--border-width-8xl);
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&[data-size='9xl'] {
@@ -1346,6 +1671,7 @@
 			--padding: var(--padding-9xl);
 			--min-width: var(--min-width-9xl);
 			--min-height: 240px;
+			--border-width: var(--border-width-9xl);
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&[data-size='full-width'] {
@@ -1358,27 +1684,43 @@
 			--box-shadow: 0 25px 50px -12px var(--shadow-color);
 		}
 		&:not([data-loading='true'][data-loading-animation-style='style-1']) > * {
-			padding-inline: var(--padding);
-			padding-block: calc(var(--padding) / 2);
+			/* padding-inline: var(--padding);
+			padding-block: calc(var(--padding) / 2); */
+		}
+		--padding-input-left: var(--padding);
+		&[data-has-leading] {
+			--padding-input-left: 0px;
+		}
+		--padding-input-right: var(--padding);
+		&[data-has-trailing] {
+			--padding-input-right: 0px;
 		}
 		> input {
+			@apply flex-1;
 			max-width: 100%;
 			border-radius: var(--border-radius);
-
+			padding-left: var(--padding-input-left);
+			padding-right: var(--padding-input-right);
+			transition: all 0.3s ease-in-out;
 			&:focus {
 				outline: none;
 			}
 			&::placeholder {
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
 			}
 		}
 		&[data-disabled='true'] {
-			padding-inline: var(--padding);
-			padding-block: calc(var(--padding) / 2);
+			/* padding-inline: var(--padding);
+			padding-block: calc(var(--padding) / 2); */
 			opacity: var(--disabled-opacity);
 			cursor: not-allowed;
 		}
-		&[data-loading='true'][data-loading-animation-style='style-1'] .input-loading-icon {
+		.input-loading-icon {
 			padding-inline: var(--padding);
+		}
+		&[data-loading='true'][data-loading-animation-style='style-1'] .input-loading-icon {
 			animation: loading-style-1 calc(var(--loading-animation-duration) * 1ms) linear infinite;
 			color: hsl(var(--primary));
 		}
@@ -1446,31 +1788,39 @@
 				z-index: 1;
 			}
 		}
+		&[data-focus='true'],
+		&[data-hover='true'] {
+			--color: hsl(var(--foreground));
+			--border-color: hsl(var(--primary));
+		}
+		&[data-focus='false'],
+		&[data-hover='false'] {
+			--border-color: transparent;
+		}
 		&[data-is-invalid='true'] {
-			--color: hsl(var(--danger-100));
-			border-color: hsl(var(--danger-100));
-			&[data-focus='true'] {
+			--color: hsl(var(--danger-300));
+			border-color: hsl(var(--color));
+			&[data-focus='true'],
+			&[data-hover='true'] {
 				--color: hsl(var(--danger));
 				border-color: hsl(var(--danger));
 			}
 		}
 		&[data-is-invalid='false'] {
-			--color: hsl(var(--success-100));
-			border-color: hsl(var(--success-100));
-			&[data-focus='true'] {
+			--color: hsl(var(--success-300));
+			border-color: hsl(var(--color));
+			&[data-focus='true'],
+			&[data-hover='true'] {
 				--color: hsl(var(--success));
 				border-color: hsl(var(--success));
 			}
 		}
-		&[data-focus='true'] {
-			--color: hsl(var(--foreground));
-			border-color: hsl(var(--primary));
-		}
+
 		transition: all linear 0.3s;
 		display: flex;
 		align-items: center;
 		border-radius: var(--border-radius);
-		min-height: var(--min-height);
+		min-height: calc(var(--min-height) + var(--border-width) * 2);
 		min-width: var(--min-width);
 		font-size: var(--font-size);
 		line-height: var(--line-height);
@@ -1479,6 +1829,12 @@
 		cursor: var(--cursor);
 		opacity: var(--opacity);
 		color: var(--color);
+		border-style: solid;
+		border-color: var(--border-color);
+		border-width: var(--border-width);
+		:global(.input-leading-icon) {
+			padding-inline: var(--padding);
+		}
 	}
 	.visual-cursor-animation {
 		border-right: 1px solid white;
@@ -1536,5 +1892,27 @@
 	}
 	:global(html[data-theme='dark']) .input-visual-cursor {
 		@apply border-white;
+	}
+	:root[data-theme='light'] {
+		.input-root {
+			&[data-is-invalid='true'] {
+				--color: hsl(var(--danger-400));
+				border-color: hsl(var(--color));
+				&[data-focus='true'],
+				&[data-hover='true'] {
+					--color: hsl(var(--danger));
+					border-color: hsl(var(--danger));
+				}
+			}
+			&[data-is-invalid='false'] {
+				--color: hsl(var(--success-400));
+				border-color: hsl(var(--color));
+				&[data-focus='true'],
+				&[data-hover='true'] {
+					--color: hsl(var(--success));
+					border-color: hsl(var(--success));
+				}
+			}
+		}
 	}
 </style>

@@ -9,6 +9,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { v7 as uuidV7 } from 'uuid';
 	import { some } from 'es-toolkit/compat';
+	import { profile } from '$store/basic.svelte';
 
 	let { children, ...props }: TextField = $props();
 	let configs = $state({
@@ -21,7 +22,8 @@
 				if (configs.childrens)
 					return some([...configs.childrens.values()] as MetaNode[], (node) => node.loading);
 				return false;
-			}
+			},
+			hover: undefined as undefined | boolean
 		},
 		value: undefined as undefined | string | number,
 		errorMessages: undefined as undefined | SvelteMap<keyof EventListener, string>,
@@ -45,7 +47,24 @@
 				}
 			},
 			get click() {
+				if (!profile.browser.type?.includes('desktop')) return undefined;
 				return this.touchstart;
+			},
+			get mouseover() {
+				if (!profile.browser.type?.includes('desktop')) return undefined;
+				return {
+					handler() {
+						configs.status.hover = true;
+					}
+				};
+			},
+			get mouseleave() {
+				if (!profile.browser.type?.includes('desktop')) return undefined;
+				return {
+					handler() {
+						configs.status.hover = false;
+					}
+				};
 			},
 			mousedown: {
 				handler(e: MouseEvent) {
@@ -188,13 +207,9 @@
 		{#if configs.errorMessages}
 			{#each configs.errorMessages.values() as item, idx (idx)}
 				<p
-					class={configs.status.isInvalid
-						? configs.status.focus
-							? 'text-[hsl(var(--danger))]'
-							: 'text-[hsl(var(--danger-100))]'
-						: configs.status.focus
-							? 'text-[hsl(var(--success))]'
-							: 'text-[hsl(var(--success-100))]'}
+					class="textfield-message {configs.status.isInvalid ? 'invalid' : 'valid'}"
+					data-focus={configs.status.focus}
+					data-hover={configs.status.hover}
 				>
 					{item}
 				</p>
@@ -211,6 +226,23 @@
 <style lang="scss">
 	.textfield {
 		&[data-is-invalid='true'] {
+			color: hsl(var(--danger));
+		}
+	}
+	.textfield-message {
+		transition: all ease-in-out 0.3s;
+	}
+	.textfield-message.valid {
+		color: hsl(var(--success-300));
+		&[data-focus='true'],
+		&[data-hover='true'] {
+			color: hsl(var(--success));
+		}
+	}
+	.textfield-message.invalid {
+		color: hsl(var(--danger-300));
+		&[data-focus='true'],
+		&[data-hover='true'] {
 			color: hsl(var(--danger));
 		}
 	}

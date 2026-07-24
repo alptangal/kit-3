@@ -1,4 +1,4 @@
-import type { BasicProps } from '$components/interface';
+import type { BasicProps, MetaChildren } from '$components/interface';
 import type { Size } from '$interfaces/basic';
 
 export interface InputProps extends BasicProps {
@@ -19,6 +19,16 @@ export interface InputProps extends BasicProps {
 	focusAtStart?: boolean;
 	showPassword?: boolean;
 	showPasswordButtonEnabled?: boolean;
-	onEnter?: () => void;
+	onEnter?: (value?: number | string) => void;
 	name?: string;
+	copyButtonEnabled?: boolean;
+	onLoaded?: (data: MetaChildren) => void;
+	onChange?: (value?: number | string) => void;
+	onKeyup?: (value?: number | string) => void;
+	onKeydown?: (value?: number | string) => void;
+	onBlur?: (value?: number | string) => void;
+	onFocus?: (value?: number | string) => void;
+	onClear?: (value?: number | string) => void;
+	leadingIcon?: string;
+	trailingIcon?: string;
 }

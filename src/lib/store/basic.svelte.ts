@@ -1,8 +1,19 @@
 import { browser } from '$app/environment';
 import type { NumbericKey } from '$components/keyboard/numberic/_interface';
-import type { AppTheme, Browser, Screen } from '$interfaces/basic';
+import type {
+	AppTheme,
+	Browser,
+	CountryCode,
+	Direction,
+	LanguageCode,
+	Region,
+	Screen,
+	Size
+} from '$interfaces/basic';
+import type { Timezone } from '$interfaces/timezone';
 import { detectBrowserType } from '$modules';
 import type { SvelteComponent } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 import type { FlyParams } from 'svelte/transition';
 
 export const profile = $state({
@@ -222,3 +233,142 @@ export const profile = $state({
 		}
 	}
 });
+interface MetaBrowser {
+	originalResolution?: {
+		width: number;
+		height: number;
+	};
+	userAgent?: string | null;
+	isMobile?: boolean;
+	os?: 'window' | 'mac' | 'linux' | 'android' | 'ios' | 'chrome';
+	width?: number;
+	height?: number;
+	ip?: `${number}:${number}:${number}:${number}`;
+	region?: Region;
+	language?: LanguageCode;
+	country?: CountryCode;
+	theme?: 'dark' | 'light' | 'system';
+	preferColor?: 'dark' | 'light';
+	timezone?: Timezone;
+	/**
+	 * Duration in miliseconds
+	 */
+	duration?: `${number}s` | `${number}ms` | number;
+	/**
+	 * delay in miliseconds
+	 */
+	delay?: number;
+	transition?: {
+		fade?: {
+			/**
+			 * Duration in miliseconds
+			 */
+			duration?: number;
+		};
+		fly?: {
+			/**
+			 * Duration in miliseconds
+			 */
+			duration?: number;
+			x?: number;
+			y?: number;
+		};
+	};
+	size?: Size;
+	direction?: Direction;
+	disabled?: boolean;
+	modalStorage?: HTMLElement;
+	windows?: Map<
+		string,
+		{
+			ref: HTMLElement;
+		}
+	>;
+}
+interface MetaUser {
+	firstName: string;
+	lastName: string;
+	dob?: string;
+	region: Region;
+	country: CountryCode;
+	gender: 'Male' | 'Female';
+	phone?: string;
+	email?: string;
+	username: string;
+}
+class User {
+	private _browser = $state<MetaBrowser | undefined>(undefined);
+	private _user = $state<undefined | MetaUser>(undefined);
+	timeId: SvelteMap<string | symbol, number | NodeJS.Timeout>;
+
+	constructor() {
+		this._browser = {
+			language: 'en',
+			duration: '300ms',
+			get delay() {
+				if (!this.duration) return 0;
+				return typeof this.duration == 'number'
+					? this.duration
+					: typeof this.duration == 'string' && this.duration.includes('ms')
+						? parseFloat(this.duration)
+						: parseFloat(this.duration) * 10;
+			},
+			set delay(val) {
+				this.duration = val;
+			},
+			get preferColor() {
+				if (!browser) return 'light';
+				return this.theme == 'system' || !this.theme
+					? window.matchMedia('(prefers-color-scheme: dark)').matches
+						? 'dark'
+						: 'light'
+					: this.theme;
+			}
+		};
+		this.timeId = new SvelteMap();
+		$effect.root(() => {
+			$effect(() => {
+				this._browser?.theme;
+				this.syncMetaTheme();
+			});
+		});
+	}
+	get browser() {
+		return this._browser;
+	}
+	set browser(meta) {
+		this._browser = { ...this._browser, ...meta };
+	}
+	updateMetaBrowser(meta: MetaBrowser) {
+		this._browser = { ...this._browser, ...meta };
+		this.syncMetaTheme();
+	}
+	private syncMetaTheme() {
+		let themeChanged = false;
+		if (
+			this._browser &&
+			this._browser.theme &&
+			this._browser.theme != localStorage.getItem('theme')
+		) {
+			localStorage.setItem('theme', this._browser.theme);
+			themeChanged = true;
+		}
+		if (
+			!document.documentElement.getAttribute('data-theme') ||
+			!document.documentElement.getAttribute('data-prefer-color') ||
+			themeChanged
+		) {
+			if (!this._browser || !this._browser.theme) return;
+			document.documentElement.setAttribute('data-theme', this._browser.theme);
+			document.documentElement.setAttribute(
+				'data-prefer-color',
+				this._browser.theme == 'system'
+					? window.matchMedia('(prefers-color-scheme: dark)').matches
+						? 'dark'
+						: 'light'
+					: this._browser.theme
+			);
+		}
+	}
+}
+export const client = new User();

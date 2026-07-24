@@ -14,6 +14,6 @@ const FORM_CONTEXT = Symbol('form-context');
 export function setFormContext(ctx: FormContext) {
 	setContext(FORM_CONTEXT, ctx);
 }
-export function getFormContext(): FormContext {
+export function getFormContext(): FormContext|undefined {
 	return getContext(FORM_CONTEXT);
 }

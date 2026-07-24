@@ -14,6 +14,7 @@ interface TextFieldContext extends TextField {
 	ref?: HTMLElement;
 	status?: {
 		focus?: boolean;
+		hover?: boolean;
 	};
 	onBlur?: (value: boolean) => void;
 	onFocus?: (
@@ -30,6 +31,6 @@ const TEXT_FIELD = Symbol('textfield-context');
 export function setTextfieldCtx(ctx: TextFieldContext) {
 	setContext(TEXT_FIELD, ctx);
 }
-export function getTextfieldCtx(): TextFieldContext {
+export function getTextfieldCtx(): TextFieldContext|undefined {
 	return getContext(TEXT_FIELD);
 }

@@ -1,110 +1,275 @@
 <script lang="ts">
-	import type { Arrow } from '.';
-	import { getTooltipContext } from '../Provider';
+	import type { DistanceUnits } from '$components/interface';
+	import { convertToPixels, styleSynced } from '$modules';
+	import { handleEvents } from '$modules/_attachments';
+	import { client } from '$store/basic.svelte';
+	import { getTooltipCtx } from '..';
+	import type { TooltipArrowConfigs, TooltipArrowProps } from '../_interface';
 
-	let { children, ...props }: Arrow = $props();
-	const tooltipCtx = getTooltipContext();
-	let configs = $state({
-		get contentRef() {
-			return tooltipCtx.contentRef;
-		},
-		get contentRect() {
-			return this.contentRef?.getBoundingClientRect();
-		},
+	let { ...props }: TooltipArrowProps = $props();
+	const tooltipCtx = getTooltipCtx();
+	let configs: TooltipArrowConfigs = $state({
 		get size() {
-			switch (props.size) {
-				case 'xs':
-					return 2;
-				case 'sm':
-					return 4;
-				case 'md':
-					return 6;
-				case 'lg':
-					return 8;
-				case 'xl':
-					return 10;
-				case '2xl':
-					return 12;
-				case '3xl':
-					return 14;
-				case '4xl':
-					return 16;
-				case '5xl':
-					return 18;
-				case '6xl':
-					return 20;
-				case '7xl':
-					return 22;
-				case '8xl':
-					return 24;
-				case '9xl':
-					return 26;
+			return props.size ?? tooltipCtx?.contentMeta?.size ?? tooltipCtx?.size ?? 'md';
+		},
+		get color() {
+			return props.color ?? 'default';
+		},
+		get style() {
+			const defaultStyles: (string | undefined)[] = [
+				'tooltip-arrow',
+				`color-${this.color}`,
+				`size-${this.size}`,
+				tooltipCtx?.contentMeta?.position
+					? `position-${tooltipCtx.contentMeta.position}`
+					: undefined
+			];
+			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
+		},
+		event: [
+			{
+				events: {
+					load(e, data) {
+						if (data?.node instanceof HTMLElement && tooltipCtx?.updateArrowMeta) {
+							tooltipCtx.updateArrowMeta({
+								get size() {
+									return configs.size;
+								},
+								ref: data.node
+							});
+							document.body.append(data.node);
+							return () => {
+								if (data.node instanceof HTMLElement) data.node.remove();
+							};
+						}
+					}
+				}
 			}
-			return 6;
+		]
+	});
+
+	$effect(() => {
+		if (
+			tooltipCtx?.contentMeta?.position &&
+			tooltipCtx.status?.mousePosition &&
+			tooltipCtx.ref &&
+			tooltipCtx.contentMeta.ref &&
+			configs.ref
+		) {
+			if (!configs.timeId) configs.timeId = new Map();
+			const name = 'arrow-animation';
+			const timeId = configs.timeId.get('arrow-animation');
+			if (timeId) clearTimeout(timeId);
+			configs.timeId.set(
+				name,
+				setTimeout(() => {
+					if (
+						tooltipCtx?.contentMeta?.position &&
+						tooltipCtx.status?.mousePosition &&
+						tooltipCtx.ref &&
+						tooltipCtx.contentMeta.ref &&
+						configs.ref
+					) {
+						const contentRect = tooltipCtx.contentMeta.ref.getBoundingClientRect();
+						const targetRect = tooltipCtx.ref.getBoundingClientRect();
+						const contentPosition = tooltipCtx.contentMeta.position;
+						const { x: mouseX, y: mouseY } = tooltipCtx.status.mousePosition;
+						let arrowSize: undefined | number = 0;
+						if (tooltipCtx?.arrowMeta?.ref)
+							arrowSize =
+								(convertToPixels(
+									getComputedStyle(tooltipCtx.arrowMeta.ref).getPropertyValue(
+										'--size'
+									) as DistanceUnits
+								) ?? 0) / 2;
+
+						configs.ref.classList.forEach((clss) =>
+							clss.includes('position') ? configs.ref?.classList.remove(clss) : undefined
+						);
+						switch (contentPosition) {
+							case 'top':
+								configs.ref.style.left = `${mouseX - arrowSize / 2}px`;
+								configs.ref.style.top = `${targetRect.top - (tooltipCtx.contentMeta.offset ?? 0) - arrowSize}px`;
+								if (mouseX < contentRect.left + (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-top-left');
+								} else if (mouseX > contentRect.right - (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-top-right');
+								} else {
+									configs.ref.classList.add('position-top');
+								}
+								break;
+							case 'bottom':
+								configs.ref.style.left = `${mouseX - arrowSize / 2}px`;
+								configs.ref.style.top = `${targetRect.bottom + (tooltipCtx.contentMeta.offset ?? 0)}px`;
+								if (mouseX < contentRect.left + (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-bottom-left');
+								} else if (mouseX > contentRect.right - (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-bottom-right');
+								} else {
+									configs.ref.classList.add('position-bottom');
+								}
+								break;
+							case 'left':
+								configs.ref.style.top = `${mouseY - arrowSize / 2}px`;
+								configs.ref.style.left = `${targetRect.left - (tooltipCtx.contentMeta.offset ?? 0) - arrowSize}px`;
+								if (mouseY < contentRect.top + (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-left-top');
+								} else if (mouseY > contentRect.bottom - (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-left-bottom');
+								} else {
+									configs.ref.classList.add('position-left');
+								}
+								break;
+							case 'right':
+								configs.ref.style.top = `${mouseY - arrowSize / 2}px`;
+								configs.ref.style.left = `${targetRect.right + (tooltipCtx.contentMeta.offset ?? 0)}px`;
+								if (mouseY < contentRect.top + (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-right-top');
+								} else if (mouseY > contentRect.bottom - (tooltipCtx.offset ?? 0)) {
+									configs.ref.classList.add('position-right-bottom');
+								} else {
+									configs.ref.classList.add('position-right');
+								}
+								break;
+						}
+					}
+				}, tooltipCtx.delay)
+			);
 		}
 	});
 </script>
 
-<svelte:element
-	this={props.as ?? 'div'}
-	class={'tooltip-arrow ' + (tooltipCtx.placement ? `tooltip-arrow-${tooltipCtx.placement}` : '')}
-	data-size={props.size ?? 'md'}
-	style:--arrow-color={`hsl(var(--${props.color ?? 'primary'}))`}
-	style:left={tooltipCtx.mousePosition?.clientX &&
-	tooltipCtx.placement &&
-	configs.contentRect?.left &&
-	['top', 'bottom'].includes(tooltipCtx.placement)
-		? `${Math.min(configs.contentRect.width - configs.size, Math.max(0, tooltipCtx.mousePosition.clientX - configs.contentRect.left))}px`
-		: undefined}
-	style:top={tooltipCtx.mousePosition?.clientY &&
-	tooltipCtx.placement &&
-	configs.contentRect &&
-	['left', 'right'].includes(tooltipCtx.placement)
-		? `${Math.min(configs.contentRect.height - configs.size, Math.max(0, tooltipCtx.mousePosition.clientY - configs.contentRect.top))}px`
-		: undefined}
-	style:--arrow-size={`calc(${configs.size} * 1px)`}
->
-	{@render children?.()}
-</svelte:element>
+{#if tooltipCtx?.contentMeta?.position}
+	<svelte:element
+		this={props.as ?? 'div'}
+		bind:this={configs.ref}
+		class={configs.style}
+		{@attach handleEvents(configs.event)}
+	></svelte:element>
+{/if}
 
 <style lang="scss">
+	@use '$styles/colors.scss';
 	.tooltip-arrow {
-		@apply flex relative transition-all ease-in-out duration-300;
-	}
-	.tooltip-arrow-top {
-		&::before {
-			content: '';
-			width: 0px;
-			height: 0px;
-			border-top: calc(var(--arrow-size)) var(--arrow-color) solid;
-			border-left: calc(var(--arrow-size) / 1.73205081) transparent solid;
-			border-right: calc(var(--arrow-size) / 1.73205081) transparent solid;
+		&.size-xs {
+			--size: var(--font-size-xs);
 		}
-	}
-	.tooltip-arrow-bottom::before {
-		content: '';
-		width: 0;
-		height: 0;
-		border-bottom: var(--arrow-size) var(--arrow-color) solid;
-		border-left: calc(var(--arrow-size) / 1.73205081) transparent solid;
-		border-right: calc(var(--arrow-size) / 1.73205081) transparent solid;
-	}
-
-	.tooltip-arrow-left::before {
-		content: '';
-		width: 0;
-		height: 0;
-		border-left: var(--arrow-size) var(--arrow-color) solid;
-		border-top: calc(var(--arrow-size) / 1.73205081) transparent solid;
-		border-bottom: calc(var(--arrow-size) / 1.73205081) transparent solid;
-	}
-
-	.tooltip-arrow-right::before {
-		content: '';
-		width: 0;
-		height: 0;
-		border-right: var(--arrow-size) var(--arrow-color) solid;
-		border-top: calc(var(--arrow-size) / 1.73205081) transparent solid;
-		border-bottom: calc(var(--arrow-size) / 1.73205081) transparent solid;
+		&.size-sm {
+			--size: var(--font-size-sm);
+		}
+		&.size-md {
+			--size: var(--font-size-md);
+		}
+		&.size-lg {
+			--size: var(--font-size-lg);
+		}
+		&.size-xl {
+			--size: var(--font-size-xl);
+		}
+		&.size-2xl {
+			--size: var(--font-size-2xl);
+		}
+		&.size-3xl {
+			--size: var(--font-size-3xl);
+		}
+		&.size-4xl {
+			--size: var(--font-size-4xl);
+		}
+		&.size-5xl {
+			--size: var(--font-size-5xl);
+		}
+		&.size-6xl {
+			--size: var(--font-size-6xl);
+		}
+		&.size-7xl {
+			--size: var(--font-size-7xl);
+		}
+		&.size-8xl {
+			--size: var(--font-size-8xl);
+		}
+		&.size-9xl {
+			--size: var(--font-size-9xl);
+		}
+		&.position-top {
+			top: 100%;
+			border-top: calc(var(--size) / 2) solid var(--color);
+			border-left: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+			border-right: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+		}
+		&.position-top-left {
+			top: 100%;
+			left: 0px;
+			border-top: calc(var(--size) / 2) solid var(--color);
+			border-right: calc((var(--size)) / 2) solid transparent;
+		}
+		&.position-top-right {
+			top: 100%;
+			right: 0px;
+			border-top: calc(var(--size) / 2) solid var(--color);
+			border-left: calc((var(--size)) / 2) solid transparent;
+		}
+		&.position-bottom {
+			bottom: 100%;
+			border-bottom: calc(var(--size) / 2) solid var(--color);
+			border-left: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+			border-right: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+		}
+		&.position-bottom-left {
+			bottom: 100%;
+			left: 0px;
+			border-bottom: calc(var(--size) / 2) solid var(--color);
+			border-right: calc((var(--size)) / 2) solid transparent;
+		}
+		&.position-bottom-right {
+			bottom: 100%;
+			right: 0px;
+			border-bottom: calc(var(--size) / 2) solid var(--color);
+			border-left: calc((var(--size)) / 2) solid transparent;
+		}
+		&.position-left {
+			left: 100%;
+			border-left: calc(var(--size) / 2) solid var(--color);
+			border-top: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+			border-bottom: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+		}
+		&.position-left-top {
+			left: 100%;
+			top: 0px;
+			border-left: calc(var(--size) / 2) solid var(--color);
+			border-bottom: calc((var(--size)) / 2) solid transparent;
+		}
+		&.position-left-bottom {
+			bottom: 100%;
+			right: 0px;
+			border-left: calc(var(--size) / 2) solid var(--color);
+			border-top: calc((var(--size)) / 2) solid transparent;
+		}
+		&.position-right {
+			right: 100%;
+			border-right: calc(var(--size) / 2) solid var(--color);
+			border-top: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+			border-bottom: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
+			border-left: 0 solid transparent;
+		}
+		&.position-right-top {
+			right: 100%;
+			top: 0%;
+			border-right: calc(var(--size) / 2) solid var(--color);
+			border-bottom: calc((var(--size)) / 2) solid transparent;
+			border-top: 0 solid transparent;
+			border-left: 0 solid transparent;
+		}
+		&.position-right-bottom {
+			right: 100%;
+			bottom: 0%;
+			border-right: calc(var(--size) / 2) solid var(--color);
+			border-top: calc((var(--size)) / 2) solid transparent;
+			border-bottom: 0 solid transparent;
+			border-left: 0 solid transparent;
+		}
+		width: 0px;
+		height: 0px;
+		position: fixed;
+		transition: all ease-in-out 0.3s;
 	}
 </style>

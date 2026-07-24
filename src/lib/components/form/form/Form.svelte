@@ -97,8 +97,6 @@
 					nextNode.focus();
 				}
 			}
-
-			// [...configs.childrens.values()].find((_, idx) => idx == nextIndex)?.focus();
 		}
 	});
 </script>

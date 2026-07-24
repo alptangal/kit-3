@@ -1,6 +1,6 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
-	import { profile } from '$store/basic.svelte';
+	import { profile, client } from '$store/basic.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import '../app.css';
 	import { Container, Footer, Header } from '$components/layout';
@@ -11,8 +11,9 @@
 	import Input from '$components/form/input/Input.svelte';
 	import { detectBrowserType, updateResizeWindow, watchClipboard } from '$modules';
 	import Numberic from '$components/keyboard/numberic/Numberic.svelte';
-	import { Description, Form, Label, TextField } from '$components/form/index.js';
+	import { Checkbox, Description, Form, Label, TextField } from '$components/form/index.js';
 	import { getFormContext } from '$components/form/form/index.js';
+	import type { Theme } from '$interfaces/basic.js';
 
 	let { data, children } = $props();
 
@@ -65,6 +66,44 @@
 					height: window.innerHeight
 				};
 			}
+			client.browser = {
+				userAgent: data.userAgent,
+				originalResolution: {
+					width: window.innerWidth,
+					height: window.innerHeight
+				},
+				get isMobile() {
+					if (!this.userAgent) return undefined;
+					return detectBrowserType(this.userAgent)?.includes('desktop') ? false : true;
+				},
+				get os() {
+					if (!this.userAgent) return undefined;
+					const result = detectBrowserType(this.userAgent);
+					switch (result) {
+						case 'desktop/chrome':
+							return 'chrome';
+						case 'desktop/linux':
+							return 'linux';
+						case 'desktop/mac':
+							return 'mac';
+						case 'desktop/window':
+							return 'window';
+						case 'mobile/android':
+							return 'android';
+						case 'mobile/ios':
+							return 'ios';
+					}
+				},
+				width: window.innerWidth,
+				height: window.innerHeight,
+				get theme() {
+					if (localStorage.getItem('theme')) return localStorage.getItem('theme') as Theme;
+					return 'system';
+				},
+				get size(){
+				return this.isMobile?'md':'sm'
+				}
+			};
 		}
 	});
 	onDestroy(() => {
@@ -82,54 +121,13 @@
 			} catch (e) {}
 		}
 	});
-
-	const formTest = {
-		get context() {
-			return getFormContext();
-		},
-		username: {
-			value: null,
-			required: true,
-			isInvalid: undefined,
-			errorMessages: {
-				required: 'This field is required'
-			}
-		},
-		password: {
-			value: null,
-			required: true,
-			isInvalid: undefined,
-			message: null
-		}
-	};
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
 	<meta name="theme-color" id="themeMetaTag" content="#defaultColor" />
 </svelte:head>
-<Button
-	events={{
-		events: [
-			{
-				click: {
-					handler() {
-						if (profile.theme == 'system') {
-							profile.theme = 'dark';
-						} else if (profile.theme == 'dark') {
-							profile.theme = 'light';
-						} else if (profile.theme == 'light') {
-							profile.theme = 'system';
-						}
-						setTimeout(() => {
-							console.log(profile.theme);
-						}, 1000);
-					}
-				}
-			}
-		]
-	}}>{profile.theme}</Button
->
+
 <Container
 	touchActionDisabled={profile.visualKeyboard.focusOn ? true : false}
 	transitionEnabled
@@ -137,74 +135,7 @@
 	height={profile.browser.dimensions?.height ?? 0}
 	class="overflow-auto"
 >
-	{#snippet snippet()}
-		<Header>
-			{#snippet left()}
-				<Button
-					size="9xl"
-					label="haha"
-					description="here is description here is description"
-					color="success"
-					icon={iconify['arrow-left-rounded']}
-					loadingIcon={iconify['loading-fill']}
-					loadingAnimation={{ style: 'style-1', duration: 3000 }}
-					loading
-				></Button>
-
-				<Form method="get" action="/33">
-					<TextField
-						required
-						errorMessages={formTest.username.errorMessages}
-						validate={{
-							change: {
-								isValid(v) {
-									if (v == 3) return true;
-									return false;
-								},
-								message: {
-									valid: ' equal 3',
-									invalid: 'not equal 3'
-								}
-							}
-						}}
-					>
-						<Label>Username</Label>
-						<Input
-							class="border border-solid border-gray-500"
-							overwriteDefaultStyles
-							placeholder="Please enter your keys"
-							clearButtonEnabled
-							type="text"
-							loading
-							loadingAnimation={{ style: 'style-4', duration: '1s' }}
-						/>
-						<Description>Here is username field very large</Description>
-					</TextField>
-					<TextField required>
-						<Label>Password</Label>
-						<Input
-							class="border border-solid border-gray-500"
-							overwriteDefaultStyles
-							placeholder="Please enter your keys"
-							clearButtonEnabled
-							type="password"
-							loadingAnimation={{ style: 'style-4', duration: '1s' }}
-							focusAtStart
-							showPasswordButtonEnabled
-						/>
-						<Description>Here is username field very large</Description>
-					</TextField>
-					<Button
-						type="submit"
-						disabled={formTest.context.loading || !formTest.context.valid}
-						loading={formTest.context.loading}>Submit</Button
-					><Button type="reset">Reset</Button>
-				</Form>
-			{/snippet}
-		</Header>
-		{@render children()}
-		<Footer></Footer>
-	{/snippet}
+	{@render children()}
 </Container>
 {#if profile.visualKeyboard.focusOn}
 	<Numberic

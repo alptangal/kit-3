@@ -1,0 +1,35 @@
+<script lang="ts">
+	import { styleSynced } from '$modules';
+	import type { Snippet } from 'svelte';
+	import type { PageProps } from './$types';
+	import { NavigationMenu } from '$components/navigation';
+	import { SearchMain } from '$components/search/Main';
+	import Input from '$components/form/input/Input.svelte';
+
+	let { data, children }: { data: PageProps; children: Snippet } = $props();
+	let configs = $state({
+		ref: undefined as undefined | HTMLElement,
+		get style() {
+			const defaultStyles: string[] = [];
+			return styleSynced({ defaultStyles });
+		}
+	});
+</script>
+
+<div bind:this={configs.ref} class={configs.style}>
+	<NavigationMenu>
+		<NavigationMenu.left>left</NavigationMenu.left>
+		<NavigationMenu.center>
+			<SearchMain class="w-full">
+				<SearchMain.Input class="flex-1 overflow-hidden" />
+				<SearchMain.Control />
+			</SearchMain>
+		</NavigationMenu.center>
+		<NavigationMenu.right>right</NavigationMenu.right>
+	</NavigationMenu>
+	<Input type="text" />
+	{@render children()}
+</div>
+
+<style lang="scss">
+</style>
