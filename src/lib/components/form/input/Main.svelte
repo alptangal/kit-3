@@ -513,6 +513,7 @@
 								const clipboard = client.browser.clipboard.get(lastTime);
 								if (!clipboard) return;
 								value = clipboard.slice(0, configs.maxLength ? configs.maxLength : -1);
+								if (configs.type == 'password') configs.input.password.value = value;
 								configs.actionButtons.paste.status.pasted = true;
 								if (!configs.timeId) configs.timeId = new Map();
 								const name = 'timeout-paste';
