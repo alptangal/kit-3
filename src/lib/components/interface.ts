@@ -515,7 +515,7 @@ export type EventCompact = (
 	data?: {
 		node?: HTMLElement | Window | Document | Body | VisualViewport;
 	}
-) => (() => void) | Promise<() => void> | void | Promise<void>;
+) => (() => void) | undefined | Promise<(() => void) | undefined> | void | Promise<void>;
 export interface EventFull {
 	handler: (
 		event?: Event | MouseEvent | TouchEvent | KeyboardEvent,

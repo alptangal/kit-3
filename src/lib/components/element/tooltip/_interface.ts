@@ -1,13 +1,9 @@
 // import type { BasicConfigs, BasicProps, Color, Size } from '$components/interface';
 
-import type {
-	BasicConfigs,
-	BasicProps,
-	DistanceUnits,
-	Positions,
-	TimeUnits
-} from '$components/interface';
+import type { BasicConfigs, BasicProps, DistanceUnits, TimeUnits } from '$components/interface';
 import type { Color, Size } from '$interfaces/basic';
+import type { SvelteComponent } from 'svelte';
+import type { ButtonConfigs } from '../button/_interface';
 
 // export interface TooltipProps_old extends BasicProps {
 // 	label?:
@@ -66,10 +62,15 @@ export interface TooltipProps extends BasicProps {
 	delay?: TimeUnits;
 	offset?: DistanceUnits;
 	rounded?: Size | 'full' | 'none';
+	actionButtons?: {
+		info?: {
+			hide?: boolean;
+		};
+	};
 }
 export interface TooltipConfigs extends BasicConfigs {
 	size: Size;
-	status?: {
+	status: {
 		hover?: boolean;
 		mousePosition?: {
 			x: number;
@@ -80,6 +81,12 @@ export interface TooltipConfigs extends BasicConfigs {
 	offset: number;
 	rounded: Size | 'full' | 'none';
 	previousPosition?: 'top' | 'bottom' | 'left' | 'right';
+	actionButtons: {
+		info: BasicConfigs & {
+			component?: SvelteComponent & { configs: ButtonConfigs };
+			actived?: boolean;
+		};
+	};
 }
 export interface TooltipContentProps extends BasicProps {
 	delay?: TimeUnits;

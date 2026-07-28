@@ -4,7 +4,6 @@
 	import type { PageProps } from './$types';
 	import { NavigationMenu } from '$components/navigation';
 	import { SearchMain } from '$components/search/Main';
-	import Input from '$components/form/input/Input.svelte';
 
 	let { data, children }: { data: PageProps; children: Snippet } = $props();
 	let configs = $state({
@@ -27,7 +26,6 @@
 		</NavigationMenu.center>
 		<NavigationMenu.right>right</NavigationMenu.right>
 	</NavigationMenu>
-	<Input type="text" />
 	{@render children()}
 </div>
 

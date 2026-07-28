@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import type { TooltipConfigs } from '$components/element/tooltip/_interface';
 import type { NumbericKey } from '$components/keyboard/numberic/_interface';
 import type {
 	AppTheme,
@@ -284,6 +285,9 @@ interface MetaBrowser {
 			ref: HTMLElement;
 		}
 	>;
+	visualInput?: HTMLElement;
+	clipboard?: Map<number, string>;
+	tooltips?: Map<HTMLElement, TooltipConfigs>;
 }
 interface MetaUser {
 	firstName: string;

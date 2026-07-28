@@ -1,11 +1,9 @@
 import Root from './tooltip/Main.svelte';
 import Content from './tooltip/Content/Main.svelte';
 import Arrow from './tooltip/Arrow/Main.svelte';
-import Trigger from './tooltip/Trigger/Main.svelte';
 export const Tooltip = Object.assign(Root, {
 	Content,
-	Arrow,
-	Trigger
+	Arrow
 });
 import * as Loading from './loading/index.ts';
 

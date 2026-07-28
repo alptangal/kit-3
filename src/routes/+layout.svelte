@@ -8,7 +8,6 @@
 	import { Button, Tooltip } from '$components/element/index.js';
 	import { iconify } from '$assets/icons/iconify.js';
 	import Icon from '@iconify/svelte';
-	import Input from '$components/form/input/Input.svelte';
 	import { detectBrowserType, updateResizeWindow, watchClipboard } from '$modules';
 	import Numberic from '$components/keyboard/numberic/Numberic.svelte';
 	import { Checkbox, Description, Form, Label, TextField } from '$components/form/index.js';
@@ -100,8 +99,8 @@
 					if (localStorage.getItem('theme')) return localStorage.getItem('theme') as Theme;
 					return 'system';
 				},
-				get size(){
-				return this.isMobile?'md':'sm'
+				get size() {
+					return this.isMobile ? 'md' : 'sm';
 				}
 			};
 		}

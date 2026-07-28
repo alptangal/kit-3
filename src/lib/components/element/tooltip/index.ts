@@ -1,4 +1,3 @@
-import type { DistanceUnits } from '$components/interface';
 import type { Size } from '$interfaces/basic';
 import { getContext, setContext } from 'svelte';
 
@@ -14,7 +13,7 @@ export interface ArrowMeta {
 }
 interface TooltipContext {
 	size?: Size;
-	ref?: HTMLElement;
+	ref?: HTMLElement | null | Element;
 	status?: {
 		hover?: boolean;
 		mousePosition?: {

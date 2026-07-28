@@ -108,12 +108,13 @@
 		configs.timeId.set(
 			name,
 			setTimeout(async () => {
-				contentRef.style.width = '';
-				contentRef.style.maxWidth = '';
-				contentRef.style.maxHeight = '';
-				contentRef.style.top = '';
-				contentRef.style.left = '';
-				contentRef.style.right = '';
+				// contentRef.style.width = '';
+				// contentRef.style.maxWidth = '';
+				// contentRef.style.maxHeight = '';
+				// contentRef.style.top = '';
+				// contentRef.style.left = '';
+				// contentRef.style.right = '';
+				// contentRef.style.bottom = '';
 				const targetRect = targetRef.getBoundingClientRect();
 				const contentRect = contentRef.getBoundingClientRect();
 				let arrowSize: undefined | number = 0;
@@ -134,16 +135,12 @@
 				const finalPosition = (
 					!keys(pickBy(meta, (value) => value.ready)).length
 						? Object.entries(meta).sort(
-								([k, value], [k1, value1]) => value1.acreage - value.acreage
+								([, value], [, value1]) => value1.acreage - value.acreage
 							)[0][0]
 						: Object.entries(pickBy(meta, (value) => value.ready)).sort(
-								([k, val], [k1, val1]) => val.mousePositionToSide - val1.mousePositionToSide
+								([, val], [, val1]) => val.mousePositionToSide - val1.mousePositionToSide
 							)[0][0]
 				) as 'top' | 'bottom' | 'left' | 'right';
-				// // if (!keys(pickBy(meta, (value) => value.ready)).length) {
-				// 	const finalPosition = Object.entries(meta).sort(
-				// 		([k, value], [k1, value1]) => value1.acreage - value.acreage
-				// 	)[0][0] as 'top' | 'bottom' | 'left' | 'right';
 				configs.position = finalPosition;
 				if (!keys(pickBy(meta, (value) => value.ready)).length)
 					contentRef.style.width = `${contentRef.offsetWidth}px`;
@@ -151,7 +148,7 @@
 					case 'top':
 						contentRef.style.maxWidth = `${(client.browser?.width ?? 0) - OFFSET * 2}px`;
 						contentRef.style.maxHeight = `${targetRect.top - arrowSize - configs.offset - OFFSET}px`;
-						contentRef.style.bottom = `${(client.browser?.height ?? 0) - targetRect.bottom + arrowSize + targetRect.height + configs.offset}px`;
+						contentRef.style.top = `${targetRect.top - arrowSize - contentRect.height - configs.offset}px`;
 						if (contentRef.offsetWidth > targetRect.width) {
 							if (contentRef.offsetWidth < (client.browser?.width ?? 0) - OFFSET * 2) {
 								contentRef.style.left = `${targetRect.left + targetRect.width / 2 - contentRef.offsetWidth / 2}px`;
@@ -180,7 +177,7 @@
 					case 'left':
 						contentRef.style.maxWidth = `${targetRect.left - arrowSize - OFFSET}px`;
 						contentRef.style.maxHeight = `${(client.browser?.height ?? 0) - OFFSET * 2}px`;
-						contentRef.style.right = `${(client.browser?.width ?? 0) - targetRect.right + targetRect.width + arrowSize + configs.offset}px`;
+						contentRef.style.left = `${targetRect.left - contentRect.width - arrowSize - configs.offset}px`;
 						if (contentRef.offsetHeight > targetRect.height) {
 							if (contentRef.offsetHeight < (client.browser?.height ?? 0) - OFFSET * 2) {
 								contentRef.style.top = `${targetRect.top + targetRect.height / 2 - contentRef.offsetHeight / 2}px`;
@@ -206,71 +203,6 @@
 						}
 						break;
 				}
-				// } else {
-				// 	const finalPosition = Object.entries(pickBy(meta, (value) => value.ready)).sort(
-				// 		([k, val], [k1, val1]) => val.mousePositionToSide - val1.mousePositionToSide
-				// 	)[0][0] as 'top' | 'bottom' | 'left' | 'right';
-
-				// 	configs.position = finalPosition;
-				// 	switch (finalPosition) {
-				// 		case 'top':
-				// 			contentRef.style.maxWidth = `${(client.browser?.width ?? 0) - OFFSET * 2}px`;
-				// 			contentRef.style.maxHeight = `${targetRect.top - arrowSize - configs.offset - OFFSET}px`;
-				// 			contentRef.style.top = `${targetRect.top - arrowSize - contentRef.offsetHeight - configs.offset}px`;
-				// 			if (contentRef.offsetWidth > targetRect.width) {
-				// 				if (contentRef.offsetWidth < (client.browser?.width ?? 0) - OFFSET * 2) {
-				// 					contentRef.style.left = `${targetRect.left + targetRect.width / 2 - contentRef.offsetWidth / 2}px`;
-				// 				} else {
-				// 					contentRef.style.left = `${OFFSET}px`;
-				// 				}
-				// 			} else {
-				// 				contentRef.style.left = `${Math.max(targetRect.left, Math.min(mousePosition.x - contentRef.offsetWidth / 2, targetRect.right - contentRef.offsetWidth))}px`;
-				// 			}
-				// 			break;
-				// 		case 'bottom':
-				// 			contentRef.style.maxWidth = `${(client.browser?.width ?? 0) - OFFSET * 2}px`;
-				// 			contentRef.style.maxHeight = `${(client.browser?.height ?? 0) - targetRect.bottom - configs.offset - arrowSize - OFFSET}px`;
-				// 			contentRef.style.top = `${targetRect.bottom + arrowSize + configs.offset}px`;
-				// 			if (contentRef.offsetWidth > targetRect.width) {
-				// 				if (contentRef.offsetWidth < (client.browser?.width ?? 0) - OFFSET * 2) {
-				// 					contentRef.style.left = `${targetRect.left + targetRect.width / 2 - contentRef.offsetWidth / 2}px`;
-				// 				} else {
-				// 					contentRef.style.left = `${OFFSET}px`;
-				// 				}
-				// 			} else {
-				// 				contentRef.style.left = `${Math.max(targetRect.left, Math.min(mousePosition.x - contentRef.offsetWidth / 2, targetRect.right - contentRef.offsetWidth))}px`;
-				// 			}
-				// 			break;
-				// 		case 'left':
-				// 			contentRef.style.maxWidth = `${targetRect.left - arrowSize - OFFSET}px`;
-				// 			contentRef.style.maxHeight = `${(client.browser?.height ?? 0) - OFFSET * 2}px`;
-				// 			contentRef.style.right = `${(client.browser?.width ?? 0) - targetRect.right + targetRect.width + arrowSize + configs.offset}px`;
-				// 			if (contentRef.offsetHeight > targetRect.height) {
-				// 				if (contentRef.offsetHeight < (client.browser?.height ?? 0) - OFFSET * 2) {
-				// 					contentRef.style.top = `${targetRect.top + targetRect.height / 2 - contentRef.offsetHeight / 2}px`;
-				// 				} else {
-				// 					contentRef.style.top = `${OFFSET}px`;
-				// 				}
-				// 			} else {
-				// 				contentRef.style.top = `${Math.max(targetRect.top, Math.min(mousePosition.y - contentRef.offsetHeight / 2, targetRect.bottom - contentRef.offsetHeight))}px`;
-				// 			}
-				// 			break;
-				// 		case 'right':
-				// 			contentRef.style.maxWidth = `${(client.browser?.width ?? 0) - targetRect.right - arrowSize - OFFSET}px`;
-				// 			contentRef.style.maxHeight = `${(client.browser?.height ?? 0) - OFFSET * 2}px`;
-				// 			contentRef.style.left = `${targetRect.right + arrowSize + configs.offset}px`;
-				// 			if (contentRef.offsetHeight > targetRect.height) {
-				// 				if (contentRef.offsetHeight < (client.browser?.height ?? 0) - OFFSET * 2) {
-				// 					contentRef.style.top = `${targetRect.top + targetRect.height / 2 - contentRef.offsetHeight / 2}px`;
-				// 				} else {
-				// 					contentRef.style.top = `${OFFSET}px`;
-				// 				}
-				// 			} else {
-				// 				contentRef.style.top = `${Math.max(targetRect.top, Math.min(mousePosition.y - contentRef.offsetHeight / 2, targetRect.bottom - contentRef.offsetHeight))}px`;
-				// 			}
-				// 			break;
-				// 	}
-				// }
 			}, configs.delay)
 		);
 	}

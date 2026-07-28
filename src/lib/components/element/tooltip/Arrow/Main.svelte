@@ -2,7 +2,6 @@
 	import type { DistanceUnits } from '$components/interface';
 	import { convertToPixels, styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
-	import { client } from '$store/basic.svelte';
 	import { getTooltipCtx } from '..';
 	import type { TooltipArrowConfigs, TooltipArrowProps } from '../_interface';
 

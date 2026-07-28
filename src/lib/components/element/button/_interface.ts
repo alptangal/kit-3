@@ -14,7 +14,7 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 		  };
 	class?:
 		| string
-		| string[]
+		| (string | undefined)[]
 		| {
 				root?: string | string[];
 				icon?:
@@ -28,6 +28,7 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	'aspect-square'?: boolean;
 	rounded?: Size | 'full' | 'none';
 	disabled?: boolean;
+	actived?: boolean;
 	transitionDisabled?: boolean;
 	color?: Color;
 	onClick?: () => void | Promise<void>;

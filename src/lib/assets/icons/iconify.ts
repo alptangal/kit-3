@@ -13,6 +13,7 @@ export const iconify = {
 	'dangerous-outline-rounded': 'material-symbols-light:dangerous-outline-rounded',
 	'warning-outline-rounded': 'material-symbols-light:warning-outline-rounded',
 	'password-2-off-rounded': 'material-symbols-light:password-2-off-rounded',
-  'password-2-rounded': 'material-symbols-light:password-2-rounded',
-	'search-rounded':'material-symbols-light:search-rounded'
+	'password-2-rounded': 'material-symbols-light:password-2-rounded',
+	'search-rounded': 'material-symbols-light:search-rounded',
+	'info-i-rounded': 'material-symbols-light:info-i-rounded'
 };
