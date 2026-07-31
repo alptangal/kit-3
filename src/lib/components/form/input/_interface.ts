@@ -13,6 +13,33 @@ type ValidationFull = {
 		invalid?: TranslateContent;
 	};
 };
+export type NumberKeyAllowed =
+	| '0'
+	| '1'
+	| '2'
+	| '3'
+	| '4'
+	| '5'
+	| '6'
+	| '7'
+	| '8'
+	| '9'
+	| 'ac'
+	| 'del'
+	| '('
+	| ')'
+	| '.'
+	| '+'
+	| '-'
+	| 'x'
+	| ':'
+	| '=';
+export interface NumberInputTarget {
+	value: string | undefined;
+	ref?: HTMLInputElement;
+	maxLength?: number;
+}
+
 export interface InputProps extends BasicProps {
 	type?: InputTypes;
 	rounded?: Size | 'full' | 'none';
@@ -50,6 +77,7 @@ export interface InputProps extends BasicProps {
 	color?: Color;
 }
 export interface InputConfigs extends BasicConfigs {
+	previousValue?: string;
 	type: InputTypes;
 	size: Size;
 	rounded: Size | 'full' | 'none';
@@ -65,10 +93,13 @@ export interface InputConfigs extends BasicConfigs {
 		focus?: boolean;
 		currentCursor?: number;
 	};
-	input: { [k in Exclude<InputTypes, 'password'>]: BasicConfigs } & {
+	input: { [k in Exclude<InputTypes, 'password' | 'number'>]: BasicConfigs } & {
 		password: BasicConfigs & {
 			value?: string;
 			showPassword?: boolean;
+		};
+		number: BasicConfigs & {
+			resolveCalculator?: (value: string) => void;
 		};
 	};
 	maskValue: BasicConfigs & {

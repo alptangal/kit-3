@@ -30,7 +30,7 @@ export const defaults: Content = {
 //--------------------------------END DEFAULTS----------------------
 
 export function getMetaSide(
-	targetRef: HTMLElement,
+	targetRef: HTMLElement | Element,
 	contentRef: HTMLElement,
 	arrowRef: HTMLElement | undefined,
 	propsOffset: number | undefined,

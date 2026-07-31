@@ -561,6 +561,8 @@ export interface EventListener {
 	keydown?: EventDefault;
 	keyup?: EventDefault;
 	input?: EventDefault;
+	focusin?: EventDefault;
+	focusout?: EventDefault;
 	focus?: EventDefault;
 	blur?: EventDefault;
 	change?: EventDefault;

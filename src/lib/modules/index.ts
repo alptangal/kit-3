@@ -199,3 +199,18 @@ export function convertToPixels(input?: DistanceUnits): number | undefined {
 	}
 	return undefined;
 }
+export function measureTextWidth(text: string, referenceEl: HTMLElement): number {
+	const mirror = document.createElement('span');
+	mirror.style.position = 'absolute';
+	mirror.style.visibility = 'hidden';
+	mirror.style.whiteSpace = 'pre';
+	// Copy font styles từ input thật để đo chính xác
+	const computed = getComputedStyle(referenceEl);
+	mirror.style.font = computed.font;
+	mirror.style.letterSpacing = computed.letterSpacing;
+	mirror.textContent = text || '';
+	document.body.appendChild(mirror);
+	const width = mirror.offsetWidth;
+	mirror.remove();
+	return width;
+}

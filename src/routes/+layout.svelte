@@ -9,7 +9,6 @@
 	import { iconify } from '$assets/icons/iconify.js';
 	import Icon from '@iconify/svelte';
 	import { detectBrowserType, updateResizeWindow, watchClipboard } from '$modules';
-	import Numberic from '$components/keyboard/numberic/Numberic.svelte';
 	import { Checkbox, Description, Form, Label, TextField } from '$components/form/index.js';
 	import { getFormContext } from '$components/form/form/index.js';
 	import type { Theme } from '$interfaces/basic.js';
@@ -136,17 +135,6 @@
 >
 	{@render children()}
 </Container>
-{#if profile.visualKeyboard.focusOn}
-	<Numberic
-		doneButtonEnabled
-		otherFieldsButtonEnabled
-		bind:this={profile.visualKeyboard.component}
-		output={(val) => {
-			if (profile.visualKeyboard.onKeyup) profile.visualKeyboard.onKeyup(val);
-		}}
-		disableKeys={[]}
-	/>
-{/if}
 
 <style lang="scss">
 	@use '$assets/styles/basic.scss';

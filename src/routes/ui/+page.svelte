@@ -28,7 +28,7 @@
 		<Input
 			loading
 			variant="primary"
-			type="password"
+			type="number"
 			actionButtons={{ copy: { display: true }, paste: { display: true } }}
 		>
 			{#snippet leading(data)}
@@ -59,4 +59,33 @@
 			hello this my world something here hello111
 		</Tooltip.Content>
 	</Tooltip>
+	<Input
+		loading
+		variant="primary"
+		type="number"
+		actionButtons={{ copy: { display: true }, paste: { display: true } }}
+	>
+		{#snippet leading(data)}
+			<Button
+				icon={iconify['search-rounded']}
+				class={[...(data?.defaultStyles ?? []), 'p-0! ']}
+				aspect-square
+				size={data?.size}
+				events={[
+					{
+						events: {
+							mousedown: {
+								handler(e) {
+									console.log(e);
+								},
+								options: {
+									stopPropagation: true
+								}
+							}
+						}
+					}
+				]}
+			/>
+		{/snippet}
+	</Input>
 </div>

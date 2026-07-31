@@ -32,7 +32,8 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	transitionDisabled?: boolean;
 	color?: Color;
 	onClick?: () => void | Promise<void>;
-	delay?: number | `${number}s` | `${number}ms`;
+	delay?: number | `${number}s` | `${number}ms` | 'none';
+	transitionDuration?: number | `${number}s` | `${number}ms` | 'none';
 	loading?: boolean;
 	loadingDuration?: number | `${number}s` | `${number}ms`;
 }
@@ -48,7 +49,7 @@ export interface ButtonConfigs extends BasicConfigs {
 		hover?: boolean;
 		tap?: boolean;
 	};
-	delay: number;
+	delay?: number;
 	transitionDuration: number;
 	loadingDuration: number;
 }

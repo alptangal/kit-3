@@ -228,6 +228,7 @@
 			bottom: 100%;
 			left: 100%;
 			transform: translateX(-50%) translateY(50%);
+			padding-inline: 0px;
 		}
 	}
 </style>

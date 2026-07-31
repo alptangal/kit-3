@@ -1,0 +1,289 @@
+@use '$styles/sizes.scss';
+.input-root {
+	--cursor: text;
+	--border-color: transparent;
+	--color: var(--default);
+	&.size-xs {
+		--min-width: calc(var(--container-xs) * 2/3);
+		--min-height: var(--min-width-button-xs);
+	}
+	&.size-sm {
+		--min-width: calc(var(--container-sm) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-md {
+		--min-width: calc(var(--container-md) * 2/3);
+		--min-height: var(--min-width-button-xs);
+	}
+	&.size-lg {
+		--min-width: calc(var(--container-lg) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-xl {
+		--min-width: calc(var(--container-xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-2xl {
+		--min-width: calc(var(--container-2xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-3xl {
+		--min-width: calc(var(--container-3xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-4xl {
+		--min-width: calc(var(--container-4xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-5xl {
+		--min-width: calc(var(--container-5xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-6xl {
+		--min-width: calc(var(--container-6xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-7xl {
+		--min-width: calc(var(--container-7xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-8xl {
+		--min-width: calc(var(--container-8xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.size-9xl {
+		--min-width: calc(var(--container-9xl) * 2/3);
+		--min-height: var(--font-size);
+	}
+	&.focus {
+		&.animation-bounce {
+			animation: border-animation var(--duration) 2 ease-in-out;
+		}
+	}
+	&.variant-secondary {
+		@media (prefers-color-scheme: dark) {
+			--background: var(--color-gray-700);
+		}
+		@media (prefers-color-scheme: light) {
+			--background: var(--color-gray-200);
+		}
+		&.focus,
+		&:hover:not(.disabled) {
+			@media (prefers-color-scheme: dark) {
+				--background: var(--color-gray-600);
+			}
+			@media (prefers-color-scheme: light) {
+				--background: var(--color-gray-300);
+			}
+		}
+		&.focus {
+			--border-color: var(--color-sky-500);
+		}
+		&.color-success {
+			--color: var(--success);
+			--background: var(--success-100);
+			--border-color: var(--success);
+			&.focus,
+			&:hover:not(.disabled) {
+				@media (prefers-color-scheme: dark) {
+					--background: var(--success-600);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: var(--success-300);
+				}
+			}
+			&.focus {
+				--border-color: var(--success-500);
+			}
+		}
+		&.color-error {
+			--color: var(--error);
+			--background: var(--error-100);
+			--border-color: var(--error);
+			&.focus,
+			&:hover:not(.disabled) {
+				@media (prefers-color-scheme: dark) {
+					--background: var(--error-600);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: var(--error-300);
+				}
+			}
+			&.focus {
+				--border-color: var(--error-500);
+			}
+		}
+	}
+	&.variant-primary {
+		@media (prefers-color-scheme: dark) {
+			--background: var(--color-gray-900);
+		}
+		@media (prefers-color-scheme: light) {
+			--background: var(--color-gray-100);
+		}
+
+		&.focus,
+		&:hover:not(.disabled) {
+			@media (prefers-color-scheme: dark) {
+				--background: var(--color-gray-800);
+			}
+			@media (prefers-color-scheme: light) {
+				--background: var(--color-gray-200);
+			}
+		}
+		&.focus {
+			--border-color: var(--color-sky-500);
+		}
+		&.color-success {
+			--color: var(--success);
+			--background: var(--success-100);
+			--border-color: var(--success);
+			&.focus,
+			&:hover:not(.disabled) {
+				@media (prefers-color-scheme: dark) {
+					--background: var(--success-800);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: var(--success-200);
+				}
+			}
+			&.focus {
+				--border-color: var(--success-500);
+			}
+		}
+		&.color-error {
+			--color: var(--error);
+			--background: var(--error-100);
+			--border-color: var(--error);
+			&.focus,
+			&:hover:not(.disabled) {
+				@media (prefers-color-scheme: dark) {
+					--background: var(--error-800);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: var(--error-200);
+				}
+			}
+			&.focus {
+				--border-color: var(--error-500);
+			}
+		}
+	}
+
+	&.disabled {
+		--cursor: not-allowed;
+		--position: relative;
+		&::before {
+			content: '';
+			position: absolute;
+			top: 0px;
+			left: 0px;
+			width: 100%;
+			height: 100%;
+			z-index: 99;
+			border-radius: var(--border-radius);
+		}
+	}
+	@media (prefers-color-scheme: dark) {
+		--placeholder-color: var(--color-gray-400);
+	}
+	@media (prefers-color-scheme: light) {
+		--placeholder-color: var(--color-gray-400);
+	}
+	--height: calc(var(--line-height) * 1rem);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: var(--gap-sm);
+	cursor: var(--cursor);
+	border: var(--border-width) solid var(--border-color);
+	border-radius: var(--border-radius);
+	// padding-inline: calc(var(--padding) / 2);
+	// padding-block: calc(var(--padding) / 6);
+	line-height: var(--line-height);
+	min-width: var(--min-width);
+	max-width: 100%;
+	font-size: var(--font-size);
+	background: var(--background);
+	position: var(--position);
+	color: var(--color);
+	.input-placeholder {
+		color: var(--placeholder-color);
+		flex: 1;
+		min-width: 0px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.input-editor {
+		@apply flex-1 flex h-full items-center;
+		background: transparent;
+		color: var(--color);
+		min-width: 0;
+		&.input-editor-number {
+			padding-inline: 0 !important;
+		}
+		&:focus {
+			border: none;
+			outline: none;
+		}
+		.input-visual-cursor {
+			border: none;
+			border-right: var(--border-width) solid var(--color-sky-600);
+			height: calc(100% - var(--border-width) * 2);
+		}
+	}
+	.input-mask {
+		overflow: hidden;
+		flex: 1;
+		align-items: center;
+		display: flex;
+	}
+	.input-group-actions {
+		@apply flex items-center gap-[calc(var(--gap)/4)] w-fit;
+		height: 100%;
+	}
+	.input-max-length {
+		width: fit-content;
+		display: flex;
+		align-items: center;
+		color: var(--placeholder-color);
+	}
+	:global(.input-snippet) {
+		height: fit-content;
+		width: fit-content;
+	}
+	&.validation-loading {
+		position: relative;
+		&::before {
+			content: '';
+			position: absolute;
+			bottom: 0px;
+			left: 50%;
+			transform: translateX(-50%);
+			width: 0px;
+			height: calc(var(--border-width));
+			border-radius: var(--border-radius);
+			z-index: 9999;
+			animation: validation-loading infinite var(--duration) ease-in-out;
+			background: var(--color-sky-800);
+			opacity: 0.5;
+		}
+	}
+}
+@keyframes border-animation {
+	from {
+		transform: scale(0.99);
+	}
+	to {
+		transform: scale(1);
+	}
+}
+@keyframes validation-loading {
+	from {
+		width: 0px;
+	}
+	to {
+		width: 100%;
+	}
+}

@@ -42,6 +42,7 @@
 		},
 		get delay() {
 			if (!props.delay) return client.browser?.delay ?? 300;
+			if (props.delay == 'none') return undefined;
 			return typeof props.delay == 'number'
 				? props.delay
 				: props.delay.includes('ms')
@@ -89,16 +90,18 @@
 				},
 				click: {
 					async handler() {
-						if (!configs.status) configs.status = {};
-						if (!configs.timeId) configs.timeId = new Map();
-						configs.status.tap = !configs.status.tap;
-						configs.timeId.set(
-							'animation-tap',
-							setTimeout(() => {
-								if (!configs.status) configs.status = {};
-								configs.status.tap = !configs.status.tap;
-							}, configs.delay)
-						);
+						if (configs.delay) {
+							if (!configs.status) configs.status = {};
+							if (!configs.timeId) configs.timeId = new Map();
+							configs.status.tap = !configs.status.tap;
+							configs.timeId.set(
+								'animation-tap',
+								setTimeout(() => {
+									if (!configs.status) configs.status = {};
+									configs.status.tap = !configs.status.tap;
+								}, configs.delay)
+							);
+						}
 						if (props.onClick) await props.onClick();
 						return () => {
 							const timeId = configs.timeId?.get('animation-tap');
@@ -131,7 +134,7 @@
 			configs.timeId.set('loading', requestAnimationFrame(processLoading));
 			function processLoading() {
 				const currentAt = performance.now();
-				const percent = Math.min(((currentAt - startAt) * 100) / configs.delay, 100);
+				const percent = Math.min(((currentAt - startAt) * 100) / configs.transitionDuration, 100);
 				if (configs.ref) configs.ref.style.setProperty('--loading-percent', `${percent}%`);
 				if (percent == 100) {
 					startAt = performance.now();

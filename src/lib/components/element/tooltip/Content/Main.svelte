@@ -97,7 +97,7 @@
 	const tooltipCtx = getTooltipCtx();
 
 	function setPositionTooltip(
-		targetRef: HTMLElement,
+		targetRef: HTMLElement | Element,
 		contentRef: HTMLElement,
 		mousePosition: { x: number; y: number }
 	) {

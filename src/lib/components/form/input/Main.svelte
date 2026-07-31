@@ -1,18 +1,23 @@
 <script lang="ts">
 	import { iconify } from '$assets/icons/iconify';
 	import { Button, Icon } from '$components/element';
-	import { styleSynced } from '$modules';
+	import { measureTextWidth, styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
-	import { untrack, type SvelteComponent } from 'svelte';
-	import type { InputConfigs, InputProps } from './_interface';
+	import { onDestroy, untrack, type SvelteComponent } from 'svelte';
+	import type { InputConfigs, InputProps, NumberKeyAllowed } from './_interface';
 	import type { ButtonConfigs } from '$components/element/button/_interface';
 	import { keys_allowed } from '.';
-	import type { EventListener } from '$components/interface';
+	import type { BasicConfigs, EventListener } from '$components/interface';
 	import type { TranslateContent } from '$interfaces/basic';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { curry } from 'es-toolkit/compat';
+	import { Keyboard } from '$components/keyboard';
+	import { ensureKeyboardHost } from '$modules/keyboardHost.svelte';
+	import { numberKeyboardState } from '$modules/numberKeyboardState.svelte';
+	import { browser } from '$app/environment';
 
+	let visualNumberKbCleaner: (() => void) | undefined = $state(undefined);
 	let { value = $bindable(), disabled = $bindable(), ...props }: InputProps = $props();
 	let configs: InputConfigs = $state({
 		status: {},
@@ -112,19 +117,7 @@
 					events: {
 						async load() {
 							if (client.browser?.isMobile && !client.browser.visualInput) {
-								const visualInput = document.createElement('input');
-								visualInput.classList.add(
-									'visual-input',
-									'h-1',
-									'w-1',
-									'opacity-0',
-									'fixed',
-									'bottom-0',
-									'left-0',
-									'-z-50'
-								);
-								document.body.appendChild(visualInput);
-								client.browser.visualInput = visualInput;
+								client.createInputVisual();
 							}
 							let clipboardRaw: string | undefined | null;
 							try {
@@ -144,42 +137,63 @@
 								console.log(e);
 							}
 						},
-						mousedown(e: MouseEvent) {
-							if (value && configs.maskValue.ref) {
-								const index = calculatorCursor(e, value, configs.maskValue.ref);
-								requestAnimationFrame(() => {
-									const ref = configs.input[configs.type].ref;
-									if (ref instanceof HTMLInputElement) {
-										configs.status.currentCursor = index ?? value?.length ?? 1;
-										ref.setSelectionRange(
-											configs.status.currentCursor,
-											configs.status.currentCursor
-										);
-									}
-								});
-							}
-							if (configs.status.focus) {
-								const target = e.target as HTMLElement;
-								const ref = configs.input[configs.type].ref;
-								if (!ref?.contains(target)) e.preventDefault();
-								const name = 'animation-bounce';
-								if (!configs.timeId) configs.timeId = new Map();
-								const timeId = configs.timeId.get(name);
-								if (timeId) clearTimeout(timeId);
-								configs.timeId.set(
-									name,
-									setTimeout(() => {
-										configs.ref?.classList.add('animation-bounce');
-										setTimeout(() => {
-											configs.ref?.classList.remove('animation-bounce');
-										}, configs.duration);
-									}, configs.delay)
-								);
-							} else {
-								configs.status.focus = true;
-								if (client.browser?.isMobile && client.browser.visualInput) {
-									client.browser.visualInput.focus();
+						mousedown: {
+							async handler(e: MouseEvent) {
+								if (value && configs.maskValue.ref) {
+									const index = calculatorCursor(e, value, configs.maskValue.ref);
+									requestAnimationFrame(() => {
+										const ref = configs.input[configs.type].ref;
+										if (ref instanceof HTMLInputElement) {
+											configs.status.currentCursor = index ?? value?.length ?? 1;
+											ref.setSelectionRange(
+												configs.status.currentCursor,
+												configs.status.currentCursor
+											);
+										}
+									});
 								}
+								if (
+									configs.type == 'number' &&
+									client.browser?.isMobile &&
+									!client.browser?.visualKeyboard
+								) {
+									e.preventDefault();
+									if (!client.browser?.visualInput) client.createInputVisual();
+									await client.getVisualKeyboardMeta();
+									configs.status.focus = true;
+									requestAnimationFrame(() => {
+										showVisualNumberKb();
+									});
+								} else {
+									if (configs.status.focus) {
+										const target = e.target as HTMLElement;
+										const ref = configs.input[configs.type].ref;
+										if (!ref?.contains(target)) e.preventDefault();
+										const name = 'animation-bounce';
+										if (!configs.timeId) configs.timeId = new Map();
+										const timeId = configs.timeId.get(name);
+										if (timeId) clearTimeout(timeId);
+										configs.timeId.set(
+											name,
+											setTimeout(() => {
+												configs.ref?.classList.add('animation-bounce');
+												setTimeout(() => {
+													configs.ref?.classList.remove('animation-bounce');
+												}, configs.duration);
+											}, configs.delay)
+										);
+									} else {
+										configs.status.focus = true;
+										if (configs.type == 'number') {
+											requestAnimationFrame(() => {
+												showVisualNumberKb();
+											});
+										}
+									}
+								}
+							},
+							options: {
+								stopPropagation: true
 							}
 						},
 						keydown() {
@@ -206,7 +220,7 @@
 							return () => {
 								requestAnimationFrame(() => {
 									const ref = configs.input[configs.type].ref;
-									if (ref) {
+									if (ref && !(configs.type === 'number' && client.browser?.isMobile)) {
 										ref.focus();
 										configs.ref?.classList.add('animation-bounce');
 										setTimeout(() => {
@@ -324,6 +338,15 @@
 				event: [
 					{
 						events: {
+							load(e, data) {
+								const node = data?.node;
+								if (node instanceof HTMLElement) {
+									const { width, height }: { width: number; height: number } =
+										node.getBoundingClientRect();
+									configs.maskValue.width = width;
+									configs.maskValue.height = height;
+								}
+							},
 							mousedown(e) {
 								let index: number | undefined;
 								if (configs.input.password.showPassword) {
@@ -349,39 +372,41 @@
 								const event = e as KeyboardEvent;
 								if (configs.input.password.showPassword) event.preventDefault();
 								const key = event.key;
+								if (
+									['delete', 'backspace', 'control', 'alt', 'shift'].includes(key.toLowerCase())
+								) {
+									return;
+								}
 								if (!value) {
 									value = key;
+									configs.status.currentCursor = 1;
 								} else {
-									if (
-										!['delete', 'backspace', 'control', 'alt', 'shift'].includes(key.toLowerCase())
-									) {
-										const currentCursor = configs.status.currentCursor ?? 1;
-										value =
-											value.slice(0, currentCursor) +
-											key +
-											value.slice(currentCursor, value.length);
-									}
-								}
-								if (
-									!configs.status.currentCursor ||
-									configs.status.currentCursor == value.length - 1
-								) {
-									configs.status.currentCursor = value.length;
-								} else {
-									configs.status.currentCursor += 1;
+									const currentCursor = configs.status.currentCursor ?? value.length;
+
+									value =
+										value.slice(0, currentCursor) + key + value.slice(currentCursor, value.length);
+									configs.status.currentCursor = currentCursor + 1;
 								}
 							},
 							keyup() {
 								if (!value) return;
 								configs.input.password.value = Array(value.length).fill('*').join('');
 								const inputRef = configs.input.password.ref as HTMLInputElement;
-
-								if (inputRef && configs.status.currentCursor) {
-									inputRef.setSelectionRange(
-										configs.status.currentCursor,
-										configs.status.currentCursor
-									);
-								}
+								if (!configs.timeId) configs.timeId = new Map();
+								const name = 'animation-keyup';
+								const timeId = configs.timeId.get(name) as number;
+								if (timeId) cancelAnimationFrame(timeId);
+								configs.timeId.set(
+									name,
+									requestAnimationFrame(() => {
+										if (inputRef && configs.status.currentCursor != undefined) {
+											inputRef.setSelectionRange(
+												configs.status.currentCursor,
+												configs.status.currentCursor
+											);
+										}
+									})
+								);
 							},
 							blur() {
 								configs.status.focus = false;
@@ -392,7 +417,141 @@
 			},
 			email: {},
 			phone: {},
-			number: {},
+			number: {
+				get style() {
+					return [...(configs.input.text.style ?? []), 'input-editor-number'];
+				},
+				get event() {
+					if (!browser) return undefined;
+					const events = [
+						{
+							events: {
+								async load(_, data) {
+									if (data?.node instanceof HTMLInputElement) {
+										if (!value) {
+											data.node.style.width = `0px`;
+										} else {
+											const w = measureTextWidth(value, data.node);
+											const baseSize = getComputedStyle(document.body).fontSize;
+											data.node.style.width = `${(w + 1) / parseFloat(baseSize)}rem`;
+										}
+										return async () => {
+											if (visualNumberKbCleaner && configs.status.focus == false) {
+												visualNumberKbCleaner();
+												visualNumberKbCleaner = undefined;
+											}
+										};
+									}
+								},
+								async keydown(e, data) {
+									e;
+									const event = e as CustomEvent<string>;
+									if (client.browser?.isMobile) {
+										event.preventDefault();
+										const key = event.detail as NumberKeyAllowed;
+										const currentIndex = configs.status.currentCursor;
+										if (key == 'ac') {
+											value = '';
+											configs.status.currentCursor = 0;
+										} else if (key == 'del') {
+											if (value && configs.status.currentCursor) {
+												if (currentIndex == value.length) {
+													value = value.slice(0, -1);
+													configs.status.currentCursor = value.length ?? 1;
+												} else if (currentIndex !== undefined) {
+													value =
+														value.slice(0, currentIndex - 1) +
+														value.slice(currentIndex, value.length);
+													configs.status.currentCursor = Math.max(
+														0,
+														configs.status.currentCursor - 1
+													);
+												}
+											}
+										} else if (key == '=' && value) {
+											const rs = await calculatorString(value);
+											if (rs != value) {
+												value = rs;
+											}
+											return;
+										} else {
+											if (!value) value = '';
+											if (currentIndex === undefined) {
+												value += key;
+												configs.status.currentCursor = 1;
+											} else {
+												if (currentIndex == value.length) {
+													value += key;
+												} else {
+													value =
+														value.slice(0, currentIndex) +
+														key +
+														value.slice(currentIndex, value.length);
+												}
+												if (!configs.status.currentCursor) configs.status.currentCursor = 0;
+												configs.status.currentCursor += 1;
+											}
+										}
+										if (configs.status.currentCursor != undefined) {
+											requestAnimationFrame(() => {
+												const inputRef = configs.input.number.ref as HTMLInputElement;
+												if (configs.status.currentCursor != undefined)
+													if (inputRef)
+														inputRef.setSelectionRange(
+															configs.status.currentCursor,
+															configs.status.currentCursor
+														);
+											});
+										}
+										if (configs.input.number.ref && value) {
+											const w = measureTextWidth(value, configs.input.number.ref);
+											configs.input.number.ref.style.width = `${w + 4}px`;
+										}
+
+										return;
+									}
+								},
+								blur(e) {
+									configs.status.focus = false;
+								},
+								mousedown(e) {
+									const ev = e as MouseEvent;
+									ev.preventDefault();
+									let index: number | undefined;
+									if (!value || !configs.input.number.ref) {
+										index = 1;
+									} else {
+										index = calculatorCursor(e as MouseEvent, value, configs.input.number.ref);
+									}
+									configs.status.currentCursor = index ?? value?.length ?? 1;
+								}
+							}
+						},
+						{
+							events: {
+								mousedown: {
+									handler(e) {
+										const ev = e as MouseEvent;
+										if (
+											configs.status.focus &&
+											!configs.ref?.contains(ev.target as HTMLElement) &&
+											!client.browser?.visualKeyboard?.ref?.contains(ev.target as HTMLElement)
+										) {
+											configs.status.focus = false;
+											if (visualNumberKbCleaner) visualNumberKbCleaner();
+										}
+									},
+									options: {
+										capture: true
+									}
+								}
+							},
+							target: window
+						}
+					] as BasicConfigs['event'];
+					return events;
+				}
+			},
 			currency: {}
 		},
 		maskValue: {
@@ -406,11 +565,18 @@
 			event: [
 				{
 					events: {
-						load(e, data) {
+						async load(e, data) {
 							if (data?.node instanceof HTMLElement) {
 								data.node.style.width = `${configs.maskValue.width}px`;
 								data.node.style.height = `${configs.maskValue.height}px`;
 								data.node.scrollTo({ left: data.node.scrollWidth, behavior: 'smooth' });
+
+								if (value) {
+									const rs = await calculatorString(value);
+									if (rs != value) {
+										value = rs;
+									}
+								}
 							}
 							return () => {
 								requestAnimationFrame(() => {
@@ -660,6 +826,51 @@
 		mirroEl.remove();
 		return index;
 	}
+	function showVisualNumberKb() {
+		const target = {
+			get value() {
+				return value;
+			},
+			set value(v: string | undefined) {
+				value = v; // gán thẳng vào biến $bindable(), Svelte tự lo phần reactivity
+			},
+			ref: configs.input.number.ref as HTMLInputElement,
+			maxLength: configs.maxLength
+		};
+		visualNumberKbCleaner = ensureKeyboardHost(target);
+	}
+	async function calculatorString(input: string): Promise<string> {
+		let calculated: number;
+		if (!configs.timeId) configs.timeId = new Map();
+		const name = 'timeout-calculator';
+		const timeId = configs.timeId.get(name);
+		if (timeId) clearTimeout(timeId);
+		if (configs.input.number.resolveCalculator && configs.previousValue)
+			configs.input.number.resolveCalculator(configs.previousValue);
+		return new Promise<string>((resolve) => {
+			if (!configs.timeId) {
+				configs.timeId = new Map();
+			}
+			configs.input.number.resolveCalculator = resolve;
+			configs.timeId.set(
+				name,
+				setTimeout(() => {
+					try {
+						calculated = Function(
+							`'use strict'; return (${input?.toString().replaceAll('x', '*').replaceAll(':', '/')})`
+						)();
+
+						if (calculated != null) {
+							configs.previousValue = calculated.toString();
+							resolve(calculated.toString());
+						}
+					} catch (e) {
+						if (configs.previousValue) resolve(configs.previousValue);
+					}
+				}, 300)
+			);
+		});
+	}
 
 	$effect(() => {
 		if (configs.ref) {
@@ -712,7 +923,7 @@
 			class={configs.maskValue.style}
 			{@attach handleEvents(configs.maskValue.event)}
 		>
-			{#if configs.type == 'text'}
+			{#if ['text', 'number'].includes(configs.type)}
 				{value}
 			{:else if configs.type == 'password'}
 				{configs.input.password.showPassword ? value : configs.input.password.value}
@@ -726,6 +937,20 @@
 			class={configs.input.text.style}
 			{@attach handleEvents(configs.input.text.event)}
 		/>
+	{:else if configs.type == 'number'}
+		<div class={configs.input.number.style}>
+			<input
+				type="text"
+				bind:value
+				bind:this={configs.input.number.ref}
+				class="bg-transparent outline-none border-none"
+				readonly={client.browser?.isMobile}
+				inputmode={client.browser?.isMobile ? 'none' : undefined}
+				{@attach handleEvents(configs.input.number.event)}
+			/>
+
+			<div class="input-visual-cursor"></div>
+		</div>
 	{:else if configs.type == 'password'}
 		<input
 			type="text"
@@ -792,6 +1017,7 @@
 					: iconify['password-2-rounded']}
 				class="p-0!"
 				events={configs.actionButtons.showPassword.event}
+				size={configs.size}
 			/>
 		{/if}
 	</div>
@@ -807,285 +1033,5 @@
 </svelte:element>
 
 <style lang="scss">
-	@use '$styles/sizes.scss';
-	.input-root {
-		--cursor: text;
-		--border-color: transparent;
-		--color: var(--default);
-		&.size-xs {
-			--min-width: calc(var(--container-xs) * 2/3);
-			--min-height: var(--min-width-button-xs);
-		}
-		&.size-sm {
-			--min-width: calc(var(--container-sm) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-md {
-			--min-width: calc(var(--container-md) * 2/3);
-			--min-height: var(--min-width-button-xs);
-		}
-		&.size-lg {
-			--min-width: calc(var(--container-lg) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-xl {
-			--min-width: calc(var(--container-xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-2xl {
-			--min-width: calc(var(--container-2xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-3xl {
-			--min-width: calc(var(--container-3xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-4xl {
-			--min-width: calc(var(--container-4xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-5xl {
-			--min-width: calc(var(--container-5xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-6xl {
-			--min-width: calc(var(--container-6xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-7xl {
-			--min-width: calc(var(--container-7xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-8xl {
-			--min-width: calc(var(--container-8xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.size-9xl {
-			--min-width: calc(var(--container-9xl) * 2/3);
-			--min-height: var(--font-size);
-		}
-		&.focus {
-			&.animation-bounce {
-				animation: border-animation var(--duration) 2 ease-in-out;
-			}
-		}
-		&.variant-secondary {
-			@media (prefers-color-scheme: dark) {
-				--background: var(--color-gray-700);
-			}
-			@media (prefers-color-scheme: light) {
-				--background: var(--color-gray-200);
-			}
-			&.focus,
-			&:hover:not(.disabled) {
-				@media (prefers-color-scheme: dark) {
-					--background: var(--color-gray-600);
-				}
-				@media (prefers-color-scheme: light) {
-					--background: var(--color-gray-300);
-				}
-			}
-			&.focus {
-				--border-color: var(--color-sky-500);
-			}
-			&.color-success {
-				--color: var(--success);
-				--background: var(--success-100);
-				--border-color: var(--success);
-				&.focus,
-				&:hover:not(.disabled) {
-					@media (prefers-color-scheme: dark) {
-						--background: var(--success-600);
-					}
-					@media (prefers-color-scheme: light) {
-						--background: var(--success-300);
-					}
-				}
-				&.focus {
-					--border-color: var(--success-500);
-				}
-			}
-			&.color-error {
-				--color: var(--error);
-				--background: var(--error-100);
-				--border-color: var(--error);
-				&.focus,
-				&:hover:not(.disabled) {
-					@media (prefers-color-scheme: dark) {
-						--background: var(--error-600);
-					}
-					@media (prefers-color-scheme: light) {
-						--background: var(--error-300);
-					}
-				}
-				&.focus {
-					--border-color: var(--error-500);
-				}
-			}
-		}
-		&.variant-primary {
-			@media (prefers-color-scheme: dark) {
-				--background: var(--color-gray-900);
-			}
-			@media (prefers-color-scheme: light) {
-				--background: var(--color-gray-100);
-			}
-
-			&.focus,
-			&:hover:not(.disabled) {
-				@media (prefers-color-scheme: dark) {
-					--background: var(--color-gray-800);
-				}
-				@media (prefers-color-scheme: light) {
-					--background: var(--color-gray-200);
-				}
-			}
-			&.focus {
-				--border-color: var(--color-sky-500);
-			}
-			&.color-success {
-				--color: var(--success);
-				--background: var(--success-100);
-				--border-color: var(--success);
-				&.focus,
-				&:hover:not(.disabled) {
-					@media (prefers-color-scheme: dark) {
-						--background: var(--success-800);
-					}
-					@media (prefers-color-scheme: light) {
-						--background: var(--success-200);
-					}
-				}
-				&.focus {
-					--border-color: var(--success-500);
-				}
-			}
-			&.color-error {
-				--color: var(--error);
-				--background: var(--error-100);
-				--border-color: var(--error);
-				&.focus,
-				&:hover:not(.disabled) {
-					@media (prefers-color-scheme: dark) {
-						--background: var(--error-800);
-					}
-					@media (prefers-color-scheme: light) {
-						--background: var(--error-200);
-					}
-				}
-				&.focus {
-					--border-color: var(--error-500);
-				}
-			}
-		}
-
-		&.disabled {
-			--cursor: not-allowed;
-			--position: relative;
-			&::before {
-				content: '';
-				position: absolute;
-				top: 0px;
-				left: 0px;
-				width: 100%;
-				height: 100%;
-				z-index: 99;
-				border-radius: var(--border-radius);
-			}
-		}
-		@media (prefers-color-scheme: dark) {
-			--placeholder-color: var(--color-gray-400);
-		}
-		@media (prefers-color-scheme: light) {
-			--placeholder-color: var(--color-gray-400);
-		}
-		--height: calc(var(--line-height) * 1rem);
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--gap-sm);
-		cursor: var(--cursor);
-		border: var(--border-width) solid var(--border-color);
-		border-radius: var(--border-radius);
-		// padding-inline: calc(var(--padding) / 2);
-		// padding-block: calc(var(--padding) / 6);
-		line-height: var(--line-height);
-		min-width: var(--min-width);
-		max-width: 100%;
-		font-size: var(--font-size);
-		background: var(--background);
-		position: var(--position);
-		color: var(--color);
-		.input-placeholder {
-			color: var(--placeholder-color);
-			flex: 1;
-			min-width: 0px;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-		}
-		.input-editor {
-			@apply flex-1;
-			background: transparent;
-			color: var(--color);
-			min-width: 0;
-			&:focus {
-				border: none;
-				outline: none;
-			}
-		}
-		.input-mask {
-			overflow: hidden;
-			flex: 1;
-			align-items: center;
-			display: flex;
-		}
-		.input-group-actions {
-			@apply flex items-center gap-[calc(var(--gap)/4)] w-fit;
-			height: 100%;
-		}
-		.input-max-length {
-			width: fit-content;
-			display: flex;
-			align-items: center;
-			color: var(--placeholder-color);
-		}
-		:global(.input-snippet) {
-			height: fit-content;
-			width: fit-content;
-		}
-		&.validation-loading {
-			position: relative;
-			&::before {
-				content: '';
-				position: absolute;
-				bottom: 0px;
-				left: 50%;
-				transform: translateX(-50%);
-				width: 0px;
-				height: calc(var(--border-width));
-				border-radius: var(--border-radius);
-				z-index: 9999;
-				animation: validation-loading infinite var(--duration) ease-in-out;
-				background: var(--color-sky-800);
-				opacity: 0.5;
-			}
-		}
-	}
-	@keyframes border-animation {
-		from {
-			transform: scale(0.99);
-		}
-		to {
-			transform: scale(1);
-		}
-	}
-	@keyframes validation-loading {
-		from {
-			width: 0px;
-		}
-		to {
-			width: 100%;
-		}
-	}
+	@use './styles.scss';
 </style>

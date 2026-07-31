@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import type { TooltipConfigs } from '$components/element/tooltip/_interface';
-import type { NumbericKey } from '$components/keyboard/numberic/_interface';
+import type { KeyboardNumberConfigs } from '$components/keyboard/number/_interface';
+import type { NumbericKey } from '$components/keyboard/numberic_old/_interface';
 import type {
 	AppTheme,
 	Browser,
@@ -234,6 +235,12 @@ export const profile = $state({
 		}
 	}
 });
+interface VisualKeyboardMeta {
+	width: number;
+	height: number;
+	delay?: number;
+	ref?: HTMLElement;
+}
 interface MetaBrowser {
 	originalResolution?: {
 		width: number;
@@ -285,9 +292,13 @@ interface MetaBrowser {
 			ref: HTMLElement;
 		}
 	>;
-	visualInput?: HTMLElement;
+	visualInput?: HTMLInputElement;
+	visualKeyboard?: VisualKeyboardMeta;
 	clipboard?: Map<number, string>;
 	tooltips?: Map<HTMLElement, TooltipConfigs>;
+	keyboard?: {
+		number: KeyboardNumberConfigs;
+	};
 }
 interface MetaUser {
 	firstName: string;
@@ -303,7 +314,7 @@ interface MetaUser {
 class User {
 	private _browser = $state<MetaBrowser | undefined>(undefined);
 	private _user = $state<undefined | MetaUser>(undefined);
-	timeId: SvelteMap<string | symbol, number | NodeJS.Timeout>;
+	timeId: Map<string | symbol, number | NodeJS.Timeout>;
 
 	constructor() {
 		this._browser = {
@@ -373,6 +384,56 @@ class User {
 					: this._browser.theme
 			);
 		}
+	}
+	createInputVisual(): HTMLInputElement {
+		if (this.browser?.visualInput) return this.browser.visualInput;
+		const inputEl = document.createElement('input');
+		inputEl.style.position = 'fixed';
+		inputEl.style.zIndex = '-1';
+		inputEl.style.width = '.1px';
+		inputEl.style.height = '.1px';
+		inputEl.style.bottom = '0';
+		inputEl.style.left = '0';
+		document.body.appendChild(inputEl);
+		if (!this.browser) this.browser = {};
+		this.browser.visualInput = inputEl;
+		return this.browser.visualInput;
+	}
+	async getVisualKeyboardMeta() {
+		if (!this.browser?.visualInput) return undefined;
+		if (this.browser.visualKeyboard) return this.browser.visualKeyboard;
+		let result: boolean = false;
+
+		function resize() {
+			if (!visualViewport) return;
+			if (!client.browser) client.browser = {};
+			if (!client.browser.originalResolution)
+				client.browser.originalResolution = {
+					width: window.innerWidth,
+					height: window.innerHeight
+				};
+			client.browser.visualKeyboard = {
+				width: client.browser.originalResolution.width,
+				height: client.browser.originalResolution.height - visualViewport.height
+			};
+			client.browser.visualInput?.blur();
+			result = true;
+			visualViewport?.removeEventListener('resize', resize);
+		}
+		visualViewport?.addEventListener('resize', resize);
+
+		this.browser.visualInput.focus();
+
+		return new Promise<void>((resolve) => {
+			function tes() {
+				if (result) {
+					resolve();
+				} else {
+					requestAnimationFrame(tes);
+				}
+			}
+			tes();
+		});
 	}
 }
 export const client = new User();
