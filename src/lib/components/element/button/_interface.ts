@@ -52,4 +52,6 @@ export interface ButtonConfigs extends BasicConfigs {
 	delay?: number;
 	transitionDuration: number;
 	loadingDuration: number;
+	loading?: boolean;
+	disabled?: boolean;
 }

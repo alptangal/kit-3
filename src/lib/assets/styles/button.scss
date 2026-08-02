@@ -20,7 +20,13 @@ $themes: 'dark', 'light';
 					--border-color: transparent;
 					&.color-#{$color} {
 						--background: var(--color-#{$ref}-600);
-						--color: var(--color-#{$ref}-300);
+						--color: var(--color-#{$ref}-400);
+						@media (prefers-color-scheme: light) {
+							&.loading {
+								--color: var(--color-#{$ref}-500);
+							}
+						}
+
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled) {
 								--background: var(--color-#{$ref}-500);

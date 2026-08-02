@@ -1,7 +1,7 @@
 import type { BasicProps, MetaChildren } from '$components/interface';
 import type { Size } from '$interfaces/basic';
 
-export interface InputProps extends BasicProps {
+export interface InputProps_Old extends BasicProps {
 	placeholder?: string;
 	variant?: 'primary' | 'secondary';
 	size?: Size | 'full-width';

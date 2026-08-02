@@ -112,49 +112,60 @@ export function handleEvents(events: BasicProps['events']) {
 					};
 				}
 			>();
-			events.forEach((eventObj) => {
-				if (!eventObj) return;
-				const target = eventObj?.target ?? rootNode;
-				const currentEvents = eventsFormated.get(target) ?? {};
-				const eventsHere = eventObj.events;
+			events
+				.filter((ev) => ev && ev.events)
+				.forEach((eventObj) => {
+					if (!eventObj) return;
+					const target = eventObj?.target ?? rootNode;
+					const currentEvents = eventsFormated.get(target) ?? {};
+					const eventsHere = eventObj.events;
 
-				(Object.entries(eventsHere) as [keyof EventListener, EventDefault][]).forEach(
-					([eventName, data]) => {
-						if (!data) return;
-						if (!currentEvents[eventName]) currentEvents[eventName] = {};
-						const id = uuid.v7();
-						const options = typeof data == 'object' ? (data.options ?? {}) : {};
-						const {
-							passive,
-							once,
-							signal,
-							capture,
-							delay,
-							stopPropagation,
-							stopImmediatePropagation,
-							preventDefault
-						} = options;
-						async function handler(
-							e?: MouseEvent | KeyboardEvent | TouchEvent | Event,
-							metaNode?: {
-								node?:
-									| HTMLElement
-									| HTMLDivElement
-									| HTMLInputElement
-									| Body
-									| Document
-									| Window
-									| VisualViewport;
-							}
-						) {
-							if (currentEvents[eventName]) {
-								if (preventDefault) e?.preventDefault();
-								if (stopPropagation && e) e.stopPropagation();
-								if (stopImmediatePropagation && e) e.stopImmediatePropagation();
-								if (delay) {
-									if (currentEvents[eventName][id].timeId)
-										clearTimeout(currentEvents[eventName][id].timeId);
-									currentEvents[eventName][id].timeId = setTimeout(async () => {
+					(Object.entries(eventsHere) as [keyof EventListener, EventDefault][]).forEach(
+						([eventName, data]) => {
+							if (!data) return;
+							if (!currentEvents[eventName]) currentEvents[eventName] = {};
+							const id = uuid.v7();
+							const options = typeof data == 'object' ? (data.options ?? {}) : {};
+							const {
+								passive,
+								once,
+								signal,
+								capture,
+								delay,
+								stopPropagation,
+								stopImmediatePropagation,
+								preventDefault
+							} = options;
+							async function handler(
+								e?: MouseEvent | KeyboardEvent | TouchEvent | Event,
+								metaNode?: {
+									node?:
+										| HTMLElement
+										| HTMLDivElement
+										| HTMLInputElement
+										| Body
+										| Document
+										| Window
+										| VisualViewport;
+								}
+							) {
+								if (currentEvents[eventName]) {
+									if (preventDefault) e?.preventDefault();
+									if (stopPropagation && e) e.stopPropagation();
+									if (stopImmediatePropagation && e) e.stopImmediatePropagation();
+									if (delay) {
+										if (currentEvents[eventName][id].timeId)
+											clearTimeout(currentEvents[eventName][id].timeId);
+										currentEvents[eventName][id].timeId = setTimeout(async () => {
+											const res =
+												typeof data == 'object'
+													? await data.handler(e, metaNode)
+													: await data(e, metaNode);
+											if (res && currentEvents[eventName]) {
+												currentEvents[eventName][id].callback = res;
+											}
+										}, delay);
+									} else {
 										const res =
 											typeof data == 'object'
 												? await data.handler(e, metaNode)
@@ -162,24 +173,15 @@ export function handleEvents(events: BasicProps['events']) {
 										if (res && currentEvents[eventName]) {
 											currentEvents[eventName][id].callback = res;
 										}
-									}, delay);
-								} else {
-									const res =
-										typeof data == 'object'
-											? await data.handler(e, metaNode)
-											: await data(e, metaNode);
-									if (res && currentEvents[eventName]) {
-										currentEvents[eventName][id].callback = res;
 									}
 								}
 							}
+							currentEvents[eventName][id] =
+								typeof data == 'object' ? { ...data, handler } : { handler };
 						}
-						currentEvents[eventName][id] =
-							typeof data == 'object' ? { ...data, handler } : { handler };
-					}
-				);
-				eventsFormated.set(target, currentEvents);
-			});
+					);
+					eventsFormated.set(target, currentEvents);
+				});
 			if (!eventsFormated.size) return undefined;
 			// const manageEvents = new Map<
 			// 	HTMLElement | Window | Document,

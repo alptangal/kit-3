@@ -68,7 +68,8 @@
 			--background: var(--color-gray-200);
 		}
 		&.focus,
-		&:hover:not(.disabled) {
+		&:hover:not(.disabled),
+		&.hover:not(.disabled) {
 			@media (prefers-color-scheme: dark) {
 				--background: var(--color-gray-600);
 			}
@@ -84,7 +85,8 @@
 			--background: var(--success-100);
 			--border-color: var(--success);
 			&.focus,
-			&:hover:not(.disabled) {
+			&:hover:not(.disabled),
+			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
 					--background: var(--success-600);
 				}
@@ -101,7 +103,8 @@
 			--background: var(--error-100);
 			--border-color: var(--error);
 			&.focus,
-			&:hover:not(.disabled) {
+			&:hover:not(.disabled),
+			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
 					--background: var(--error-600);
 				}
@@ -123,7 +126,8 @@
 		}
 
 		&.focus,
-		&:hover:not(.disabled) {
+		&:hover:not(.disabled),
+		&.hover:not(.disabled) {
 			@media (prefers-color-scheme: dark) {
 				--background: var(--color-gray-800);
 			}
@@ -139,7 +143,8 @@
 			--background: var(--success-100);
 			--border-color: var(--success);
 			&.focus,
-			&:hover:not(.disabled) {
+			&:hover:not(.disabled),
+			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
 					--background: var(--success-800);
 				}
@@ -156,7 +161,8 @@
 			--background: var(--error-100);
 			--border-color: var(--error);
 			&.focus,
-			&:hover:not(.disabled) {
+			&:hover:not(.disabled),
+			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
 					--background: var(--error-800);
 				}
@@ -207,6 +213,7 @@
 	background: var(--background);
 	position: var(--position);
 	color: var(--color);
+	padding-left: var(--border-radius);
 	.input-placeholder {
 		color: var(--placeholder-color);
 		flex: 1;

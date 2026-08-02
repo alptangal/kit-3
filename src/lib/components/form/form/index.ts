@@ -1,19 +1,10 @@
 import { getContext, setContext } from 'svelte';
-import type { Form } from './_interface';
-import type { MetaNode } from '../textField';
-export interface TextfieldToForm extends MetaNode {
-	name: string;
-}
-interface FormContext extends Form {
-	insertMetaNode?: (childrenNode: TextfieldToForm) => void;
-	valid?: boolean;
-	nextNode?: (currentNode: HTMLElement | HTMLInputElement | HTMLDivElement) => void;
-}
+import type { FormConfigs } from './_interface';
 
-const FORM_CONTEXT = Symbol('form-context');
-export function setFormContext(ctx: FormContext) {
-	setContext(FORM_CONTEXT, ctx);
+const NAME = Symbol('form-context');
+export function getFormContext(): FormConfigs | undefined {
+	return getContext(NAME);
 }
-export function getFormContext(): FormContext|undefined {
-	return getContext(FORM_CONTEXT);
+export function setFormContext(context: FormConfigs) {
+	setContext(NAME, context);
 }

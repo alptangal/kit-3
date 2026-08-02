@@ -16,3 +16,21 @@
 .color-error {
 	--color: var(--danger);
 }
+.color-description-default {
+	--color: var(--default-500);
+}
+.color-description-secondary {
+	--color: var(--secondary-300);
+}
+.color-description-success {
+	--color: var(--success-300);
+}
+.color-description-warning {
+	--color: var(--warning-300);
+}
+.color-description-info {
+	--color: var(--primary-300);
+}
+.color-description-error {
+	--color: var(--danger-300);
+}

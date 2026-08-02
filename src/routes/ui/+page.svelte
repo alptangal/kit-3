@@ -64,6 +64,13 @@
 		variant="primary"
 		type="number"
 		actionButtons={{ copy: { display: true }, paste: { display: true } }}
+		required
+		minNumber="3"
+		maxNumber="99"
+		name="my name"
+		validation={{
+			operator: 'or'
+		}}
 	>
 		{#snippet leading(data)}
 			<Button

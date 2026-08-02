@@ -28,33 +28,33 @@ export type Region = // Africa
 	| 'Micronesia'
 	| 'Polynesia';
 
-export type Size =
-	| 'xs'
-	| 'sm'
-	| 'md'
-	| 'lg'
-	| 'xl'
-	| '2xl'
-	| '3xl'
-	| '4xl'
-	| '5xl'
-	| '6xl'
-	| '7xl'
-	| '8xl'
-	| '9xl';
+// export type Size =
+// 	| 'xs'
+// 	| 'sm'
+// 	| 'md'
+// 	| 'lg'
+// 	| 'xl'
+// 	| '2xl'
+// 	| '3xl'
+// 	| '4xl'
+// 	| '5xl'
+// 	| '6xl'
+// 	| '7xl'
+// 	| '8xl'
+// 	| '9xl';
 export type Theme = 'dark' | 'light' | 'system';
-export type Color = 'default' | 'info' | 'success' | 'warning' | 'error' | 'secondary' | 'primary';
-export type Variant =
-	| 'outline'
-	| 'solid'
-	| 'soft'
-	| 'subtle'
-	| 'ghost'
-	| 'link'
-	| 'shadow'
-	| 'flat'
-	| 'faded'
-	| 'light';
+// export type Color = 'default' | 'info' | 'success' | 'warning' | 'error' | 'secondary' | 'primary';
+// export type Variant =
+// 	| 'outline'
+// 	| 'solid'
+// 	| 'soft'
+// 	| 'subtle'
+// 	| 'ghost'
+// 	| 'link'
+// 	| 'shadow'
+// 	| 'flat'
+// 	| 'faded'
+// 	| 'light';
 export interface Browser {
 	type?:
 		| 'mobile/android'

@@ -1,31 +1,37 @@
-import type { BasicProps, EventListener } from '$components/interface';
-import type { Size } from '$interfaces/basic';
+import type { BasicConfigs, BasicProps, Size } from '$components/interface';
+import type { DescriptionConfigs } from '../description/_interface';
+import type { InputConfigs } from '../input/_interface';
+import type { LabelConfigs } from '../label/_interface';
 
-export interface TextField extends BasicProps {
-	orientation?: 'vertical' | 'horizontal';
+export interface TextFieldProps extends BasicProps {
+	loading?: boolean;
 	required?: boolean;
-	errorRequiredMessage?: string;
-	size?: Size;
-	hint?: string;
-	error?: string;
-	help?: string;
-	description?: string;
-	label?: string;
+}
+export interface TextFieldConfigs extends BasicConfigs {
+	size: Size;
+	status: {
+		hover?: boolean;
+		focus?: boolean;
+		changed?: boolean;
+		reseting?: boolean;
+	};
+	loading?: boolean;
 	name?: string;
-	disabled?: boolean;
-	isInvalid?: boolean;
-	errorMessages?: {
-		required?: string;
+	required?: boolean;
+	value?: string;
+	setValue?: (value?: string) => void;
+	validation?: {
+		isValid?: boolean | 'pending';
+		setValid?: (value?: boolean | 'pending') => void;
 	};
-	validate?: {
-		[event in keyof EventListener]: {
-			isValid: (value: object | number | string | undefined | null) => Promise<boolean> | boolean;
-			message?: {
-				valid?: string;
-				invalid?: string;
-			};
-			result?: boolean;
-		};
+	children?: {
+		label?: LabelConfigs;
+		description?: DescriptionConfigs;
+		input?: InputConfigs;
 	};
-	onEnter?: () => void;
+	previousValue?: string;
+	reset: () => void;
+}
+export interface TextFieldContext extends TextFieldConfigs {
+	setValue?: (value?: string) => void;
 }

@@ -1,6 +1,8 @@
-import type { BasicProps } from '$components/interface';
-import type { Size } from '$interfaces/basic';
+import type { BasicConfigs, BasicProps, Color, Size } from '$components/interface';
 
-export interface Description extends BasicProps {
-	size?: Size;
+export interface DescriptionProps extends BasicProps {
+	color?: Color;
+}
+export interface DescriptionConfigs extends BasicConfigs {
+	size: Size;
 }

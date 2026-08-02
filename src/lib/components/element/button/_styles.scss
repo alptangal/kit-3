@@ -1,0 +1,310 @@
+$colors: 'default', 'secondary', 'success', 'info', 'warning', 'error';
+$variants: 'solid', 'outline', 'soft', 'subtle', 'link', 'ghost';
+$colorRefs: (
+	'default': 'gray',
+	'secondary': 'cyan',
+	'success': 'green',
+	'info': 'sky',
+	'warning': 'amber',
+	'error': 'red'
+);
+$themes: 'dark', 'light';
+
+@use '$styles/sizes.scss';
+.button-root {
+	--cursor: pointer;
+	@each $variant in $variants {
+		&.variant-#{$variant} {
+			@each $color, $ref in $colorRefs {
+				@if $variant== 'solid' {
+					--border-color: transparent;
+					&.color-#{$color} {
+						--background: var(--color-#{$ref}-600);
+						--color: var(--color-#{$ref}-400);
+						@media (prefers-color-scheme: light) {
+							&.loading {
+								--color: var(--color-#{$ref}-500);
+							}
+						}
+
+						@media (hover: hover) and (pointer: fine) {
+							&:hover:not(.disabled) {
+								--background: var(--color-#{$ref}-500);
+								--color: white;
+							}
+						}
+						&.button-tapped {
+							--background: var(--color-#{$ref}-500);
+							--color: white;
+						}
+					}
+				} @else if $variant== 'outline' {
+					&.color-#{$color} {
+						--background: transparent;
+						@if $color== 'default' {
+							--color: var(--foreground);
+							--border-color: var(--foreground);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+							--border-color: var(--color-#{$ref}-500);
+						}
+
+						@media (hover: hover) and (pointer: fine) {
+							&:hover:not(.disabled) {
+								@media (prefers-color-scheme: dark) {
+									--background: var(--color-#{$ref}-950);
+								}
+								@media (prefers-color-scheme: light) {
+									--background: var(--color-#{$ref}-200);
+								}
+							}
+						}
+						&.button-tapped {
+							@media (prefers-color-scheme: dark) {
+								--background: var(--color-#{$ref}-950);
+							}
+							@media (prefers-color-scheme: light) {
+								--background: var(--color-#{$ref}-200);
+							}
+						}
+					}
+				} @else if $variant== 'soft' {
+					--border-color: transparent;
+					&.color-#{$color} {
+						@media (prefers-color-scheme: dark) {
+							--background: var(--color-#{$ref}-950);
+						}
+						@media (prefers-color-scheme: light) {
+							--background: var(--color-#{$ref}-200);
+						}
+						--color: var(--foreground);
+						@media (hover: hover) and (pointer: fine) {
+							&:hover:not(.disabled) {
+								@media (prefers-color-scheme: dark) {
+									--background: var(--color--#{$ref}-900);
+								}
+								@media (prefers-color-scheme: light) {
+									--background: var(--color-#{$ref}-300);
+								}
+							}
+						}
+						&.button-tapped {
+							@media (prefers-color-scheme: dark) {
+								--background: var(--color--#{$ref}-900);
+							}
+							@media (prefers-color-scheme: light) {
+								--background: var(--color-#{$ref}-300);
+							}
+						}
+					}
+				} @else if $variant== 'subtle' {
+					&.color-#{$color} {
+						--background: var(--color-#{$ref}-100);
+						@if $color== 'default' {
+							--color: var(--foreground-500);
+							--border-color: var(--foreground-500);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+							--border-color: var(--color-#{$ref}-500);
+						}
+						@media (hover: hover) and (pointer: fine) {
+							&:hover:not(.disabled) {
+								--background: var(--color-#{$ref}-200);
+							}
+						}
+						&.button-tapped {
+							--background: var(--color-#{$ref}-200);
+						}
+					}
+				} @else if $variant== 'link' {
+					--border-color: transparent;
+					&.color-#{$color} {
+						--background: transparent;
+						@if $color== 'default' {
+							--color: var(--foreground);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+						}
+						@media (hover: hover) and (pointer: fine) {
+							&:hover:not(.disabled) {
+								@if $color== 'default' {
+									--color: var(--foreground-500);
+								} @else {
+									--color: var(--color-#{$ref}-700);
+								}
+							}
+						}
+						&.button-tapped {
+							@if $color== 'default' {
+								--color: var(--foreground-500);
+							} @else {
+								--color: var(--color-#{$ref}-700);
+							}
+						}
+					}
+				} @else if $variant== 'ghost' {
+					--border-color: transparent;
+					&.color-#{$color} {
+						--background: transparent;
+						@if $color== 'default' {
+							--color: var(--foreground);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+						}
+						@media (hover: hover) and (pointer: fine) {
+							&:hover:not(.disabled) {
+								@media (prefers-color-scheme: dark) {
+									--background: var(--color-#{$ref}-950);
+								}
+								@media (prefers-color-scheme: light) {
+									--background: var(--color-#{$ref}-200);
+								}
+							}
+						}
+						&.button-tapped {
+							@media (prefers-color-scheme: dark) {
+								--background: var(--color-#{$ref}-950);
+							}
+							@media (prefers-color-scheme: light) {
+								--background: var(--color-#{$ref}-200);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	&.transition {
+		transition: all ease-in-out var(--transition-duration);
+	}
+	&.disabled {
+		--cursor: not-allowed;
+		&::before {
+			content: '';
+			position: absolute;
+			top: 0px;
+			left: 0px;
+			width: 100%;
+			height: 100%;
+			border-radius: var(--border-radius);
+			background: var(--color-gray-200);
+			opacity: 0.4;
+			touch-action: none;
+		}
+	}
+	&.loading {
+		--background: transparent !important;
+		&.color-default {
+			--loading-background: linear-gradient(
+				100deg,
+				var(--color-gray-200) 0%,
+				var(--color-gray-300) 25%,
+				white 50%,
+				var(--color-gray-400) 75%,
+				var(--color-gray-200) 100%
+			);
+		}
+		&.color-secondary {
+			--loading-background: linear-gradient(
+				100deg,
+				var(--color-cyan-200) 0%,
+				var(--color-cyan-300) 25%,
+				white 50%,
+				var(--color-cyan-400) 75%,
+				var(--color-cyan-200) 100%
+			);
+		}
+		&.color-success {
+			--loading-background: linear-gradient(
+				100deg,
+				var(--color-green-200) 0%,
+				var(--color-green-300) 25%,
+				white 50%,
+				var(--color-green-400) 75%,
+				var(--color-green-200) 100%
+			);
+		}
+		&.color-error {
+			--loading-background: linear-gradient(
+				100deg,
+				var(--color-red-200) 0%,
+				var(--color-red-300) 25%,
+				white 50%,
+				var(--color-red-400) 75%,
+				var(--color-red-200) 100%
+			);
+		}
+		&.color-warning {
+			--loading-background: linear-gradient(
+				100deg,
+				var(--color-amber-200) 0%,
+				var(--color-amber-300) 25%,
+				white 50%,
+				var(--color-amber-400) 75%,
+				var(--color-amber-200) 100%
+			);
+		}
+		&.color-info {
+			--loading-background: linear-gradient(
+				100deg,
+				var(--color-sky-200) 0%,
+				var(--color-sky-300) 25%,
+				white 50%,
+				var(--color-sky-400) 75%,
+				var(--color-sky-200) 100%
+			);
+		}
+		&::before {
+			content: '';
+			position: absolute;
+			top: 0px;
+			left: 0px;
+			width: 100%;
+			height: 100%;
+			border-radius: var(--border-radius);
+			background: var(--loading-background);
+			opacity: 0.8;
+			backdrop-filter: blur(999px);
+			background-size: 200% 100%;
+			background-position: 0% 0%;
+			animation: shimmer var(--loading-duration) linear infinite;
+		}
+		@keyframes shimmer {
+			0% {
+				background-position: 200% 0%;
+			}
+			100% {
+				background-position: -200% 0%;
+			}
+		}
+	}
+	&[data-tap='true'] {
+		transform: scale(0.995);
+	}
+	color: var(--color);
+	background: var(--background);
+	border-radius: var(--border-radius);
+	border-width: var(--border-width);
+	border-style: solid;
+	border-color: var(--border-color);
+	font-size: var(--font-size);
+	// max-width: 100%;
+	padding-inline: var(--padding);
+	line-height: var(--line-height);
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--gap);
+	cursor: var(--cursor);
+	opacity: var(--opacity);
+	touch-action: none;
+	position: relative;
+	transform: scale(1);
+
+	.button-render {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+}

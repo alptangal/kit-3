@@ -610,7 +610,7 @@ export type Positions =
 	| 'center-center';
 export type Directions = 'top' | 'bottom' | 'left' | 'right';
 export type ThemeTypes = 'system' | 'light' | 'dark' | 'auto';
-export type Color = 'success' | 'warning' | 'danger' | 'primary' | 'secondary' | 'default';
+export type Color = 'default' | 'info' | 'success' | 'warning' | 'error' | 'secondary' | 'primary';
 export type FontWeight =
 	| 'thin'
 	| 'extralight'
@@ -658,7 +658,7 @@ export interface BasicProps {
 	overwriteDefaultStyles?: boolean;
 	transitionEnabled?: boolean;
 	/**Duration of the transition in milliseconds. */
-	transitionDuration?: number | `${number}s` | `${number}ms`;
+	transitionDuration?: number | `${number}s` | `${number}ms` | 'none';
 	portal?: string | HTMLElement;
 	disabled?: boolean;
 	size?: Size;

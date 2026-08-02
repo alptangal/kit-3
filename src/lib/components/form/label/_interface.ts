@@ -1,9 +1,12 @@
-import type { BasicProps } from '$components/interface';
-import type { Size } from '$interfaces/basic';
+import type { BasicConfigs, BasicProps, Color, Size } from '$components/interface';
 
-export interface Label extends BasicProps {
+export interface LabelProps extends BasicProps {
 	disabled?: boolean;
 	invalid?: boolean;
-	required?: boolean;
+	hiddenRequiredIndicator?: boolean;
 	size?: Size;
+	color?: Color;
+}
+export interface LabelConfigs extends BasicConfigs {
+	color: Color;
 }

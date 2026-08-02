@@ -3,7 +3,7 @@
 	import type { IconConfigs, IconProps } from './_interface';
 	import { styleSynced } from '$modules';
 	import { client } from '$store/basic.svelte';
-	import { getTextfieldCtx } from '$components/form/textField';
+	import { getTextFieldContext } from '$components/form/textField';
 	import { getFormContext } from '$components/form/form';
 	import { getSearchMainContext } from '$components/search/Main/_context';
 	import { handleEvents } from '$modules/_attachments';
@@ -25,24 +25,28 @@
 			const defaultStyles: string[] = ['icon'];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
-		event: {
-			load: {
-				handler() {
-					if (props.onLoad)
-						props.onLoad({
-							ref: configs.ref,
-							get width() {
-								return this.ref?.offsetWidth;
-							},
-							get height() {
-								return this.ref?.offsetHeight;
-							}
-						});
+		event: [
+			{
+				events: {
+					load: {
+						handler() {
+							if (props.onLoad)
+								props.onLoad({
+									ref: configs.ref,
+									get width() {
+										return this.ref?.offsetWidth;
+									},
+									get height() {
+										return this.ref?.offsetHeight;
+									}
+								});
+						}
+					}
 				}
 			}
-		}
+		]
 	});
-	const textfieldCtx = getTextfieldCtx();
+	const textfieldCtx = getTextFieldContext();
 	const formCtx = getFormContext();
 	const searchMainCtx = getSearchMainContext();
 
@@ -61,7 +65,7 @@
 	data-size={configs.size}
 	class={configs.style}
 	bind:this={configs.ref}
-	{@attach handleEvents([{ events: [configs.event ?? {}] }])}
+	{@attach handleEvents(configs.event)}
 >
 	<Icon icon={props.icon} />
 </svelte:element>

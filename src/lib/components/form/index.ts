@@ -1,8 +1,9 @@
 export { default as Input } from './input/Main.svelte';
-export { default as Form } from './form/Form.svelte';
-export { default as Label } from './label/Label.svelte';
-export { default as TextField } from './textField/TextField.svelte';
-export { default as Description } from './description/Description.svelte';
+export { default as Form } from './form/Main.svelte';
+export { default as Label } from './label/Main.svelte';
+export { default as TextField } from './textField/Main.svelte';
+export { default as Description } from './description/Main.svelte';
+export { default as FieldMessages } from './fieldMessages/Main.svelte';
 
 import Root from './checkbox/Root/Main.svelte';
 import Content from './checkbox/Content/Main.svelte';

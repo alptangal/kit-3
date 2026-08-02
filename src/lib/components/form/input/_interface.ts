@@ -1,11 +1,11 @@
-import type { BasicConfigs, BasicProps, EventListener } from '$components/interface';
-import type { Color, Size, TranslateContent } from '$interfaces/basic';
+import type { BasicConfigs, BasicProps, EventListener, Color, Size } from '$components/interface';
+import type { TranslateContent } from '$interfaces/basic';
 import type { Snippet, SvelteComponent } from 'svelte';
 
 type InputTypes = 'text' | 'password' | 'number' | 'currency' | 'phone' | 'email';
 type InputVariants = 'primary' | 'secondary';
-type ValidationCompact = (output?: string) => boolean | Promise<boolean>;
-type ValidationFull = {
+export type ValidationCompact = (output?: string) => boolean | Promise<boolean>;
+export type ValidationFull = {
 	id?: string | number;
 	isValid: (output?: string) => boolean | Promise<boolean>;
 	message?: {
@@ -48,6 +48,9 @@ export interface InputProps extends BasicProps {
 	placeholder?: TranslateContent;
 	variant?: InputVariants;
 	maxLength?: number | string;
+	maxNumber?: number | string;
+	minNumber?: number | string;
+	required?: boolean;
 	showPassword?: boolean;
 	actionButtons?: {
 		clear?: {
@@ -75,6 +78,7 @@ export interface InputProps extends BasicProps {
 	} & { operator?: 'and' | 'or' };
 	loading?: boolean;
 	color?: Color;
+	name?: string;
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;
@@ -86,12 +90,20 @@ export interface InputConfigs extends BasicConfigs {
 	delay: number;
 	color: Color;
 	maxLength?: number;
+	maxNumber?: number;
+	minNumber?: number;
+	required?: boolean;
 	placeholder: Omit<BasicConfigs, 'value'> & {
 		value: TranslateContent;
 	};
 	status: {
 		focus?: boolean;
 		currentCursor?: number;
+		hover?: boolean;
+		mousePos?: {
+			clientX: number;
+			clientY: number;
+		};
 	};
 	input: { [k in Exclude<InputTypes, 'password' | 'number'>]: BasicConfigs } & {
 		password: BasicConfigs & {
@@ -135,11 +147,15 @@ export interface InputConfigs extends BasicConfigs {
 	trailing: BasicConfigs;
 	lastValue?: string;
 	validation: {
-		process?: Map<keyof EventListener, boolean | 'pending'>;
+		process?: Map<keyof EventListener | 'required', boolean | 'pending'>;
 		isValid?: boolean | 'pending';
 		messages?: Map<
 			string | ((output?: string) => boolean | Promise<boolean>),
 			{ content?: TranslateContent; kind: 'valid' | 'invalid' }
 		>;
 	};
+	name?: string;
+	focus: () => void;
+	loading?: boolean;
+	reset: () => void;
 }
