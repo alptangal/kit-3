@@ -8,7 +8,7 @@
 	let configs: FormConfigs = $state({
 		get loading() {
 			if (!configs.childrens?.size) return false;
-			return configs.childrens.values().some((children) => children.loading);
+			return [...configs.childrens.values()].some((children) => children.loading);
 		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = ['form-root', `size-${this.size}`];

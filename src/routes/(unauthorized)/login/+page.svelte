@@ -4,7 +4,7 @@
 </script>
 
 <div class="login-root">
-	<Form size="9xl">
+	<Form>
 		<TextField name="username">
 			<Label>Username</Label>
 			<Input />
