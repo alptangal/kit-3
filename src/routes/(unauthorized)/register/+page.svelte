@@ -121,8 +121,25 @@
 				class="capitalize"
 				color="success"
 				type="submit"
-				onClick={() => {
-					alert('submit');
+				onClick={async () => {
+					const publicKeyOptions = {
+						challenge: new Uint8Array(32), // random, từ server
+						rp: { name: 'MyApp', id: 'myapp.com' },
+						user: {
+							id: new TextEncoder().encode('test'),
+							name: 'user@example.com',
+							displayName: 'Alpha'
+						},
+						pubKeyCredParams: [{ alg: -7, type: 'public-key' }], // ES256
+						authenticatorSelection: {
+							authenticatorAttachment: 'platform', // bắt buộc dùng FaceID/TouchID, không cho USB key
+							userVerification: 'required'
+						}
+					};
+
+					const credential = await navigator.credentials.create({
+						publicKey: publicKeyOptions
+					});
 				}}>{pageContents.buttons.confirm[client.browser?.language ?? 'en']}</Button
 			>
 			<Button class="capitalize" color="error" type="reset" variant="ghost"
