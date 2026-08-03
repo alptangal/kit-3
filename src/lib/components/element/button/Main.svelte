@@ -41,12 +41,12 @@
 
 				if (!formContext?.validation.isValid) return true;
 				if (formContext.childrens?.size) {
-					return formContext.childrens.values().every((children) => !children.status.changed);
+					return [...formContext.childrens.values()].every((children) => !children.status.changed);
 				}
 			}
 			if (configs.type == 'reset') {
 				if (formContext?.childrens?.size)
-					return formContext.childrens.values().every((children) => !children.status.changed);
+					return [...formContext.childrens.values()].every((children) => !children.status.changed);
 			}
 			return undefined;
 		},
@@ -126,7 +126,7 @@
 						}
 						if (props.onClick) await props.onClick();
 						if (configs.type == 'reset' && formContext?.childrens?.size)
-							formContext.childrens.values().forEach((field) => {
+							[...formContext.childrens.values()].forEach((field) => {
 								field.reset();
 							});
 

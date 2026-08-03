@@ -23,9 +23,7 @@
 
 <svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
 	{#if textFieldContext && textFieldContext.children?.input?.validation.messages?.size}
-		{#each textFieldContext.children.input.validation.messages
-			.values()
-			.filter((item) => item.content) as item, key (key)}
+		{#each [...textFieldContext.children.input.validation.messages.values()].filter((item) => item.content) as item, key (key)}
 			<p class={item.kind}>{item.content![client.browser?.language ?? 'en']}</p>
 		{/each}
 	{/if}

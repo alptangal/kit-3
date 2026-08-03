@@ -23,11 +23,9 @@
 		validation: {
 			get isValid() {
 				if (configs.childrens?.size) {
-					return configs.childrens
-						.values()
-						.every(
-							(children) => children.validation?.isValid !== false && children.loading != true
-						);
+					return [...configs.childrens.values()].every(
+						(children) => children.validation?.isValid !== false && children.loading != true
+					);
 				}
 				return true;
 			}

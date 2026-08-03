@@ -858,18 +858,23 @@
 			}
 		},
 		focus() {
-			configs.status.focus = true;
-			switch (configs.type) {
-				case 'text':
-					if (configs.input.text.ref) configs.input.text.ref.focus();
-					break;
-				case 'password':
-					if (configs.input.password.ref) configs.input.password.ref.focus();
-					break;
-				case 'number':
-					if (configs.input.number.ref) configs.input.number.ref.focus();
-					break;
+			if (client.browser?.isMobile) {
+				if (client.browser.visualInput) client.browser.visualInput.focus();
 			}
+			configs.status.focus = true;
+			requestAnimationFrame(() => {
+				switch (configs.type) {
+					case 'text':
+						if (configs.input.text.ref) configs.input.text.ref.focus();
+						break;
+					case 'password':
+						if (configs.input.password.ref) configs.input.password.ref.focus();
+						break;
+					case 'number':
+						if (configs.input.number.ref) configs.input.number.ref.focus();
+						break;
+				}
+			});
 		},
 		reset() {
 			value = undefined;
@@ -1061,8 +1066,7 @@
 								}, configs.delay)
 							);
 						} else {
-							configs.status.focus = true;
-							console.log('mousedown');
+							configs.focus();
 							if (configs.type === 'number' && client.browser?.isMobile) {
 								requestAnimationFrame(() => showVisualNumberKb());
 							}
