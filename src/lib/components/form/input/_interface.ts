@@ -104,6 +104,7 @@ export interface InputConfigs extends BasicConfigs {
 			clientX: number;
 			clientY: number;
 		};
+		reseting?: boolean;
 	};
 	input: { [k in Exclude<InputTypes, 'password' | 'number'>]: BasicConfigs } & {
 		password: BasicConfigs & {

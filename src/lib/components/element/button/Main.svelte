@@ -57,7 +57,7 @@
 			return props.variant ?? 'solid';
 		},
 		get size() {
-			return props.size ?? client.browser?.size ?? 'md';
+			return props.size ?? formContext?.size ?? client.browser?.size ?? 'md';
 		},
 		get color() {
 			return props.color ?? 'default';
@@ -127,7 +127,7 @@
 						if (props.onClick) await props.onClick();
 						if (configs.type == 'reset' && formContext?.childrens?.size)
 							formContext.childrens.values().forEach((field) => {
-								if (field.children?.input) field.reset();
+								field.reset();
 							});
 
 						return () => {

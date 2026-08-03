@@ -1089,24 +1089,28 @@
 		}
 		return validators;
 	}
-
+	let prevFocus: boolean | undefined;
 	$effect(() => {
-		if (configs.ref) {
-			const previousValue = value;
-			if (configs.status.focus !== undefined) {
-				configs.ref.dispatchEvent(new Event(configs.status.focus ? 'focus' : 'blur'));
-			}
-			if (value) {
-				configs.ref.dispatchEvent(new Event('input'));
-				configs.ref.dispatchEvent(new Event('keypress'));
-			}
-			if (value != configs.previousValue && !configs.status.focus) {
-				configs.ref.dispatchEvent(new Event('change'));
-			}
-			return () => {
-				if (!configs.status.focus) configs.previousValue = previousValue;
-			};
+		if (!configs.ref) return;
+		const focus = configs.status.focus;
+		if (focus !== undefined && focus !== prevFocus) {
+			configs.ref.dispatchEvent(new Event(focus ? 'focus' : 'blur'));
 		}
+		prevFocus = focus;
+	});
+	$effect(() => {
+		if (!configs.ref || configs.status.reseting) return;
+		const previousValue = value;
+		if (value) {
+			configs.ref.dispatchEvent(new Event('input'));
+			configs.ref.dispatchEvent(new Event('keypress'));
+		}
+		if (value != configs.previousValue && !configs.status.focus) {
+			configs.ref.dispatchEvent(new Event('change'));
+		}
+		return () => {
+			if (!configs.status.focus) configs.previousValue = previousValue;
+		};
 	});
 	$effect(() => {
 		if (textFieldContext) {

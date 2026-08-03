@@ -11,7 +11,7 @@
 			return configs.childrens.values().some((children) => children.loading);
 		},
 		get style() {
-			const defaultStyles: (string | undefined)[] = ['form-root'];
+			const defaultStyles: (string | undefined)[] = ['form-root', `size-${this.size}`];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
 		get method() {
@@ -46,6 +46,9 @@
 </svelte:element>
 
 <style lang="scss">
+	@use '$styles/sizes.scss';
 	.form-root {
+		@apply flex flex-col;
+		gap: var(--gap);
 	}
 </style>
