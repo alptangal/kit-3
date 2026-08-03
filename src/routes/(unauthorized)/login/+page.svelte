@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { Button } from '$components/element';
 	import { Description, FieldMessages, Form, Input, Label, TextField } from '$components/form';
+	import { client } from '$store/basic.svelte';
+	import { pageContents } from '.';
 </script>
 
 <div class="login-root">
@@ -18,13 +20,16 @@
 		</TextField>
 		<div class="flex gap-1">
 			<Button
+				class="capitalize"
 				color="success"
 				type="submit"
 				onClick={() => {
 					alert('submit');
-				}}>Login</Button
+				}}>{pageContents.login[client.browser?.language ?? 'en']}</Button
 			>
-			<Button color="error" type="reset" variant="ghost">Reset</Button>
+			<Button class="capitalize" color="error" type="reset" variant="ghost"
+				>{pageContents.reset[client.browser?.language ?? 'en']}</Button
+			>
 		</div>
 	</Form>
 </div>

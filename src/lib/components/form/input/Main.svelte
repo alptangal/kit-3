@@ -79,7 +79,7 @@
 					: undefined;
 		},
 		get color() {
-			if (props.validation || configs.required) {
+			if (props.validation || configs.required || configs.type == 'email') {
 				if (configs.validation.isValid != 'pending') {
 					return configs.validation.isValid ? 'success' : 'error';
 				}
@@ -94,7 +94,7 @@
 		},
 		validation: {
 			get isValid() {
-				if (!props.validation && !configs.required) return undefined;
+				if (!props.validation && !configs.required && configs.type !== 'email') return undefined;
 				if (configs.validation.process) {
 					const operator = props.validation?.operator ?? 'and';
 					const results = [...configs.validation.process.values()];
@@ -387,9 +387,9 @@
 									}
 									configs.status.currentCursor = index ?? value?.length ?? 1;
 								},
-								keyup(e) {
+								async keyup(e) {
 									const event = e as KeyboardEvent;
-									const key = event.key;
+									let key = event.key;
 									const fnKeys = [
 										'delete',
 										'backspace',
@@ -402,6 +402,22 @@
 										'arrowright'
 									];
 									if (!fnKeys.includes(key.toLowerCase())) {
+										if (event.ctrlKey === true && key == 'v') {
+											let clipboardText;
+											try {
+												clipboardText = await navigator.clipboard.readText();
+											} catch (e) {
+												clipboardText = localStorage.getItem('clipboard');
+												if (clipboardText) {
+													clipboardText = JSON.parse(clipboardText) as { [k: string]: string };
+													const lastTime = Object.keys(clipboardText).sort(
+														(a, b) => parseFloat(b) - parseFloat(a)
+													)[0];
+													clipboardText = clipboardText[lastTime];
+												}
+											}
+											if (clipboardText) key = clipboardText;
+										}
 										if (!value) {
 											value = key;
 										} else {
@@ -413,7 +429,12 @@
 											if (!configs.status.currentCursor) configs.status.currentCursor = 1;
 											configs.status.currentCursor += 1;
 										}
-									} else {
+									} else if (
+										fnKeys.includes(key.toLowerCase()) &&
+										event.altKey === false &&
+										event.ctrlKey === false &&
+										event.shiftKey == false
+									) {
 										if (configs.status.currentCursor === undefined)
 											configs.status.currentCursor = 1;
 										if (
@@ -453,7 +474,14 @@
 					] as InputConfigs['input']['password']['event'];
 				}
 			},
-			email: {},
+			email: {
+				get style() {
+					return configs.input.text.style;
+				},
+				get event() {
+					return configs.input.text.event;
+				}
+			},
 			phone: {},
 			number: {
 				get style() {
@@ -898,7 +926,7 @@
 		handles: (ValidationCompact | ValidationFull)[],
 		operator: 'and' | 'or'
 	) {
-		if (!props.validation && !configs.required) return;
+		if (!props.validation && !configs.required && configs.type !== 'email') return;
 		if (!configs.validation.messages) configs.validation.messages = new SvelteMap();
 		if (!configs.timeId) configs.timeId = new Map();
 		const name = `timeout-validation-${eventName}`;
@@ -908,6 +936,7 @@
 			resolver();
 		}
 		configs.loading = true;
+
 		return new Promise<void>((resolve) => {
 			resolver = resolve;
 			if (!configs.timeId) configs.timeId = new Map();
@@ -929,7 +958,6 @@
 							} else {
 								isValid = validateHandler.isValid;
 								result = await isValid(untrack(() => value));
-
 								const content = result
 									? validateHandler.message?.valid
 									: validateHandler.message?.invalid;
@@ -1090,6 +1118,8 @@
 			if (configs.maxNumber != null && defaultValidation.maxNumber) {
 				validators.push(defaultValidation.maxNumber(configs.maxNumber, configs.name));
 			}
+		} else if (configs.type === 'email' && defaultValidation.isEmail) {
+			validators.push(defaultValidation.isEmail(configs.name));
 		}
 		return validators;
 	}
@@ -1166,12 +1196,20 @@
 			class={configs.maskValue.style}
 			{@attach handleEvents(configs.maskValue.event)}
 		>
-			{#if ['text', 'number'].includes(configs.type)}
+			{#if ['text', 'number', 'email'].includes(configs.type)}
 				{value}
 			{:else if configs.type == 'password'}
 				{configs.input.password.showPassword ? value : configs.input.password.value}
 			{/if}
 		</div>
+	{:else if configs.type == 'email'}
+		<input
+			type="text"
+			bind:value
+			bind:this={configs.input.email.ref}
+			class={configs.input.email.style}
+			{@attach handleEvents(configs.input.email.event)}
+		/>
 	{:else if configs.type == 'text'}
 		<input
 			type="text"

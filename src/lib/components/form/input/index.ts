@@ -36,6 +36,7 @@ export const defaultValidation: {
 	required: (fieldName?: string) => ValidationCompact | ValidationFull;
 	minNumber?: (minValue: number, fieldName?: string) => ValidationCompact | ValidationFull;
 	maxNumber?: (maxValue: number, fieldName?: string) => ValidationCompact | ValidationFull;
+	isEmail?: (fieldName?: string) => ValidationCompact | ValidationFull;
 } = {
 	required: (fieldName) => {
 		return {
@@ -81,6 +82,23 @@ export const defaultValidation: {
 				},
 				valid: {
 					en: `${fieldName ?? 'this field'} is valid max number=${maxValue}`
+				}
+			}
+		};
+	},
+	isEmail(fieldName) {
+		return {
+			isValid(input) {
+				const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+				if (input && emailRegex.test(input)) return true;
+				return false;
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'} must be an email`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'} is valid email`
 				}
 			}
 		};
