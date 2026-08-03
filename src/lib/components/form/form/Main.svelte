@@ -24,7 +24,10 @@
 			get isValid() {
 				if (configs.childrens?.size) {
 					return [...configs.childrens.values()].every(
-						(children) => children.validation?.isValid !== false && children.loading != true
+						(children) =>
+							children.validation?.isValid !== false &&
+							children.loading != true &&
+							children.validation?.isValid != 'pending'
 					);
 				}
 				return true;

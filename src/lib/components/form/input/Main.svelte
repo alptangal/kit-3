@@ -692,7 +692,7 @@
 								data.node.style.height = `${configs.maskValue.height}px`;
 								data.node.scrollTo({ left: data.node.scrollWidth, behavior: 'smooth' });
 
-								if (value) {
+								if (value && configs.type == 'number') {
 									if (!configs.timeId) configs.timeId = new Map();
 									const name = 'timeout-calculate';
 									const timeId = configs.timeId.get(name);
