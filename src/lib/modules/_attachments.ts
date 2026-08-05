@@ -1,4 +1,6 @@
 import type { BasicProps, EventDefault, EventFull, EventListener } from '$components/interface';
+import omit from 'es-toolkit/compat/omit';
+import pick from 'es-toolkit/compat/pick';
 import { SvelteMap } from 'svelte/reactivity';
 import * as uuid from 'uuid';
 
@@ -101,6 +103,7 @@ export function handleEvents(events: BasicProps['events']) {
 	return (rootNode: HTMLElement) => {
 		try {
 			if (!events) return;
+
 			const eventsFormated = new Map<
 				HTMLElement | Window | Document,
 				{
@@ -194,28 +197,52 @@ export function handleEvents(events: BasicProps['events']) {
 			// 		};
 			// 	}
 			// >();
-			[...eventsFormated.keys()].forEach((target) => {
+			[...eventsFormated.keys()].forEach(async (target) => {
 				const value = eventsFormated.get(target);
+
 				// if (!manageEvents.get(target)) manageEvents.set(target, {});
 				if (value) {
-					(
-						Object.entries(value) as [
-							keyof EventListener,
-							{
-								[id: string]: EventFull & {
-									callback?: () => void | Promise<void>;
-									timeId?: NodeJS.Timeout;
-								};
-							}
-						][]
-					).forEach(([eventName, callbackObj]) => {
-						Object.entries(callbackObj).forEach(async ([callbackId, data]) => {
-							const { handler, options } = data;
-							if (eventName == 'load') {
-								await handler(undefined, { node: target });
-							} else {
+					const totalEventsWidthoutLoad = Object.keys(omit(value, ['load'])).length;
+					let i = 0;
+					new Promise<void>((resolve) => {
+						(
+							Object.entries(omit(value, ['load'])) as [
+								keyof EventListener,
+								{
+									[id: string]: EventFull & {
+										callback?: () => void | Promise<void>;
+										timeId?: NodeJS.Timeout;
+									};
+								}
+							][]
+						).forEach(([eventName, callbackObj]) => {
+							Object.entries(callbackObj).map(async ([callbackId, data]) => {
+								const { handler, options } = data;
+
 								target.addEventListener(eventName, handler, options);
-							}
+
+								i++;
+								if (i == totalEventsWidthoutLoad) {
+									resolve();
+								}
+							});
+						});
+					}).then(() => {
+						(
+							Object.entries(pick(value, ['load'])) as [
+								keyof EventListener,
+								{
+									[id: string]: EventFull & {
+										callback?: () => void | Promise<void>;
+										timeId?: NodeJS.Timeout;
+									};
+								}
+							][]
+						).forEach(([eventName, callbackObj]) => {
+							Object.entries(callbackObj).map(async ([callbackId, data]) => {
+								const { handler, options } = data;
+								await handler(undefined, { node: target });
+							});
 						});
 					});
 				}

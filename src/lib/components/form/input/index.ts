@@ -1,5 +1,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { InputConfigs, InputProps, ValidationCompact, ValidationFull } from './_interface';
+import type { EventListener } from '$components/interface';
+import type { TextFieldContext } from '../textField/_interface';
 
 export const text_keys_allowed = [
 	'arrowleft',
@@ -104,3 +106,28 @@ export const defaultValidation: {
 		};
 	}
 };
+export function createDefaultInputEvents(
+	value: string | undefined,
+	configs: InputConfigs,
+	textFieldContext?: TextFieldContext
+): InputProps['events'] {
+	return [
+		{
+			events: {
+				load(_, data) {
+					if (data?.node instanceof HTMLInputElement && configs.input.status.focus !== undefined) {
+						data.node.focus();
+					}
+				},
+				focus() {
+					configs.input.status.focus = true;
+				},
+				blur() {
+					configs.input.status.focus = false;
+					configs.status.focus = false;
+					if (textFieldContext) textFieldContext.status.selectAll = false;
+				}
+			}
+		}
+	];
+}

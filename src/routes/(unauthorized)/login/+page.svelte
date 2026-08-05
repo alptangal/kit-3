@@ -42,7 +42,7 @@
 						const credential = await navigator.credentials.create({
 							publicKey: publicKeyOptions
 						});
-						alert(credential);
+						alert(JSON.stringify(credential));
 					} catch (e) {
 						alert(e);
 					}

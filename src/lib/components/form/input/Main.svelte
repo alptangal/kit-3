@@ -13,7 +13,12 @@
 		ValidationFull
 	} from './_interface';
 	import type { ButtonConfigs } from '$components/element/button/_interface';
-	import { text_keys_allowed, number_keys_allowed, defaultValidation } from '.';
+	import {
+		text_keys_allowed,
+		number_keys_allowed,
+		defaultValidation,
+		createDefaultInputEvents
+	} from '.';
 	import type { BasicConfigs, EventListener } from '$components/interface';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { ensureKeyboardHost } from '$modules/keyboardHost.svelte';
@@ -219,6 +224,7 @@
 			]
 		},
 		input: {
+			status: {},
 			text: {
 				get event() {
 					return [
@@ -275,9 +281,6 @@
 										);
 									}
 								},
-								blur() {
-									configs.status.focus = false;
-								},
 								keydown(e) {
 									const event = e as KeyboardEvent;
 									if (
@@ -291,7 +294,8 @@
 									}
 								}
 							}
-						}
+						},
+						...(createDefaultInputEvents(value, configs, textFieldContext) ?? [])
 					] as InputConfigs['input']['text']['event'];
 				},
 				get style() {
@@ -387,6 +391,24 @@
 									}
 									configs.status.currentCursor = index ?? value?.length ?? 1;
 								},
+								keydown(e) {
+									const event = e as KeyboardEvent;
+									const ref = event.target as HTMLInputElement;
+									if (ref) {
+										const { selectionStart, selectionEnd } = ref;
+										if (
+											value &&
+											selectionStart !== null &&
+											selectionEnd !== null &&
+											value.slice(selectionStart, selectionEnd) === value
+										) {
+											if (configs.status.selectAll) configs.status.selectAll = false;
+											value = undefined;
+											configs.input.password.value = undefined;
+											configs.status.currentCursor = 0;
+										}
+									}
+								},
 								async keyup(e) {
 									const event = e as KeyboardEvent;
 									let key = event.key;
@@ -418,6 +440,7 @@
 											}
 											if (clipboardText) key = clipboardText;
 										}
+
 										if (!value) {
 											value = key;
 										} else {
@@ -465,12 +488,10 @@
 											configs.status.currentCursor = value.length;
 										}
 									}
-								},
-								blur() {
-									configs.status.focus = false;
 								}
 							}
-						}
+						},
+						...(createDefaultInputEvents(value, configs, textFieldContext) ?? [])
 					] as InputConfigs['input']['password']['event'];
 				}
 			},
@@ -632,9 +653,6 @@
 										return;
 									}
 								},
-								blur(e) {
-									configs.status.focus = false;
-								},
 								mousedown(e) {
 									const ev = e as MouseEvent;
 									ev.preventDefault();
@@ -648,6 +666,7 @@
 								}
 							}
 						},
+						...(createDefaultInputEvents(value, configs, textFieldContext) ?? []),
 						{
 							events: {
 								mousedown: {
@@ -890,19 +909,19 @@
 				if (client.browser.visualInput) client.browser.visualInput.focus();
 			}
 			configs.status.focus = true;
-			requestAnimationFrame(() => {
-				switch (configs.type) {
-					case 'text':
-						if (configs.input.text.ref) configs.input.text.ref.focus();
-						break;
-					case 'password':
-						if (configs.input.password.ref) configs.input.password.ref.focus();
-						break;
-					case 'number':
-						if (configs.input.number.ref) configs.input.number.ref.focus();
-						break;
-				}
-			});
+			// requestAnimationFrame(() => {
+			// 	switch (configs.type) {
+			// 		case 'text':
+			// 			if (configs.input.text.ref) configs.input.text.ref.focus();
+			// 			break;
+			// 		case 'password':
+			// 			if (configs.input.password.ref) configs.input.password.ref.focus();
+			// 			break;
+			// 		case 'number':
+			// 			if (configs.input.number.ref) configs.input.number.ref.focus();
+			// 			break;
+			// 	}
+			// });
 		},
 		reset() {
 			value = undefined;
@@ -915,7 +934,7 @@
 	const textFieldContext = getTextFieldContext();
 
 	function onFocus() {
-		if (!configs.status.focus) configs.status.focus = true;
+		// if (!configs.status.focus) configs.status.focus = true;
 		requestAnimationFrame(() => {
 			configs.input.text?.ref?.focus();
 		});
@@ -1053,52 +1072,56 @@
 			mousedown: {
 				async handler(e: MouseEvent) {
 					configs.status.mousePos = { clientX: e.clientX, clientY: e.clientY };
-					if (value && configs.maskValue.ref) {
-						e.preventDefault();
-						const index = calculatorCursor(e, value, configs.maskValue.ref);
-						requestAnimationFrame(() => {
-							const ref = configs.input[configs.type].ref;
-							if (ref instanceof HTMLInputElement) {
-								configs.status.currentCursor = index ?? value?.length ?? 1;
-								ref.setSelectionRange(configs.status.currentCursor, configs.status.currentCursor);
-							}
-						});
-					}
-					if (
-						configs.type === 'number' &&
-						client.browser?.isMobile &&
-						!client.browser?.visualKeyboard
-					) {
-						e.preventDefault();
-						if (!client.browser?.visualInput) client.createInputVisual();
-						await client.getVisualKeyboardMeta();
-						configs.status.focus = true;
-						requestAnimationFrame(() => showVisualNumberKb());
-					} else {
-						if (configs.status.focus) {
-							const target = e.target as HTMLElement;
-							const ref = configs.input[configs.type].ref;
-							if (!ref?.contains(target)) e.preventDefault();
-							const name = 'animation-bounce';
-							if (!configs.timeId) configs.timeId = new Map();
-							const timeId = configs.timeId.get(name);
-							if (timeId) clearTimeout(timeId);
-							configs.timeId.set(
-								name,
-								setTimeout(() => {
-									configs.ref?.classList.add('animation-bounce');
-									setTimeout(
-										() => configs.ref?.classList.remove('animation-bounce'),
-										configs.duration
-									);
-								}, configs.delay)
-							);
+					if (e.detail == 1) {
+						if (value && configs.maskValue.ref) {
+							e.preventDefault();
+							const index = calculatorCursor(e, value, configs.maskValue.ref);
+							requestAnimationFrame(() => {
+								const ref = configs.input[configs.type].ref;
+								if (ref instanceof HTMLInputElement) {
+									configs.status.currentCursor = index ?? value?.length ?? 1;
+									ref.setSelectionRange(configs.status.currentCursor, configs.status.currentCursor);
+								}
+							});
+						}
+						if (
+							configs.type === 'number' &&
+							client.browser?.isMobile &&
+							!client.browser?.visualKeyboard
+						) {
+							e.preventDefault();
+							if (!client.browser?.visualInput) client.createInputVisual();
+							await client.getVisualKeyboardMeta();
+							// configs.status.focus = true;
+							requestAnimationFrame(() => showVisualNumberKb());
 						} else {
-							configs.focus();
-							if (configs.type === 'number' && client.browser?.isMobile) {
-								requestAnimationFrame(() => showVisualNumberKb());
+							if (configs.status.focus) {
+								const target = e.target as HTMLElement;
+								const ref = configs.input[configs.type].ref;
+								if (!ref?.contains(target)) e.preventDefault();
+								const name = 'animation-bounce';
+								if (!configs.timeId) configs.timeId = new Map();
+								const timeId = configs.timeId.get(name);
+								if (timeId) clearTimeout(timeId);
+								configs.timeId.set(
+									name,
+									setTimeout(() => {
+										configs.ref?.classList.add('animation-bounce');
+										setTimeout(
+											() => configs.ref?.classList.remove('animation-bounce'),
+											configs.duration
+										);
+									}, configs.delay)
+								);
+							} else {
+								configs.focus();
+								if (configs.type === 'number' && client.browser?.isMobile) {
+									requestAnimationFrame(() => showVisualNumberKb());
+								}
 							}
 						}
+					} else {
+						configs.status.selectAll = true;
 					}
 				},
 				options: { stopPropagation: true }
@@ -1152,8 +1175,18 @@
 				textFieldContext.setValue(value);
 			if (textFieldContext.validation?.setValid)
 				textFieldContext.validation.setValid(configs.validation.isValid);
-			textFieldContext.status.focus = configs.status.focus;
+			textFieldContext.status.focus = configs.input.status.focus;
 			textFieldContext.loading = configs.loading;
+		}
+	});
+	$effect(() => {
+		if (
+			configs.input.status.focus &&
+			(textFieldContext?.status.selectAll || configs.status.selectAll) &&
+			value?.length
+		) {
+			(configs.input[configs.type].ref! as HTMLInputElement).setSelectionRange(0, value.length);
+			if (textFieldContext?.status.selectAll) textFieldContext.status.selectAll = false;
 		}
 	});
 

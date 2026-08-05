@@ -14,6 +14,7 @@ export interface TextFieldConfigs extends BasicConfigs {
 		focus?: boolean;
 		changed?: boolean;
 		reseting?: boolean;
+		selectAll?: boolean;
 	};
 	loading?: boolean;
 	name?: string;

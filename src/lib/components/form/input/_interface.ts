@@ -98,6 +98,7 @@ export interface InputConfigs extends BasicConfigs {
 	};
 	status: {
 		focus?: boolean;
+		selectAll?: boolean;
 		currentCursor?: number;
 		hover?: boolean;
 		mousePos?: {
@@ -113,6 +114,9 @@ export interface InputConfigs extends BasicConfigs {
 		};
 		number: BasicConfigs & {
 			resolveCalculator?: (value: string) => void;
+		};
+		status: {
+			focus?: boolean;
 		};
 	};
 	maskValue: BasicConfigs & {

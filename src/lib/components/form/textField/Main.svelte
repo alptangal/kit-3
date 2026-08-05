@@ -43,9 +43,15 @@
 						},
 						mousedown(e) {
 							const event = e as MouseEvent;
-							if (configs.status.focus) {
-								event.preventDefault();
-							} else {
+							event.preventDefault();
+							if (event.detail == 1) {
+								if (configs.status.focus) {
+								} else {
+									configs.status.selectAll = false;
+									if (configs.children?.input) configs.children.input.focus();
+								}
+							} else if (event.detail == 2 && configs.value?.length) {
+								configs.status.selectAll = true;
 								if (configs.children?.input) configs.children.input.focus();
 							}
 						}
