@@ -26,7 +26,7 @@
 				onClick={async () => {
 					const publicKeyOptions = {
 						challenge: new Uint8Array(32), // random, từ server
-						rp: { name: 'MyApp', id: 'myapp.com' },
+						rp: { name: 'MyApp', id: 'https://kit-3.vercel.com' },
 						user: {
 							id: new TextEncoder().encode('userId'),
 							name: 'user@example.com',
