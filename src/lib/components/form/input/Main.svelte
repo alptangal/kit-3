@@ -906,7 +906,10 @@
 		},
 		focus() {
 			if (client.browser?.isMobile) {
-				if (client.browser.visualInput) client.browser.visualInput.focus();
+				if (!client.browser.visualInput) client.createInputVisual();
+				if (client.browser.visualInput) {
+					client.browser.visualInput.focus();
+				}
 			}
 			configs.status.focus = true;
 			// requestAnimationFrame(() => {
