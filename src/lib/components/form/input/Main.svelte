@@ -912,19 +912,6 @@
 				}
 			}
 			configs.status.focus = true;
-			// requestAnimationFrame(() => {
-			// 	switch (configs.type) {
-			// 		case 'text':
-			// 			if (configs.input.text.ref) configs.input.text.ref.focus();
-			// 			break;
-			// 		case 'password':
-			// 			if (configs.input.password.ref) configs.input.password.ref.focus();
-			// 			break;
-			// 		case 'number':
-			// 			if (configs.input.number.ref) configs.input.number.ref.focus();
-			// 			break;
-			// 	}
-			// });
 		},
 		reset() {
 			value = undefined;

@@ -1,13 +1,22 @@
 <script lang="ts">
 	import { Button } from '$components/element';
-	import { Description, FieldMessages, Form, Input, Label, TextField } from '$components/form';
+	import {
+		Checkbox,
+		Description,
+		FieldMessages,
+		Form,
+		Input,
+		Label,
+		TextField
+	} from '$components/form';
+	import { Modal } from '$components/modal';
 	import { client } from '$store/basic.svelte';
 	import { pageContents } from '.';
 </script>
 
 <div class="login-root">
 	<Form>
-		<TextField name="username">
+		<TextField name="username" required>
 			<Label>Username</Label>
 			<Input />
 			<FieldMessages />
@@ -18,6 +27,9 @@
 			<Description>Must be at least 8 characters with 1 uppercase and 1 number</Description>
 			<FieldMessages />
 		</TextField>
+		<Checkbox>
+			<Label>Remember me</Label>
+		</Checkbox>
 		<div class="flex gap-1">
 			<Button
 				class="capitalize"
@@ -48,6 +60,7 @@
 					}
 				}}>{pageContents.login[client.browser?.language ?? 'en']}</Button
 			>
+
 			<Button class="capitalize" color="error" type="reset" variant="ghost"
 				>{pageContents.reset[client.browser?.language ?? 'en']}</Button
 			>

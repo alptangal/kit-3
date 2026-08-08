@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { styleSynced } from '$modules';
 	import { client } from '$store/basic.svelte';
+	import { getCheckboxContext } from '../checkbox';
 	import { getTextFieldContext } from '../textField';
 	import type { LabelConfigs, LabelProps } from './_interface';
 
@@ -18,18 +19,27 @@
 			if (props.color) return props.color;
 			if (typeof textFieldContext?.children?.input?.validation.isValid == 'boolean')
 				return textFieldContext?.children?.input?.validation.isValid ? 'success' : 'error';
+			if (typeof checkboxContext?.validation.isValid == 'boolean' && checkboxContext.required)
+				return checkboxContext.validation.isValid ? 'success' : 'error';
 			return 'default';
 		},
 		get size() {
-			return props.size ?? textFieldContext?.size ?? client.browser?.size ?? 'md';
+			return (
+				props.size ??
+				textFieldContext?.size ??
+				checkboxContext?.size ??
+				client.browser?.size ??
+				'md'
+			);
 		}
 	});
 	const textFieldContext = getTextFieldContext();
+	const checkboxContext = getCheckboxContext();
 </script>
 
 <svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
 	{@render children?.()}
-	{#if !props.hiddenRequiredIndicator && textFieldContext?.required}
+	{#if !props.hiddenRequiredIndicator && (textFieldContext?.required || checkboxContext?.required)}
 		<span class="color-[var(--error)]"> * </span>
 	{/if}
 </svelte:element>

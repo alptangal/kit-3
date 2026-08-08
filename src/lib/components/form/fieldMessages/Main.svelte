@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { styleSynced } from '$modules';
 	import { client } from '$store/basic.svelte';
+	import { fly } from 'svelte/transition';
+	import { getCheckboxContext } from '../checkbox';
 	import { sizeIndex } from '../description';
 	import { getTextFieldContext } from '../textField';
 	import type { fieldMessagesConfigs, FieldMessagesProps } from './_interface';
@@ -16,17 +18,27 @@
 		get style() {
 			const defaultStyles: (string | undefined)[] = ['fieldMessages-root', `size-${this.size}`];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
+		},
+		get messages() {
+			return (
+				textFieldContext?.children?.input?.validation.messages ??
+				checkboxContext?.validation.messages
+			);
 		}
 	});
 	const textFieldContext = getTextFieldContext();
+	const checkboxContext = getCheckboxContext();
 </script>
 
-<svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
-	{#if textFieldContext && textFieldContext.children?.input?.validation.messages?.size}
-		{#each [...textFieldContext.children.input.validation.messages.values()].filter((item) => item.content) as item, key (key)}
-			<p class={item.kind}>{item.content![client.browser?.language ?? 'en']}</p>
-		{/each}
-	{/if}
+<svelte:element
+	this={props.as ?? 'div'}
+	bind:this={configs.ref}
+	class={configs.style}
+	transition:fly={client.browser?.transition?.fly}
+>
+	{#each [...(configs.messages ?? []).values()].filter((item) => item.content) as item, key (key)}
+		<p class={item.kind}>{item.content![client.browser?.language ?? 'en']}</p>
+	{/each}
 </svelte:element>
 
 <style lang="scss">

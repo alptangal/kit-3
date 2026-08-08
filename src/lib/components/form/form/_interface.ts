@@ -1,4 +1,5 @@
 import type { BasicConfigs, BasicProps, Size } from '$components/interface';
+import type { CheckboxConfigs } from '../checkbox/_interface';
 import type { TextFieldConfigs } from '../textField/_interface';
 
 export interface FormProps extends BasicProps {
@@ -15,7 +16,7 @@ export interface FormConfigs extends Omit<BasicConfigs, 'childrens'> {
 	onReset?: () => void;
 	onInvalid?: () => void;
 	size?: Size;
-	childrens?: Set<TextFieldConfigs>;
+	childrens?: Set<TextFieldConfigs | CheckboxConfigs>;
 	validation: {
 		isValid?: boolean;
 	};

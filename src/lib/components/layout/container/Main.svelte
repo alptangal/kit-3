@@ -21,42 +21,49 @@
 		} as TranslateContent
 	};
 	let { children, ...props }: ContainerProps = $props();
-	let configs:ContainerConfigs = $state({
+	let configs: ContainerConfigs = $state({
 		get duration() {
 			let d = props.transitionDuration ?? client.browser?.duration ?? 300;
 			d = typeof d == 'number' ? d : parseFloat(d);
 			return d;
 		},
-			ref: undefined as undefined | HTMLElement,
-			event:{
-				load: {
-					handler() {
-						if (props.portal) {
-							if (props.portal instanceof HTMLElement && configs.ref) {
-								props.portal.append(configs.ref);
-							} else {
-								const portal = document.getElementById(props.portal as string);
-								if (portal && configs.ref) {
-									portal.append(configs.ref);
+		ref: undefined as undefined | HTMLElement,
+		get event() {
+			const defaultEvents = [
+				{
+					events: {
+						load: {
+							handler() {
+								if (props.portal) {
+									if (props.portal instanceof HTMLElement && configs.ref) {
+										props.portal.append(configs.ref);
+									} else {
+										const portal = document.getElementById(props.portal as string);
+										if (portal && configs.ref) {
+											portal.append(configs.ref);
+										}
+									}
 								}
+							},
+							options: {}
+						},
+						click: {
+							handler() {},
+							options: {
+								delay: 3000
 							}
 						}
-					},
-					options: {}
-				},
-				click: {
-					handler() {},
-					options: {
-						delay: 3000
 					}
 				}
-			}
+			];
+			return [...defaultEvents, ...(props.events ?? [])];
+		}
 	});
 	setContainerContext({
-	get size(){
-	return props.size??client.browser?.size??'md'
-	}
-	})
+		get size() {
+			return props.size ?? client.browser?.size ?? 'md';
+		}
+	});
 
 	onDestroy(() => {
 		if (props.portal && configs.ref) {
@@ -77,7 +84,7 @@
 {#if children}
 	<svelte:element
 		this={props.as ?? 'div'}
-		{@attach handleEvents([{events:[configs.event??{}]}, props.events])}
+		{@attach handleEvents(configs.event)}
 		bind:this={configs.ref}
 		class={props.overwriteDefaultStyles
 			? props.class

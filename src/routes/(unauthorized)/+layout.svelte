@@ -20,7 +20,6 @@
 		<NavigationMenu.left>left</NavigationMenu.left>
 		<NavigationMenu.center>
 			<SearchMain class="w-full">
-				<SearchMain.Input class="flex-1 overflow-hidden" />
 				<SearchMain.Control />
 			</SearchMain>
 		</NavigationMenu.center>

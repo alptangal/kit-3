@@ -1,9 +1,22 @@
 <script lang="ts">
 	import { Button } from '$components/element';
-	import { Description, FieldMessages, Form, Input, Label, TextField } from '$components/form';
+	import {
+		Checkbox,
+		Description,
+		FieldMessages,
+		Form,
+		Input,
+		Label,
+		TextField
+	} from '$components/form';
 	import type { InputProps } from '$components/form/input/_interface';
 	import { client } from '$store/basic.svelte';
+	import { onMount } from 'svelte';
 	import { pageContents } from '.';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { Modal } from '$components/modal';
+	import { Container } from '$components/layout';
+	import type { BasicProps } from '$components/interface';
 
 	let userMeta: { [k: string]: { value?: string; validation?: InputProps['validation'] } } = $state(
 		{
@@ -64,6 +77,55 @@
 			}
 		}
 	);
+	let term = $state({
+		value: undefined as undefined | boolean
+	});
+	let modals: {
+		term: {
+			display?: boolean;
+			actionButtons: {
+				confirm: {
+					event: BasicProps['events'];
+				};
+				decline: {
+					event: BasicProps['events'];
+				};
+			};
+		};
+	} = $state({
+		term: {
+			actionButtons: {
+				confirm: {
+					event: [
+						{
+							events: {
+								mousedown() {
+									term.value = true;
+									modals.term.display = false;
+								}
+							}
+						}
+					]
+				},
+				decline: {
+					event: [
+						{
+							events: {
+								mousedown() {
+									term.value = false;
+									modals.term.display = false;
+								}
+							}
+						}
+					]
+				}
+			}
+		}
+	});
+	onMount(() => {
+		if (!client.browser) client.browser = {};
+		if (client.browser.layers) client.browser.layers = new SvelteMap();
+	});
 </script>
 
 <div class="login-root">
@@ -116,6 +178,29 @@
 			<Description>Confirm password must same the password</Description>
 			<FieldMessages />
 		</TextField>
+		<Checkbox bind:checked={term.value} required class="flex flex-wrap flex-row! justify-start!">
+			<Checkbox.Indicator /><Label class="flex items-center"
+				>Agree <Button
+					class="ml-1 px-0!"
+					variant="link"
+					events={[
+						{
+							events: {
+								mousedown: {
+									handler(e) {
+										modals.term.display = true;
+									},
+									options: {
+										stopPropagation: true
+									}
+								}
+							}
+						}
+					]}>the term</Button
+				></Label
+			>
+			<FieldMessages class="w-full" />
+		</Checkbox>
 		<div class="flex gap-1">
 			<Button
 				class="capitalize"
@@ -148,6 +233,18 @@
 		</div>
 	</Form>
 </div>
+<Modal bind:display={modals.term.display} size="xs" isDimissable>
+	<Modal.Container>
+		<Modal.Container.Header>The term</Modal.Container.Header>
+		<Modal.Container.Body>hello body</Modal.Container.Body>
+		<Modal.Container.Footer class="flex gap-1">
+			<Button color="success" events={modals.term.actionButtons.confirm.event}>Confirm</Button>
+			<Button color="error" events={modals.term.actionButtons.decline.event} variant="ghost"
+				>Decline</Button
+			>
+		</Modal.Container.Footer>
+	</Modal.Container>
+</Modal>
 
 <style lang="scss">
 	.login-root {

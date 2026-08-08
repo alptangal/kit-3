@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import type { TooltipConfigs } from '$components/element/tooltip/_interface';
+import type { Size } from '$components/interface';
 import type { KeyboardNumberConfigs } from '$components/keyboard/number/_interface';
 import type { NumbericKey } from '$components/keyboard/numberic_old/_interface';
 import type {
@@ -9,11 +10,10 @@ import type {
 	Direction,
 	LanguageCode,
 	Region,
-	Screen,
-	Size
+	Screen
 } from '$interfaces/basic';
 import type { Timezone } from '$interfaces/timezone';
-import { detectBrowserType } from '$modules';
+import { convertToMiliseconds, detectBrowserType } from '$modules';
 import type { SvelteComponent } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import type { FlyParams } from 'svelte/transition';
@@ -299,6 +299,7 @@ interface MetaBrowser {
 	keyboard?: {
 		number: KeyboardNumberConfigs;
 	};
+	layers?: Map<HTMLElement, number | 'root'>;
 }
 interface MetaUser {
 	firstName: string;
@@ -338,6 +339,21 @@ class User {
 						? 'dark'
 						: 'light'
 					: this.theme;
+			},
+			layers: new SvelteMap(),
+			transition: {
+				fly: {
+					get duration() {
+						return convertToMiliseconds(client._browser?.duration ?? 300);
+					},
+					x: 30,
+					y: 30
+				},
+				fade: {
+					get duration() {
+						return convertToMiliseconds(client._browser?.duration ?? 300);
+					}
+				}
 			}
 		};
 		this.timeId = new SvelteMap();

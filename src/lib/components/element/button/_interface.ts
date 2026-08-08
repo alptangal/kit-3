@@ -1,5 +1,4 @@
-import type { BasicConfigs, BasicProps } from '$components/interface';
-import type { Color, Size } from '$interfaces/basic';
+import type { BasicConfigs, BasicProps, Color, Size } from '$components/interface';
 type ButtonTypes = 'button' | 'submit' | 'reset';
 type ButtonVariants = 'solid' | 'outline' | 'soft' | 'subtle' | 'link' | 'ghost';
 export interface ButtonProps extends Omit<BasicProps, 'class'> {
@@ -43,7 +42,6 @@ export interface ButtonConfigs extends BasicConfigs {
 	variant: ButtonVariants;
 	size: Size;
 	'aspect-square'?: boolean;
-	disabled?: boolean;
 	color?: Color;
 	status?: {
 		hover?: boolean;

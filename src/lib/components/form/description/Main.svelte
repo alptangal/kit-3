@@ -5,6 +5,7 @@
 	import { sizeIndex } from '.';
 	import { getTextFieldContext } from '../textField';
 	import type { DescriptionConfigs, DescriptionProps } from './_interface';
+	import { getCheckboxContext } from '../checkbox';
 
 	let { children, ...props }: DescriptionProps = $props();
 	let configs: DescriptionConfigs = $state({
@@ -21,12 +22,14 @@
 		},
 		get size() {
 			if (props.size) return props.size;
-			const parentSize = textFieldContext?.size ?? client.browser?.size ?? 'md';
+			const parentSize =
+				textFieldContext?.size ?? checkboxContext?.size ?? client.browser?.size ?? 'md';
 			const defaultSize = sizeIndex[sizeIndex.indexOf(parentSize) - 1];
 			return defaultSize;
 		}
 	});
 	const textFieldContext = getTextFieldContext();
+	const checkboxContext = getCheckboxContext();
 </script>
 
 {#if (textFieldContext && !textFieldContext.children?.input?.validation.messages?.size) || !textFieldContext}

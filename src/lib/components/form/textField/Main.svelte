@@ -45,8 +45,7 @@
 							const event = e as MouseEvent;
 							event.preventDefault();
 							if (event.detail == 1) {
-								if (configs.status.focus) {
-								} else {
+								if (!configs.status.focus) {
 									configs.status.selectAll = false;
 									if (configs.children?.input) configs.children.input.focus();
 								}

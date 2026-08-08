@@ -1,7 +1,7 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
 	import { profile, client } from '$store/basic.svelte';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, type SvelteComponent } from 'svelte';
 	import '../app.css';
 	import { Container, Footer, Header } from '$components/layout';
 	import { browser } from '$app/environment';
@@ -12,6 +12,10 @@
 	import { Checkbox, Description, Form, Label, TextField } from '$components/form/index.js';
 	import { getFormContext } from '$components/form/form/index.js';
 	import type { Theme } from '$interfaces/basic.js';
+	import { beforeNavigate, onNavigate } from '$app/navigation';
+	import type { BasicProps } from '$components/interface.js';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { handleEvents } from '$modules/_attachments.js';
 
 	let { data, children } = $props();
 
@@ -22,7 +26,27 @@
 		},
 		timeId: {
 			click: null as null | number
-		}
+		},
+		component: undefined as undefined | SvelteComponent,
+		get ref() {
+			if (this.component) {
+				return this.component.configs.ref;
+			}
+			return undefined;
+		},
+		event: [
+			{
+				events: {
+					load(_, data) {
+						if (data?.node instanceof HTMLElement) {
+							if (!client.browser) client.browser = {};
+							client.browser.layers = new SvelteMap();
+							client.browser.layers.set(data.node, 'root');
+						}
+					}
+				}
+			}
+		] as BasicProps['events']
 	});
 
 	function handleResize() {
@@ -119,6 +143,9 @@
 			} catch (e) {}
 		}
 	});
+	onNavigate(() => {
+		alert('onnavigate');
+	});
 </script>
 
 <svelte:head>
@@ -132,6 +159,8 @@
 	width={profile.browser.dimensions?.width ?? 0}
 	height={profile.browser.dimensions?.height ?? 0}
 	class="overflow-auto"
+	bind:this={configs.component}
+	events={configs.event}
 >
 	{@render children()}
 </Container>

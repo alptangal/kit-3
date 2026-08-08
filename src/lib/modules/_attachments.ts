@@ -139,20 +139,18 @@ export function handleEvents(events: BasicProps['events']) {
 								stopImmediatePropagation,
 								preventDefault
 							} = options;
-							async function handler(
-								e?: MouseEvent | KeyboardEvent | TouchEvent | Event,
-								metaNode?: {
-									node?:
-										| HTMLElement
-										| HTMLDivElement
-										| HTMLInputElement
-										| Body
-										| Document
-										| Window
-										| VisualViewport;
-								}
-							) {
+							async function handler(e?: MouseEvent | KeyboardEvent | TouchEvent | Event) {
 								if (currentEvents[eventName]) {
+									const metaNode: {
+										node?:
+											| HTMLElement
+											| HTMLDivElement
+											| HTMLInputElement
+											| Body
+											| Document
+											| Window
+											| VisualViewport;
+									} = { node: target };
 									if (preventDefault) e?.preventDefault();
 									if (stopPropagation && e) e.stopPropagation();
 									if (stopImmediatePropagation && e) e.stopImmediatePropagation();
@@ -205,28 +203,31 @@ export function handleEvents(events: BasicProps['events']) {
 					const totalEventsWidthoutLoad = Object.keys(omit(value, ['load'])).length;
 					let i = 0;
 					new Promise<void>((resolve) => {
-						(
-							Object.entries(omit(value, ['load'])) as [
-								keyof EventListener,
-								{
-									[id: string]: EventFull & {
-										callback?: () => void | Promise<void>;
-										timeId?: NodeJS.Timeout;
-									};
-								}
-							][]
-						).forEach(([eventName, callbackObj]) => {
-							Object.entries(callbackObj).map(async ([callbackId, data]) => {
-								const { handler, options } = data;
+						if (totalEventsWidthoutLoad == 0) {
+							resolve();
+						} else {
+							(
+								Object.entries(omit(value, ['load'])) as [
+									keyof EventListener,
+									{
+										[id: string]: EventFull & {
+											callback?: () => void | Promise<void>;
+											timeId?: NodeJS.Timeout;
+										};
+									}
+								][]
+							).forEach(([eventName, callbackObj]) => {
+								Object.entries(callbackObj).map(async ([callbackId, data]) => {
+									const { handler, options } = data;
+									target.addEventListener(eventName, handler, options);
 
-								target.addEventListener(eventName, handler, options);
-
-								i++;
-								if (i == totalEventsWidthoutLoad) {
-									resolve();
-								}
+									i++;
+									if (i == totalEventsWidthoutLoad) {
+										resolve();
+									}
+								});
 							});
-						});
+						}
 					}).then(() => {
 						(
 							Object.entries(pick(value, ['load'])) as [

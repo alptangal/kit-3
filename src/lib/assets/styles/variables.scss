@@ -358,6 +358,19 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 	--color-white: hsl(0deg 0% 100%);
 }
 :root {
+	--container-xs: 16rem;
+	--container-sm: 18rem;
+	--container-md: 20rem;
+	--container-lg: 24rem;
+	--container-xl: 28rem;
+	--container-2xl: 32rem;
+	--container-3xl: 36rem;
+	--container-4xl: 42rem;
+	--container-5xl: 48rem;
+	--container-6xl: 56rem;
+	--container-7xl: 64rem;
+	--container-8xl: 72rem;
+	--container-9xl: 80rem;
 	--white: hsl(0, 0%, 100%);
 	--black: hsl(0, 0%, 0%);
 	--snow: hsl(0, 0%, 98.8%);

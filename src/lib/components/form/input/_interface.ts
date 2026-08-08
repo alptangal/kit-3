@@ -4,10 +4,10 @@ import type { Snippet, SvelteComponent } from 'svelte';
 
 type InputTypes = 'text' | 'password' | 'number' | 'currency' | 'phone' | 'email';
 type InputVariants = 'primary' | 'secondary';
-export type ValidationCompact = (output?: string) => boolean | Promise<boolean>;
+export type ValidationCompact = (output?: string | boolean) => boolean | Promise<boolean>;
 export type ValidationFull = {
 	id?: string | number;
-	isValid: (output?: string) => boolean | Promise<boolean>;
+	isValid: (output?: string | boolean) => boolean | Promise<boolean>;
 	message?: {
 		valid?: TranslateContent;
 		invalid?: TranslateContent;
