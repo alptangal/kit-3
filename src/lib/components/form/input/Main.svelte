@@ -47,7 +47,7 @@
 				`size-${this.size}`,
 				configs.status.focus ? 'focus' : undefined,
 				`variant-${this.variant}`,
-				disabled ? 'disabled' : undefined,
+				this.disabled ? 'disabled' : undefined,
 				`rounded-${this.rounded}`,
 				props.loading ? 'loading' : undefined,
 				`color-${this.color}`,
@@ -94,6 +94,14 @@
 		get required() {
 			return props.required ?? textFieldContext?.required;
 		},
+		_disabled: undefined as undefined | boolean,
+		get disabled() {
+			if (disabled) return disabled;
+			return this._disabled ?? formContext?.disabled;
+		},
+		set disabled(v) {
+			this._disabled = v;
+		},
 		get name() {
 			return props.name ?? textFieldContext?.name;
 		},
@@ -110,7 +118,7 @@
 			}
 		},
 		get event() {
-			if (disabled) return [];
+			if (this.disabled) return [];
 
 			const defaultValidators = getDefaultValidators();
 			const hasCustomValidation = !!props.validation;
@@ -201,32 +209,36 @@
 					}
 				);
 			},
-			event: [
-				{
-					events: {
-						load() {
-							return () => {
-								requestAnimationFrame(() => {
-									const ref = configs.input[configs.type].ref;
-									if (ref && !(configs.type === 'number' && client.browser?.isMobile)) {
-										ref.focus();
-										configs.ref?.classList.add('animation-bounce');
-										setTimeout(() => {
-											configs.ref?.classList.remove('animation-bounce');
-										}, configs.duration);
-									}
-								});
-							};
-						},
-						mousedown() {}
+			get event() {
+				if (configs.disabled) return [];
+				return [
+					{
+						events: {
+							load() {
+								return () => {
+									requestAnimationFrame(() => {
+										const ref = configs.input[configs.type].ref;
+										if (ref && !(configs.type === 'number' && client.browser?.isMobile)) {
+											ref.focus();
+											configs.ref?.classList.add('animation-bounce');
+											setTimeout(() => {
+												configs.ref?.classList.remove('animation-bounce');
+											}, configs.duration);
+										}
+									});
+								};
+							},
+							mousedown() {}
+						}
 					}
-				}
-			]
+				];
+			}
 		},
 		input: {
 			status: {},
 			text: {
 				get event() {
+					if (configs.disabled) return [];
 					return [
 						props.validation
 							? {
@@ -295,7 +307,12 @@
 								}
 							}
 						},
-						...(createDefaultInputEvents(value, configs, textFieldContext) ?? [])
+						...(createDefaultInputEvents(
+							untrack(() => value),
+							configs,
+							textFieldContext,
+							formContext
+						) ?? [])
 					] as InputConfigs['input']['text']['event'];
 				},
 				get style() {
@@ -311,8 +328,7 @@
 				get value() {
 					if (!this._value) return this._value;
 					if (configs.input.password.showPassword) return this._value;
-					if (configs.status.currentCursor != value?.length || !configs.status.focus)
-						return Array(this._value.length).fill('*').join('');
+					if (!configs.status.focus) return Array(this._value.length).fill('*').join('');
 					return (
 						this._value
 							.slice(0, -1)
@@ -325,6 +341,7 @@
 					this._value = v;
 				},
 				get event() {
+					if (configs.disabled) return [];
 					return [
 						props.validation
 							? {
@@ -370,7 +387,7 @@
 										configs.maskValue.height = height;
 									}
 								},
-								mousedown(e) {
+								mousedown(e, data) {
 									let index: number | undefined;
 									if (configs.input.password.showPassword) {
 										if (!value || !configs.input.password.ref) {
@@ -390,26 +407,40 @@
 										}
 									}
 									configs.status.currentCursor = index ?? value?.length ?? 1;
+									if (data?.node instanceof HTMLInputElement) {
+										data.node.setSelectionRange(
+											configs.status.currentCursor,
+											configs.status.currentCursor
+										);
+									}
 								},
 								keydown(e) {
 									const event = e as KeyboardEvent;
 									const ref = event.target as HTMLInputElement;
+
 									if (ref) {
-										const { selectionStart, selectionEnd } = ref;
-										if (
-											value &&
-											selectionStart !== null &&
-											selectionEnd !== null &&
-											value.slice(selectionStart, selectionEnd) === value
-										) {
-											if (configs.status.selectAll) configs.status.selectAll = false;
+										if (configs.status.selectAll) {
+											configs.status.selectAll = false;
 											value = undefined;
 											configs.input.password.value = undefined;
 											configs.status.currentCursor = 0;
+										} else {
+											const { selectionStart, selectionEnd } = ref;
+											if (
+												value &&
+												selectionStart !== null &&
+												selectionEnd !== null &&
+												value.slice(selectionStart, selectionEnd) === value
+											) {
+												value = undefined;
+												configs.input.password.value = undefined;
+												configs.status.currentCursor = 0;
+											}
 										}
 									}
 								},
-								async keyup(e) {
+								async keyup(e, data) {
+									if (!(data?.node instanceof HTMLInputElement)) return;
 									const event = e as KeyboardEvent;
 									let key = event.key;
 									const fnKeys = [
@@ -421,9 +452,11 @@
 										'arrowup',
 										'arrowdown',
 										'arrowleft',
-										'arrowright'
+										'arrowright',
+										'enter'
 									];
 									if (!fnKeys.includes(key.toLowerCase())) {
+										console.log(event);
 										if (event.ctrlKey === true && key == 'v') {
 											let clipboardText;
 											try {
@@ -449,9 +482,9 @@
 												value.slice(0, currentCursor) +
 												key +
 												value.slice(currentCursor, value.length);
-											if (!configs.status.currentCursor) configs.status.currentCursor = 1;
-											configs.status.currentCursor += 1;
 										}
+										if (!configs.status.currentCursor) configs.status.currentCursor = 1;
+										configs.status.currentCursor += 1;
 									} else if (
 										fnKeys.includes(key.toLowerCase()) &&
 										event.altKey === false &&
@@ -472,26 +505,30 @@
 												value.slice(currentCursor, value.length);
 											configs.status.currentCursor -= 1;
 										}
-										if ('arrowleft' == key.toLowerCase()) {
-											configs.status.currentCursor = Math.max(0, configs.status.currentCursor - 1);
+										if (['arrowleft', 'arrowright'].includes(key.toLowerCase()) && value) {
+											configs.status.currentCursor = data.node.selectionStart ?? 0;
 										}
 										if ('arrowdown' == key.toLowerCase()) {
 											configs.status.currentCursor = 0;
 										}
-										if (key.toLowerCase() == 'arrowright' && value) {
-											configs.status.currentCursor = Math.min(
-												configs.status.currentCursor + 1,
-												value.length
-											);
-										}
 										if ('arrowup' == key.toLowerCase() && value) {
 											configs.status.currentCursor = value.length;
+										}
+										if ('delete' == key.toLowerCase() && value) {
+											value =
+												value.slice(0, configs.status.currentCursor) +
+												value.slice(configs.status.currentCursor, value.length - 1);
 										}
 									}
 								}
 							}
 						},
-						...(createDefaultInputEvents(value, configs, textFieldContext) ?? [])
+						...(createDefaultInputEvents(
+							untrack(() => value),
+							configs,
+							textFieldContext,
+							formContext
+						) ?? [])
 					] as InputConfigs['input']['password']['event'];
 				}
 			},
@@ -500,6 +537,7 @@
 					return configs.input.text.style;
 				},
 				get event() {
+					if (configs.disabled) return [];
 					return configs.input.text.event;
 				}
 			},
@@ -510,6 +548,7 @@
 				},
 				get event() {
 					if (!browser) return undefined;
+					if (configs.disabled) return [];
 					const events = [
 						props.validation
 							? {
@@ -666,7 +705,12 @@
 								}
 							}
 						},
-						...(createDefaultInputEvents(value, configs, textFieldContext) ?? []),
+						...(createDefaultInputEvents(
+							untrack(() => value),
+							configs,
+							textFieldContext,
+							formContext
+						) ?? []),
 						{
 							events: {
 								mousedown: {
@@ -702,51 +746,54 @@
 				];
 				return styleSynced({ defaultStyles });
 			},
-			event: [
-				{
-					events: {
-						async load(e, data) {
-							if (data?.node instanceof HTMLElement) {
-								data.node.style.width = `${configs.maskValue.width}px`;
-								data.node.style.height = `${configs.maskValue.height}px`;
-								data.node.scrollTo({ left: data.node.scrollWidth, behavior: 'smooth' });
+			get event() {
+				if (configs.disabled) return [];
+				return [
+					{
+						events: {
+							async load(e, data) {
+								if (data?.node instanceof HTMLElement) {
+									data.node.style.width = `${configs.maskValue.width}px`;
+									data.node.style.height = `${configs.maskValue.height}px`;
+									data.node.scrollTo({ left: data.node.scrollWidth, behavior: 'smooth' });
 
-								if (value && configs.type == 'number') {
-									if (!configs.timeId) configs.timeId = new Map();
-									const name = 'timeout-calculate';
-									const timeId = configs.timeId.get(name);
-									if (timeId) {
-										clearTimeout(timeId);
-									}
-									configs.timeId.set(
-										name,
-										setTimeout(() => {
-											if (value) {
-												const rs = calculatorString(value);
-												if (rs && rs.toString() !== value) {
-													value = rs.toString();
+									if (value && configs.type == 'number') {
+										if (!configs.timeId) configs.timeId = new Map();
+										const name = 'timeout-calculate';
+										const timeId = configs.timeId.get(name);
+										if (timeId) {
+											clearTimeout(timeId);
+										}
+										configs.timeId.set(
+											name,
+											setTimeout(() => {
+												if (value) {
+													const rs = calculatorString(value);
+													if (rs && rs.toString() !== value) {
+														value = rs.toString();
+													}
 												}
-											}
-										}, configs.delay)
-									);
-								}
-							}
-							return () => {
-								requestAnimationFrame(() => {
-									const ref = configs.input[configs.type].ref;
-									if (ref) {
-										ref.focus();
-										configs.ref?.classList.add('animation-bounce');
-										setTimeout(() => {
-											configs.ref?.classList.remove('animation-bounce');
-										}, configs.duration);
+											}, configs.delay)
+										);
 									}
-								});
-							};
+								}
+								return () => {
+									requestAnimationFrame(() => {
+										const ref = configs.input[configs.type].ref;
+										if (ref) {
+											ref.focus();
+											configs.ref?.classList.add('animation-bounce');
+											setTimeout(() => {
+												configs.ref?.classList.remove('animation-bounce');
+											}, configs.duration);
+										}
+									});
+								};
+							}
 						}
 					}
-				}
-			]
+				];
+			}
 		},
 		actionButtons: {
 			clear: {
@@ -1062,9 +1109,9 @@
 			mousedown: {
 				async handler(e: MouseEvent) {
 					configs.status.mousePos = { clientX: e.clientX, clientY: e.clientY };
+					e.preventDefault();
 					if (e.detail == 1) {
 						if (value && configs.maskValue.ref) {
-							e.preventDefault();
 							const index = calculatorCursor(e, value, configs.maskValue.ref);
 							requestAnimationFrame(() => {
 								const ref = configs.input[configs.type].ref;
@@ -1079,7 +1126,6 @@
 							client.browser?.isMobile &&
 							!client.browser?.visualKeyboard
 						) {
-							e.preventDefault();
 							if (!client.browser?.visualInput) client.createInputVisual();
 							await client.getVisualKeyboardMeta();
 							// configs.status.focus = true;
@@ -1144,6 +1190,9 @@
 			configs.ref.dispatchEvent(new Event(focus ? 'focus' : 'blur'));
 		}
 		prevFocus = focus;
+		if ((!focus || value?.length) && configs.status.selectAll) {
+			// configs.status.selectAll = false;
+		}
 	});
 	$effect(() => {
 		if (!configs.ref || configs.status.reseting) return;
@@ -1185,6 +1234,15 @@
 			if (!textFieldContext.children) textFieldContext.children = {};
 			textFieldContext.children.input = configs;
 		}
+	});
+	onDestroy(() => {
+		value = undefined;
+		if (configs.type == 'password') configs.input.password.value = undefined;
+		[...(configs.timeId?.values() ?? [])].forEach((time) => {
+			clearTimeout(time);
+			cancelAnimationFrame(time as number);
+		});
+		configs.timeId?.clear();
 	});
 
 	export { configs };

@@ -4,6 +4,8 @@
 	import type { PageProps } from './$types';
 	import { NavigationMenu } from '$components/navigation';
 	import { SearchMain } from '$components/search/Main';
+	import { page } from '$app/state';
+	import { onNavigate } from '$app/navigation';
 
 	let { data, children }: { data: PageProps; children: Snippet } = $props();
 	let configs = $state({

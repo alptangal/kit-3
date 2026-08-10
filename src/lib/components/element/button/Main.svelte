@@ -7,6 +7,8 @@
 	import { Icon } from '$components/element';
 	import type { EventListener } from '$components/interface';
 	import { getFormContext } from '$components/form/form';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	let { children, ...props }: ButtonProps = $props();
 	let configs: ButtonConfigs = $state({
 		status: {},
@@ -17,8 +19,8 @@
 				`size-${this.size}`,
 				props['aspect-square'] ? 'aspect-square' : undefined,
 				props.rounded ? `rounded-${props.rounded}` : undefined,
-				configs.disabled ? 'disabled' : undefined,
-				configs.loading ? 'loading' : undefined,
+				this.disabled ? 'disabled' : undefined,
+				this.loading ? 'loading' : undefined,
 				!props.transitionDisabled ? 'transition' : undefined,
 				`color-${this.color}`,
 				configs.status?.tap || props.actived ? `button-tapped` : undefined
@@ -36,17 +38,12 @@
 		},
 		get disabled() {
 			if (props.disabled) return props.disabled;
-			if (configs.type == 'submit') {
-				if (formContext?.loading) return formContext.loading;
-
-				if (!formContext?.validation.isValid) return true;
+			if (formContext) {
+				if (formContext.loading || formContext.disabled) return true;
+				if (!formContext.validation.isValid && configs.type == 'submit') return true;
 				if (formContext.childrens?.size) {
 					return [...formContext.childrens.values()].every((children) => !children.status.changed);
 				}
-			}
-			if (configs.type == 'reset') {
-				if (formContext?.childrens?.size)
-					return [...formContext.childrens.values()].every((children) => !children.status.changed);
 			}
 			return undefined;
 		},
@@ -110,6 +107,18 @@
 						}
 					}
 				},
+				async mousedown() {
+					if (configs.type == 'reset' && formContext?.childrens?.size)
+						[...formContext.childrens.values()].forEach((field) => {
+							field.reset();
+						});
+					if (configs.type == 'button' && configs.variant == 'link' && props.to)
+						await goto(resolve(props.to as Parameters<typeof resolve>[0]));
+					if (configs.type == 'submit' && formContext) {
+						formContext.disabled = true;
+						formContext.loading = true;
+					}
+				},
 				click: {
 					async handler() {
 						if (configs.delay) {
@@ -125,10 +134,6 @@
 							);
 						}
 						if (props.onClick) await props.onClick();
-						if (configs.type == 'reset' && formContext?.childrens?.size)
-							[...formContext.childrens.values()].forEach((field) => {
-								field.reset();
-							});
 
 						return () => {
 							const timeId = configs.timeId?.get('animation-tap');

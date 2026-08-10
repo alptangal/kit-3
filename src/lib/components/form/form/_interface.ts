@@ -4,6 +4,7 @@ import type { TextFieldConfigs } from '../textField/_interface';
 
 export interface FormProps extends BasicProps {
 	method?: 'post' | 'get' | 'dialog';
+	action?: string;
 }
 export interface FormConfigs extends Omit<BasicConfigs, 'childrens'> {
 	method: 'post' | 'get' | 'dialog';

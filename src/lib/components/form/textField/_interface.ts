@@ -16,6 +16,7 @@ export interface TextFieldConfigs extends BasicConfigs {
 		reseting?: boolean;
 		selectAll?: boolean;
 	};
+	disabled?: boolean;
 	loading?: boolean;
 	name?: string;
 	required?: boolean;
@@ -32,6 +33,8 @@ export interface TextFieldConfigs extends BasicConfigs {
 	};
 	previousValue?: string;
 	reset: () => void;
+	onEnter?: () => void;
+	focus?: () => void;
 }
 export interface TextFieldContext extends TextFieldConfigs {
 	setValue?: (value?: string) => void;

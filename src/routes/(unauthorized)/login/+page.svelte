@@ -11,7 +11,9 @@
 	} from '$components/form';
 	import { Modal } from '$components/modal';
 	import { client } from '$store/basic.svelte';
+	import { fly } from 'svelte/transition';
 	import { pageContents } from '.';
+	import { omit } from 'es-toolkit/object';
 </script>
 
 <div class="login-root">
@@ -66,6 +68,11 @@
 			>
 		</div>
 	</Form>
+	<div class="flex items-center">
+		<Label>Do you want become member?</Label>
+
+		<Button variant="link" color="success" class="underline" to="/register">Register</Button>
+	</div>
 </div>
 
 <style lang="scss">

@@ -17,6 +17,8 @@
 	import { Modal } from '$components/modal';
 	import { Container } from '$components/layout';
 	import type { BasicProps } from '$components/interface';
+	import { fly } from 'svelte/transition';
+	import { omit } from 'es-toolkit';
 
 	let userMeta: { [k: string]: { value?: string; validation?: InputProps['validation'] } } = $state(
 		{
@@ -128,8 +130,8 @@
 	});
 </script>
 
-<div class="login-root">
-	<Form>
+<div class="register-root">
+	<Form method="post" action="/">
 		<div class="grid grid-cols-3 gap-1">
 			<TextField name="firstname">
 				<Label>{pageContents.textFields.firstname[client.browser?.language ?? 'en']}</Label>
@@ -181,7 +183,8 @@
 		<Checkbox bind:checked={term.value} required class="flex flex-wrap flex-row! justify-start!">
 			<Checkbox.Indicator /><Label class="flex items-center"
 				>Agree <Button
-					class="ml-1 px-0!"
+					color={typeof term.value == 'boolean' ? (term.value ? 'success' : 'error') : 'default'}
+					class="ml-1 px-0! underline"
 					variant="link"
 					events={[
 						{
@@ -232,6 +235,11 @@
 			>
 		</div>
 	</Form>
+	<div class="flex items-center">
+		<Label>Are you a member?</Label>
+
+		<Button variant="link" color="success" class="underline" to="/login">login</Button>
+	</div>
 </div>
 <Modal bind:display={modals.term.display} size="xs" isDimissable>
 	<Modal.Container>
@@ -247,7 +255,7 @@
 </Modal>
 
 <style lang="scss">
-	.login-root {
+	.register-root {
 		@apply flex flex-col;
 	}
 </style>

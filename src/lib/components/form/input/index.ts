@@ -2,6 +2,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import type { InputConfigs, InputProps, ValidationCompact, ValidationFull } from './_interface';
 import type { EventListener } from '$components/interface';
 import type { TextFieldContext } from '../textField/_interface';
+import type { FormConfigs } from '../form/_interface';
 
 export const text_keys_allowed = [
 	'arrowleft',
@@ -109,23 +110,47 @@ export const defaultValidation: {
 export function createDefaultInputEvents(
 	value: string | undefined,
 	configs: InputConfigs,
-	textFieldContext?: TextFieldContext
+	textFieldContext?: TextFieldContext,
+	formContext?: FormConfigs
 ): InputProps['events'] {
 	return [
 		{
 			events: {
 				load(_, data) {
-					if (data?.node instanceof HTMLInputElement && configs.input.status.focus !== undefined) {
+					if (data?.node instanceof HTMLInputElement) {
 						data.node.focus();
 					}
 				},
-				focus() {
+				mousedown(e, data) {
+					const event = e as MouseEvent;
+					const target = data?.node;
+					// if (configs.status.focus) event.preventDefault();
+					if (event.detail == 2 && value?.length) {
+						configs.status.selectAll = true;
+						if (target instanceof HTMLInputElement && value?.length) {
+							target.setSelectionRange(0, value.length);
+						}
+					}
+					console.log(22222);
+				},
+				focus(e) {
 					configs.input.status.focus = true;
 				},
 				blur() {
 					configs.input.status.focus = false;
 					configs.status.focus = false;
 					if (textFieldContext) textFieldContext.status.selectAll = false;
+				},
+				keydown(e) {
+					const event = e as KeyboardEvent;
+					if (event.key.toLowerCase() == 'enter' && textFieldContext?.onEnter) {
+						textFieldContext.onEnter();
+						if (!formContext?.validation.isValid) {
+							event.preventDefault();
+						}
+					} else if (event.key == 'a' && event.ctrlKey) {
+						configs.status.selectAll = true;
+					}
 				}
 			}
 		}

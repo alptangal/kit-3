@@ -1,18 +1,6 @@
 import { browser } from '$app/environment';
-import type { TooltipConfigs } from '$components/element/tooltip/_interface';
-import type { Size } from '$components/interface';
-import type { KeyboardNumberConfigs } from '$components/keyboard/number/_interface';
 import type { NumbericKey } from '$components/keyboard/numberic_old/_interface';
-import type {
-	AppTheme,
-	Browser,
-	CountryCode,
-	Direction,
-	LanguageCode,
-	Region,
-	Screen
-} from '$interfaces/basic';
-import type { Timezone } from '$interfaces/timezone';
+import type { AppTheme, Browser, MetaBrowser, MetaUser, Screen } from '$interfaces/basic';
 import { convertToMiliseconds, detectBrowserType } from '$modules';
 import type { SvelteComponent } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
@@ -235,83 +223,7 @@ export const profile = $state({
 		}
 	}
 });
-interface VisualKeyboardMeta {
-	width: number;
-	height: number;
-	delay?: number;
-	ref?: HTMLElement;
-}
-interface MetaBrowser {
-	originalResolution?: {
-		width: number;
-		height: number;
-	};
-	userAgent?: string | null;
-	isMobile?: boolean;
-	os?: 'window' | 'mac' | 'linux' | 'android' | 'ios' | 'chrome';
-	width?: number;
-	height?: number;
-	ip?: `${number}:${number}:${number}:${number}`;
-	region?: Region;
-	language?: LanguageCode;
-	country?: CountryCode;
-	theme?: 'dark' | 'light' | 'system';
-	preferColor?: 'dark' | 'light';
-	timezone?: Timezone;
-	/**
-	 * Duration in miliseconds
-	 */
-	duration?: `${number}s` | `${number}ms` | number;
-	/**
-	 * delay in miliseconds
-	 */
-	delay?: number;
-	transition?: {
-		fade?: {
-			/**
-			 * Duration in miliseconds
-			 */
-			duration?: number;
-		};
-		fly?: {
-			/**
-			 * Duration in miliseconds
-			 */
-			duration?: number;
-			x?: number;
-			y?: number;
-		};
-	};
-	size?: Size;
-	direction?: Direction;
-	disabled?: boolean;
-	modalStorage?: HTMLElement;
-	windows?: Map<
-		string,
-		{
-			ref: HTMLElement;
-		}
-	>;
-	visualInput?: HTMLInputElement;
-	visualKeyboard?: VisualKeyboardMeta;
-	clipboard?: Map<number, string>;
-	tooltips?: Map<HTMLElement, TooltipConfigs>;
-	keyboard?: {
-		number: KeyboardNumberConfigs;
-	};
-	layers?: Map<HTMLElement, number | 'root'>;
-}
-interface MetaUser {
-	firstName: string;
-	lastName: string;
-	dob?: string;
-	region: Region;
-	country: CountryCode;
-	gender: 'Male' | 'Female';
-	phone?: string;
-	email?: string;
-	username: string;
-}
+
 class User {
 	private _browser = $state<MetaBrowser | undefined>(undefined);
 	private _user = $state<undefined | MetaUser>(undefined);

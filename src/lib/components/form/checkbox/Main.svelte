@@ -2,7 +2,7 @@
 	import { convertToMiliseconds, styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { defaultValidation, releaseIndicator, setCheckboxContext } from '.';
 	import { getFormContext } from '../form';
 	import type { CheckboxConfigs, CheckboxProps } from './_interface';
@@ -34,7 +34,7 @@
 			return 'default';
 		},
 		get disabled() {
-			return props.disabled;
+			return props.disabled ?? formContext?.disabled;
 		},
 		get checked() {
 			return checked;
@@ -77,6 +77,17 @@
 		},
 		children: {},
 		validation: {
+			_isValid: undefined as undefined | boolean | 'pending',
+			get isValid() {
+				if (configs.required) {
+					if (!this._isValid) return 'pending';
+					return this._isValid;
+				}
+				return undefined;
+			},
+			set isValid(v) {
+				this._isValid = v;
+			},
 			messages: new SvelteMap()
 		},
 		reset() {
@@ -172,6 +183,14 @@
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
 			formContext.childrens.add(configs);
 		}
+	});
+	onDestroy(() => {
+		checked = undefined;
+		[...(configs.timeId?.values() ?? [])].forEach((time) => {
+			clearTimeout(time);
+			cancelAnimationFrame(time as number);
+		});
+		configs.timeId?.clear();
 	});
 </script>
 

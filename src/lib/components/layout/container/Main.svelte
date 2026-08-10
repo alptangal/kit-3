@@ -7,6 +7,7 @@
 	import MessageComponent from '$components/element/messageComponent/MessageComponent.svelte';
 	import type { TranslateContent } from '$interfaces/basic';
 	import { setContainerContext } from '.';
+	import { fly } from 'svelte/transition';
 
 	const NAME_COMP: TranslateContent = {
 		vi: 'Container',
@@ -105,6 +106,7 @@
 		style:height={typeof props.height == 'number' ? `${props.height}px` : (props.height ?? 'auto')}
 		style:transition-duration="var(--transition-duration)"
 		style:--transition-duration={props.transitionEnabled ? `${configs.duration}ms` : undefined}
+		transition:fly={client.browser?.transition?.fly}
 	>
 		{@render children()}
 	</svelte:element>

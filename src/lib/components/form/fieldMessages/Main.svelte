@@ -30,12 +30,7 @@
 	const checkboxContext = getCheckboxContext();
 </script>
 
-<svelte:element
-	this={props.as ?? 'div'}
-	bind:this={configs.ref}
-	class={configs.style}
-	transition:fly={client.browser?.transition?.fly}
->
+<svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
 	{#each [...(configs.messages ?? []).values()].filter((item) => item.content) as item, key (key)}
 		<p class={item.kind}>{item.content![client.browser?.language ?? 'en']}</p>
 	{/each}

@@ -31,7 +31,7 @@ export interface CheckboxProps extends BasicProps {
 	required?: boolean;
 	delay?: TimeUnits;
 }
-export interface CheckboxConfigs extends BasicConfigs {
+export interface CheckboxConfigs extends Omit<BasicConfigs, 'status'> {
 	status: {
 		changed?: boolean;
 	};
@@ -54,4 +54,5 @@ export interface CheckboxConfigs extends BasicConfigs {
 		>;
 	};
 	reset: () => void;
+	focus?: () => void;
 }

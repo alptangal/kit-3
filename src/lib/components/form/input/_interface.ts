@@ -87,6 +87,7 @@ export interface InputConfigs extends BasicConfigs {
 	rounded: Size | 'full' | 'none';
 	duration: number;
 	variant: InputVariants;
+	disabled?: boolean;
 	delay: number;
 	color: Color;
 	maxLength?: number;

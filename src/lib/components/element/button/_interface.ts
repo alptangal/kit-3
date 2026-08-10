@@ -1,3 +1,4 @@
+import type { ResolvedPathname } from '$app/types';
 import type { BasicConfigs, BasicProps, Color, Size } from '$components/interface';
 type ButtonTypes = 'button' | 'submit' | 'reset';
 type ButtonVariants = 'solid' | 'outline' | 'soft' | 'subtle' | 'link' | 'ghost';
@@ -35,6 +36,7 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	transitionDuration?: number | `${number}s` | `${number}ms` | 'none';
 	loading?: boolean;
 	loadingDuration?: number | `${number}s` | `${number}ms`;
+	to?: string;
 }
 export interface ButtonConfigs extends BasicConfigs {
 	type: ButtonTypes;

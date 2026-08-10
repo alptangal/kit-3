@@ -16,6 +16,7 @@
 	import type { BasicProps } from '$components/interface.js';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { handleEvents } from '$modules/_attachments.js';
+	import { page } from '$app/state';
 
 	let { data, children } = $props();
 
@@ -143,8 +144,14 @@
 			} catch (e) {}
 		}
 	});
-	onNavigate(() => {
-		alert('onnavigate');
+	onNavigate((navigation) => {
+		if (!document.startViewTransition) return;
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
 	});
 </script>
 

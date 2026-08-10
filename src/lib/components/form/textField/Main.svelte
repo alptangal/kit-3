@@ -21,7 +21,8 @@
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
 				'textField-root',
-				configs.status.hover ? 'hover' : undefined
+				configs.status.hover ? 'hover' : undefined,
+				this.disabled ? 'disabled' : undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
@@ -31,7 +32,11 @@
 		get required() {
 			return props.required;
 		},
+		get disabled() {
+			return props.disabled ?? formContext?.disabled ?? undefined;
+		},
 		get event() {
+			if (this.disabled) return [];
 			const eventDefault: TextFieldConfigs['event'] = [
 				{
 					events: {
@@ -62,6 +67,28 @@
 		setValue(input) {
 			configs.previousValue = configs.value;
 			configs.value = input;
+		},
+		onEnter() {
+			if (formContext && (formContext.childrens?.size ?? 0) > 1 && formContext.ref) {
+				const fields = [...formContext.ref.querySelectorAll('.textField-root')].filter((children) =>
+					[...children.classList].includes('textField-root')
+				);
+				const currentIndex = fields.findIndex((field) => field === configs.ref);
+
+				if (formContext.childrens?.size) {
+					[...formContext.childrens.values()].forEach((children) => {
+						if (
+							children.ref == fields[currentIndex < fields.length - 1 ? currentIndex + 1 : 0] &&
+							children.focus
+						) {
+							children.focus();
+						}
+					});
+				}
+			}
+		},
+		focus() {
+			if (configs.children?.input?.focus) configs.children.input.focus();
 		},
 		validation: {
 			setValid(v) {
@@ -99,6 +126,10 @@
 	.textField-root {
 		--cursor: text;
 		&.hover {
+		}
+		&.disabled {
+			--cursor: not-allowed;
+			opacity: var(--disabled-opacity);
 		}
 		cursor: var(--cursor);
 	}
