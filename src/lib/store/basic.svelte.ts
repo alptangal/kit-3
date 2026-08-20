@@ -1,6 +1,13 @@
 import { browser } from '$app/environment';
 import type { NumbericKey } from '$components/keyboard/numberic_old/_interface';
-import type { AppTheme, Browser, MetaBrowser, MetaUser, Screen } from '$interfaces/basic';
+import {
+	type MetaSystem,
+	type AppTheme,
+	type Browser,
+	type MetaBrowser,
+	type MetaUser,
+	type Screen
+} from '$interfaces/basic';
 import { convertToMiliseconds, detectBrowserType } from '$modules';
 import type { SvelteComponent } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
@@ -227,6 +234,7 @@ export const profile = $state({
 class User {
 	private _browser = $state<MetaBrowser | undefined>(undefined);
 	private _user = $state<undefined | MetaUser>(undefined);
+	private _system = $state<undefined | MetaSystem>(undefined);
 	timeId: Map<string | symbol, number | NodeJS.Timeout>;
 
 	constructor() {
@@ -281,6 +289,26 @@ class User {
 	}
 	set browser(meta) {
 		this._browser = { ...this._browser, ...meta };
+	}
+	get user() {
+		return this._user;
+	}
+	set user(meta) {
+		if (meta) {
+			this._user = { ...this._user, ...meta };
+		} else {
+			this._user = meta;
+		}
+	}
+	get system() {
+		return this._system;
+	}
+	set system(meta) {
+		if (meta) {
+			this._system = { ...this._system, ...meta };
+		} else {
+			this._system = meta;
+		}
 	}
 	updateMetaBrowser(meta: MetaBrowser) {
 		this._browser = { ...this._browser, ...meta };

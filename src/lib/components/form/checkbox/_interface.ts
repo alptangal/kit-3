@@ -30,14 +30,16 @@ export interface CheckboxProps extends BasicProps {
 	duration?: TimeUnits;
 	required?: boolean;
 	delay?: TimeUnits;
+	name?: string;
 }
-export interface CheckboxConfigs extends Omit<BasicConfigs, 'status'> {
+export interface CheckboxConfigs extends Omit<BasicConfigs, 'status' | 'value'> {
 	status: {
 		changed?: boolean;
 	};
 	children: {
 		indicator?: CheckboxIndicatorConfigs;
 	};
+	name?: string;
 	loading?: boolean;
 	checked?: boolean;
 	previousValue?: boolean;

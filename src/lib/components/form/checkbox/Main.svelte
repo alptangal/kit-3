@@ -29,7 +29,7 @@
 		get color() {
 			if (props.color) return props.color;
 			if (this.required && configs.status.changed) {
-				return configs.validation.isValid ? 'success' : 'error';
+				return configs.validation.isValid == true ? 'success' : 'error';
 			}
 			return 'default';
 		},
@@ -80,7 +80,7 @@
 			_isValid: undefined as undefined | boolean | 'pending',
 			get isValid() {
 				if (configs.required) {
-					if (!this._isValid) return 'pending';
+					if (this._isValid === undefined) return 'pending';
 					return this._isValid;
 				}
 				return undefined;

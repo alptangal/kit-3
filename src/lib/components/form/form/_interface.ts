@@ -5,22 +5,29 @@ import type { TextFieldConfigs } from '../textField/_interface';
 export interface FormProps extends BasicProps {
 	method?: 'post' | 'get' | 'dialog';
 	action?: string;
+	encryptDisabled?: boolean;
+	onSubmit?: () => void | Promise<void>;
+	onReset?: () => void | Promise<void>;
+	onResponse?: () => void | Promise<void>;
 }
 export interface FormConfigs extends Omit<BasicConfigs, 'childrens'> {
 	method: 'post' | 'get' | 'dialog';
-	action?: string;
+	action: string;
 	encryptDataType?: 'application/x-www-form-urlencoded' | 'multipart/form-data' | 'text/plain';
 	target?: '_self' | '_blank' | '_parent' | '_top';
 	disabled?: boolean;
 	loading?: boolean;
-	onSubmit?: () => void;
-	onReset?: () => void;
-	onInvalid?: () => void;
+	onSubmit?: () => void | Promise<void>;
+	onReset?: () => void | Promise<void>;
+	onResponse?: () => void | Promise<void>;
+	onInvalid?: () => void | Promise<void>;
 	size?: Size;
 	childrens?: Set<TextFieldConfigs | CheckboxConfigs>;
 	validation: {
 		isValid?: boolean;
 	};
+	encryptDisabled?: boolean;
+	reset: () => void;
 }
 export interface FormContext {
 	size?: Size;

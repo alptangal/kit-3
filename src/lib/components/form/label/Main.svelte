@@ -19,8 +19,11 @@
 			if (props.color) return props.color;
 			if (typeof textFieldContext?.children?.input?.validation.isValid == 'boolean')
 				return textFieldContext?.children?.input?.validation.isValid ? 'success' : 'error';
-			if (typeof checkboxContext?.validation.isValid == 'boolean' && checkboxContext.required)
-				return checkboxContext.validation.isValid ? 'success' : 'error';
+			if (checkboxContext?.required) {
+				if (typeof checkboxContext?.validation.isValid == 'boolean')
+					return checkboxContext.validation.isValid ? 'success' : 'error';
+				return 'default';
+			}
 			return 'default';
 		},
 		get size() {

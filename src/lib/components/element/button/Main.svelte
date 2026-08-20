@@ -41,7 +41,7 @@
 			if (formContext) {
 				if (formContext.loading || formContext.disabled) return true;
 				if (!formContext.validation.isValid && configs.type == 'submit') return true;
-				if (formContext.childrens?.size) {
+				if (formContext.childrens?.size && ['submit', 'reset'].includes(configs.type)) {
 					return [...formContext.childrens.values()].every((children) => !children.status.changed);
 				}
 			}
@@ -107,18 +107,6 @@
 						}
 					}
 				},
-				async mousedown() {
-					if (configs.type == 'reset' && formContext?.childrens?.size)
-						[...formContext.childrens.values()].forEach((field) => {
-							field.reset();
-						});
-					if (configs.type == 'button' && configs.variant == 'link' && props.to)
-						await goto(resolve(props.to as Parameters<typeof resolve>[0]));
-					if (configs.type == 'submit' && formContext) {
-						formContext.disabled = true;
-						formContext.loading = true;
-					}
-				},
 				click: {
 					async handler() {
 						if (configs.delay) {
@@ -133,8 +121,20 @@
 								}, configs.delay)
 							);
 						}
-						if (props.onClick) await props.onClick();
+						if (configs.type == 'reset' && formContext?.childrens?.size) {
+							[...formContext.childrens.values()].forEach((field) => {
+								field.reset();
+							});
+							if (formContext.onReset) formContext.onReset();
+						}
+						if (configs.type == 'button' && configs.variant == 'link' && props.to)
+							await goto(resolve(props.to as Parameters<typeof resolve>[0]));
 
+						if (configs.type == 'submit' && formContext) {
+							formContext.disabled = true;
+							formContext.loading = true;
+						}
+						if (props.onClick) await props.onClick();
 						return () => {
 							const timeId = configs.timeId?.get('animation-tap');
 							if (timeId) cancelAnimationFrame(timeId as number);
@@ -191,6 +191,7 @@
 	bind:this={configs.ref}
 	type={configs.type}
 	class={configs.style}
+	disabled={configs.disabled}
 	data-tap={configs.status?.tap}
 	style:--transition-duration={`${configs.transitionDuration}ms`}
 	style:--loading-duration={`${configs.loadingDuration}ms`}

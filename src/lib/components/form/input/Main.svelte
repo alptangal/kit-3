@@ -453,10 +453,11 @@
 										'arrowdown',
 										'arrowleft',
 										'arrowright',
-										'enter'
+										'enter',
+										'escape',
+										'tab'
 									];
 									if (!fnKeys.includes(key.toLowerCase())) {
-										console.log(event);
 										if (event.ctrlKey === true && key == 'v') {
 											let clipboardText;
 											try {
@@ -1089,11 +1090,7 @@
 					client.createInputVisual();
 				}
 				let clipboardRaw: string | undefined | null;
-				try {
-					clipboardRaw = await navigator.clipboard.readText();
-				} catch (e) {
-					clipboardRaw = localStorage.getItem('clipboard');
-				}
+				clipboardRaw = localStorage.getItem('clipboard');
 				if (!clipboardRaw) return;
 				if (!client.browser) client.browser = {};
 				if (!client.browser.clipboard) client.browser.clipboard = new Map();

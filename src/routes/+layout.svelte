@@ -17,6 +17,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { handleEvents } from '$modules/_attachments.js';
 	import { page } from '$app/state';
+	import { encryption } from '$modules/encryption.js';
 
 	let { data, children } = $props();
 
@@ -89,6 +90,7 @@
 					height: window.innerHeight
 				};
 			}
+
 			client.browser = {
 				userAgent: data.userAgent,
 				originalResolution: {

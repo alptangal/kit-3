@@ -131,7 +131,6 @@ export function createDefaultInputEvents(
 							target.setSelectionRange(0, value.length);
 						}
 					}
-					console.log(22222);
 				},
 				focus(e) {
 					configs.input.status.focus = true;
@@ -150,6 +149,8 @@ export function createDefaultInputEvents(
 						}
 					} else if (event.key == 'a' && event.ctrlKey) {
 						configs.status.selectAll = true;
+					} else if (event.key.toLowerCase() == 'tab' && textFieldContext?.onTab) {
+						textFieldContext.onTab();
 					}
 				}
 			}

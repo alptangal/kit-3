@@ -1,5 +1,6 @@
 import type { DistanceUnits, TimeUnits } from '$components/interface';
 import type { Browser } from '$interfaces/basic';
+import type { ServerResponse } from '$interfaces/basic';
 import { client, profile } from '$store/basic.svelte';
 
 export async function copyToClipboard(content: string) {
@@ -213,4 +214,28 @@ export function measureTextWidth(text: string, referenceEl: HTMLElement): number
 	const width = mirror.offsetWidth;
 	mirror.remove();
 	return width;
+}
+
+export async function apiFetch(
+	url: string,
+	options: { method?: string; body?: any } = {}
+): Promise<ServerResponse> {
+	const res = await fetch(url, {
+		method: options.method ?? 'post',
+		headers: { 'Content-Type': 'application/json' },
+		body: options.body ? JSON.stringify(options.body) : undefined
+	});
+
+	const data = await res.json().catch(() => undefined);
+
+	if (!res.ok) {
+		return {
+			message: data?.message ?? `Request failed: ${res.status}`,
+			data,
+			status: res.status,
+			ok: res.ok
+		};
+	}
+
+	return { message: data?.message, data, status: res.status, ok: res.ok };
 }

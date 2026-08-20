@@ -34,6 +34,7 @@ export interface TextFieldConfigs extends BasicConfigs {
 	previousValue?: string;
 	reset: () => void;
 	onEnter?: () => void;
+	onTab?: () => void;
 	focus?: () => void;
 }
 export interface TextFieldContext extends TextFieldConfigs {

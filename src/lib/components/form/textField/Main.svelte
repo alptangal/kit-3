@@ -81,11 +81,16 @@
 							children.ref == fields[currentIndex < fields.length - 1 ? currentIndex + 1 : 0] &&
 							children.focus
 						) {
-							children.focus();
+							requestAnimationFrame(() => {
+								if (children.focus) children.focus();
+							});
 						}
 					});
 				}
 			}
+		},
+		get onTab() {
+			return this.onEnter;
 		},
 		focus() {
 			if (configs.children?.input?.focus) configs.children.input.focus();

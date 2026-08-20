@@ -301,6 +301,10 @@ $themes: 'dark', 'light';
 	touch-action: none;
 	position: relative;
 	transform: scale(1);
+	-webkit-touch-callout: none; // chặn context menu long-press trên iOS Safari
+	-webkit-user-select: none;
+	user-select: none;
+	touch-action: manipulation; // giảm delay 300ms tap, tránh double-tap-zoom, giảm long-press ambiguity
 
 	.button-render {
 		overflow: hidden;

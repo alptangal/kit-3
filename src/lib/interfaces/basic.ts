@@ -3,6 +3,11 @@ import type { Size } from '$components/interface';
 import type { KeyboardNumberConfigs } from '$components/keyboard/number/_interface';
 import type { Timezone } from './timezone';
 
+export type AuthMethod = 'webauthn' | 'password';
+export interface ServerResponse {
+	message?: string;
+	data?: { [k: string]: any };
+}
 interface VisualKeyboardMeta {
 	width: number;
 	height: number;
@@ -68,6 +73,14 @@ export interface MetaBrowser {
 		number: KeyboardNumberConfigs;
 	};
 	layers?: Map<HTMLElement, number | 'root'>;
+}
+export interface MetaSystem {
+	publicKey?: CryptoKey;
+	privateKey?: CryptoKey;
+	sessionPublicKey?: CryptoKey;
+	sessionPrivateKey?: CryptoKey;
+	sessionPrivateKeyB64: string;
+	sessionPublicKeyB64: string;
 }
 export interface MetaUser {
 	firstName: string;
