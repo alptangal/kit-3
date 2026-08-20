@@ -31,7 +31,7 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	actived?: boolean;
 	transitionDisabled?: boolean;
 	color?: Color;
-	onClick?: () => void | Promise<void>;
+	onClick?: (event?: Event) => void | Promise<void>;
 	delay?: number | `${number}s` | `${number}ms` | 'none';
 	transitionDuration?: number | `${number}s` | `${number}ms` | 'none';
 	loading?: boolean;

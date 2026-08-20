@@ -109,7 +109,7 @@
 		return undefined;
 	}
 
-	async function handleRegister() {
+	async function handleRegister(e) {
 		if (registerState.loading) return; // chặn double-submit
 
 		const validationError = validateBeforeSubmit();
@@ -122,11 +122,10 @@
 		registerState.loading = true;
 
 		try {
-			const authMethod = await detectAuthMethod();
+			const authMethod = isWebAuthnSupported ? 'webauthn' : 'password';
 			const name = [userMeta.firstname.value, userMeta.midname.value, userMeta.lastname.value]
 				.filter(Boolean)
 				.join(' ');
-
 			// ---------- BƯỚC 1: register-init ----------
 			const initRes = await encryption.fetchSecure('/api/auth/register', {
 				body: {
@@ -162,7 +161,6 @@
 					err instanceof Error ? `WebAuthn cancelled: ${err.message}` : 'WebAuthn cancelled';
 				return;
 			}
-			alert(1111);
 			const verifyRes = await encryption.fetchSecure('/api/auth/register', {
 				body: {
 					action: 'register-verify',
@@ -222,10 +220,21 @@
 			}
 		}
 	});
+	let isWebAuthnSupported = $state(false);
 
-	onMount(() => {
+	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		if (client.browser.layers) client.browser.layers = new SvelteMap();
+
+		// Kiểm tra sẵn khi mount trang
+		if (typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined') {
+			try {
+				isWebAuthnSupported =
+					await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+			} catch {
+				isWebAuthnSupported = false;
+			}
+		}
 	});
 </script>
 

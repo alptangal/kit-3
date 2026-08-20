@@ -108,7 +108,7 @@
 					}
 				},
 				click: {
-					async handler() {
+					async handler(e) {
 						if (configs.delay) {
 							if (!configs.status) configs.status = {};
 							if (!configs.timeId) configs.timeId = new Map();
@@ -134,7 +134,7 @@
 							formContext.disabled = true;
 							formContext.loading = true;
 						}
-						if (props.onClick) await props.onClick();
+						if (props.onClick) await props.onClick(e);
 						return () => {
 							const timeId = configs.timeId?.get('animation-tap');
 							if (timeId) cancelAnimationFrame(timeId as number);
