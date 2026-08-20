@@ -1,5 +1,5 @@
 import { encryption } from '$modules/encryption';
-import { systemVault } from '$store/system-vault';
+import { systemVault } from '$store/initSystemVault';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -7,7 +7,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		const body = await request.json();
 		if (!body.encryptedSessionKeyB64 || !body.ivB64 || !body.ciphertextB64)
 			throw new Error(JSON.stringify({ message: 'Decryption failed cuz broken data' }));
-		if (!systemVault) return new Response(JSON.stringify({ message: 'System crash' }));
+		if (!systemVault || !systemVault.privateKey)
+			return new Response(JSON.stringify({ message: 'System crash' }));
 		const data = await encryption.decryptWithPrivateKeyHybrid(systemVault.privateKey, body);
 		return new Response(data);
 	} catch (e) {
