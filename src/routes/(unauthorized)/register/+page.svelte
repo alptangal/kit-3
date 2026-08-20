@@ -340,8 +340,21 @@
 				color="success"
 				type="button"
 				disabled={registerState.loading}
-				onClick={handleRegister}
+				events={[
+					{
+						events: {
+							click: {
+								handler(e) {
+									e.preventDefault();
+									handleRegister(e);
+								},
+								options: { stopPropagation: true }
+							}
+						}
+					}
+				]}
 			>
+				>
 				{registerState.loading
 					? '...'
 					: pageContents.buttons.confirm[client.browser?.language ?? 'en']}
