@@ -109,9 +109,8 @@
 		return undefined;
 	}
 
-	async function handleRegister(e) {
+	async function handleRegister() {
 		if (registerState.loading) return; // chặn double-submit
-
 		const validationError = validateBeforeSubmit();
 		if (validationError) {
 			registerState.error = validationError;
@@ -122,7 +121,7 @@
 		registerState.loading = true;
 
 		try {
-			const authMethod = isWebAuthnSupported ? 'webauthn' : 'password';
+			const authMethod = await detectAuthMethod();
 			const name = [userMeta.firstname.value, userMeta.midname.value, userMeta.lastname.value]
 				.filter(Boolean)
 				.join(' ');
@@ -151,6 +150,10 @@
 
 			// ---------- Nhánh webauthn: cần round-trip ----------
 			let attestationResponse;
+			console.log(
+				'[DEBUG] webauthnOptions:',
+				JSON.stringify(initRes.data.webauthnOptions, null, 2)
+			);
 			try {
 				attestationResponse = await startRegistration({
 					optionsJSON: initRes.data.webauthnOptions
@@ -220,21 +223,10 @@
 			}
 		}
 	});
-	let isWebAuthnSupported = $state(false);
 
-	onMount(async () => {
+	onMount(() => {
 		if (!client.browser) client.browser = {};
 		if (client.browser.layers) client.browser.layers = new SvelteMap();
-
-		// Kiểm tra sẵn khi mount trang
-		if (typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined') {
-			try {
-				isWebAuthnSupported =
-					await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-			} catch {
-				isWebAuthnSupported = false;
-			}
-		}
 	});
 </script>
 
@@ -340,21 +332,8 @@
 				color="success"
 				type="button"
 				disabled={registerState.loading}
-				events={[
-					{
-						events: {
-							click: {
-								handler(e) {
-									e.preventDefault();
-									handleRegister(e);
-								},
-								options: { stopPropagation: true }
-							}
-						}
-					}
-				]}
+				onClick={handleRegister}
 			>
-				>
 				{registerState.loading
 					? '...'
 					: pageContents.buttons.confirm[client.browser?.language ?? 'en']}

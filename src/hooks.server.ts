@@ -1,7 +1,8 @@
 // hooks.server.ts
 import type { MetaUser } from '$interfaces/basic';
 import type { Handle } from '@sveltejs/kit';
-import { initSystemVault, systemVault } from '$store/initSystemVault';
+import { systemVault } from '$store/initSystemVault';
+import { initApp } from '$store/init-app';
 
 declare global {
 	// eslint-disable-next-line no-var
@@ -17,7 +18,7 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	await initSystemVault();
+	await initApp();
 	// Defensive check — nếu vì lý do gì đó vault chưa sẵn sàng (init lỗi/đang chạy),
 	// từ chối sớm thay vì để lỗi mơ hồ xảy ra sâu bên trong từng route
 	if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {

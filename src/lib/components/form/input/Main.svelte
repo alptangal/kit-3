@@ -324,22 +324,6 @@
 				get style() {
 					return configs.input.text.style;
 				},
-				_value: undefined as undefined | string,
-				get value() {
-					if (!this._value) return this._value;
-					if (configs.input.password.showPassword) return this._value;
-					if (!configs.status.focus) return Array(this._value.length).fill('*').join('');
-					return (
-						this._value
-							.slice(0, -1)
-							.split('')
-							.map((character) => '*')
-							.join('') + this._value.slice(-1)
-					);
-				},
-				set value(v: string | undefined) {
-					this._value = v;
-				},
 				get event() {
 					if (configs.disabled) return [];
 					return [
@@ -376,154 +360,6 @@
 									)
 								}
 							: { events: {} },
-						{
-							events: {
-								load(e, data) {
-									const node = data?.node;
-									if (node instanceof HTMLElement) {
-										const { width, height }: { width: number; height: number } =
-											node.getBoundingClientRect();
-										configs.maskValue.width = width;
-										configs.maskValue.height = height;
-									}
-								},
-								mousedown(e, data) {
-									let index: number | undefined;
-									if (configs.input.password.showPassword) {
-										if (!value || !configs.input.password.ref) {
-											index = 1;
-										} else {
-											index = calculatorCursor(e as MouseEvent, value, configs.input.password.ref);
-										}
-									} else {
-										if (!configs.input.password.value || !configs.input.password.ref) {
-											index = 1;
-										} else {
-											index = calculatorCursor(
-												e as MouseEvent,
-												configs.input.password.value,
-												configs.input.password.ref
-											);
-										}
-									}
-									configs.status.currentCursor = index ?? value?.length ?? 1;
-									if (data?.node instanceof HTMLInputElement) {
-										data.node.setSelectionRange(
-											configs.status.currentCursor,
-											configs.status.currentCursor
-										);
-									}
-								},
-								keydown(e) {
-									const event = e as KeyboardEvent;
-									const ref = event.target as HTMLInputElement;
-
-									if (ref) {
-										if (configs.status.selectAll) {
-											configs.status.selectAll = false;
-											value = undefined;
-											configs.input.password.value = undefined;
-											configs.status.currentCursor = 0;
-										} else {
-											const { selectionStart, selectionEnd } = ref;
-											if (
-												value &&
-												selectionStart !== null &&
-												selectionEnd !== null &&
-												value.slice(selectionStart, selectionEnd) === value
-											) {
-												value = undefined;
-												configs.input.password.value = undefined;
-												configs.status.currentCursor = 0;
-											}
-										}
-									}
-								},
-								async keyup(e, data) {
-									if (!(data?.node instanceof HTMLInputElement)) return;
-									const event = e as KeyboardEvent;
-									let key = event.key;
-									const fnKeys = [
-										'delete',
-										'backspace',
-										'control',
-										'alt',
-										'shift',
-										'arrowup',
-										'arrowdown',
-										'arrowleft',
-										'arrowright',
-										'enter',
-										'escape',
-										'tab'
-									];
-									if (!fnKeys.includes(key.toLowerCase())) {
-										if (event.ctrlKey === true && key == 'v') {
-											let clipboardText;
-											try {
-												clipboardText = await navigator.clipboard.readText();
-											} catch (e) {
-												clipboardText = localStorage.getItem('clipboard');
-												if (clipboardText) {
-													clipboardText = JSON.parse(clipboardText) as { [k: string]: string };
-													const lastTime = Object.keys(clipboardText).sort(
-														(a, b) => parseFloat(b) - parseFloat(a)
-													)[0];
-													clipboardText = clipboardText[lastTime];
-												}
-											}
-											if (clipboardText) key = clipboardText;
-										}
-
-										if (!value) {
-											value = key;
-										} else {
-											const currentCursor = configs.status.currentCursor ?? value.length;
-											value =
-												value.slice(0, currentCursor) +
-												key +
-												value.slice(currentCursor, value.length);
-										}
-										if (!configs.status.currentCursor) configs.status.currentCursor = 1;
-										configs.status.currentCursor += 1;
-									} else if (
-										fnKeys.includes(key.toLowerCase()) &&
-										event.altKey === false &&
-										event.ctrlKey === false &&
-										event.shiftKey == false
-									) {
-										if (configs.status.currentCursor === undefined)
-											configs.status.currentCursor = 1;
-										if (
-											key.toLowerCase() == 'backspace' &&
-											value &&
-											configs.status.currentCursor &&
-											configs.status.currentCursor > 0
-										) {
-											const currentCursor = configs.status.currentCursor ?? value.length;
-											value =
-												value.slice(0, currentCursor - 1) +
-												value.slice(currentCursor, value.length);
-											configs.status.currentCursor -= 1;
-										}
-										if (['arrowleft', 'arrowright'].includes(key.toLowerCase()) && value) {
-											configs.status.currentCursor = data.node.selectionStart ?? 0;
-										}
-										if ('arrowdown' == key.toLowerCase()) {
-											configs.status.currentCursor = 0;
-										}
-										if ('arrowup' == key.toLowerCase() && value) {
-											configs.status.currentCursor = value.length;
-										}
-										if ('delete' == key.toLowerCase() && value) {
-											value =
-												value.slice(0, configs.status.currentCursor) +
-												value.slice(configs.status.currentCursor, value.length - 1);
-										}
-									}
-								}
-							}
-						},
 						...(createDefaultInputEvents(
 							untrack(() => value),
 							configs,
@@ -1313,8 +1149,8 @@
 		</div>
 	{:else if configs.type == 'password'}
 		<input
-			type="text"
-			bind:value={configs.input.password.value}
+			type={configs.input.password.showPassword ? 'text' : 'password'}
+			bind:value
 			bind:this={configs.input.password.ref}
 			class={configs.input.password.style}
 			{@attach handleEvents(configs.input.password.event)}

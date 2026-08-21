@@ -71,23 +71,23 @@ export default defineConfig({
 		// Safari 15 = WebKit 15 → target safari15
 		target: ['es2020', 'safari15']
 	},
-	// server: {
-	// 	https: {
-	// 		cert: fs.readFileSync('./phuongdomega.test.pem'),
-	// 		key: fs.readFileSync('./phuongdomega.test-key.pem')
-	// 	},
-	// 	host: '0.0.0.0', // cho phép truy cập từ thiết bị khác trong LAN,
-	// 	port: 3000,
-	// 	hmr: {
-	// 		host: 'phuongdomega.test',
-	// 		port: 3000,
-	// 		protocol: 'wss' // Sử dụng wss vì bạn chạy HTTPS
-	// 	}
-	// }
 	server: {
 		https: {
-			key: fs.readFileSync('localhost-key.pem'),
-			cert: fs.readFileSync('localhost.pem')
+			cert: fs.readFileSync('./192-168-2-30.sslip.io.pem'),
+			key: fs.readFileSync('./192-168-2-30.sslip.io-key.pem')
+		},
+		host: '0.0.0.0', // cho phép truy cập từ thiết bị khác trong LAN,
+		port: 3000,
+		hmr: {
+			host: 'phuongdomega.test',
+			port: 3000,
+			protocol: 'wss' // Sử dụng wss vì bạn chạy HTTPS
 		}
 	}
+	// server: {
+	// 	https: {
+	// 		key: fs.readFileSync('localhost-key.pem'),
+	// 		cert: fs.readFileSync('localhost.pem')
+	// 	}
+	// }
 });

@@ -18,8 +18,8 @@ import {
 const cb = couchbase();
 
 // ===== Client cho cluster DATA =====
-export const cbData = (collectionName: string) =>
-	cb.dataApi({
+export const cbData = (collectionName: string) => {
+	return cb.dataApi({
 		clusterId: cb_clusterId,
 		username: cb_username,
 		password: cb_password,
@@ -27,6 +27,7 @@ export const cbData = (collectionName: string) =>
 		scopeName: cb_scopeName,
 		collectionName
 	});
+};
 
 // ===== Client cho cluster VAULT — dùng credential HOÀN TOÀN KHÁC =====
 export const cbVault = (collectionName: string) =>

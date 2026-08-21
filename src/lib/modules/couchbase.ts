@@ -179,11 +179,25 @@ interface DocumentResponse {
 	};
 	message?: string;
 }
+interface FtsSearchResult {
+	status: number;
+	ok: boolean;
+	hits?: {
+		id: string;
+		score: number;
+		fields?: Record<string, any>;
+		fragments?: Record<string, string[]>;
+	}[];
+	total?: number;
+	took?: string;
+	message?: string;
+}
 const managementData = (data: { apiKeySecret: string; organizationId: string }) => {
 	const { apiKeySecret, organizationId } = data;
 	const baseUrl = 'https://cloudapi.cloud.couchbase.com';
 	const headers = {
-		authorization: `Bearer ${apiKeySecret}`
+		authorization: `Bearer ${apiKeySecret}`,
+		'content-type': 'application/json'
 	};
 	return {
 		organizations: {
@@ -191,9 +205,14 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 				try {
 					const res = await fetch(`${baseUrl}/v4/organizations/${organizationId}`, { headers });
 					if (res.ok) {
-						return res.json();
+						const jsonData = await res.json();
+
+						return {
+							data: jsonData,
+							ok: true
+						};
 					}
-					throw new Error(`Get organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Organizations.get] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -202,9 +221,13 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 				try {
 					const res = await fetch(`${baseUrl}/v4/organizations`, { headers });
 					if (res.ok) {
-						return res.json();
+						const jsonData = await res.json();
+						return {
+							data: jsonData['data'],
+							ok: true
+						};
 					}
-					throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Organizations.list] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -220,9 +243,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						})
 					});
 					if (res.ok) {
-						return res.json();
+						return { ok: true };
 					}
-					throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Organizations.updateConfiguration] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -241,9 +264,13 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						})
 					});
 					if (res.ok) {
-						return res.json();
+						const jsonData = await res.json();
+						return {
+							data: jsonData.id,
+							ok: true
+						};
 					}
-					throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Projects.create] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -254,9 +281,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						headers
 					});
 					if (res.ok) {
-						return res.json();
+						const jsonData = await res.json();
+						return { data: jsonData, ok: true };
 					}
-					throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Projects.list] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -271,9 +299,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 					);
 					if (res.ok) {
-						return res.json();
+						const jsonData = await res.json();
+						return { data: jsonData, ok: true };
 					}
-					throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Projects.get] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -293,9 +322,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 					);
 					if (res.ok) {
-						return res.json();
+						return { ok: true };
 					}
-					throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Projects.update] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -311,9 +340,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 					);
 					if (res.ok) {
-						return res.json();
+						return { ok: true };
 					}
-					throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+					throw new Error(`[Projects.delete] ${res.status} ${res.statusText}`);
 				} catch (e) {
 					throw new Error(JSON.stringify(e));
 				}
@@ -353,9 +382,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData.id, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -369,9 +399,13 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return {
+								...jsonData,
+								ok: true
+							};
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -386,9 +420,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -419,9 +454,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.update] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -437,9 +472,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -454,9 +489,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.getCapacityStatistics] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -475,9 +511,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.turnOn] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -493,9 +529,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Clusters.turnOff] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -555,9 +591,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData.id, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Buckets.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -571,9 +608,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { ...jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Buckets.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -589,9 +627,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Buckets.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -635,9 +674,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Buckets.update] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -653,9 +692,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Buckets.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -679,9 +718,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Scopes.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -695,9 +734,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Scopes.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -712,9 +752,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[scopes.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -730,9 +771,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Scopes.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -751,7 +792,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					try {
 						const { name, maxTTL } = data;
 						const res = await fetch(
-							`${baseUrl}/v4/organizations/${organizationId}/projects/${projectId}/clusters/${clusterId}/buckets/${bucketId}/scopes/${scopeName}`,
+							`${baseUrl}/v4/organizations/${organizationId}/projects/${projectId}/clusters/${clusterId}/buckets/${bucketId}/scopes/${scopeName}/collections`,
 							{
 								headers,
 								method: 'post',
@@ -762,9 +803,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Collections.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -778,9 +819,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { ...jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Collections.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -795,9 +837,10 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							const jsonData = await res.json();
+							return { data: jsonData, ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Collections.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -816,9 +859,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Collections.update] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -834,9 +877,9 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							return res.json();
+							return { ok: true };
 						}
-						throw new Error(`List organizations failed: ${res.status} ${res.statusText}`);
+						throw new Error(`[Collections.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
 						throw new Error(JSON.stringify(e));
 					}
@@ -1173,6 +1216,123 @@ const dataApi = (data: {
 							},
 							...(res.ok && res.data ? { data: res.data.results } : {})
 						};
+					}
+				},
+				/**
+				 * Returns the number of documents indexed in the specified Search index.
+				 * @indexName The name of the Search index definition. You must use the fully qualified name for the index, which includes the bucket and scope.
+				 */
+				search: {
+					async getCount(data: { indexName: string }) {
+						try {
+							const { indexName } = data;
+							const url = `https://${clusterId}.data.cloud.couchbase.com/_p/fts/api/index/${indexName}/count`;
+							const res = await fetch(url, { headers });
+
+							if (res.ok) {
+								const jsonData = await res.json();
+								return {
+									status: res.status,
+									get ok() {
+										return res.status < 400;
+									},
+									count: jsonData.count
+								};
+							}
+
+							const errorBody = await res.text();
+							throw new Error(
+								`[Search.getCount] ${res.status} ${res.statusText} — Body: ${errorBody}`
+							);
+						} catch (e) {
+							throw normalizeError(e, 'couchbase.search.getCount');
+						}
+					},
+					/**
+					 * Thực thi truy vấn Full Text Search trên 1 Search Index đã định nghĩa (scoped tới bucket/scope hiện tại).
+					 * @indexName Tên index (không cần fully-qualified — endpoint đã scoped theo bucket/scope trong URL)
+					 * @query FTS query object theo chuẩn Couchbase — có thể là match query, query string, boolean query...
+					 *        Xem: https://docs.couchbase.com/server/current/fts/fts-query-string-syntax.html
+					 * @size Số kết quả tối đa trả về (mặc định 10)
+					 * @from Vị trí bắt đầu — dùng cho phân trang
+					 * @fields Danh sách field muốn trả về trong "fields" của mỗi hit (mặc định chỉ trả id + score)
+					 * @sort Cách sắp xếp — mặc định theo "-_score" (điểm liên quan giảm dần)
+					 * @highlight Bật highlight đoạn text khớp — hữu ích cho UI hiển thị kết quả tìm kiếm
+					 */
+					async searchIndex(data: {
+						indexName: string;
+						query: Record<string, any>;
+						size?: number;
+						from?: number;
+						fields?: string[];
+						sort?: (string | Record<string, any>)[];
+						highlight?: {
+							style?: 'html' | 'ansi';
+							fields?: string[];
+						};
+						facets?: Record<string, any>;
+						explain?: boolean;
+					}): Promise<FtsSearchResult> {
+						try {
+							const {
+								indexName,
+								query,
+								size = 10,
+								from = 0,
+								fields,
+								sort,
+								highlight,
+								facets,
+								explain = false
+							} = data;
+
+							if (!indexName) throw new Error('indexName is required');
+							if (!query) throw new Error('query is required');
+
+							const safeSize = Number.isInteger(size) && size > 0 ? Math.min(size, 1000) : 10;
+							const safeFrom = Number.isInteger(from) && from >= 0 ? from : 0;
+
+							const url = `https://${clusterId}.data.cloud.couchbase.com/_p/fts/api/bucket/${bucketName}/scope/${scopeName}/index/${indexName}/query`;
+
+							const res = await fetch(url, {
+								method: 'post',
+								headers,
+								body: JSON.stringify({
+									query,
+									size: safeSize,
+									from: safeFrom,
+									...(fields ? { fields } : {}),
+									...(sort ? { sort } : {}),
+									...(highlight ? { highlight } : {}),
+									...(facets ? { facets } : {}),
+									explain
+								})
+							});
+
+							if (res.ok) {
+								const jsonData = await res.json();
+								return {
+									status: res.status,
+									get ok() {
+										return res.status < 400;
+									},
+									hits: jsonData.hits ?? [],
+									total: jsonData.total_hits ?? 0,
+									took: jsonData.took
+								};
+							}
+
+							const errorBody = await res.text();
+							return {
+								status: res.status,
+								get ok() {
+									return false;
+								},
+								message: `${res.status} ${res.statusText} — Body: ${errorBody}`
+							};
+						} catch (e) {
+							throw normalizeError(e, 'couchbase.search.searchIndex');
+						}
 					}
 				}
 			};
