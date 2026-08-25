@@ -9,57 +9,128 @@
 		Label,
 		TextField
 	} from '$components/form';
-	import { Modal } from '$components/modal';
+	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
-	import { fly } from 'svelte/transition';
+	import { onMount } from 'svelte';
 	import { pageContents } from '.';
-	import { omit } from 'es-toolkit/object';
+	import type { LoginConfigs, LoginRequestBody } from './_interface';
+	import { isEqual } from 'es-toolkit';
+
+	let configs: LoginConfigs = $state({
+		username: {},
+		password: {},
+		remember: {}
+	});
+	let loading = $state(false);
+	let status = $state({
+		get disabled() {
+			const currentSubmit = {
+				username: configs.username.value,
+				password: configs.password.value,
+				remember: configs.remember.checked
+			};
+			return (
+				loading ||
+				isEqual(currentSubmit, previousSubmited) ||
+				!configs.username.value ||
+				!configs.password.value
+			);
+		}
+	});
+	let previousSubmited: undefined | { username: string; password: string; remember?: boolean } =
+		undefined;
+	let encryptionKeys:
+		| undefined
+		| {
+				public: CryptoKey;
+				private: CryptoKey;
+		  };
+
+	async function handleRegistration() {
+		if (!configs.username.value || !configs.password.value || !encryptionKeys) return;
+		loading = true;
+		const requestBody: LoginRequestBody = {
+			username: configs.username.value,
+			password: configs.password.value,
+			remember: configs.remember.checked,
+			publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki')
+		};
+		const response = await encryption.fetchSecure(
+			'/api/auth/login',
+			{
+				method: 'post',
+				body: requestBody
+			},
+			{ privateKey: encryptionKeys.private, publicKey: encryptionKeys.public }
+		);
+		console.log(response);
+		loading = false;
+		previousSubmited = {
+			...requestBody
+		};
+		client.browser?.toasts?.create({
+			title:
+				(response.ok
+					? pageContents.responseOk[client.browser.language ?? 'en']
+					: pageContents.responseFail[client.browser.language ?? 'en']) ?? '',
+			description: response.message ? response.message[client.browser.language ?? 'en'] : undefined,
+			duration: 'infinite',
+			color: response.ok ? 'success' : 'error'
+		});
+	}
+	onMount(async () => {
+		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
+		encryptionKeys = { private: privateKey, public: publicKey };
+	});
 </script>
 
 <div class="login-root">
 	<Form>
 		<TextField name="username" required>
 			<Label>Username</Label>
-			<Input />
+			<Input bind:value={configs.username.value} />
 			<FieldMessages />
 		</TextField>
 		<TextField name="password" required>
 			<Label>Password</Label>
-			<Input loading type="password" />
+			<Input loading type="password" bind:value={configs.password.value} />
 			<Description>Must be at least 8 characters with 1 uppercase and 1 number</Description>
 			<FieldMessages />
 		</TextField>
-		<Checkbox>
+		<Checkbox bind:checked={configs.remember.checked}>
 			<Label>Remember me</Label>
 		</Checkbox>
 		<div class="flex gap-1">
 			<Button
 				class="capitalize"
 				color="success"
-				type="submit"
+				type="button"
+				{loading}
+				disabled={status.disabled}
 				onClick={async () => {
-					const publicKeyOptions = {
-						challenge: new Uint8Array(32), // random, từ server
-						rp: { name: 'MyApp' },
-						user: {
-							id: new TextEncoder().encode('userId'),
-							name: 'user@example.com',
-							displayName: 'Alpha'
-						},
-						pubKeyCredParams: [{ alg: -7, type: 'public-key' }], // ES256
-						authenticatorSelection: {
-							authenticatorAttachment: 'platform', // bắt buộc dùng FaceID/TouchID, không cho USB key
-							userVerification: 'required'
-						}
-					};
-					try {
-						const credential = await navigator.credentials.create({
-							publicKey: publicKeyOptions
-						});
-						alert(JSON.stringify(credential));
-					} catch (e) {
-						alert(e);
-					}
+					await handleRegistration();
+					// const publicKeyOptions = {
+					// 	challenge: new Uint8Array(32), // random, từ server
+					// 	rp: { name: 'MyApp' },
+					// 	user: {
+					// 		id: new TextEncoder().encode('userId'),
+					// 		name: 'user@example.com',
+					// 		displayName: 'Alpha'
+					// 	},
+					// 	pubKeyCredParams: [{ alg: -7, type: 'public-key' }], // ES256
+					// 	authenticatorSelection: {
+					// 		authenticatorAttachment: 'platform', // bắt buộc dùng FaceID/TouchID, không cho USB key
+					// 		userVerification: 'required'
+					// 	}
+					// };
+					// try {
+					// 	const credential = await navigator.credentials.create({
+					// 		publicKey: publicKeyOptions
+					// 	});
+					// 	alert(JSON.stringify(credential));
+					// } catch (e) {
+					// 	alert(e);
+					// }
 				}}>{pageContents.login[client.browser?.language ?? 'en']}</Button
 			>
 

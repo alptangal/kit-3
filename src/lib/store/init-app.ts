@@ -22,6 +22,5 @@ export async function initApp(): Promise<void> {
 
 	// 4. Seed dữ liệu catalog mặc định (idempotent)
 	await seedAllCatalogData();
-
 	console.log('=== App initialization completed ===');
 }

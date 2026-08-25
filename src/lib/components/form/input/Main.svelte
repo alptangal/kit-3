@@ -1113,7 +1113,7 @@
 			{#if ['text', 'number', 'email'].includes(configs.type)}
 				{value}
 			{:else if configs.type == 'password'}
-				{configs.input.password.showPassword ? value : configs.input.password.value}
+				{configs.input.password.showPassword ? value : [...value].map((_) => '●').join('')}
 			{/if}
 		</div>
 	{:else if configs.type == 'email'}

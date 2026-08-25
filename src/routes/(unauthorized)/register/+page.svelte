@@ -15,12 +15,11 @@
 	import { pageContents } from '.';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { Modal } from '$components/modal';
-	import { Container } from '$components/layout';
 	import type { BasicProps } from '$components/interface';
-	import { fly } from 'svelte/transition';
 	import { encryption } from '$modules/encryption';
-	import { startRegistration } from '@simplewebauthn/browser';
 	import { goto } from '$app/navigation';
+	import { iconify } from '$assets/icons/iconify';
+	import * as uuid from 'uuid';
 
 	let userMeta: { [k: string]: { value?: string; validation?: InputProps['validation'] } } = $state(
 		{
@@ -121,11 +120,6 @@
 		registerState.loading = true;
 
 		try {
-			const authMethod = await detectAuthMethod();
-			const name = [userMeta.firstname.value, userMeta.midname.value, userMeta.lastname.value]
-				.filter(Boolean)
-				.join(' ');
-			// ---------- BƯỚC 1: register-init ----------
 			const initRes = await encryption.fetchSecure('/api/auth/register', {
 				body: {
 					action: 'register-init',
@@ -133,8 +127,7 @@
 					firstname: userMeta.firstname.value,
 					midname: userMeta.midname.value,
 					lastname: userMeta.lastname.value,
-					password: userMeta.password.value,
-					authMethod
+					password: userMeta.password.value
 				}
 			});
 
@@ -142,42 +135,10 @@
 				registerState.error = initRes.message ?? 'Registration broken response';
 				return;
 			}
-			// ---------- Nhánh password: xong luôn ----------
 			if (initRes.data.authMethod === 'password') {
 				await goto('/login?registered=1');
 				return;
 			}
-
-			// ---------- Nhánh webauthn: cần round-trip ----------
-			let attestationResponse;
-			console.log(
-				'[DEBUG] webauthnOptions:',
-				JSON.stringify(initRes.data.webauthnOptions, null, 2)
-			);
-			try {
-				attestationResponse = await startRegistration({
-					optionsJSON: initRes.data.webauthnOptions
-				});
-			} catch (err) {
-				// User huỷ thao tác vân tay/Face ID, hoặc thiết bị từ chối
-				registerState.error =
-					err instanceof Error ? `WebAuthn cancelled: ${err.message}` : 'WebAuthn cancelled';
-				return;
-			}
-			const verifyRes = await encryption.fetchSecure('/api/auth/register', {
-				body: {
-					action: 'register-verify',
-					registrationId: initRes.data.registrationId,
-					webauthnResponse: attestationResponse
-				}
-			});
-
-			if (!verifyRes.ok) {
-				registerState.error = verifyRes.message ?? 'WebAuthn verification failed';
-				return;
-			}
-
-			await goto('/login?registered=1');
 		} catch (err) {
 			registerState.error = err instanceof Error ? err.message : 'Unexpected error';
 		} finally {

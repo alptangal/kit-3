@@ -950,15 +950,23 @@ const dataApi = (data: {
 			async update(data: {
 				documentKey: string;
 				content: { [k: string]: any };
+				overwriteAll?: boolean;
 			}): Promise<DocumentResponse> {
 				try {
-					const { documentKey, content } = data;
+					const { documentKey, content, overwriteAll = false } = data;
+					let currentDocument = undefined;
+					if (!overwriteAll) {
+						const response = await this.get({ documentKey });
+						if (response.ok) {
+							currentDocument = response.data;
+						}
+					}
 					const res = await fetch(
 						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${documentKey}`,
 						{
 							headers,
 							method: 'put',
-							body: JSON.stringify(content)
+							body: JSON.stringify({ ...(currentDocument ?? {}), ...content })
 						}
 					);
 					return {

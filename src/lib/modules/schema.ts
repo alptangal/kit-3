@@ -1,7 +1,9 @@
 export const collectionSchemas = {
 	users: {
 		fields: {
-			name: { type: 'string', searchable: true, sortable: true, selectable: true },
+			firstname: { type: 'string', searchable: true, sortable: true, selectable: true },
+			midname: { type: 'string', searchable: true, sortable: true, selectable: true },
+			lastname: { type: 'string', searchable: true, sortable: true, selectable: true },
 			description: { type: 'string', searchable: true, sortable: false, selectable: true },
 
 			// Tham chiếu tới name_roles.name — 1 user CHỈ có 1 role (owner/manager/staff/customer)
@@ -30,6 +32,7 @@ export const collectionSchemas = {
 			mfaEnabled: { type: 'boolean', searchable: true, sortable: false, selectable: true },
 			lastLoginAt: { type: 'date', searchable: false, sortable: true, selectable: true },
 			lastLoginIp: { type: 'string', searchable: false, sortable: false, selectable: false },
+			remember: { type: 'boolean', searchable: false, sortable: false, selectable: false },
 
 			// Chỉ áp dụng cho role 'customer' — nhân viên/quản lý không cần các field này
 			customerTierEncrypted: {
@@ -538,6 +541,11 @@ export const collectionSchemas = {
 
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
 			deletedAt: { type: 'date', searchable: false, sortable: false, selectable: false }
+		}
+	},
+	system: {
+		fields: {
+			initApp: { type: 'object', searchable: true, sortable: false, selectable: true }
 		}
 	}
 } as const;

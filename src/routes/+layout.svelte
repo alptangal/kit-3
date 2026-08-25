@@ -5,20 +5,12 @@
 	import '../app.css';
 	import { Container, Footer, Header } from '$components/layout';
 	import { browser } from '$app/environment';
-	import { Button, Tooltip } from '$components/element/index.js';
-	import { iconify } from '$assets/icons/iconify.js';
-	import Icon from '@iconify/svelte';
 	import { detectBrowserType, updateResizeWindow, watchClipboard } from '$modules';
-	import { Checkbox, Description, Form, Label, TextField } from '$components/form/index.js';
-	import { getFormContext } from '$components/form/form/index.js';
 	import type { Theme } from '$interfaces/basic.js';
 	import { beforeNavigate, onNavigate } from '$app/navigation';
 	import type { BasicProps } from '$components/interface.js';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { handleEvents } from '$modules/_attachments.js';
-	import { page } from '$app/state';
-	import { encryption } from '$modules/encryption.js';
-
+	import { Toast, ToastWrapper } from '$components/element';
 	let { data, children } = $props();
 
 	let configs = $state({
@@ -173,6 +165,7 @@
 >
 	{@render children()}
 </Container>
+<ToastWrapper />
 
 <style lang="scss">
 	@use '$assets/styles/basic.scss';

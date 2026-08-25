@@ -1,11 +1,14 @@
+import type { ButtonProps } from '$components/element/button/_interface';
+import type { ToastProps } from '$components/element/toast/_interface';
 import type { TooltipConfigs } from '$components/element/tooltip/_interface';
-import type { Size } from '$components/interface';
+import type { Color, Size, TimeUnits } from '$components/interface';
 import type { KeyboardNumberConfigs } from '$components/keyboard/number/_interface';
 import type { Timezone } from './timezone';
 
 export type AuthMethod = 'webauthn' | 'password';
 export interface ServerResponse {
-	message?: string;
+	ok: boolean;
+	message?: TranslateContent;
 	data?: { [k: string]: any };
 }
 interface VisualKeyboardMeta {
@@ -34,7 +37,7 @@ export interface MetaBrowser {
 	/**
 	 * Duration in miliseconds
 	 */
-	duration?: `${number}s` | `${number}ms` | number;
+	duration?: TimeUnits;
 	/**
 	 * delay in miliseconds
 	 */
@@ -73,6 +76,40 @@ export interface MetaBrowser {
 		number: KeyboardNumberConfigs;
 	};
 	layers?: Map<HTMLElement, number | 'root'>;
+	toasts?: {
+		ref?: HTMLElement;
+		children: Map<
+			string,
+			{
+				title: string;
+				description?: string;
+				color?: Color;
+				indicator?: string;
+				disabled?: boolean;
+				showCloseButton?: boolean;
+				action?: ButtonProps;
+				duration?: TimeUnits | 'infinite';
+				id?: string;
+				ref?: HTMLElement;
+				offset?: number;
+				position?: ToastProps['position'];
+			}
+		>;
+		create: (data: {
+			id?: string;
+			title: string;
+			description?: string;
+			color?: Color;
+			indicator?: string;
+			disabled?: boolean;
+			showCloseButton?: boolean;
+			action?: ButtonProps;
+			duration?: TimeUnits | 'infinite';
+			position?: ToastProps['position'];
+			offset?: number;
+		}) => void;
+		remove: (key: string) => void;
+	};
 }
 export interface MetaSystem {
 	publicKey?: CryptoKey;

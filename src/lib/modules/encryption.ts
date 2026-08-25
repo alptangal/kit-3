@@ -388,7 +388,7 @@ const fetchSecure = async (
 	const encryptedResponse = await res.json();
 	const decryptedText = await decryptWithPrivateKeyHybrid(sessionPrivateKey, encryptedResponse);
 	if (decryptedText) {
-		return { ...JSON.parse(decryptedText) };
+		return { ...JSON.parse(decryptedText), ok: res.ok };
 	}
 	throw new Error('Encryption.decryptedText failed');
 };
@@ -413,7 +413,7 @@ async function hmacBlindIndex(secretKey: Uint8Array, value: string): Promise<str
 	);
 	return bufToBase64(sig);
 }
-export async function setupIndexKey(vaultPassword: string) {
+async function setupIndexKey(vaultPassword: string) {
 	// DEK ở đây CHÍNH LÀ Index Key — dùng thẳng, không mã hoá thêm gì nữa
 	const { dek, storageRecord } = await encryption.setupVault(vaultPassword);
 	const rawIndexKey = await crypto.subtle.exportKey('raw', dek);
@@ -424,13 +424,47 @@ export async function setupIndexKey(vaultPassword: string) {
 	};
 }
 
-export async function unlockIndexKey(
+async function unlockIndexKey(
 	vaultPassword: string,
 	storageRecord: { saltB64: string; dekIvB64: string; wrappedDekB64: string }
 ) {
 	const dek = await encryption.unlockVault(vaultPassword, storageRecord);
 	const raw = await crypto.subtle.exportKey('raw', dek);
 	return new Uint8Array(raw);
+}
+
+type JsonPrimitive = string | number | boolean | null;
+
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+function stableStringify(value: JsonValue): string {
+	if (value === null || typeof value !== 'object') {
+		return JSON.stringify(value) ?? 'null';
+	}
+
+	if (Array.isArray(value)) {
+		return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+	}
+
+	const keys = Object.keys(value).sort();
+
+	return `{${keys
+		.map((key) => {
+			return `${JSON.stringify(key)}:${stableStringify(value[key])}`;
+		})
+		.join(',')}}`;
+}
+
+async function getDataHash(data: JsonValue): Promise<string> {
+	const canonical = stableStringify(data);
+
+	const encoded = new TextEncoder().encode(canonical);
+
+	const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+
+	const hashArray = Array.from(new Uint8Array(hashBuffer));
+
+	return hashArray.map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 // ============ Export ============
 
@@ -452,5 +486,6 @@ export const encryption = {
 	fetchSecure,
 	hmacBlindIndex,
 	setupIndexKey,
-	unlockIndexKey
+	unlockIndexKey,
+	getDataHash
 };

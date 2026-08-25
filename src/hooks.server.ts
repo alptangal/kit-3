@@ -11,6 +11,7 @@ declare global {
 
 if (!globalThis.__appInitialized) {
 	globalThis.__appInitialized = true;
+	await initApp();
 }
 
 async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
@@ -18,7 +19,6 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	await initApp();
 	// Defensive check — nếu vì lý do gì đó vault chưa sẵn sàng (init lỗi/đang chạy),
 	// từ chối sớm thay vì để lỗi mơ hồ xảy ra sâu bên trong từng route
 	if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {

@@ -1,5 +1,9 @@
 // $modules/couchbase/seed-data.ts
-import { cbData } from './clients';
+import { email_owner, password_owner, username_owner } from '$env/static/private';
+import { encryption } from '$modules/encryption';
+import { collectionSchemas } from '$modules/schema';
+import { systemVault } from '$store/initSystemVault';
+import { cbData, cbData } from './clients';
 
 const cbRoles = cbData('name_roles');
 const cbPermissions = cbData('permissions');
@@ -161,10 +165,97 @@ export async function seedUserStatus(): Promise<void> {
 }
 
 export async function seedAllCatalogData(): Promise<void> {
-	console.log('[seed] Starting catalog seed...');
-	await seedRoles();
-	await seedPermissions();
-	await seedDetailRoles();
-	await seedUserStatus();
-	console.log('[seed] Done seeding catalog data');
+	const collectionSchemasHashed = await encryption.getDataHash(collectionSchemas);
+	const res = await cbData('system').document.get({ documentKey: 'initApp' });
+	if (res.status == 404 || res.data?.collectionSchemasHashed != collectionSchemasHashed) {
+		console.log('[seed] Starting catalog seed...');
+		await seedRoles();
+		await seedPermissions();
+		await seedDetailRoles();
+		await seedUserStatus();
+		await createAdminAccount({
+			username: username_owner,
+			password: password_owner,
+			email: email_owner
+		});
+		if (res.status == 404) {
+			await cbData('system').document.create({
+				documentKey: 'initApp',
+				content: {
+					status: 'success',
+					collectionSchemasHashed,
+					createdAt: new Date().toISOString()
+				}
+			});
+		} else {
+			await cbData('system').document.update({
+				documentKey: 'initApp',
+				content: {
+					status: 'success',
+					collectionSchemasHashed,
+					createdAt: new Date().toISOString()
+				}
+			});
+		}
+
+		console.log('[seed] Done seeding catalog data');
+	} else {
+		console.log('[seed] Done created catalog data');
+	}
+}
+export async function createAdminAccount(data: {
+	username: string;
+	password: string;
+	email: string;
+}) {
+	const collectionName = 'users';
+	const { username, email, password } = data;
+	const documentKey = `${collectionName}-${username}`;
+	if (!systemVault.indexKey) return;
+	const cbUser = cbData(collectionName);
+	const normalizedEmail = email.trim().toLowerCase();
+	const emailBlindIndex = await encryption.hmacBlindIndex(systemVault.indexKey, normalizedEmail);
+	const existing = await cbUser.document.get({ documentKey });
+	if (existing.ok && existing.data) {
+		console.log(`[seed] "${collectionName}-administrator" already exists — skip`);
+		return;
+	}
+	const { dek, storageRecord } = await encryption.setupVault(password);
+	const emailEncrypted = await encryption.encryptData(dek, normalizedEmail);
+	const userDoc = {
+		firstname: 'Administrator',
+		lastname: null,
+		midname: null,
+		description: '',
+		statusId: 'status-active',
+		roleId: 'role-owner',
+
+		emailBlindIndex,
+		emailEncrypted,
+
+		vaultSaltB64: storageRecord.saltB64,
+		vaultDekIvB64: storageRecord.dekIvB64,
+		vaultWrappedDekB64: storageRecord.wrappedDekB64,
+
+		authMethod: 'password' as const,
+		webauthnCredentials: [],
+		webauthnUserHandle: null,
+
+		mfaEnabled: false,
+		lastLoginAt: null,
+		lastLoginIp: null,
+
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		deletedAt: null
+	};
+	const rs = await cbUser.document.create({
+		documentKey,
+		content: userDoc
+	});
+	if (rs.ok) {
+		console.log(`[seed] "${collectionName}-administrator" created succesful`);
+	} else {
+		console.log(`[seed] "${collectionName}-administrator" create failed`);
+	}
 }

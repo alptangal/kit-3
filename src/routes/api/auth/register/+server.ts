@@ -41,7 +41,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 			return json(enc, { status });
 		};
-		const { email, firstName, lastName, midName, password, username } = dataDecrypted;
+		const { email, firstname, lastname, midname, password, username } = dataDecrypted;
 
 		if (!email || !username || !password) {
 			return respond({ message: 'Missing field required' }, 400);
@@ -61,7 +61,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const existing = await cbUsers.query.document.search({
 			collectionName: 'users',
 			conditions: [{ fieldName: 'emailBlindIndex', keyword: emailBlindIndex, operator: 'EQUALS' }],
-			selectFields: ['name']
+			selectFields: ['username']
 		});
 		if (existing.ok && existing.data && existing.data.length > 0) {
 			return respond({ message: 'Email already registered' }, 409);
@@ -70,9 +70,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		const emailEncrypted = await encryption.encryptData(dek, normalizedEmail);
 
 		const userDoc = {
-			firstName,
-			lastName,
-			midName,
+			firstname,
+			lastname,
+			midname,
 			description: '',
 			status: 'not active',
 			role: 'user',

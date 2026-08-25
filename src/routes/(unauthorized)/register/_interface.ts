@@ -1,7 +1,7 @@
 export interface RegisterRequestBody {
-	firstName: string;
-	lastName: string;
-	midName: string;
+	firstname: string;
+	lastname: string;
+	midname: string;
 	username: string;
 	email: string;
 	password: string;
