@@ -13,6 +13,7 @@ import {
 	type SortableFieldOf,
 	type SelectableFieldOf
 } from './schema';
+import type { CollectionDocument } from '$interfaces/schemaTypes';
 
 // Helper dùng chung, thay thế mọi chỗ `throw new Error(JSON.stringify(e))`
 function normalizeError(e: unknown, context: string): Error {
@@ -888,13 +889,13 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 		}
 	};
 };
-const dataApi = (data: {
+const dataApi = <C extends CollectionName>(data: {
 	clusterId: string;
 	username: string;
 	password: string;
 	bucketName: string;
 	scopeName: string;
-	collectionName: string;
+	collectionName: C;
 }) => {
 	const { clusterId, username, password, bucketName, scopeName, collectionName } = data;
 	const headers = {
@@ -925,7 +926,7 @@ const dataApi = (data: {
 			},
 			async create(data: {
 				documentKey?: string;
-				content: { [k: string]: any };
+				content: CollectionDocument<C>;
 			}): Promise<DocumentResponse> {
 				try {
 					const { documentKey = randomUUID(), content } = data;

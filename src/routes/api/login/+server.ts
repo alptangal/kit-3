@@ -1,13 +1,19 @@
 import { encryption } from '$modules/encryption';
 import { systemVault } from '$store/initSystemVault';
 import { json, type RequestHandler } from '@sveltejs/kit';
-import type { LoginRequestBody } from '../../../(unauthorized)/login/_interface';
+import type { LoginRequestBody } from '../../(unauthorized)/login/_interface';
 import type { ServerResponse } from '$interfaces/basic';
 import { cbData } from '$modules/couchbase/clients';
+import { Users } from '$lib/server/db/users';
 
 const collectionName = 'users';
 const cbUsers = cbData(collectionName);
 export const POST: RequestHandler = async ({ request }) => {
+	const normalizedEmail = 'phuongdomega@atomicmail.io'.trim().toLowerCase();
+	const emailBlindIndex = await encryption.hmacBlindIndex(systemVault.indexKey, normalizedEmail);
+	const users = Users;
+	const user = await users.getBy({ emailBlindIndex });
+	console.log(user);
 	try {
 		if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {
 			throw new Error('System crash');

@@ -547,6 +547,70 @@ export const collectionSchemas = {
 		fields: {
 			initApp: { type: 'object', searchable: true, sortable: false, selectable: true }
 		}
+	},
+	refresh_tokens: {
+		fields: {
+			// ===== Khóa chính & Tham chiếu =====
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// Hash của refresh token (KHÔNG lưu token thô vì security)
+			// Token được hash trước khi lưu — so sánh hash khi verify
+			tokenHash: { type: 'string', searchable: true, sortable: false, selectable: false },
+
+			// ===== Metadata Token =====
+			// Family ID để detect token reuse attack (rotation chain)
+			// Nếu user submit token cũ → invalidate toàn bộ family
+			familyId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// Thế hệ token trong family này (theo dõi rotation)
+			generation: { type: 'number', searchable: false, sortable: false, selectable: true },
+
+			expiresAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			isRevoked: { type: 'boolean', searchable: true, sortable: false, selectable: true },
+			revokedAt: { type: 'date', searchable: false, sortable: true, selectable: true },
+			revokedReason: { type: 'string', searchable: true, sortable: false, selectable: true },
+			// 'logout' | 'password_changed' | 'suspicious_activity' | 'manual' | 'device_logout'
+
+			// ===== Device & Security Tracking =====
+			// Để detect unauthorized access từ device/IP khác
+			deviceId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			deviceNameEncrypted: { type: 'string', searchable: false, sortable: false, selectable: true },
+			deviceTypeEncrypted: { type: 'string', searchable: false, sortable: false, selectable: true },
+			// 'web' | 'mobile_ios' | 'mobile_android' | 'desktop'
+
+			ipAddress: { type: 'string', searchable: true, sortable: false, selectable: false }, // audit
+			userAgent: { type: 'string', searchable: false, sortable: false, selectable: false }, // audit
+
+			// ===== Sử dụng & Audit =====
+			lastUsedAt: { type: 'date', searchable: false, sortable: true, selectable: true },
+			usageCount: { type: 'number', searchable: false, sortable: false, selectable: true },
+
+			// Ghi lại mỗi lần refresh -> audit trail
+			refreshHistory: { type: 'array', searchable: false, sortable: false, selectable: true },
+			// [{ refreshedAt, ipAddress, newTokenHash, generation }]
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Optional: Token Rotation Audit (chi tiết hơn) =====
+	token_rotation_logs: {
+		fields: {
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			oldTokenHash: { type: 'string', searchable: false, sortable: false, selectable: false },
+			newTokenHash: { type: 'string', searchable: false, sortable: false, selectable: false },
+
+			action: { type: 'string', searchable: true, sortable: true, selectable: true },
+			// 'rotated' | 'revoked' | 'reuse_detected' | 'expired'
+
+			familyId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			generation: { type: 'number', searchable: false, sortable: false, selectable: true },
+
+			ipAddress: { type: 'string', searchable: true, sortable: false, selectable: false },
+			reason: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
 	}
 } as const;
 const collectionSchemasVault = {

@@ -120,7 +120,7 @@
 		registerState.loading = true;
 
 		try {
-			const initRes = await encryption.fetchSecure('/api/auth/register', {
+			const initRes = await encryption.fetchSecure('/api/register', {
 				body: {
 					action: 'register-init',
 					email: userMeta.email.value,

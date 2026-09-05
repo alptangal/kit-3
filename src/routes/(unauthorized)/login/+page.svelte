@@ -56,7 +56,7 @@
 			publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki')
 		};
 		const response = await encryption.fetchSecure(
-			'/api/auth/login',
+			'/api/login',
 			{
 				method: 'post',
 				body: requestBody
@@ -74,7 +74,6 @@
 					? pageContents.responseOk[client.browser.language ?? 'en']
 					: pageContents.responseFail[client.browser.language ?? 'en']) ?? '',
 			description: response.message ? response.message[client.browser.language ?? 'en'] : undefined,
-			duration: 'infinite',
 			color: response.ok ? 'success' : 'error'
 		});
 	}

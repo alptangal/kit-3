@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 import { cbData } from '$modules/couchbase/clients';
 import type { ServerResponse } from '$interfaces/basic';
 import { systemVault } from '$store/initSystemVault';
-import type { RegisterRequestBody } from '../../../(unauthorized)/register/_interface';
+import type { RegisterRequestBody } from '../../(unauthorized)/register/_interface';
 
 const cbUsers = cbData('users');
 
