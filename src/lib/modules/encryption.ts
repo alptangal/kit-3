@@ -208,7 +208,6 @@ async function changePassword(
 async function getServerPublicKeyB64(): Promise<string | undefined> {
 	try {
 		const res = await fetch('/api/encryption/public-key');
-		console.log(res);
 		if (res.ok) {
 			const js = await res.json();
 			return js['data']['publicKeyB64'];

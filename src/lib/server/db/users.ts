@@ -96,10 +96,60 @@ const adminMessages = {
 	queryFailed: {
 		vi: 'Lấy danh sách người dùng thất bại',
 		en: 'Failed to fetch user list'
+	} as TranslateContent,
+	// MỚI — hoàn thiện nghiệp vụ xoá mềm / khôi phục
+	userAlreadyDeleted: {
+		vi: 'Người dùng này đã bị xoá trước đó',
+		en: 'This user has already been deleted'
+	} as TranslateContent,
+	userNotDeleted: {
+		vi: 'Người dùng này chưa bị xoá nên không thể khôi phục',
+		en: 'This user has not been deleted, nothing to restore'
+	} as TranslateContent,
+	userRestored: {
+		vi: 'Khôi phục người dùng thành công',
+		en: 'User restored successfully'
 	} as TranslateContent
 };
 
 type UserDocument = User & { _id: string };
+
+// SỬA (mới): danh sách field "an toàn" được phép trả ra ngoài cho tầng quản trị
+// (list()/getById() của UserAdminService). KHÔNG bao gồm vaultSaltB64/vaultDekIvB64/
+// vaultWrappedDekB64 (khoá DEK đã wrap), các blind index (email/phone/usernameBlindIndex)
+// hay webauthn* — những field này không cần thiết cho UI quản trị, và không nên rời khỏi
+// tầng service nếu tránh được (giảm bề mặt rò rỉ vật liệu mã hoá dù đã được bảo vệ bằng KEK).
+const ADMIN_SAFE_FIELDS = [
+	'firstname',
+	'midname',
+	'lastname',
+	'description',
+	'roleId',
+	'statusId',
+	'emailEncrypted',
+	'phoneEncrypted',
+	'profileEncrypted',
+	'authMethod',
+	'mfaEnabled',
+	'lastLoginAt',
+	'remember',
+	'customerTierEncrypted',
+	'loyaltyPoints',
+	'branchId',
+	'createdAt',
+	'updatedAt',
+	'deletedAt'
+] as const;
+type AdminSafeField = (typeof ADMIN_SAFE_FIELDS)[number];
+export type SafeUserDocument = { _id: string } & Pick<User, AdminSafeField>;
+
+function sanitizeUserForAdmin(doc: UserDocument): SafeUserDocument {
+	const safe = { _id: doc._id } as SafeUserDocument;
+	for (const field of ADMIN_SAFE_FIELDS) {
+		(safe as Record<string, unknown>)[field] = doc[field];
+	}
+	return safe;
+}
 
 /**
  * Users — entity đại diện cho 1 user + các thao tác TỰ THÂN
@@ -459,7 +509,11 @@ export class UserAdminService {
 
 		const hierarchyDenied = await this.assertCanManageTarget(actor, target);
 		if (hierarchyDenied) return hierarchyDenied;
-
+		// SỬA (mới): không cho thao tác trạng thái lên 1 user đã bị xoá mềm — phải restore()
+		// trước. Tránh trường hợp "hồi sinh" 1 phần trạng thái của tài khoản đã xoá.
+		if (target.user.deletedAt) {
+			return { success: false, messages: adminMessages.userAlreadyDeleted };
+		}
 		const status = await cbUserStatus.document.get({ documentKey: statusId });
 		if (!status.ok || !status.data)
 			return { success: false, messages: adminMessages.statusNotFound };
@@ -496,7 +550,10 @@ export class UserAdminService {
 
 		const hierarchyDenied = await this.assertCanManageTarget(actor, target);
 		if (hierarchyDenied) return hierarchyDenied;
-
+		// SỬA (mới): như setStatus — không đổi role của user đã xoá mềm.
+		if (target.user.deletedAt) {
+			return { success: false, messages: adminMessages.userAlreadyDeleted };
+		}
 		const role = await cbRoles.document.get({ documentKey: roleId });
 		if (!role.ok || !role.data) return { success: false, messages: adminMessages.roleNotFound };
 
@@ -529,9 +586,25 @@ export class UserAdminService {
 		const target = await Users.getById(documentKey);
 		if (!target) return { success: false, messages: adminMessages.notFound };
 
-		const denied = await this.requirePermission(actor, 'users:manage', target.user.branchId);
+		// SỬA (lỗ hổng leo thang quyền — nghiêm trọng): delete() trước đây (1) không truyền
+		// `documentKey` làm targetUserId cho requirePermission (nên scope 'own_records' không
+		// hoạt động đúng), và (2) HOÀN TOÀN THIẾU assertCanManageTarget() — cùng lỗ hổng đã
+		// được vá ở setStatus/setRole nhưng chưa từng áp dụng ở đây. Hệ quả: 1 'manager' có
+		// scope 'own_branch' cho 'users:manage' có thể TỰ XOÁ CHÍNH MÌNH qua kênh admin, hoặc
+		// xoá 1 'manager'/'owner' khác cùng chi nhánh, miễn scope khớp branchId — bất kể cấp bậc.
+		const denied = await this.requirePermission(
+			actor,
+			'users:manage',
+			target.user.branchId,
+			documentKey
+		);
 		if (denied) return denied;
+		const hierarchyDenied = await this.assertCanManageTarget(actor, target);
+		if (hierarchyDenied) return hierarchyDenied;
 
+		if (target.user.deletedAt) {
+			return { success: false, messages: adminMessages.userAlreadyDeleted };
+		}
 		try {
 			const res = await cbUsers.document.update({
 				documentKey: documentKey,
@@ -545,16 +618,99 @@ export class UserAdminService {
 		} catch {
 			return { success: false, messages: adminMessages.deleteFailed };
 		}
+	} /**
+	 * MỚI: Khôi phục 1 user đã bị xoá mềm (undo của delete()/Users.delete()).
+	 * Áp dụng cùng quy tắc quyền/cấp bậc như delete() — actor không tự restore chính mình,
+	 * và chỉ restore được user có level thấp hơn mình.
+	 * Kiểm tra lại tính duy nhất của email/username trước khi khôi phục, vì trong lúc tài
+	 * khoản này bị xoá mềm, email/username của nó có thể đã được người khác đăng ký lại
+	 * (xem Users.onlyActive).
+	 */
+	static async restore(
+		actor: ActorContext,
+		documentKey: string
+	): Promise<{ success: boolean; messages: TranslateContent }> {
+		const target = await Users.getById(documentKey);
+		if (!target) return { success: false, messages: adminMessages.notFound };
+
+		if (!target.user.deletedAt) {
+			return { success: false, messages: adminMessages.userNotDeleted };
+		}
+
+		const denied = await this.requirePermission(
+			actor,
+			'users:manage',
+			target.user.branchId,
+			documentKey
+		);
+		if (denied) return denied;
+
+		const hierarchyDenied = await this.assertCanManageTarget(actor, target);
+		if (hierarchyDenied) return hierarchyDenied;
+
+		const [emailTaken, usernameTaken] = await Promise.all([
+			Users.isEmailTaken(target.user.emailBlindIndex, documentKey),
+			Users.isUsernameTaken(target.user.usernameBlindIndex, documentKey)
+		]);
+		if (emailTaken) return { success: false, messages: authMessages.emailTaken };
+		if (usernameTaken) return { success: false, messages: authMessages.usernameTaken };
+
+		try {
+			const res = await cbUsers.document.update({
+				documentKey,
+				content: {
+					deletedAt: null,
+					statusId: 'status-active',
+					updatedAt: new Date().toISOString()
+				} as Partial<User> as User
+			});
+			if (!res.ok) return { success: false, messages: adminMessages.updateFailed };
+			return { success: true, messages: adminMessages.userRestored };
+		} catch {
+			return { success: false, messages: adminMessages.updateFailed };
+		}
+	}
+	/**
+	 * MỚI: Xem chi tiết 1 user (tầng quản trị) — có kiểm tra quyền/scope, và LUÔN trả về
+	 * dữ liệu đã được lược bỏ các field nhạy cảm (xem ADMIN_SAFE_FIELDS/sanitizeUserForAdmin).
+	 */
+	static async getById(
+		actor: ActorContext,
+		documentKey: string
+	): Promise<
+		{ success: false; messages: TranslateContent } | { success: true; data: SafeUserDocument }
+	> {
+		const target = await Users.getById(documentKey);
+		if (!target) return { success: false, messages: adminMessages.notFound };
+
+		const denied = await this.requirePermission(
+			actor,
+			'users:manage',
+			target.user.branchId,
+			documentKey
+		);
+		if (denied) return denied;
+
+		return {
+			success: true,
+			data: sanitizeUserForAdmin({ ...target.user, _id: documentKey })
+		};
 	}
 	/**
 	 * SỬA: câu N1QL trước đây dùng `FROM \`users\`` (bare keyspace) — thiếu định danh
 	 * bucket/scope nên sẽ lỗi trên Couchbase Server thật (không giống `search()` trong
 	 * couchbase.ts vốn luôn build fully-qualified `bucket.scope.collection`).
 	 * Nay dùng `usersKeyspace` đã build sẵn ở đầu file.
+	 *
+	 * SỬA (mới):
+	 *  1) Mặc định loại trừ user đã xoá mềm khỏi kết quả (bật lại bằng `includeDeleted: true`
+	 *     cho các màn hình kiểu "thùng rác").
+	 *  2) Chỉ SELECT các field an toàn (ADMIN_SAFE_FIELDS) thay vì `SELECT *` — tránh kéo
+	 *     vaultSaltB64/vaultDekIvB64/vaultWrappedDekB64 và các blind index ra khỏi tầng service.
 	 */
 	static async list(
 		actor: ActorContext,
-		options: { page?: number; pageSize?: number } = {}
+		options: { page?: number; pageSize?: number; includeDeleted?: boolean } = {}
 	): Promise<
 		{ success: false; messages: TranslateContent } | ({ success: true } & AdminListResult)
 	> {
@@ -565,24 +721,31 @@ export class UserAdminService {
 		const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 20));
 		const offset = (page - 1) * pageSize;
 
-		let whereClause = '';
-		let args: string[] = [];
+		const conditions: string[] = [];
+		const args: string[] = [];
 
 		if (scope === 'all') {
-			whereClause = '';
+			// không lọc thêm theo phạm vi
 		} else if (scope === 'own_branch') {
 			if (!actor.branchId) {
 				return { success: false, messages: adminMessages.permissionDenied };
 			}
-			whereClause = 'WHERE branchId = $1';
-			args = [actor.branchId];
+			args.push(actor.branchId);
+			conditions.push(`branchId = $${args.length}`);
 		} else if (scope === 'own_records') {
-			whereClause = 'WHERE META().id = $1';
-			args = [actor.userId];
+			args.push(actor.userId);
+			conditions.push(`META().id = $${args.length}`);
 		} else {
 			// Scope không xác định — từ chối an toàn thay vì để lọt xuống "không lọc gì cả"
 			return { success: false, messages: adminMessages.permissionDenied };
 		}
+
+		if (!options.includeDeleted) {
+			conditions.push('(deletedAt IS NULL OR deletedAt IS MISSING)');
+		}
+
+		const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+		const selectClause = `META().id AS _id, ${ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')}`;
 
 		const [countRes, dataRes] = await Promise.all([
 			cbUsers.document.query({
@@ -591,7 +754,7 @@ export class UserAdminService {
 				readonly: true
 			}),
 			cbUsers.document.query({
-				statement: `SELECT META().id AS _id, * FROM ${usersKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
+				statement: `SELECT ${selectClause} FROM ${usersKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
 				args,
 				readonly: true
 			})
@@ -602,7 +765,7 @@ export class UserAdminService {
 		}
 
 		const total = Number(countRes.data?.results?.[0] ?? 0);
-		const items = (dataRes.data?.results ?? []) as UserDocument[];
+		const items = (dataRes.data?.results ?? []) as SafeUserDocument[];
 
 		return { success: true, items, total, page, pageSize };
 	}

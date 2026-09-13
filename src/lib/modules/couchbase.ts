@@ -1141,6 +1141,13 @@ const dataApi = <C extends CollectionName>(data: {
 				collection: {
 					async create(data: { name: string }): Promise<DocumentResponse> {
 						const { name } = data;
+						// SỬA: `name` được ghép thẳng vào câu DDL (CREATE COLLECTION) — N1QL không hỗ trợ
+						// tham số hoá tên định danh (identifier) như với giá trị dữ liệu, nên phải tự
+						// whitelist ký tự hợp lệ để tránh N1QL injection nếu `name` từng đến từ input
+						// ít tin cậy hơn dự kiến.
+						if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+							throw new Error(`Invalid collection name: "${name}"`);
+						}
 						const statement = `CREATE COLLECTION \`${bucketName}\`.\`${scopeName}\`.\`${name}\``;
 						const res = await document.query({ statement });
 						return {
@@ -1153,6 +1160,10 @@ const dataApi = <C extends CollectionName>(data: {
 					},
 					async drop(data: { name: string }): Promise<DocumentResponse> {
 						const { name } = data;
+						// SỬA: cùng lý do như create() ở trên.
+						if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+							throw new Error(`Invalid collection name: "${name}"`);
+						}
 						const statement = `DROP COLLECTION \`${bucketName}\`.\`${scopeName}\`.\`${name}\``;
 						const res = await document.query({ statement });
 						return {
@@ -1236,11 +1247,13 @@ const dataApi = <C extends CollectionName>(data: {
 						const whereClause = whereClauses.join(` ${logicalOperator} `);
 
 						// ----- ORDER BY clause -----
-						const orderClause = orderBy
-							? `ORDER BY \`${String(assertSortableField(collectionName, orderBy) && orderBy)}\` ${
-									orderDirection === 'ASC' ? 'ASC' : 'DESC'
-								}`
-							: '';
+						let orderClause = '';
+						if (orderBy) {
+							// Ném lỗi nếu field không được đánh dấu sortable trong schema — validate TRƯỚC khi
+							// build chuỗi câu lệnh, tách riêng khỏi việc build orderClause cho dễ đọc.
+							assertSortableField(collectionName, orderBy);
+							orderClause = `ORDER BY \`${String(orderBy)}\` ${orderDirection === 'ASC' ? 'ASC' : 'DESC'}`;
+						}
 
 						// ----- LIMIT / OFFSET (ép number, không đưa qua args để tránh injection) -----
 						const safeLimit =
