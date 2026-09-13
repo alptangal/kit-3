@@ -1,3 +1,5 @@
+//$modules/couchbase.ts
+
 import { randomUUID } from 'crypto';
 import {
 	assertOperatorAllowed,
@@ -7,13 +9,12 @@ import {
 	assertValueMatchesType,
 	toN1qlOperator,
 	type CollectionName,
-	type FieldOf,
 	type Operator,
 	type SearchableFieldOf,
 	type SortableFieldOf,
-	type SelectableFieldOf
+	type SelectableFieldOf,
+	type InferCollection
 } from './schema';
-import type { CollectionDocument } from '$interfaces/schemaTypes';
 
 // Helper dùng chung, thay thế mọi chỗ `throw new Error(JSON.stringify(e))`
 function normalizeError(e: unknown, context: string): Error {
@@ -105,19 +106,19 @@ type CloudProvider =
 				| 'centralus'
 				| 'southcentralus'
 				| 'canadacentral'
-				| 'westus2 '
+				| 'westus2'
 				| 'westus3'
 				| 'brazilsouth'
 				| 'germanywestcentral'
 				| 'norwayeast'
 				| 'uksouth'
-				| 'westeurope '
-				| 'northeurope '
+				| 'westeurope'
+				| 'northeurope'
 				| 'swedencentral'
 				| 'switzerlandnorth'
 				| 'uaenorth'
-				| 'spaincentral '
-				| 'francecentral '
+				| 'spaincentral'
+				| 'francecentral'
 				| 'australiaeast'
 				| 'koreacentral'
 				| 'centralindia'
@@ -145,7 +146,7 @@ type Disk =
 			 */
 			storage?: 64 | 128 | 256 | 512 | 1024 | 2048 | 3072;
 			/**
-			 * Only required for Ultra Disk types. Not used in other storage types. See IOPS Defaults for a list of supported IOPS values.
+			 *Only required for Ultra Disk types. Not used in other storage types. See IOPS Defaults for a list of supported IOPS values.
 			 */
 			iops?: number;
 			/**
@@ -215,7 +216,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Organizations.get] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.organizations.get');
 				}
 			},
 			async list() {
@@ -230,7 +231,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Organizations.list] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.organizations.list');
 				}
 			},
 			async updateConfiguration(data: { subdomain: string }) {
@@ -248,7 +249,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Organizations.updateConfiguration] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.organizations.updateConfiguration');
 				}
 			}
 		},
@@ -273,7 +274,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Projects.create] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.projects.create');
 				}
 			},
 			async list() {
@@ -287,7 +288,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Projects.list] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.project.list');
 				}
 			},
 			async get(data: { projectId: string }) {
@@ -305,7 +306,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Projects.get] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.projects.get');
 				}
 			},
 			async update(data: { projectId: string; name: string; description?: string }) {
@@ -327,7 +328,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Projects.update] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.projects.update');
 				}
 			},
 			async delete(data: { projectId: string }) {
@@ -345,7 +346,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					}
 					throw new Error(`[Projects.delete] ${res.status} ${res.statusText}`);
 				} catch (e) {
-					throw new Error(JSON.stringify(e));
+					throw normalizeError(e, 'couchbase.managementData.projects.delete');
 				}
 			}
 		},
@@ -388,7 +389,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.create');
 					}
 				},
 				async list() {
@@ -408,7 +409,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.list');
 					}
 				},
 				async get(data: { clusterId: string }) {
@@ -426,7 +427,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.get');
 					}
 				},
 				async update(data: {
@@ -459,7 +460,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.update] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.update');
 					}
 				},
 				async delete(data: { clusterId: string }) {
@@ -477,7 +478,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.delete');
 					}
 				},
 				async getCapacityStatistics(data: { clusterId: string }) {
@@ -495,7 +496,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.getCapacityStatistics] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.getCapacityStatistics');
 					}
 				},
 				async turnOn(data: { clusterId: string; turnOnLinkedAppService?: boolean }) {
@@ -516,7 +517,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.turnOn] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.turnOn');
 					}
 				},
 				async turnOff(data: { clusterId: string }) {
@@ -534,7 +535,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Clusters.turnOff] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.cluster.turnOff');
 					}
 				}
 			};
@@ -549,7 +550,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 					vbuckets?: 128 | 1024;
 					memoryAllocationInMb?: number;
 					bucketConflictResolution?: 'seqno' | 'lww';
-					durabilityLevel?: 'none' | 'majority' | 'majorityAndPersistActive' | 'persistToMajority';
+					durabilityLevel?: 'none' | 'majorityAndPersistActive' | 'majority' | 'persistToMajority';
 					replicas?: 1 | 2 | 3;
 					flushEnabled?: boolean;
 					timeToLiveInSeconds?: number;
@@ -597,7 +598,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Buckets.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.buckets.create');
 					}
 				},
 				async list() {
@@ -614,7 +615,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Buckets.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.buckets.list');
 					}
 				},
 				async get(data: { bucketId: string }) {
@@ -633,13 +634,13 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Buckets.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.buckets.get');
 					}
 				},
 				async update(data: {
 					bucketId: string;
 					memoryAllocationInMb: number;
-					durabilityLevel: 'none' | 'majority' | 'majorityAndPersistActive' | 'persistToMajority';
+					durabilityLevel: 'none' | 'majorityAndPersistActive' | 'majority' | 'persistToMajority';
 					replicas: 1 | 2 | 3;
 					flushEnabled?: boolean;
 					timeToLiveInSeconds: number;
@@ -679,7 +680,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Buckets.update] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.buckets.update');
 					}
 				},
 				async delete(data: { bucketId: string }) {
@@ -697,7 +698,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Buckets.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.buckets.delete');
 					}
 				}
 			};
@@ -723,7 +724,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Scopes.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.scopes.create');
 					}
 				},
 				async list() {
@@ -740,7 +741,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Scopes.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.scopes.list');
 					}
 				},
 				async get(data: { scopeName: string }) {
@@ -758,7 +759,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[scopes.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.scopes.get');
 					}
 				},
 				async delete(data: { scopeName: string }) {
@@ -776,7 +777,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Scopes.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.scopes.delete');
 					}
 				}
 			};
@@ -808,7 +809,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Collections.create] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.collections.create');
 					}
 				},
 				async list() {
@@ -825,7 +826,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Collections.list] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.collections.list');
 					}
 				},
 				async get(data: { collectionName: string }) {
@@ -843,7 +844,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Collections.get] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.collections.get');
 					}
 				},
 				async update(data: { collectionName: string; maxTTL: number }) {
@@ -864,7 +865,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Collections.update] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.collections.update');
 					}
 				},
 				async delete(data: { collectionName: string }) {
@@ -882,13 +883,23 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 						throw new Error(`[Collections.delete] ${res.status} ${res.statusText}`);
 					} catch (e) {
-						throw new Error(JSON.stringify(e));
+						throw normalizeError(e, 'couchbase.managementData.collections.delete');
 					}
 				}
 			};
 		}
 	};
 };
+// Đọc body lỗi an toàn (không throw nếu body rỗng/không phải text)
+async function readErrorMessage(res: Response): Promise<string> {
+	try {
+		const text = await res.text();
+		return text || res.statusText || `HTTP ${res.status}`;
+	} catch {
+		return res.statusText || `HTTP ${res.status}`;
+	}
+}
+
 const dataApi = <C extends CollectionName>(data: {
 	clusterId: string;
 	username: string;
@@ -902,55 +913,63 @@ const dataApi = <C extends CollectionName>(data: {
 		authorization: `Basic ${btoa(`${username}:${password}`)}`,
 		'content-type': 'application/json'
 	};
+	// SỬA: documentKey có thể chứa ký tự đặc biệt (blind index base64 có '/', '+', '=',
+	// hoặc username tuỳ ý người dùng nhập) -> nếu ghép thẳng vào URL path sẽ tạo path sai
+	// (vd '/' bị hiểu là phân cách thư mục), khiến get/update/delete nhắm sai document hoặc
+	// lỗi 400/404 khó hiểu. Nay luôn encode trước khi ghép vào URL.
+	const encodeKey = (documentKey: string) => encodeURIComponent(documentKey);
 	return {
 		document: {
 			async get(data: { documentKey: string }): Promise<DocumentResponse> {
 				try {
 					const { documentKey } = data;
 					const res = await fetch(
-						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${documentKey}`,
+						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 						{
 							headers
 						}
 					);
+					const isOk = res.status < 400;
 					return {
 						status: res.status,
-						...(res.status < 400 ? { data: await res.json() } : {}),
+						...(isOk ? { data: await res.json() } : { message: await readErrorMessage(res) }),
 						get ok() {
 							return res.status < 400;
 						}
 					};
 				} catch (e) {
-					throw normalizeError(e, 'couchbase.document.get');
+					throw normalizeError(e, 'couchbase.dataApi.document.get');
 				}
 			},
 			async create(data: {
 				documentKey?: string;
-				content: CollectionDocument<C>;
+				content: InferCollection<C>;
 			}): Promise<DocumentResponse> {
 				try {
 					const { documentKey = randomUUID(), content } = data;
 					const res = await fetch(
-						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${documentKey}`,
+						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 						{
 							headers,
 							method: 'post',
 							body: JSON.stringify(content)
 						}
 					);
+					const isOk = res.status < 400;
 					return {
 						status: res.status,
+						...(isOk ? {} : { message: await readErrorMessage(res) }),
 						get ok() {
 							return res.status < 400;
 						}
 					};
 				} catch (e) {
-					throw normalizeError(e, 'couchbase.document.create');
+					throw normalizeError(e, 'couchbase.dataApi.document.create');
 				}
 			},
 			async update(data: {
 				documentKey: string;
-				content: { [k: string]: any };
+				content: Partial<InferCollection<C>>;
 				overwriteAll?: boolean;
 			}): Promise<DocumentResponse> {
 				try {
@@ -963,41 +982,45 @@ const dataApi = <C extends CollectionName>(data: {
 						}
 					}
 					const res = await fetch(
-						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${documentKey}`,
+						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 						{
 							headers,
 							method: 'put',
 							body: JSON.stringify({ ...(currentDocument ?? {}), ...content })
 						}
 					);
+					const isOk = res.status < 400;
 					return {
 						status: res.status,
+						...(isOk ? {} : { message: await readErrorMessage(res) }),
 						get ok() {
 							return res.status < 400;
 						}
 					};
 				} catch (e) {
-					throw normalizeError(e, 'couchbase.document.update');
+					throw normalizeError(e, 'couchbase.dataApi.document.update');
 				}
 			},
 			async delete(data: { documentKey: string }): Promise<DocumentResponse> {
 				try {
 					const { documentKey } = data;
 					const res = await fetch(
-						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${documentKey}`,
+						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 						{
 							headers,
 							method: 'delete'
 						}
 					);
+					const isOk = res.status < 400;
 					return {
 						status: res.status,
+						...(isOk ? {} : { message: await readErrorMessage(res) }),
 						get ok() {
 							return res.status < 400;
 						}
 					};
 				} catch (e) {
-					throw normalizeError(e, 'couchbase.document.delete');
+					throw normalizeError(e, 'couchbase.dataApi.document.delete');
 				}
 			},
 			async touch(data: {
@@ -1011,7 +1034,7 @@ const dataApi = <C extends CollectionName>(data: {
 				try {
 					const { documentKey, expiry, returnContent } = data;
 					const res = await fetch(
-						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${documentKey}/touch`,
+						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}/touch`,
 						{
 							headers,
 							method: 'post',
@@ -1021,26 +1044,27 @@ const dataApi = <C extends CollectionName>(data: {
 							})
 						}
 					);
+					const isOk = res.status < 400;
 					return {
 						status: res.status,
-						...(res.status == 200 ? { data: await res.json() } : {}),
+						...(isOk ? {} : { message: await readErrorMessage(res) }),
 						get ok() {
 							return res.status < 400;
 						}
 					};
 				} catch (e) {
-					throw normalizeError(e, 'couchbase.document.touch');
+					throw normalizeError(e, 'couchbase.dataApi.document.touch');
 				}
 			},
 			async query(data: {
 				statement: string;
 				readonly?: boolean;
-				scanConsistency?: 'not_bounded' | 'at_plus' | 'request_plus' | 'statement_plus';
+				scan_consistency?: 'not_bounded' | 'at_plus' | 'request_plus' | 'statement_plus';
 				metrics?: boolean;
 				signature?: boolean;
 				pretty?: boolean;
 				profile?: 'off' | 'phases' | 'timings';
-				control?: boolean;
+				controls?: boolean;
 				client_context_id?: string;
 				format?: 'JSON' | 'XML' | 'CSV' | 'TSV';
 				compression?: 'ZIP' | 'RLE' | 'LZMA' | 'LZO' | 'NONE';
@@ -1081,15 +1105,33 @@ const dataApi = <C extends CollectionName>(data: {
 							})
 						}
 					);
+					// SỬA: trước đây luôn `data: await res.json()` RỒI mới xét `!isOk` để đọc thêm
+					// `readErrorMessage(res)` (res.text()) — đọc body Response 2 lần. Lần đọc thứ 2
+					// luôn thất bại vì stream đã bị tiêu thụ (bắt bởi try/catch trong readErrorMessage
+					// nên không crash, nhưng message trả về chỉ còn statusText, mất toàn bộ nội dung
+					// lỗi N1QL thật sự — rất khó debug). Nay chỉ đọc body ĐÚNG 1 LẦN bằng text(),
+					// sau đó parse JSON từ text đó nếu cần.
+					const bodyText = await res.text();
+					const isOk = res.status < 400;
+					let parsedBody: { [k: string]: any } | undefined = undefined;
+					if (bodyText) {
+						try {
+							parsedBody = JSON.parse(bodyText);
+						} catch {
+							parsedBody = undefined;
+						}
+					}
 					return {
 						status: res.status,
-						...(res.status < 400 ? { data: await res.json() } : {}),
+						...(isOk
+							? { data: parsedBody }
+							: { message: bodyText || res.statusText || `HTTP ${res.status}` }),
 						get ok() {
 							return res.status < 400;
 						}
 					};
 				} catch (e) {
-					throw normalizeError(e, 'couchbase.document.query');
+					throw normalizeError(e, 'couchbase.dataApi.document.query');
 				}
 			}
 		},
@@ -1103,6 +1145,7 @@ const dataApi = <C extends CollectionName>(data: {
 						const res = await document.query({ statement });
 						return {
 							status: res.status,
+							...(res.ok ? {} : { message: res.message }),
 							get ok() {
 								return res.status < 400;
 							}
@@ -1114,6 +1157,7 @@ const dataApi = <C extends CollectionName>(data: {
 						const res = await document.query({ statement });
 						return {
 							status: res.status,
+							...(res.ok ? {} : { message: res.message }),
 							get ok() {
 								return res.status < 400;
 							}
@@ -1124,9 +1168,9 @@ const dataApi = <C extends CollectionName>(data: {
 						FROM system:keyspaces
 						WHERE \`bucket\` = "${bucketName}" AND \`scope\` = "${scopeName}";`;
 						const res = await document.query({ statement });
-						console.log(res);
 						return {
 							status: res.status,
+							...(res.ok ? {} : { message: res.message }),
 							get ok() {
 								return res.status < 400;
 							},
@@ -1135,8 +1179,7 @@ const dataApi = <C extends CollectionName>(data: {
 					}
 				},
 				document: {
-					async search<C extends CollectionName>(data: {
-						collectionName: C;
+					async search(data: {
 						conditions: {
 							fieldName: SearchableFieldOf<C>;
 							keyword: string | number | boolean;
@@ -1150,7 +1193,6 @@ const dataApi = <C extends CollectionName>(data: {
 						offset?: number;
 					}): Promise<DocumentResponse> {
 						const {
-							collectionName,
 							conditions,
 							logicalOperator = 'AND',
 							selectFields,
@@ -1223,7 +1265,7 @@ const dataApi = <C extends CollectionName>(data: {
 							get ok() {
 								return res.status < 400;
 							},
-							...(res.ok && res.data ? { data: res.data.results } : {})
+							...(res.ok && res.data ? { data: res.data.results } : { message: res.message })
 						};
 					}
 				},
@@ -1254,7 +1296,7 @@ const dataApi = <C extends CollectionName>(data: {
 								`[Search.getCount] ${res.status} ${res.statusText} — Body: ${errorBody}`
 							);
 						} catch (e) {
-							throw normalizeError(e, 'couchbase.search.getCount');
+							throw normalizeError(e, 'couchbase.dataApi.query.search.getCount');
 						}
 					},
 					/**
@@ -1349,9 +1391,7 @@ const dataApi = <C extends CollectionName>(data: {
 	};
 };
 
-export const couchbase = () => {
-	return {
-		managementData,
-		dataApi
-	};
+export const couchbase = {
+	managementData,
+	dataApi
 };

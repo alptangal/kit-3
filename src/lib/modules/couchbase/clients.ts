@@ -14,11 +14,12 @@ import {
 	cb_bucketName_vault,
 	cb_scopeName_vault
 } from '$env/static/private';
+import type { CollectionName } from '$modules/schema';
 
-const cb = couchbase();
+const cb = couchbase;
 
 // ===== Client cho cluster DATA =====
-export const cbData = (collectionName: string) => {
+export const cbData = <CN extends CollectionName>(collectionName: CN) => {
 	return cb.dataApi({
 		clusterId: cb_clusterId,
 		username: cb_username,
@@ -30,7 +31,7 @@ export const cbData = (collectionName: string) => {
 };
 
 // ===== Client cho cluster VAULT — dùng credential HOÀN TOÀN KHÁC =====
-export const cbVault = (collectionName: string) =>
+export const cbVault = (collectionName: CollectionName) =>
 	cb.dataApi({
 		clusterId: cb_clusterId_vault,
 		username: cb_username_vault,

@@ -90,7 +90,3 @@ export type CollectionDocument<Name extends keyof Collections> = ApplyOverrides<
 	InferCollection<Collections[Name]>,
 	Name
 >;
-
-// ---- Ví dụ dùng: interface KHÔNG cần viết tay, tự đồng bộ theo schema ----
-export type User = CollectionDocument<'users'>;
-// ... cứ thêm collection nào cần dùng

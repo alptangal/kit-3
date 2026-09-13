@@ -1,9 +1,10 @@
 // $modules/couchbase/seed-data.ts
+//
 import { email_owner, password_owner, username_owner } from '$env/static/private';
 import { encryption } from '$modules/encryption';
 import { collectionSchemas } from '$modules/schema';
 import { systemVault } from '$store/initSystemVault';
-import { cbData, cbData } from './clients';
+import { cbData } from './clients';
 
 const cbRoles = cbData('name_roles');
 const cbPermissions = cbData('permissions');
@@ -125,6 +126,9 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'stock_transfers:create', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'stock_takes:perform', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'reports:view', scope: 'own_branch' },
+		// Manager cũng cần quản lý user trong chi nhánh mình (vd khoá/mở tài khoản staff) —
+		// thiếu grant này thì UserAdminService.setStatus/setRole/delete/list sẽ luôn từ chối manager.
+		{ roleName: 'manager', permissionKey: 'users:manage', scope: 'own_branch' },
 
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
@@ -167,7 +171,7 @@ export async function seedUserStatus(): Promise<void> {
 export async function seedAllCatalogData(): Promise<void> {
 	const collectionSchemasHashed = await encryption.getDataHash(collectionSchemas);
 	const res = await cbData('system').document.get({ documentKey: 'initApp' });
-	if (res.status == 404 || res.data?.collectionSchemasHashed != collectionSchemasHashed) {
+	if (res.status == 404 || res.data?.initApp?.collectionSchemasHashed != collectionSchemasHashed) {
 		console.log('[seed] Starting catalog seed...');
 		await seedRoles();
 		await seedPermissions();
@@ -178,31 +182,31 @@ export async function seedAllCatalogData(): Promise<void> {
 			password: password_owner,
 			email: email_owner
 		});
+		const initAppContent = {
+			initApp: {
+				status: 'success',
+				collectionSchemasHashed,
+				createdAt: new Date().toISOString()
+			}
+		};
 		if (res.status == 404) {
 			await cbData('system').document.create({
 				documentKey: 'initApp',
-				content: {
-					status: 'success',
-					collectionSchemasHashed,
-					createdAt: new Date().toISOString()
-				}
+				content: initAppContent
 			});
 		} else {
 			await cbData('system').document.update({
 				documentKey: 'initApp',
-				content: {
-					status: 'success',
-					collectionSchemasHashed,
-					createdAt: new Date().toISOString()
-				}
+				content: initAppContent
 			});
 		}
 
 		console.log('[seed] Done seeding catalog data');
 	} else {
-		console.log('[seed] Done created catalog data');
+		console.log('[seed] Catalog already up to date — skip');
 	}
 }
+
 export async function createAdminAccount(data: {
 	username: string;
 	password: string;
@@ -211,7 +215,13 @@ export async function createAdminAccount(data: {
 	const collectionName = 'users';
 	const { username, email, password } = data;
 	const documentKey = `${collectionName}-${username}`;
-	if (!systemVault.indexKey) return;
+	// SỬA: trước đây `if (!systemVault.indexKey) return;` âm thầm bỏ qua việc tạo admin,
+	// nhưng seedAllCatalogData() vẫn ghi initApp = success ngay sau đó -> lần chạy sau
+	// hệ thống nghĩ đã seed xong, admin account vĩnh viễn không được tạo và không tự retry.
+	// Nay throw để lỗi này không bị nuốt âm thầm.
+	if (!systemVault.indexKey) {
+		throw new Error('[seed] Cannot create admin account: systemVault.indexKey chưa được khởi tạo');
+	}
 	const cbUser = cbData(collectionName);
 	const normalizedEmail = email.trim().toLowerCase();
 	const emailBlindIndex = await encryption.hmacBlindIndex(systemVault.indexKey, normalizedEmail);
@@ -221,17 +231,35 @@ export async function createAdminAccount(data: {
 		return;
 	}
 	const { dek, storageRecord } = await encryption.setupVault(password);
-	const emailEncrypted = await encryption.encryptData(dek, normalizedEmail);
+	const emailEncrypted = JSON.stringify(await encryption.encryptData(dek, normalizedEmail));
+
+	const normalizedUsername = username.trim().toLowerCase();
+	const usernameBlindIndex = await encryption.hmacBlindIndex(
+		systemVault.indexKey,
+		normalizedUsername
+	);
+	// Admin account bootstrap không thu thập số điện thoại — dùng chuỗi rỗng nhất quán
+	// cho cả blind index lẫn giá trị mã hoá, để field vẫn hợp lệ theo schema (required)
+	// mà không phải bịa số điện thoại giả.
+	const phoneBlindIndex = await encryption.hmacBlindIndex(systemVault.indexKey, '');
+	const phoneEncrypted = JSON.stringify(await encryption.encryptData(dek, ''));
+	const profileEncrypted = JSON.stringify(await encryption.encryptData(dek, JSON.stringify({})));
+
 	const userDoc = {
 		firstname: 'Administrator',
 		lastname: null,
 		midname: null,
 		description: '',
+		// Đồng bộ với schema mới: roleId/statusId trỏ tới catalog thay vì hardcode string
 		statusId: 'status-active',
 		roleId: 'role-owner',
 
 		emailBlindIndex,
 		emailEncrypted,
+		phoneBlindIndex,
+		phoneEncrypted,
+		usernameBlindIndex,
+		profileEncrypted,
 
 		vaultSaltB64: storageRecord.saltB64,
 		vaultDekIvB64: storageRecord.dekIvB64,
@@ -239,11 +267,16 @@ export async function createAdminAccount(data: {
 
 		authMethod: 'password' as const,
 		webauthnCredentials: [],
-		webauthnUserHandle: null,
+		webauthnUserHandle: crypto.randomUUID(),
 
 		mfaEnabled: false,
 		lastLoginAt: null,
 		lastLoginIp: null,
+		remember: false,
+
+		// branchId / customerTierEncrypted CỐ Ý bỏ trống — owner không gắn với 1 chi nhánh
+		// cụ thể và không phải customer, nên 2 field này giờ là optional trong schema
+		// (xem ghi chú trong collectionSchemas.users).
 
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
@@ -256,6 +289,10 @@ export async function createAdminAccount(data: {
 	if (rs.ok) {
 		console.log(`[seed] "${collectionName}-administrator" created succesful`);
 	} else {
-		console.log(`[seed] "${collectionName}-administrator" create failed`);
+		// SỬA: trước đây chỉ log, không throw -> seedAllCatalogData vẫn ghi initApp=success
+		// dù tạo admin thất bại. Nay throw để dừng seeding và giữ trạng thái có thể retry.
+		throw new Error(
+			`[seed] "${collectionName}-administrator" create failed: ${rs.message ?? rs.status}`
+		);
 	}
 }

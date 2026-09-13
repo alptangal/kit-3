@@ -1,3 +1,63 @@
+//$modules/schema.ts
+
+const collectionsName = [
+	'users',
+	'webauthn_challenges',
+	'name_roles',
+	'permissions',
+	'detail_roles',
+	'user_status',
+	'products',
+	'product_variants',
+	'product_variant_attributes',
+	'inventory_stock',
+	'inventory_lots',
+	'stock_movements',
+	'orders',
+	'suppliers',
+	'purchase_orders',
+	'stock_transfers',
+	'stock_takes',
+	'brands',
+	'categories',
+	'branches',
+	'payments',
+	'order_returns',
+	'pos_sessions',
+	'promotions',
+	'loyalty_transactions',
+	'audit_logs',
+	'notifications',
+	'notification_templates',
+	'conversations',
+	'messages',
+	'system',
+	'refresh_tokens',
+	'token_rotation_logs',
+	'system_secrets' // <-- MỚI: dùng cho cbVault, xem clients.ts
+] as const;
+const fieldTypes = [
+	'string',
+	'object',
+	'array',
+	'date',
+	'null',
+	'undefined',
+	'number',
+	'boolean'
+] as const;
+type FieldTypeMap = {
+	string: string;
+	object: Record<string, unknown>;
+	array: unknown[];
+	date: string;
+	null: null;
+	undefined: undefined;
+	number: number;
+	boolean: boolean;
+};
+export type CollectionName = (typeof collectionsName)[number];
+type FieldTypes = (typeof fieldTypes)[number];
 export const collectionSchemas = {
 	users: {
 		fields: {
@@ -6,33 +66,142 @@ export const collectionSchemas = {
 			lastname: { type: 'string', searchable: true, sortable: true, selectable: true },
 			description: { type: 'string', searchable: true, sortable: false, selectable: true },
 
-			// Tham chiếu tới name_roles.name — 1 user CHỈ có 1 role (owner/manager/staff/customer)
-			roleId: { type: 'string', searchable: true, sortable: true, selectable: true },
+			// Tham chiếu tới name_roles theo DOCUMENT KEY (vd 'role-owner'), KHÔNG PHẢI field `name`
+			// ('owner'). Chỗ nào cần lấy roleName dạng chuỗi ('owner'/'manager'/...) để đưa vào
+			// ActorContext.roleName / PermissionChecker phải fetch name_roles.get({documentKey: roleId})
+			// rồi đọc field `name`, chứ không dùng roleId trực tiếp làm roleName.
+			roleId: {
+				type: 'string',
+				searchable: true,
+				sortable: true,
+				selectable: true,
+				required: true
+			},
 
 			// Tham chiếu tới user_status.name — thay vì hardcode 'active' như trước,
 			// giờ trỏ về catalog quản lý được (admin có thể thêm status mới qua UI)
-			statusId: { type: 'string', searchable: true, sortable: true, selectable: true },
+			statusId: {
+				type: 'string',
+				searchable: true,
+				sortable: true,
+				selectable: true,
+				required: true
+			},
 
-			emailBlindIndex: { type: 'string', searchable: true, sortable: false, selectable: false },
-			phoneBlindIndex: { type: 'string', searchable: true, sortable: false, selectable: false },
-			usernameBlindIndex: { type: 'string', searchable: true, sortable: false, selectable: false },
+			emailBlindIndex: {
+				type: 'string',
+				searchable: true,
+				sortable: false,
+				selectable: false,
+				required: true
+			},
+			phoneBlindIndex: {
+				type: 'string',
+				searchable: true,
+				sortable: false,
+				selectable: false,
+				required: true
+			},
+			usernameBlindIndex: {
+				type: 'string',
+				searchable: true,
+				sortable: false,
+				selectable: false,
+				required: true
+			},
 
-			emailEncrypted: { type: 'string', searchable: false, sortable: false, selectable: true },
-			phoneEncrypted: { type: 'string', searchable: false, sortable: false, selectable: true },
-			profileEncrypted: { type: 'string', searchable: false, sortable: false, selectable: true },
+			emailEncrypted: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
+			phoneEncrypted: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
+			profileEncrypted: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
 
-			vaultSaltB64: { type: 'string', searchable: false, sortable: false, selectable: true },
-			vaultDekIvB64: { type: 'string', searchable: false, sortable: false, selectable: true },
-			vaultWrappedDekB64: { type: 'string', searchable: false, sortable: false, selectable: true },
+			vaultSaltB64: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
+			vaultDekIvB64: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
+			vaultWrappedDekB64: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
 
-			authMethod: { type: 'string', searchable: true, sortable: false, selectable: true },
-			webauthnCredentials: { type: 'array', searchable: false, sortable: false, selectable: false },
-			webauthnUserHandle: { type: 'string', searchable: true, sortable: false, selectable: true },
+			authMethod: {
+				type: 'string',
+				searchable: true,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
+			webauthnCredentials: {
+				type: 'array',
+				searchable: false,
+				sortable: false,
+				selectable: false,
+				required: true
+			},
+			webauthnUserHandle: {
+				type: 'string',
+				searchable: true,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
 
-			mfaEnabled: { type: 'boolean', searchable: true, sortable: false, selectable: true },
-			lastLoginAt: { type: 'date', searchable: false, sortable: true, selectable: true },
-			lastLoginIp: { type: 'string', searchable: false, sortable: false, selectable: false },
-			remember: { type: 'boolean', searchable: false, sortable: false, selectable: false },
+			mfaEnabled: {
+				type: 'boolean',
+				searchable: true,
+				sortable: false,
+				selectable: true,
+				required: true
+			},
+			lastLoginAt: {
+				type: 'string',
+				searchable: false,
+				sortable: true,
+				selectable: true
+			},
+			lastLoginIp: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: false
+			},
+			remember: {
+				type: 'boolean',
+				searchable: false,
+				sortable: false,
+				selectable: false,
+				required: true
+			},
 
 			// Chỉ áp dụng cho role 'customer' — nhân viên/quản lý không cần các field này
 			customerTierEncrypted: {
@@ -44,11 +213,31 @@ export const collectionSchemas = {
 			loyaltyPoints: { type: 'number', searchable: true, sortable: true, selectable: true },
 
 			// Chỉ áp dụng cho role 'staff'/'manager' — gắn nhân viên với chi nhánh/kho cụ thể
-			branchId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			branchId: {
+				type: 'string',
+				searchable: true,
+				sortable: false,
+				selectable: true
+			},
 
-			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
-			updatedAt: { type: 'date', searchable: false, sortable: true, selectable: true },
-			deletedAt: { type: 'date', searchable: false, sortable: false, selectable: false }
+			createdAt: {
+				type: 'date',
+				searchable: true,
+				sortable: true,
+				selectable: true
+			},
+			updatedAt: {
+				type: 'date',
+				searchable: false,
+				sortable: true,
+				selectable: true
+			},
+			deletedAt: {
+				type: 'date',
+				searchable: true,
+				sortable: false,
+				selectable: false
+			}
 		}
 	},
 
@@ -611,32 +800,78 @@ export const collectionSchemas = {
 
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
-	}
-} as const;
-const collectionSchemasVault = {
+	},
 	system_secrets: {
 		fields: {
-			// Discriminator — phân biệt document này thuộc loại nào
 			type: { type: 'string', searchable: false, sortable: false, selectable: true },
-
-			// ===== Chỉ có ở document type: 'rsa_keypair' =====
 			publicKeyB64: { type: 'string', searchable: false, sortable: false, selectable: true },
-			privateKeyEncrypted: { type: 'object', searchable: false, sortable: false, selectable: true }, // {ivB64, ciphertextB64}
-
-			// ===== Vault protection record — CHUNG cho mọi loại secret =====
-			// Đây chính là storageRecord trả về từ setupVault(vault_password)
+			privateKeyEncrypted: { type: 'object', searchable: false, sortable: false, selectable: true },
 			saltB64: { type: 'string', searchable: false, sortable: false, selectable: true },
 			dekIvB64: { type: 'string', searchable: false, sortable: false, selectable: true },
 			wrappedDekB64: { type: 'string', searchable: false, sortable: false, selectable: true },
-
 			version: { type: 'number', searchable: false, sortable: false, selectable: true },
 			createdAt: { type: 'date', searchable: false, sortable: false, selectable: true },
 			rotatedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
 		}
 	}
-} as const;
+} as const satisfies Record<
+	CollectionName,
+	{
+		fields: Record<
+			string,
+			{
+				type: FieldTypes;
+				searchable: boolean;
+				sortable: boolean;
+				selectable: boolean;
+				required?: boolean;
+			}
+		>;
+	}
+>;
+
+type FieldsOf<CN extends CollectionName> = (typeof collectionSchemas)[CN]['fields'];
+
+// Lấy type thật từ 1 field definition
+type InferFieldType<F> = F extends { type: infer T extends FieldTypes } ? FieldTypeMap[T] : never;
+
+// Tách key nào required=true / required=false
+type RequiredKeys<F> = {
+	[K in keyof F]: F[K] extends { required: true } ? K : never;
+}[keyof F];
+
+type OptionalKeys<F> = Exclude<keyof F, RequiredKeys<F>>;
+
+// Ghép lại thành 1 interface: required là bắt buộc, còn lại là optional (?)
+export type InferCollection<CN extends CollectionName> = {
+	[K in RequiredKeys<FieldsOf<CN>>]: InferFieldType<FieldsOf<CN>[K]>;
+} & { [K in OptionalKeys<FieldsOf<CN>>]?: InferFieldType<FieldsOf<CN>[K]> | null };
+export type User = InferCollection<'users'>;
+
+// const collectionSchemasVault = {
+// 	system_secrets: {
+// 		fields: {
+// 			// Discriminator — phân biệt document này thuộc loại nào
+// 			type: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+// 			// ===== Chỉ có ở document type: 'rsa_keypair' =====
+// 			publicKeyB64: { type: 'string', searchable: false, sortable: false, selectable: true },
+// 			privateKeyEncrypted: { type: 'object', searchable: false, sortable: false, selectable: true }, // {ivB64, ciphertextB64}
+
+// 			// ===== Vault protection record — CHUNG cho mọi loại secret =====
+// 			// Đây chính là storageRecord trả về từ setupVault(vault_password)
+// 			saltB64: { type: 'string', searchable: false, sortable: false, selectable: true },
+// 			dekIvB64: { type: 'string', searchable: false, sortable: false, selectable: true },
+// 			wrappedDekB64: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+// 			version: { type: 'number', searchable: false, sortable: false, selectable: true },
+// 			createdAt: { type: 'date', searchable: false, sortable: false, selectable: true },
+// 			rotatedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
+// 		}
+// 	}
+// } as const;
 export type CollectionSchemas = typeof collectionSchemas;
-export type CollectionName = keyof CollectionSchemas;
+
 export type FieldOf<C extends CollectionName> = keyof CollectionSchemas[C]['fields'];
 
 export type SearchableFieldOf<C extends CollectionName> = {

@@ -1,3 +1,5 @@
+//$modules/encryption.ts
+
 /**
  * Envelope Encryption Module
  * Pattern: Password -> KEK (via PBKDF2) -> wraps DEK -> DEK encrypts data
@@ -10,8 +12,6 @@
  */
 
 import type { ServerResponse } from '$interfaces/basic';
-import { client } from '$store/basic.svelte';
-
 // ============ Helpers: encode/decode để lưu DB (DB không lưu binary trực tiếp tốt) ============
 
 function bufToBase64(buf: ArrayLike<number> | ArrayBuffer) {
@@ -361,6 +361,7 @@ const fetchSecure = async (
 ): Promise<ServerResponse> => {
 	const publicKey = await getServerPublicKey();
 	if (!publicKey) return { message: 'System crashed!' };
+
 	let sessionPublicKey: CryptoKey;
 	let sessionPublicKeyB64: string;
 	let sessionPrivateKey: CryptoKey;
@@ -369,22 +370,33 @@ const fetchSecure = async (
 		sessionPublicKeyB64 = await exportKeyToBase64(sessionPublicKey, 'spki');
 		sessionPrivateKey = encryptKeys.privateKey;
 	} else {
-		const { privateKey, publicKey } = await generateRSAKeyPair();
-		sessionPublicKey = publicKey;
+		const { privateKey, publicKey: newSessionPublicKey } = await generateRSAKeyPair();
+		sessionPublicKey = newSessionPublicKey;
 		sessionPrivateKey = privateKey;
 		sessionPublicKeyB64 = await exportKeyToBase64(sessionPublicKey, 'spki');
 	}
-	const encryptedBody = options.body
-		? await encryption.encryptWithPublicKeyHybrid(
-				publicKey,
-				JSON.stringify({ ...options.body, publicKeyB64: sessionPublicKeyB64 })
-			)
-		: undefined;
+
+	// SỬA: trước đây chỉ mã hoá + gửi payload khi `options.body` có giá trị.
+	// Nghĩa là với request không có body (vd GET), `sessionPublicKeyB64` KHÔNG BAO GIỜ
+	// được gửi lên server -> server không có key để mã hoá response trả về ->
+	// decryptWithPrivateKeyHybrid ở dưới sẽ luôn thất bại cho mọi request không có body.
+	// Nay luôn build 1 envelope (mặc định body rỗng {}) và luôn gửi.
+	const payload = { ...(options.body ?? {}), publicKeyB64: sessionPublicKeyB64 };
+	const encryptedBody = await encryption.encryptWithPublicKeyHybrid(
+		publicKey,
+		JSON.stringify(payload)
+	);
 
 	const res = await fetch(url, {
 		method: options.method ?? 'POST',
-		body: encryptedBody ? JSON.stringify(encryptedBody) : undefined
+		headers: { 'content-type': 'application/json' }, // thiếu trước đây
+		body: JSON.stringify(encryptedBody)
 	});
+
+	if (!res.ok) {
+		throw new Error(`fetchSecure: request failed with status ${res.status}`);
+	}
+
 	const encryptedResponse = await res.json();
 	const decryptedText = await decryptWithPrivateKeyHybrid(sessionPrivateKey, encryptedResponse);
 	if (decryptedText) {
@@ -392,6 +404,7 @@ const fetchSecure = async (
 	}
 	throw new Error('Encryption.decryptedText failed');
 };
+
 async function hmacBlindIndex(secretKey: Uint8Array, value: string): Promise<string> {
 	// Chuẩn hoá về ArrayBuffer cụ thể, tránh lỗi type ArrayBufferLike vs ArrayBuffer
 	const keyBuffer = secretKey.buffer.slice(
