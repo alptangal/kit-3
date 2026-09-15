@@ -190,6 +190,7 @@ $themes: 'dark', 'light';
 			background: var(--color-gray-200);
 			opacity: 0.4;
 			touch-action: none;
+			pointer-events: none;
 		}
 	}
 	&.loading {
@@ -310,5 +311,42 @@ $themes: 'dark', 'light';
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	// Ripple effect
+	.button-ripple {
+		position: absolute;
+		border-radius: 50%;
+		background: currentColor;
+		opacity: 0.2;
+		transform: scale(0);
+		animation: button-ripple-anim 0.6s linear;
+		pointer-events: none;
+	}
+	// Tooltip
+	.button-tooltip {
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: 50%;
+		transform: translateX(-50%);
+		background: rgba(0, 0, 0, 0.75);
+		color: #fff;
+		font-size: 0.75em;
+		padding: 3px 8px;
+		border-radius: 4px;
+		white-space: nowrap;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+		z-index: 9999;
+	}
+	&:hover .button-tooltip,
+	&:focus-visible .button-tooltip {
+		opacity: 1;
+	}
+}
+@keyframes button-ripple-anim {
+	to {
+		transform: scale(1);
+		opacity: 0;
 	}
 }

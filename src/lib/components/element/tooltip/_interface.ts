@@ -1,7 +1,6 @@
 // import type { BasicConfigs, BasicProps, Color, Size } from '$components/interface';
 
-import type { BasicConfigs, BasicProps, DistanceUnits, TimeUnits } from '$components/interface';
-import type { Color, Size } from '$interfaces/basic';
+import type { BasicConfigs, BasicProps, DistanceUnits, TimeUnits, Color, Size } from '$components/interface';
 import type { SvelteComponent } from 'svelte';
 import type { ButtonConfigs } from '../button/_interface';
 

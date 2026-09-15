@@ -8,6 +8,7 @@ import { cbData } from '$modules/couchbase/clients';
 import { encryption } from '$modules/encryption';
 import type { User } from '$modules/schema';
 import { PermissionChecker } from '$modules/rbac/permission-checker';
+import { systemVault } from '$store/initSystemVault';
 import { users } from '../messages/db';
 
 const collectionName = 'users';
@@ -61,6 +62,26 @@ const authMessages = {
 
 const adminMessages = {
 	...authMessages,
+	userCreated: {
+		vi: 'Tạo người dùng thành công',
+		en: 'User created successfully'
+	} as TranslateContent,
+	createFailed: {
+		vi: 'Tạo người dùng thất bại',
+		en: 'Failed to create user'
+	} as TranslateContent,
+	userUpdated: {
+		vi: 'Cập nhật thông tin người dùng thành công',
+		en: 'User information updated successfully'
+	} as TranslateContent,
+	passwordReset: {
+		vi: 'Đặt lại mật khẩu người dùng thành công',
+		en: 'User password reset successfully'
+	} as TranslateContent,
+	vaultUninitialized: {
+		vi: 'Hệ thống chưa khởi tạo kho mã hoá (systemVault)',
+		en: 'System vault has not been initialized'
+	} as TranslateContent,
 	statusUpdated: {
 		vi: 'Cập nhật trạng thái tài khoản thành công',
 		en: 'Account status updated successfully'
@@ -259,7 +280,8 @@ export class Users {
 		// lấy bản ghi ACTIVE thay vì luôn lấy found[0] (có thể vô tình là bản đã xoá).
 		const doc = found?.find((d) => !d.deletedAt) ?? found?.[0];
 
-		if (!doc) {
+		// SỬA: Từ chối ngay nếu không tìm thấy doc hoặc tài khoản đã bị xoá mềm (deletedAt !== null)
+		if (!doc || doc.deletedAt) {
 			return { success: false, messages: authMessages.invalidCredentials };
 		}
 
@@ -374,9 +396,12 @@ export class Users {
 		if (this.documentKey) {
 			const documentKey = this.documentKey;
 			try {
+				const now = new Date().toISOString();
+				// SỬA: Gán lại updatedAt vào instance memory this.user để dữ liệu trong bộ nhớ luôn đồng bộ
+				this.user.updatedAt = now;
 				const res = await cbUsers.document.update({
 					documentKey,
-					content: { ...this.user, updatedAt: new Date().toISOString() }
+					content: { ...this.user, updatedAt: now }
 				});
 				if (!res.ok) return { success: false, messages: users.document.update.error };
 				return { success: true, messages: users.document.update.success };
@@ -401,7 +426,7 @@ export class Users {
 }
 
 interface AdminListResult {
-	items: UserDocument[];
+	items: SafeUserDocument[];
 	total: number;
 	page: number;
 	pageSize: number;
@@ -485,6 +510,231 @@ export class UserAdminService {
 			return { success: false, messages: adminMessages.permissionDenied };
 		}
 		return null;
+	}
+
+	/**
+	 * MỚI: Tạo tài khoản user mới qua kênh quản trị (vd admin/manager tạo tài khoản nhân viên/khách hàng).
+	 * Kiểm tra quyền `users:manage`, cấp bậc role (`actorLevel > targetRoleLevel`),
+	 * tính blind indices và khởi tạo envelope encryption vault.
+	 */
+	static async createUser(
+		actor: ActorContext,
+		data: {
+			firstname: string;
+			midname?: string | null;
+			lastname?: string | null;
+			description?: string;
+			email: string;
+			phone?: string;
+			username: string;
+			password: string;
+			roleId: string;
+			statusId?: string;
+			branchId?: string | null;
+		}
+	): Promise<{ success: boolean; messages: TranslateContent; documentKey?: string }> {
+		if (!systemVault?.indexKey) {
+			return { success: false, messages: adminMessages.vaultUninitialized };
+		}
+
+		const targetBranchId = data.branchId ?? actor.branchId ?? null;
+		const denied = await this.requirePermission(actor, 'users:manage', targetBranchId);
+		if (denied) return denied;
+
+		const [actorLevel, newRoleLevel] = await Promise.all([
+			this.getRoleLevelByName(actor.roleName),
+			this.getRoleLevelById(data.roleId)
+		]);
+
+		if (actorLevel === null || newRoleLevel === null || actorLevel <= newRoleLevel) {
+			return { success: false, messages: adminMessages.permissionDenied };
+		}
+
+		const roleDoc = await cbRoles.document.get({ documentKey: data.roleId });
+		if (!roleDoc.ok || !roleDoc.data) {
+			return { success: false, messages: adminMessages.roleNotFound };
+		}
+
+		const statusId = data.statusId ?? 'status-active';
+		const statusDoc = await cbUserStatus.document.get({ documentKey: statusId });
+		if (!statusDoc.ok || !statusDoc.data) {
+			return { success: false, messages: adminMessages.statusNotFound };
+		}
+
+		const normalizedEmail = data.email.trim().toLowerCase();
+		const normalizedUsername = data.username.trim().toLowerCase();
+		const normalizedPhone = (data.phone ?? '').trim();
+
+		const [emailBlindIndex, usernameBlindIndex, phoneBlindIndex] = await Promise.all([
+			encryption.hmacBlindIndex(systemVault.indexKey, normalizedEmail),
+			encryption.hmacBlindIndex(systemVault.indexKey, normalizedUsername),
+			encryption.hmacBlindIndex(systemVault.indexKey, normalizedPhone)
+		]);
+
+		const [emailTaken, usernameTaken] = await Promise.all([
+			Users.isEmailTaken(emailBlindIndex),
+			Users.isUsernameTaken(usernameBlindIndex)
+		]);
+
+		if (emailTaken) return { success: false, messages: authMessages.emailTaken };
+		if (usernameTaken) return { success: false, messages: authMessages.usernameTaken };
+
+		const { dek, storageRecord } = await encryption.setupVault(data.password);
+		const [emailEncrypted, phoneEncrypted, profileEncrypted] = await Promise.all([
+			encryption.encryptData(dek, normalizedEmail).then((r) => JSON.stringify(r)),
+			encryption.encryptData(dek, normalizedPhone).then((r) => JSON.stringify(r)),
+			encryption.encryptData(dek, JSON.stringify({})).then((r) => JSON.stringify(r))
+		]);
+
+		const now = new Date().toISOString();
+		const newKey = `${collectionName}::${crypto.randomUUID()}`;
+
+		const userDoc: User = {
+			firstname: data.firstname,
+			midname: data.midname ?? null,
+			lastname: data.lastname ?? null,
+			description: data.description ?? '',
+			roleId: data.roleId,
+			statusId,
+
+			emailBlindIndex,
+			emailEncrypted,
+			phoneBlindIndex,
+			phoneEncrypted,
+			usernameBlindIndex,
+			profileEncrypted,
+
+			vaultSaltB64: storageRecord.saltB64,
+			vaultDekIvB64: storageRecord.dekIvB64,
+			vaultWrappedDekB64: storageRecord.wrappedDekB64,
+
+			authMethod: 'password',
+			webauthnCredentials: [],
+			webauthnUserHandle: crypto.randomUUID(),
+
+			mfaEnabled: false,
+			lastLoginAt: null,
+			lastLoginIp: null,
+			remember: false,
+
+			branchId: data.branchId ?? null,
+
+			createdAt: now,
+			updatedAt: now,
+			deletedAt: null
+		};
+
+		try {
+			const res = await cbUsers.document.create({
+				documentKey: newKey,
+				content: userDoc
+			});
+			if (!res.ok) return { success: false, messages: adminMessages.createFailed };
+			return { success: true, messages: adminMessages.userCreated, documentKey: newKey };
+		} catch {
+			return { success: false, messages: adminMessages.createFailed };
+		}
+	}
+
+	/**
+	 * MỚI: Cập nhật thông tin hồ sơ của user (tên, mô tả, chi nhánh) qua kênh quản trị.
+	 * Kiểm tra quyền `users:manage` và cấp bậc role.
+	 */
+	static async updateUser(
+		actor: ActorContext,
+		documentKey: string,
+		data: {
+			firstname?: string;
+			midname?: string | null;
+			lastname?: string | null;
+			description?: string;
+			branchId?: string | null;
+		}
+	): Promise<{ success: boolean; messages: TranslateContent }> {
+		const target = await Users.getById(documentKey);
+		if (!target) return { success: false, messages: adminMessages.notFound };
+
+		const denied = await this.requirePermission(
+			actor,
+			'users:manage',
+			target.user.branchId,
+			documentKey
+		);
+		if (denied) return denied;
+
+		const hierarchyDenied = await this.assertCanManageTarget(actor, target);
+		if (hierarchyDenied) return hierarchyDenied;
+
+		if (target.user.deletedAt) {
+			return { success: false, messages: adminMessages.userAlreadyDeleted };
+		}
+
+		const updatePayload: Partial<User> = {
+			updatedAt: new Date().toISOString()
+		};
+		if (data.firstname !== undefined) updatePayload.firstname = data.firstname;
+		if (data.midname !== undefined) updatePayload.midname = data.midname;
+		if (data.lastname !== undefined) updatePayload.lastname = data.lastname;
+		if (data.description !== undefined) updatePayload.description = data.description;
+		if (data.branchId !== undefined) updatePayload.branchId = data.branchId;
+
+		try {
+			const res = await cbUsers.document.update({
+				documentKey,
+				content: updatePayload as User
+			});
+			if (!res.ok) return { success: false, messages: adminMessages.updateFailed };
+			return { success: true, messages: adminMessages.userUpdated };
+		} catch {
+			return { success: false, messages: adminMessages.updateFailed };
+		}
+	}
+
+	/**
+	 * MỚI: Đặt lại mật khẩu cho user qua kênh quản trị (khi user quên mật khẩu).
+	 * Khởi tạo lại vault storage record với mật khẩu mới.
+	 */
+	static async resetPassword(
+		actor: ActorContext,
+		documentKey: string,
+		newPassword: string
+	): Promise<{ success: boolean; messages: TranslateContent }> {
+		const target = await Users.getById(documentKey);
+		if (!target) return { success: false, messages: adminMessages.notFound };
+
+		const denied = await this.requirePermission(
+			actor,
+			'users:manage',
+			target.user.branchId,
+			documentKey
+		);
+		if (denied) return denied;
+
+		const hierarchyDenied = await this.assertCanManageTarget(actor, target);
+		if (hierarchyDenied) return hierarchyDenied;
+
+		if (target.user.deletedAt) {
+			return { success: false, messages: adminMessages.userAlreadyDeleted };
+		}
+
+		try {
+			const { storageRecord } = await encryption.setupVault(newPassword);
+			const updatePayload: Partial<User> = {
+				vaultSaltB64: storageRecord.saltB64,
+				vaultDekIvB64: storageRecord.dekIvB64,
+				vaultWrappedDekB64: storageRecord.wrappedDekB64,
+				updatedAt: new Date().toISOString()
+			};
+
+			const res = await cbUsers.document.update({
+				documentKey,
+				content: updatePayload as User
+			});
+			if (!res.ok) return { success: false, messages: adminMessages.updateFailed };
+			return { success: true, messages: adminMessages.passwordReset };
+		} catch {
+			return { success: false, messages: adminMessages.updateFailed };
+		}
 	}
 
 	/**

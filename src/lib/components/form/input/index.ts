@@ -1,6 +1,5 @@
-import { SvelteMap } from 'svelte/reactivity';
+//$lib/components/form/input/index.ts
 import type { InputConfigs, InputProps, ValidationCompact, ValidationFull } from './_interface';
-import type { EventListener } from '$components/interface';
 import type { TextFieldContext } from '../textField/_interface';
 import type { FormConfigs } from '../form/_interface';
 
@@ -116,11 +115,6 @@ export function createDefaultInputEvents(
 	return [
 		{
 			events: {
-				load(_, data) {
-					if (data?.node instanceof HTMLInputElement) {
-						data.node.focus();
-					}
-				},
 				mousedown(e, data) {
 					const event = e as MouseEvent;
 					const target = data?.node;
@@ -134,6 +128,12 @@ export function createDefaultInputEvents(
 				},
 				focus(e) {
 					configs.input.status.focus = true;
+					requestAnimationFrame(() => {
+						configs.ref?.classList.add('animation-bounce');
+						setTimeout(() => {
+							configs.ref?.classList.remove('animation-bounce');
+						}, configs.duration ?? 300);
+					});
 				},
 				blur() {
 					configs.input.status.focus = false;

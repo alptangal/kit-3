@@ -8,8 +8,11 @@ import type { Timezone } from './timezone';
 export type AuthMethod = 'webauthn' | 'password';
 export interface ServerResponse {
 	ok: boolean;
+	/** Nội dung phản hồi đa ngôn ngữ */
 	message?: TranslateContent;
 	data?: { [k: string]: any };
+	/** HTTP status code (chỉ dùng ở client-side, từ apiFetch) */
+	status?: number;
 }
 interface VisualKeyboardMeta {
 	width: number;

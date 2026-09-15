@@ -4,11 +4,13 @@ import pick from 'es-toolkit/compat/pick';
 import { SvelteMap } from 'svelte/reactivity';
 import * as uuid from 'uuid';
 
+/** @deprecated Dùng handleEvents thay thế. Hàm này chỉ giữ lại để tương thích ngược. */
 export function handleEvents_old(events: BasicProps['events'][]) {
 	return (element: HTMLElement) => {
-		const stableEvents = events.map((event) => ({
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const stableEvents = (events as any[]).map((event: any) => ({
 			...event,
-			event: event?.events.map((ev) => {
+			event: (event?.events as any[])?.map((ev: any) => {
 				const newEvent: EventListener = {};
 				(Object.keys(ev) as (keyof typeof ev)[]).forEach((key) => {
 					const val = ev[key as keyof EventListener] as EventDefault | undefined;
@@ -76,11 +78,13 @@ export function handleEvents_old(events: BasicProps['events'][]) {
 						} else {
 							const boundHandler = processEvent.bind(null, eventInput);
 							const id = eventInput.id ?? uuid.v7();
-							(eventObj.target ?? element).addEventListener(eventName, boundHandler);
+							// eslint-disable-next-line @typescript-eslint/no-explicit-any
+							((eventObj as any).target ?? element).addEventListener(eventName, boundHandler);
 							managers.set(id, {
 								eventListener: boundHandler,
 								eventName,
-								target: eventObj.target ?? element
+								// eslint-disable-next-line @typescript-eslint/no-explicit-any
+								target: (eventObj as any).target ?? element
 							});
 						}
 					}

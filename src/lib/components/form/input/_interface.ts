@@ -1,3 +1,4 @@
+//$components/form/input/_interface.ts
 import type { BasicConfigs, BasicProps, EventListener, Color, Size } from '$components/interface';
 import type { TranslateContent } from '$interfaces/basic';
 import type { Snippet, SvelteComponent } from 'svelte';
@@ -45,7 +46,7 @@ export interface InputProps extends BasicProps {
 	rounded?: Size | 'full' | 'none';
 	size?: Size;
 	value?: string;
-	placeholder?: TranslateContent;
+	placeholder?: TranslateContent | string;
 	variant?: InputVariants;
 	maxLength?: number | string;
 	maxNumber?: number | string;
@@ -79,6 +80,8 @@ export interface InputProps extends BasicProps {
 	loading?: boolean;
 	color?: Color;
 	name?: string;
+	highlight?: string;
+	caseSensitive?: boolean;
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;
@@ -161,6 +164,8 @@ export interface InputConfigs extends BasicConfigs {
 		>;
 	};
 	name?: string;
+	highlight?: string;
+	caseSensitive?: boolean;
 	focus: () => void;
 	loading?: boolean;
 	reset: () => void;

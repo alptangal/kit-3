@@ -1,4 +1,5 @@
-import type { Size } from '$interfaces/basic';
+// Size không được export từ $interfaces/basic — lấy từ $components/interface
+import type { Size } from '$components/interface';
 import { getContext, setContext } from 'svelte';
 
 export interface ContentMeta {

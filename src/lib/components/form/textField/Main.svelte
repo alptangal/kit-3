@@ -48,7 +48,13 @@
 						},
 						mousedown(e) {
 							const event = e as MouseEvent;
-							event.preventDefault();
+							const target = event.target as HTMLElement;
+							// Chỉ prevent default nếu không click trực tiếp vào thẻ input/textarea
+							// để không làm hỏng tính năng native (ví dụ: double click bôi đen text)
+							if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+								event.preventDefault();
+							}
+							
 							if (event.detail == 1) {
 								if (!configs.status.focus) {
 									configs.status.selectAll = false;

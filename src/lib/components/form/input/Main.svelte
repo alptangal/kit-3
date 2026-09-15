@@ -1,4 +1,5 @@
 <script lang="ts">
+	//$components/form/input/Main.svelte
 	import { iconify } from '$assets/icons/iconify';
 	import { Button, Icon } from '$components/element';
 	import { measureTextWidth, styleSynced } from '$modules';
@@ -26,85 +27,133 @@
 	import { getFormContext } from '../form';
 	import { getTextFieldContext } from '../textField';
 
-	let visualNumberKbCleaner: (() => void) | undefined = $state(undefined);
 	let { value = $bindable(), disabled = $bindable(), ...props }: InputProps = $props();
+	const typeDerived = $derived(props.type ?? 'text');
+	const sizeDerived = $derived(props.size ?? textFieldContext?.size ?? formContext?.size ?? client.browser?.size ?? 'md');
+	const roundedDerived = $derived(props.rounded ?? sizeDerived);
+
+	const styleDerived = $derived.by(() => {
+		const defaultStyles: (string | undefined)[] = [
+			'input-root',
+			`size-${sizeDerived}`,
+			configs.status.focus ? 'focus' : undefined,
+			`variant-${variantDerived}`,
+			disabledDerived ? 'disabled' : undefined,
+			`rounded-${roundedDerived}`,
+			props.loading ? 'loading' : undefined,
+			`color-${colorDerived}`,
+			configs.status.hover || textFieldContext?.status.hover ? 'hover' : undefined
+		];
+		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
+	});
+
+	const delayDerived = $derived(client.browser?.delay ?? 300);
+	const durationDerived = $derived(client.browser?.delay ?? 300);
+	const variantDerived = $derived(props.variant ?? 'secondary');
+
+	const placeholderDerived = $derived.by(() => {
+		if (!props.placeholder) return undefined;
+		if (typeof props.placeholder === 'string') return props.placeholder;
+		const currentLang = client.browser?.language ?? 'en';
+		const text = props.placeholder[currentLang] ?? props.placeholder.en ?? props.placeholder.vi;
+		return text ? text : undefined;
+	});
+
+	const maxLengthDerived = $derived.by(() => {
+		if (props.maxLength)
+			return typeof props.maxLength == 'number' ? props.maxLength : parseFloat(props.maxLength);
+		return undefined;
+	});
+
+	const maxNumberDerived = $derived.by(() => {
+		return typeof props.maxNumber == 'number'
+			? props.maxNumber
+			: props.maxNumber
+				? parseFloat(props.maxNumber)
+				: undefined;
+	});
+
+	const minNumberDerived = $derived.by(() => {
+		return typeof props.minNumber == 'number'
+			? props.minNumber
+			: props.minNumber
+				? parseFloat(props.minNumber)
+				: undefined;
+	});
+
+	const colorDerived = $derived.by(() => {
+		if (props.validation || requiredDerived || typeDerived == 'email') {
+			if (configs?.validation?.isValid != 'pending') {
+				return configs?.validation?.isValid ? 'success' : 'error';
+			}
+		}
+		return props.color ?? 'default';
+	});
+
+	const requiredDerived = $derived(props.required ?? textFieldContext?.required);
+
+	let _disabled: undefined | boolean = $state(undefined);
+	const disabledDerived = $derived.by(() => {
+		if (disabled) return disabled;
+		return _disabled ?? formContext?.disabled;
+	});
+
+	const nameDerived = $derived(props.name ?? textFieldContext?.name);
+
+	const clearDisplayDerived = $derived(props.actionButtons?.clear?.display ?? true);
+	const copyDisplayDerived = $derived(props.actionButtons?.copy?.display ?? false);
+	const pasteDisplayDerived = $derived(props.actionButtons?.paste?.display ?? false);
+	const showPasswordDisplayDerived = $derived(props.actionButtons?.showPassword?.display ?? true);
+
+	const highlightDerived = $derived(props.highlight);
+	const caseSensitiveDerived = $derived(props.caseSensitive ?? false);
+
+	/** Tính danh sách các đoạn { text, isMatch } để render highlight overlay */
+	const highlightSegmentsDerived = $derived.by(() => {
+		if (!highlightDerived || !value) return undefined;
+		const flag = caseSensitiveDerived ? '' : 'i';
+		let regex: RegExp;
+		try {
+			regex = new RegExp(highlightDerived.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), `g${flag}`);
+		} catch {
+			return undefined;
+		}
+		const segments: { text: string; isMatch: boolean }[] = [];
+		let lastIndex = 0;
+		for (const match of value.matchAll(regex)) {
+			if (match.index > lastIndex) {
+				segments.push({ text: value.slice(lastIndex, match.index), isMatch: false });
+			}
+			segments.push({ text: match[0], isMatch: true });
+			lastIndex = match.index + match[0].length;
+		}
+		if (lastIndex < value.length) {
+			segments.push({ text: value.slice(lastIndex), isMatch: false });
+		}
+		return segments;
+	});
+
 	let configs: InputConfigs = $state({
 		status: {},
-		get type() {
-			return props.type ?? 'text';
-		},
-		get size() {
-			return (
-				props.size ?? textFieldContext?.size ?? formContext?.size ?? client.browser?.size ?? 'md'
-			);
-		},
-		get rounded() {
-			return props.rounded ?? this.size;
-		},
-		get style() {
-			const defaultStyles: (string | undefined)[] = [
-				'input-root',
-				`size-${this.size}`,
-				configs.status.focus ? 'focus' : undefined,
-				`variant-${this.variant}`,
-				this.disabled ? 'disabled' : undefined,
-				`rounded-${this.rounded}`,
-				props.loading ? 'loading' : undefined,
-				`color-${this.color}`,
-				configs.status.hover || textFieldContext?.status.hover ? 'hover' : undefined
-			];
-			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
-		},
-		get delay() {
-			return client.browser?.delay ?? 300;
-		},
-		get duration() {
-			return client.browser?.delay ?? 300;
-		},
-		get variant() {
-			return props.variant ?? 'secondary';
-		},
-		get maxLength() {
-			if (props.maxLength)
-				return typeof props.maxLength == 'number' ? props.maxLength : parseFloat(props.maxLength);
-			return undefined;
-		},
-		get maxNumber() {
-			return typeof props.maxNumber == 'number'
-				? props.maxNumber
-				: props.maxNumber
-					? parseFloat(props.maxNumber)
-					: undefined;
-		},
-		get minNumber() {
-			return typeof props.minNumber == 'number'
-				? props.minNumber
-				: props.minNumber
-					? parseFloat(props.minNumber)
-					: undefined;
-		},
-		get color() {
-			if (props.validation || configs.required || configs.type == 'email') {
-				if (configs.validation.isValid != 'pending') {
-					return configs.validation.isValid ? 'success' : 'error';
-				}
-			}
-			return props.color ?? 'default';
-		},
-		get required() {
-			return props.required ?? textFieldContext?.required;
-		},
-		_disabled: undefined as undefined | boolean,
-		get disabled() {
-			if (disabled) return disabled;
-			return this._disabled ?? formContext?.disabled;
-		},
-		set disabled(v) {
-			this._disabled = v;
-		},
-		get name() {
-			return props.name ?? textFieldContext?.name;
-		},
+		get type() { return typeDerived; },
+		get size() { return sizeDerived; },
+		get rounded() { return roundedDerived; },
+		get style() { return styleDerived; },
+		get delay() { return delayDerived; },
+		get duration() { return durationDerived; },
+		get variant() { return variantDerived; },
+		get maxLength() { return maxLengthDerived; },
+		get maxNumber() { return maxNumberDerived; },
+		get minNumber() { return minNumberDerived; },
+		get color() { return colorDerived; },
+		get required() { return requiredDerived; },
+		get _disabled() { return _disabled; },
+		set _disabled(v) { _disabled = v; },
+		get disabled() { return disabledDerived; },
+		set disabled(v) { _disabled = v; },
+		get name() { return nameDerived; },
+		get highlight() { return highlightDerived; },
+		get caseSensitive() { return caseSensitiveDerived; },
 		validation: {
 			get isValid() {
 				if (!props.validation && !configs.required && configs.type !== 'email') return undefined;
@@ -202,33 +251,19 @@
 		},
 		placeholder: {
 			get value() {
-				return (
-					props.placeholder ?? {
-						vi: `Nhập giá trị ${configs.type}`,
-						en: `Enter your ${configs.type}`
-					}
-				);
+				if (!props.placeholder) return { vi: '', en: '' };
+				if (typeof props.placeholder === 'string')
+					return { vi: props.placeholder, en: props.placeholder };
+				return props.placeholder;
 			},
 			get event() {
 				if (configs.disabled) return [];
 				return [
 					{
 						events: {
-							load() {
-								return () => {
-									requestAnimationFrame(() => {
-										const ref = configs.input[configs.type].ref;
-										if (ref && !(configs.type === 'number' && client.browser?.isMobile)) {
-											ref.focus();
-											configs.ref?.classList.add('animation-bounce');
-											setTimeout(() => {
-												configs.ref?.classList.remove('animation-bounce');
-											}, configs.duration);
-										}
-									});
-								};
-							},
-							mousedown() {}
+							mousedown() {
+								configs.focus();
+							}
 						}
 					}
 				];
@@ -250,10 +285,7 @@
 													eventName,
 													async () => {
 														const evName = eventName as keyof EventListener | 'operator';
-														if (evName == 'operator') {
-															if (typeof data == 'string') {
-															}
-														} else {
+														if (evName !== 'operator') {
 															if (!configs.validation.process)
 																configs.validation.process = new SvelteMap();
 															if (typeof data == 'object' && Array.isArray(data)) {
@@ -431,12 +463,6 @@
 											const baseSize = getComputedStyle(document.body).fontSize;
 											data.node.style.width = `${(w + 1) / parseFloat(baseSize)}rem`;
 										}
-										return async () => {
-											if (visualNumberKbCleaner && configs.status.focus == false) {
-												visualNumberKbCleaner();
-												visualNumberKbCleaner = undefined;
-											}
-										};
 									}
 								},
 								async keydown(e, data) {
@@ -634,9 +660,7 @@
 		},
 		actionButtons: {
 			clear: {
-				get display() {
-					return props.actionButtons?.clear?.display ?? true;
-				},
+				get display() { return clearDisplayDerived; },
 				event: [
 					{
 						events: {
@@ -663,9 +687,7 @@
 				}
 			},
 			copy: {
-				get display() {
-					return props.actionButtons?.copy?.display ?? false;
-				},
+				get display() { return copyDisplayDerived; },
 				status: {},
 				event: [
 					{
@@ -700,9 +722,7 @@
 				]
 			},
 			paste: {
-				get display() {
-					return props.actionButtons?.paste?.display ?? false;
-				},
+				get display() { return pasteDisplayDerived; },
 				status: {},
 				event: [
 					{
@@ -741,9 +761,7 @@
 				]
 			},
 			showPassword: {
-				get display() {
-					return props.actionButtons?.showPassword?.display ?? true;
-				},
+				get display() { return showPasswordDisplayDerived; },
 				status: {
 					_showing: undefined as undefined | boolean,
 					get showing() {
@@ -796,6 +814,13 @@
 				}
 			}
 			configs.status.focus = true;
+			requestAnimationFrame(() => {
+				const type = configs.type === 'password' || configs.type === 'email' || configs.type === 'phone' ? configs.type : 'text';
+				const ref = configs.input[type]?.ref as HTMLInputElement | undefined;
+				if (ref && typeof ref.focus === 'function' && document.activeElement !== ref) {
+					ref.focus();
+				}
+			});
 		},
 		reset() {
 			value = undefined;
@@ -942,18 +967,16 @@
 			mousedown: {
 				async handler(e: MouseEvent) {
 					configs.status.mousePos = { clientX: e.clientX, clientY: e.clientY };
-					e.preventDefault();
+					
+					const target = e.target as HTMLElement;
+					const type = configs.type as 'text' | 'email' | 'password' | 'number' | 'phone';
+					const ref = configs.input[type]?.ref as HTMLElement | undefined;
+					
+					if (target !== ref) {
+						e.preventDefault();
+					}
+
 					if (e.detail == 1) {
-						if (value && configs.maskValue.ref) {
-							const index = calculatorCursor(e, value, configs.maskValue.ref);
-							requestAnimationFrame(() => {
-								const ref = configs.input[configs.type].ref;
-								if (ref instanceof HTMLInputElement) {
-									configs.status.currentCursor = index ?? value?.length ?? 1;
-									ref.setSelectionRange(configs.status.currentCursor, configs.status.currentCursor);
-								}
-							});
-						}
 						if (
 							configs.type === 'number' &&
 							client.browser?.isMobile &&
@@ -961,27 +984,25 @@
 						) {
 							if (!client.browser?.visualInput) client.createInputVisual();
 							await client.getVisualKeyboardMeta();
-							// configs.status.focus = true;
 							requestAnimationFrame(() => showVisualNumberKb());
 						} else {
 							if (configs.status.focus) {
-								const target = e.target as HTMLElement;
-								const ref = configs.input[configs.type].ref;
-								if (!ref?.contains(target)) e.preventDefault();
-								const name = 'animation-bounce';
-								if (!configs.timeId) configs.timeId = new Map();
-								const timeId = configs.timeId.get(name);
-								if (timeId) clearTimeout(timeId);
-								configs.timeId.set(
-									name,
-									setTimeout(() => {
-										configs.ref?.classList.add('animation-bounce');
-										setTimeout(
-											() => configs.ref?.classList.remove('animation-bounce'),
-											configs.duration
-										);
-									}, configs.delay)
-								);
+								if (target !== ref) {
+									const name = 'animation-bounce';
+									if (!configs.timeId) configs.timeId = new Map();
+									const timeId = configs.timeId.get(name);
+									if (timeId) clearTimeout(timeId);
+									configs.timeId.set(
+										name,
+										setTimeout(() => {
+											configs.ref?.classList.add('animation-bounce');
+											setTimeout(
+												() => configs.ref?.classList.remove('animation-bounce'),
+												configs.duration
+											);
+										}, configs.delay)
+									);
+								}
 							} else {
 								configs.focus();
 								if (configs.type === 'number' && client.browser?.isMobile) {
@@ -1059,6 +1080,27 @@
 		) {
 			(configs.input[configs.type].ref! as HTMLInputElement).setSelectionRange(0, value.length);
 			if (textFieldContext?.status.selectAll) textFieldContext.status.selectAll = false;
+			if (configs.status.selectAll) configs.status.selectAll = false;
+		}
+	});
+
+	$effect(() => {
+		if (configs.type == 'number' && !configs.status.focus && value) {
+			if (!configs.timeId) configs.timeId = new Map();
+			const name = 'timeout-calculate';
+			const timeId = configs.timeId.get(name);
+			if (timeId) clearTimeout(timeId);
+			configs.timeId.set(
+				name,
+				setTimeout(() => {
+					if (value) {
+						const rs = calculatorString(value);
+						if (rs && rs.toString() !== value) {
+							value = rs.toString();
+						}
+					}
+				}, configs.delay)
+			);
 		}
 	});
 
@@ -1073,7 +1115,6 @@
 		if (configs.type == 'password') configs.input.password.value = undefined;
 		[...(configs.timeId?.values() ?? [])].forEach((time) => {
 			clearTimeout(time);
-			cancelAnimationFrame(time as number);
 		});
 		configs.timeId?.clear();
 	});
@@ -1096,49 +1137,14 @@
 			}
 		})}
 	{/if}
-	{#if !configs.status.focus && !value}
-		<div
-			class="input-placeholder"
-			bind:this={configs.placeholder.ref}
-			{@attach handleEvents(configs.placeholder.event)}
-		>
-			{configs.placeholder.value[client.browser?.language ?? 'en']}
-		</div>
-	{:else if !configs.status.focus && value}
-		<div
-			bind:this={configs.maskValue.ref}
-			class={configs.maskValue.style}
-			{@attach handleEvents(configs.maskValue.event)}
-		>
-			{#if ['text', 'number', 'email'].includes(configs.type)}
-				{value}
-			{:else if configs.type == 'password'}
-				{configs.input.password.showPassword ? value : [...value].map((_) => '●').join('')}
-			{/if}
-		</div>
-	{:else if configs.type == 'email'}
-		<input
-			type="text"
-			bind:value
-			bind:this={configs.input.email.ref}
-			class={configs.input.email.style}
-			{@attach handleEvents(configs.input.email.event)}
-		/>
-	{:else if configs.type == 'text'}
-		<input
-			type="text"
-			bind:value
-			bind:this={configs.input.text.ref}
-			class={configs.input.text.style}
-			{@attach handleEvents(configs.input.text.event)}
-		/>
-	{:else if configs.type == 'number'}
+	{#if configs.type == 'number'}
 		<div class={configs.input.number.style}>
 			<input
 				type="text"
 				bind:value
 				bind:this={configs.input.number.ref}
-				class="bg-transparent outline-none border-none"
+				class="bg-transparent outline-none border-none w-full"
+				placeholder={placeholderDerived}
 				readonly={client.browser?.isMobile}
 				inputmode={client.browser?.isMobile ? 'none' : undefined}
 				{@attach handleEvents(configs.input.number.event)}
@@ -1147,14 +1153,47 @@
 				<div class="input-visual-cursor"></div>
 			{/if}
 		</div>
-	{:else if configs.type == 'password'}
-		<input
-			type={configs.input.password.showPassword ? 'text' : 'password'}
-			bind:value
-			bind:this={configs.input.password.ref}
-			class={configs.input.password.style}
-			{@attach handleEvents(configs.input.password.event)}
-		/>
+	{:else}
+		<div class="input-highlight-wrapper">
+			{#if highlightSegmentsDerived && configs.type !== 'password'}
+				<div
+					class="input-highlight-layer"
+					aria-hidden="true"
+					{@attach (node) => {
+						// Sync scroll position from input to highlight layer
+						const inputKey = configs.type === 'email' || configs.type === 'phone' ? configs.type : 'text';
+						const inputRef = configs.input[inputKey]?.ref as HTMLInputElement | undefined;
+						if (!inputRef) return;
+						const onScroll = () => { node.scrollLeft = inputRef.scrollLeft; };
+						inputRef.addEventListener('scroll', onScroll);
+						return () => inputRef.removeEventListener('scroll', onScroll);
+					}}
+				>
+					{#each highlightSegmentsDerived as seg}
+						{#if seg.isMatch}
+							<mark class="input-highlight-mark">{seg.text}</mark>
+						{:else}
+							<span>{seg.text}</span>
+						{/if}
+					{/each}
+					<!-- whitespace char to preserve height when empty -->
+					&#x200B;
+				</div>
+			{/if}
+			<input
+				type={configs.type == 'password' ? (configs.input.password.showPassword ? 'text' : 'password') : (configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text')}
+				bind:value
+				bind:this={configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].ref}
+				class={[
+					...( configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].style ?? []),
+					highlightSegmentsDerived && configs.type !== 'password' ? 'input-transparent-text' : '',
+					'bg-transparent outline-none border-none w-full'
+				]}
+				placeholder={placeholderDerived}
+				autocomplete="off"
+				{@attach handleEvents(configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].event)}
+			/>
+		</div>
 	{/if}
 	{#if configs.maxLength && configs.type == 'text'}
 		<div class="input-max-length">{value?.length ?? 0}/{configs.maxLength}</div>

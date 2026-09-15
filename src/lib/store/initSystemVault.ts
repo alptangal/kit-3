@@ -9,7 +9,10 @@ export let systemVault: {
 	indexKey: Uint8Array;
 };
 
-const cbSystemSecrets = cbVault(cb_collectionName_vault);
+import type { CollectionName } from '$modules/schema';
+
+// env variable cb_collectionName_vault là string — cast sang CollectionName để match cbVault signature
+const cbSystemSecrets = cbVault(cb_collectionName_vault as CollectionName);
 
 async function getKeyPairFromStored(stored: {
 	publicKeyB64: string;

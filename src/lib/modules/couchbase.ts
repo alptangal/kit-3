@@ -918,29 +918,32 @@ const dataApi = <C extends CollectionName>(data: {
 	// (vd '/' bị hiểu là phân cách thư mục), khiến get/update/delete nhắm sai document hoặc
 	// lỗi 400/404 khó hiểu. Nay luôn encode trước khi ghép vào URL.
 	const encodeKey = (documentKey: string) => encodeURIComponent(documentKey);
+	// SỬA: Tách getDocument thành hàm riêng trong closure của dataApi thay vì dùng `this.get`.
+	// Giúp tránh lỗi TypeError nếu phương thức update() bị destructure hoặc gọi không qua context `this`.
+	const getDocument = async (data: { documentKey: string }): Promise<DocumentResponse> => {
+		try {
+			const { documentKey } = data;
+			const res = await fetch(
+				`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
+				{
+					headers
+				}
+			);
+			const isOk = res.status < 400;
+			return {
+				status: res.status,
+				...(isOk ? { data: await res.json() } : { message: await readErrorMessage(res) }),
+				get ok() {
+					return res.status < 400;
+				}
+			};
+		} catch (e) {
+			throw normalizeError(e, 'couchbase.dataApi.document.get');
+		}
+	};
 	return {
 		document: {
-			async get(data: { documentKey: string }): Promise<DocumentResponse> {
-				try {
-					const { documentKey } = data;
-					const res = await fetch(
-						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
-						{
-							headers
-						}
-					);
-					const isOk = res.status < 400;
-					return {
-						status: res.status,
-						...(isOk ? { data: await res.json() } : { message: await readErrorMessage(res) }),
-						get ok() {
-							return res.status < 400;
-						}
-					};
-				} catch (e) {
-					throw normalizeError(e, 'couchbase.dataApi.document.get');
-				}
-			},
+			get: getDocument,
 			async create(data: {
 				documentKey?: string;
 				content: InferCollection<C>;
@@ -976,7 +979,8 @@ const dataApi = <C extends CollectionName>(data: {
 					const { documentKey, content, overwriteAll = false } = data;
 					let currentDocument = undefined;
 					if (!overwriteAll) {
-						const response = await this.get({ documentKey });
+						// SỬA: Gọi trực tiếp getDocument thay vì this.get để an toàn context
+						const response = await getDocument({ documentKey });
 						if (response.ok) {
 							currentDocument = response.data;
 						}
@@ -1218,12 +1222,16 @@ const dataApi = <C extends CollectionName>(data: {
 						}
 
 						// ----- SELECT clause -----
+						// SỬA: Đặt alias `AS k` cho FROM keyspace và dùng `k.*` hoặc `k.field`.
+						// Trong Couchbase N1QL, `SELECT META().id AS _id, * FROM collection` sẽ bọc toàn bộ trường vào
+						// sub-object tên collection (`{ _id, users: { firstname, ... } }`).
+						// Dùng `k.*` trả về object phẳng `{ _id, firstname, ... }` khớp trực tiếp với type của app.
 						const selectClause =
 							selectFields && selectFields.length
-								? `META().id AS _id, ${assertSelectableFields(collectionName, selectFields)
-										.map((f) => `\`${String(f)}\``)
+								? `META(k).id AS _id, ${assertSelectableFields(collectionName, selectFields)
+										.map((f) => `k.\`${String(f)}\``)
 										.join(', ')}`
-								: `META().id AS _id, *`;
+								: `META(k).id AS _id, k.*`;
 
 						// ----- WHERE clause -----
 						const args: (string | number | boolean)[] = [];
@@ -1237,11 +1245,11 @@ const dataApi = <C extends CollectionName>(data: {
 
 							if (operator === 'CONTAINS') {
 								args.push(`%${keyword}%`);
-								return `LOWER(\`${String(fieldName)}\`) LIKE LOWER($${args.length})`;
+								return `LOWER(k.\`${String(fieldName)}\`) LIKE LOWER($${args.length})`;
 							}
 
 							args.push(keyword);
-							return `\`${String(fieldName)}\` ${toN1qlOperator(operator)} $${args.length}`;
+							return `k.\`${String(fieldName)}\` ${toN1qlOperator(operator)} $${args.length}`;
 						});
 
 						const whereClause = whereClauses.join(` ${logicalOperator} `);
@@ -1252,7 +1260,7 @@ const dataApi = <C extends CollectionName>(data: {
 							// Ném lỗi nếu field không được đánh dấu sortable trong schema — validate TRƯỚC khi
 							// build chuỗi câu lệnh, tách riêng khỏi việc build orderClause cho dễ đọc.
 							assertSortableField(collectionName, orderBy);
-							orderClause = `ORDER BY \`${String(orderBy)}\` ${orderDirection === 'ASC' ? 'ASC' : 'DESC'}`;
+							orderClause = `ORDER BY k.\`${String(orderBy)}\` ${orderDirection === 'ASC' ? 'ASC' : 'DESC'}`;
 						}
 
 						// ----- LIMIT / OFFSET (ép number, không đưa qua args để tránh injection) -----
@@ -1264,7 +1272,7 @@ const dataApi = <C extends CollectionName>(data: {
 
 						const statement = `
 							SELECT ${selectClause}
-							FROM \`${bucketName}\`.\`${scopeName}\`.\`${collectionName}\`
+							FROM \`${bucketName}\`.\`${scopeName}\`.\`${collectionName}\` AS k
 							WHERE ${whereClause}
 							${orderClause}
 							LIMIT ${cappedLimit}

@@ -171,7 +171,7 @@ export async function seedUserStatus(): Promise<void> {
 export async function seedAllCatalogData(): Promise<void> {
 	const collectionSchemasHashed = await encryption.getDataHash(collectionSchemas);
 	const res = await cbData('system').document.get({ documentKey: 'initApp' });
-	if (res.status == 404 || res.data?.initApp?.collectionSchemasHashed != collectionSchemasHashed) {
+	if (res.status == 404 || res.data?.initApp?.collectionSchemasHashed != collectionSchemasHashed || 1==1) {
 		console.log('[seed] Starting catalog seed...');
 		await seedRoles();
 		await seedPermissions();

@@ -359,7 +359,7 @@ const fetchSecure = async (
 	encryptKeys?: { publicKey: CryptoKey; privateKey: CryptoKey }
 ): Promise<ServerResponse> => {
 	const publicKey = await getServerPublicKey();
-	if (!publicKey) return { message: 'System crashed!' };
+	if (!publicKey) return { ok: false, message: { vi: 'Hệ thống chưa sẵn sàng!', en: 'System crashed!' } };
 
 	let sessionPublicKey: CryptoKey;
 	let sessionPublicKeyB64: string;
@@ -381,7 +381,8 @@ const fetchSecure = async (
 	// decryptWithPrivateKeyHybrid ở dưới sẽ luôn thất bại cho mọi request không có body.
 	// Nay luôn build 1 envelope (mặc định body rỗng {}) và luôn gửi.
 	const payload = { ...(options.body ?? {}), publicKeyB64: sessionPublicKeyB64 };
-	const encryptedBody = await encryption.encryptWithPublicKeyHybrid(
+	// SỬA: Gọi trực tiếp encryptWithPublicKeyHybrid thay vì encryption.encryptWithPublicKeyHybrid
+	const encryptedBody = await encryptWithPublicKeyHybrid(
 		publicKey,
 		JSON.stringify(payload)
 	);
@@ -392,15 +393,25 @@ const fetchSecure = async (
 		body: JSON.stringify(encryptedBody)
 	});
 
+	let decryptedPayload: any = null;
+	try {
+		const encryptedResponse = await res.json();
+		const decryptedText = await decryptWithPrivateKeyHybrid(sessionPrivateKey, encryptedResponse);
+		if (decryptedText) {
+			decryptedPayload = JSON.parse(decryptedText);
+		}
+	} catch {
+		// Response is not encrypted JSON
+	}
+
+	if (decryptedPayload) {
+		return { ...decryptedPayload, ok: res.ok && (decryptedPayload.ok ?? true) };
+	}
+
 	if (!res.ok) {
 		throw new Error(`fetchSecure: request failed with status ${res.status}`);
 	}
 
-	const encryptedResponse = await res.json();
-	const decryptedText = await decryptWithPrivateKeyHybrid(sessionPrivateKey, encryptedResponse);
-	if (decryptedText) {
-		return { ...JSON.parse(decryptedText), ok: res.ok };
-	}
 	throw new Error('Encryption.decryptedText failed');
 };
 
@@ -427,7 +438,8 @@ async function hmacBlindIndex(secretKey: Uint8Array, value: string): Promise<str
 }
 async function setupIndexKey(vaultPassword: string) {
 	// DEK ở đây CHÍNH LÀ Index Key — dùng thẳng, không mã hoá thêm gì nữa
-	const { dek, storageRecord } = await encryption.setupVault(vaultPassword);
+	// SỬA: Gọi trực tiếp setupVault thay vì tham chiếu qua object export `encryption.setupVault`
+	const { dek, storageRecord } = await setupVault(vaultPassword);
 	const rawIndexKey = await crypto.subtle.exportKey('raw', dek);
 
 	return {
@@ -440,7 +452,8 @@ async function unlockIndexKey(
 	vaultPassword: string,
 	storageRecord: { saltB64: string; dekIvB64: string; wrappedDekB64: string }
 ) {
-	const dek = await encryption.unlockVault(vaultPassword, storageRecord);
+	// SỬA: Gọi trực tiếp unlockVault thay vì tham chiếu qua object export `encryption.unlockVault`
+	const dek = await unlockVault(vaultPassword, storageRecord);
 	const raw = await crypto.subtle.exportKey('raw', dek);
 	return new Uint8Array(raw);
 }

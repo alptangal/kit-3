@@ -13,7 +13,7 @@ import { encryption } from '$modules/encryption';
 import { collectionSchemas, type CollectionName } from '$modules/schema';
 import { cbData } from './clients';
 
-const cbManagement = couchbase().managementData({
+const cbManagement = couchbase.managementData({
 	apiKeySecret: cb_api_key_secret,
 	organizationId: cb_organizationId
 });

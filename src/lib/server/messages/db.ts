@@ -132,7 +132,8 @@ export const users: UsersMessages = {
 		}
 	}
 };
-const management: ManagementMessages = {
+// SỬA: Export biến management để các service có thể sử dụng thông điệp dịch của API quản trị
+export const management: ManagementMessages = {
 	organizations: {
 		get: {
 			success: { vi: 'Lấy thông tin tổ chức thành công', en: 'Organization fetched successfully' },
