@@ -2,6 +2,7 @@
 import type { BasicConfigs, BasicProps, EventListener, Color, Size } from '$components/interface';
 import type { TranslateContent } from '$interfaces/basic';
 import type { Snippet, SvelteComponent } from 'svelte';
+import type { FullAutoFill } from 'svelte/elements';
 
 type InputTypes = 'text' | 'password' | 'number' | 'currency' | 'phone' | 'email';
 type InputVariants = 'primary' | 'secondary';
@@ -53,6 +54,10 @@ export interface InputProps extends BasicProps {
 	minNumber?: number | string;
 	required?: boolean;
 	showPassword?: boolean;
+	/** HTML autocomplete attribute — bỏ qua nếu không cần */
+	autocomplete?: FullAutoFill | null | undefined;
+	/** HTML inputmode attribute — hiển thị đúng keyboard trên mobile */
+	inputmode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
 	actionButtons?: {
 		clear?: {
 			display?: boolean;
@@ -82,6 +87,10 @@ export interface InputProps extends BasicProps {
 	name?: string;
 	highlight?: string;
 	caseSensitive?: boolean;
+	/** Danh sách email domains gợi ý khi gõ @ (mặc định các domain phổ biến: gmail, outlook, icloud, atomicmail, proton, yahoo, hotmail) */
+	emailDomains?: string[];
+	/** Bật/tắt gợi ý email auto-complete (mặc định bật khi type='email') */
+	emailSuggest?: boolean;
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;

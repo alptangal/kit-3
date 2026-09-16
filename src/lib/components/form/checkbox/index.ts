@@ -12,9 +12,10 @@ export function getCheckboxContext(): CheckboxConfigs | undefined {
 }
 export function releaseIndicator(data?: CheckboxConfigs) {
 	if (!data?.ref) return;
-	mount(Indicator, { target: data.ref, props: { checked: data.checked } });
+	const context = new Map<unknown, unknown>([[NAME, data]]);
+	const instance = mount(Indicator, { target: data.ref, context });
 	return () => {
-		unmount(Indicator);
+		unmount(instance);
 	};
 }
 export const defaultValidation: {

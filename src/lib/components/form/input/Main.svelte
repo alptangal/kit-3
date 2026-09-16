@@ -26,8 +26,11 @@
 	import { browser } from '$app/environment';
 	import { getFormContext } from '../form';
 	import { getTextFieldContext } from '../textField';
+	import type { FullAutoFill } from 'svelte/elements';
 
 	let { value = $bindable(), disabled = $bindable(), ...props }: InputProps = $props();
+	// Ghi nhớ giá trị ban đầu khi component được tạo ra, dùng để reset về đúng mốc ban đầu
+	let _initialValue: string | undefined = value;
 	const typeDerived = $derived(props.type ?? 'text');
 	const sizeDerived = $derived(props.size ?? textFieldContext?.size ?? formContext?.size ?? client.browser?.size ?? 'md');
 	const roundedDerived = $derived(props.rounded ?? sizeDerived);
@@ -133,6 +136,137 @@
 		return segments;
 	});
 
+	// ── Email Auto-complete Suggestions ──
+	let emailSuggestionsDismissed = $state(false);
+	let emailHighlightedIndex = $state(0);
+
+	const defaultPopularEmailDomains = [
+		'gmail.com',
+		'outlook.com',
+		'icloud.com',
+		'atomicmail.com',
+		'proton.me',
+		'protonmail.com',
+		'yahoo.com',
+		'hotmail.com'
+	];
+
+	const emailSuggestEnabled = $derived(props.emailSuggest ?? (typeDerived === 'email'));
+	const emailDomainsDerived = $derived(props.emailDomains ?? defaultPopularEmailDomains);
+
+	const emailPartsDerived = $derived.by(() => {
+		if (!emailSuggestEnabled || typeof value !== 'string') {
+			return null;
+		}
+		const firstAt = value.indexOf('@');
+		const lastAt = value.lastIndexOf('@');
+		// Trigger khi có đúng 1 ký tự '@'
+		if (firstAt === -1 || firstAt !== lastAt) {
+			return null;
+		}
+		const prefix = value.slice(0, firstAt);
+		const query = value.slice(firstAt + 1).toLowerCase();
+		return { prefix, query };
+	});
+
+	const matchingEmailDomains = $derived.by(() => {
+		if (!emailPartsDerived) return [];
+		const { query } = emailPartsDerived;
+		return emailDomainsDerived.filter((domain) => {
+			const lower = domain.toLowerCase();
+			// Thu gọn danh sách gợi ý theo độ chi tiết người dùng nhập sau @
+			// Nếu đã hoàn thành nhập đúng toàn bộ domain thì ẩn gợi ý
+			return lower.startsWith(query) && lower !== query;
+		});
+	});
+
+	// Reset index khi danh sách domain gợi ý thay đổi
+	$effect(() => {
+		if (emailHighlightedIndex >= matchingEmailDomains.length) {
+			emailHighlightedIndex = 0;
+		}
+	});
+
+	// Mở lại gợi ý khi người dùng thay đổi giá trị (gõ, xoá, backspace)
+	let _prevValueForSuggest: string | undefined = undefined;
+	$effect(() => {
+		if (value !== _prevValueForSuggest) {
+			_prevValueForSuggest = value;
+			emailSuggestionsDismissed = false;
+		}
+	});
+
+	// Quản lý trạng thái focus: input đang focus HOẶC chuột đang trên popup
+	let isInteractingWithSuggestions = $state(false);
+	const isFocused = $derived(!!(configs?.status?.focus || configs?.input?.status?.focus));
+
+	const emailSuggestionsOpen = $derived(
+		emailSuggestEnabled &&
+		!emailSuggestionsDismissed &&
+		(isFocused || isInteractingWithSuggestions) &&
+		emailPartsDerived !== null &&
+		matchingEmailDomains.length > 0
+	);
+
+	function selectEmailDomain(domain: string) {
+		if (!emailPartsDerived) return;
+		value = `${emailPartsDerived.prefix}@${domain}`;
+		_prevValueForSuggest = value;
+		emailSuggestionsDismissed = true;
+		isInteractingWithSuggestions = false;
+		const type =
+			configs.type === 'password' || configs.type === 'email' || configs.type === 'phone'
+				? configs.type
+				: 'text';
+		const inputRef = configs.input[type]?.ref as HTMLInputElement | undefined;
+		if (inputRef) {
+			requestAnimationFrame(() => {
+				inputRef.focus();
+				try {
+					if (['text', 'search', 'url', 'tel', 'password'].includes(inputRef.type)) {
+						inputRef.setSelectionRange(value.length, value.length);
+					}
+				} catch (e) {
+					// Input type email/number không hỗ trợ setSelectionRange theo chuẩn WHATWG
+				}
+			});
+		}
+	}
+
+	function handleEmailKeydown(e: KeyboardEvent) {
+		if (!emailSuggestEnabled) return;
+		if (emailSuggestionsOpen && matchingEmailDomains.length > 0) {
+			if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				e.stopPropagation();
+				emailHighlightedIndex = (emailHighlightedIndex + 1) % matchingEmailDomains.length;
+				return;
+			}
+			if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				e.stopPropagation();
+				emailHighlightedIndex =
+					(emailHighlightedIndex - 1 + matchingEmailDomains.length) % matchingEmailDomains.length;
+				return;
+			}
+			if (e.key === 'Enter' || e.key === 'Tab') {
+				e.preventDefault();
+				e.stopPropagation();
+				const chosen = matchingEmailDomains[emailHighlightedIndex] ?? matchingEmailDomains[0];
+				if (chosen) {
+					selectEmailDomain(chosen);
+				}
+				return;
+			}
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				e.stopPropagation();
+				emailSuggestionsDismissed = true;
+				return;
+			}
+		}
+	}
+
 	let configs: InputConfigs = $state({
 		status: {},
 		get type() { return typeDerived; },
@@ -180,6 +314,7 @@
 					{
 						events: {
 							async blur() {
+								if (textFieldContext) textFieldContext.status.touched = true;
 								if (!configs.validation.process) configs.validation.process = new SvelteMap();
 								const operator = 'and' as const;
 								configs.validation.process.set('blur', 'pending');
@@ -210,6 +345,9 @@
 										eventName,
 										async () => {
 											const evName = eventName as keyof EventListener;
+											if (evName === 'blur' && textFieldContext) {
+												textFieldContext.status.touched = true;
+											}
 
 											if (!configs.validation.process) {
 												configs.validation.process = new SvelteMap();
@@ -823,10 +961,21 @@
 			});
 		},
 		reset() {
-			value = undefined;
-			if (configs.type == 'password') configs.input.password.value = undefined;
+			// Khôi phục về đúng giá trị ban đầu (khi mount), không xóa trắng
+			value = _initialValue;
+			if (configs.type == 'password') configs.input.password.value = _initialValue;
 			configs.validation.process = undefined;
 			configs.validation.messages = undefined;
+			if (configs.timeId) {
+				for (const id of configs.timeId.values()) clearTimeout(id);
+				configs.timeId.clear();
+			}
+			configs.loading = false;
+			configs.status.focus = false;
+			configs.input.status.focus = false;
+			if (configs.ref) {
+				configs.ref.classList.remove('validation-loading');
+			}
 		}
 	});
 	const formContext = getFormContext();
@@ -1068,7 +1217,7 @@
 				textFieldContext.setValue(value);
 			if (textFieldContext.validation?.setValid)
 				textFieldContext.validation.setValid(configs.validation.isValid);
-			textFieldContext.status.focus = configs.input.status.focus;
+			textFieldContext.status.focus = configs.status.focus ?? configs.input.status.focus;
 			textFieldContext.loading = configs.loading;
 		}
 	});
@@ -1078,7 +1227,16 @@
 			(textFieldContext?.status.selectAll || configs.status.selectAll) &&
 			value?.length
 		) {
-			(configs.input[configs.type].ref! as HTMLInputElement).setSelectionRange(0, value.length);
+			try {
+				const el = configs.input[configs.type]?.ref as HTMLInputElement | undefined;
+				if (el && ['text', 'search', 'url', 'tel', 'password'].includes(el.type)) {
+					el.setSelectionRange(0, value.length);
+				} else if (el) {
+					el.select();
+				}
+			} catch (e) {
+				// Ignore for unsupported types like email/number
+			}
 			if (textFieldContext?.status.selectAll) textFieldContext.status.selectAll = false;
 			if (configs.status.selectAll) configs.status.selectAll = false;
 		}
@@ -1190,7 +1348,10 @@
 					'bg-transparent outline-none border-none w-full'
 				]}
 				placeholder={placeholderDerived}
-				autocomplete="off"
+				autocomplete={props.autocomplete ?? 'off' as FullAutoFill}
+				inputmode={props.inputmode}
+				name={nameDerived}
+				onkeydown={handleEmailKeydown}
 				{@attach handleEvents(configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].event)}
 			/>
 		</div>
@@ -1264,6 +1425,79 @@
 				return configs.size;
 			}
 		})}
+	{/if}
+
+	{#if emailSuggestionsOpen && matchingEmailDomains.length > 0}
+		<div
+			class="email-suggestions-popup"
+			role="listbox"
+			aria-label="Email domain suggestions"
+			onpointerenter={() => {
+				isInteractingWithSuggestions = true;
+			}}
+			onpointerleave={() => {
+				isInteractingWithSuggestions = false;
+				if (!configs?.status?.focus && !configs?.input?.status?.focus) {
+					suggestionsFocusHeld = false;
+				}
+			}}
+			onpointerdown={(e) => {
+				e.stopPropagation();
+			}}
+			onmousedown={(e) => {
+				e.stopPropagation();
+			}}
+			onclick={(e) => {
+				e.stopPropagation();
+			}}
+		>
+			<div class="email-suggestions-header">
+				<span>Gợi ý domain</span>
+			</div>
+			<div class="email-suggestions-list">
+				{#each matchingEmailDomains as domain, idx (domain)}
+					<button
+						type="button"
+						role="option"
+						aria-selected={emailHighlightedIndex === idx}
+						class="email-suggestion-item {emailHighlightedIndex === idx ? 'active' : ''}"
+						onpointerdown={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							selectEmailDomain(domain);
+						}}
+						onmousedown={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							selectEmailDomain(domain);
+						}}
+						onclick={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							selectEmailDomain(domain);
+						}}
+						ontouchstart={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							selectEmailDomain(domain);
+						}}
+						onmouseenter={() => {
+							emailHighlightedIndex = idx;
+						}}
+					>
+						<span class="email-suggestion-icon">@</span>
+						<span class="email-suggestion-text">
+							<span class="email-suggestion-prefix">{emailPartsDerived?.prefix ?? ''}@</span>
+							<span class="email-suggestion-match">{emailPartsDerived?.query ?? ''}</span>
+							<span class="email-suggestion-rest">{domain.slice(emailPartsDerived?.query.length ?? 0)}</span>
+						</span>
+						{#if emailHighlightedIndex === idx}
+							<span class="email-suggestion-hint">Tab ↵</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		</div>
 	{/if}
 </svelte:element>
 

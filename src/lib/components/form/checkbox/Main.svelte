@@ -11,8 +11,19 @@
 	import type { ValidationCompact, ValidationFull } from '../input/_interface';
 
 	let { children, checked = $bindable(), ...props }: CheckboxProps = $props();
+	const formContext = getFormContext();
+	// Ghi nhớ giá trị checked ban đầu để reset về đúng mốc đầu tiên (hỗ trợ cả formContext.data)
+	let _initialChecked: boolean | undefined =
+		formContext?.data && props.name && props.name in formContext.data
+			? Boolean(formContext.data[props.name])
+			: checked;
 	let configs: CheckboxConfigs = $state({
-		status: {},
+		previousValue: _initialChecked,
+		status: {
+			get changed() {
+				return Boolean(checked) !== Boolean(_initialChecked);
+			}
+		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
 				'checkbox-root',
@@ -91,18 +102,17 @@
 			messages: new SvelteMap()
 		},
 		reset() {
-			checked = undefined;
-			configs.previousValue = undefined;
+			// Khôi phục về checked ban đầu (khi mount), không phải luôn xóa thành undefined
+			checked = _initialChecked;
+			configs.previousValue = _initialChecked;
 			configs.validation.messages = undefined;
 			configs.validation.isValid = undefined;
-			configs.status.changed = undefined;
 			if (configs.timeId) {
 				for (const id of configs.timeId.values()) clearTimeout(id);
 				configs.timeId.clear();
 			}
 		}
 	});
-	const formContext = getFormContext();
 	setCheckboxContext(configs);
 
 	async function validationProcessing(
@@ -144,10 +154,19 @@
 			: [...results.values()].some((item) => item);
 	}
 
+	let unmountIndicator: (() => void) | undefined = undefined;
+
 	$effect(() => {
 		if (!configs.children.indicator && configs.ref) {
-			releaseIndicator(configs);
+			unmountIndicator = releaseIndicator(configs);
 		}
+		return () => {
+			unmountIndicator?.();
+			unmountIndicator = undefined;
+		};
+	});
+
+	$effect(() => {
 		const current = checked;
 		const changed = untrack(() => configs.previousValue) !== current;
 
@@ -156,7 +175,6 @@
 			configs.previousValue = current;
 		});
 		if (changed) {
-			configs.status.changed = changed;
 			if (!configs.timeId) configs.timeId = new Map();
 			const name = 'timeout-valition';
 			const timeId = configs.timeId.get(name);
@@ -185,7 +203,7 @@
 		}
 	});
 	onDestroy(() => {
-		checked = undefined;
+		unmountIndicator?.();
 		[...(configs.timeId?.values() ?? [])].forEach((time) => {
 			clearTimeout(time);
 			cancelAnimationFrame(time as number);

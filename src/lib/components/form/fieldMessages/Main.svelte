@@ -28,10 +28,21 @@
 	});
 	const textFieldContext = getTextFieldContext();
 	const checkboxContext = getCheckboxContext();
+	const visibleMessages = $derived.by(() => {
+		const msgs = [...(configs.messages ?? []).values()].filter((item) => item.content);
+		const hasInvalid = msgs.some((item) => item.kind === 'invalid');
+		if (hasInvalid) {
+			return msgs.filter((item) => item.kind === 'invalid');
+		}
+		if (props.showValid) {
+			return msgs.filter((item) => item.kind === 'valid');
+		}
+		return [];
+	});
 </script>
 
 <svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
-	{#each [...(configs.messages ?? []).values()].filter((item) => item.content) as item, key (key)}
+	{#each visibleMessages as item, key (key)}
 		<p class={item.kind}>{item.content![client.browser?.language ?? 'en']}</p>
 	{/each}
 </svelte:element>

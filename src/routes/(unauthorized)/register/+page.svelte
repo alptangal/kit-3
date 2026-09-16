@@ -14,8 +14,7 @@
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
-	import { onMount } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { onMount, onDestroy } from 'svelte';
 	import { isEqual } from 'es-toolkit';
 	import { pageContents } from '.';
 	import type { RegisterRequestBody } from './_interface';
@@ -38,12 +37,13 @@
 	let showTermsModal = $state(false);
 
 	/** Cặp khoá RSA tạm thời cho phiên đăng ký */
-	let encryptionKeys:
+	let encryptionKeys = $state<
 		| undefined
 		| {
-				public: CryptoKey;
-				private: CryptoKey;
-		  };
+				publicKey: CryptoKey;
+				privateKey: CryptoKey;
+		  }
+	>(undefined);
 
 	/** Lưu lần submit trước để ngăn submit trùng lặp */
 	let previousSubmited:
@@ -58,6 +58,133 @@
 		  } = undefined;
 
 	const lang = $derived(client.browser?.language ?? 'en');
+	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
+
+	// ── Realtime Check State for Username & Email ──
+	let usernameStatus = $state<{
+		checking: boolean;
+		checked: boolean;
+		taken: boolean;
+		available: boolean;
+		message?: { vi: string; en: string };
+	}>({
+		checking: false,
+		checked: false,
+		taken: false,
+		available: false
+	});
+
+	let emailStatus = $state<{
+		checking: boolean;
+		checked: boolean;
+		taken: boolean;
+		available: boolean;
+		message?: { vi: string; en: string };
+	}>({
+		checking: false,
+		checked: false,
+		taken: false,
+		available: false
+	});
+
+	let usernameTimeoutId: ReturnType<typeof setTimeout> | undefined;
+	let emailTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+	$effect(() => {
+		if (!encryptionKeys) return;
+		const raw = formData.username?.trim() ?? '';
+		if (!raw) {
+			usernameStatus.checking = false;
+			usernameStatus.checked = false;
+			usernameStatus.taken = false;
+			usernameStatus.available = false;
+			usernameStatus.message = undefined;
+			return;
+		}
+
+		if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(raw)) {
+			usernameStatus.checking = false;
+			usernameStatus.checked = false;
+			usernameStatus.taken = false;
+			usernameStatus.available = false;
+			usernameStatus.message = undefined;
+			return;
+		}
+
+		if (usernameTimeoutId) clearTimeout(usernameTimeoutId);
+		usernameStatus.checking = true;
+
+		usernameTimeoutId = setTimeout(async () => {
+			try {
+				const data = (await encryption.fetchSecure(
+					'/api/register/check',
+					{
+						method: 'POST',
+						body: { username: raw }
+					},
+					encryptionKeys
+				)) as any;
+				if (data.ok && data.username && data.username.valid) {
+					usernameStatus.checked = true;
+					usernameStatus.taken = data.username.taken;
+					usernameStatus.available = data.username.available;
+					usernameStatus.message = data.username.message;
+				}
+			} catch (e) {
+				console.error('Error checking username:', e);
+			} finally {
+				usernameStatus.checking = false;
+			}
+		}, 400);
+	});
+
+	$effect(() => {
+		if (!encryptionKeys) return;
+		const raw = formData.email?.trim() ?? '';
+		if (!raw) {
+			emailStatus.checking = false;
+			emailStatus.checked = false;
+			emailStatus.taken = false;
+			emailStatus.available = false;
+			emailStatus.message = undefined;
+			return;
+		}
+
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+			emailStatus.checking = false;
+			emailStatus.checked = false;
+			emailStatus.taken = false;
+			emailStatus.available = false;
+			emailStatus.message = undefined;
+			return;
+		}
+
+		if (emailTimeoutId) clearTimeout(emailTimeoutId);
+		emailStatus.checking = true;
+
+		emailTimeoutId = setTimeout(async () => {
+			try {
+				const data = (await encryption.fetchSecure(
+					'/api/register/check',
+					{
+						method: 'POST',
+						body: { email: raw }
+					},
+					encryptionKeys
+				)) as any;
+				if (data.ok && data.email && data.email.valid) {
+					emailStatus.checked = true;
+					emailStatus.taken = data.email.taken;
+					emailStatus.available = data.email.available;
+					emailStatus.message = data.email.message;
+				}
+			} catch (e) {
+				console.error('Error checking email:', e);
+			} finally {
+				emailStatus.checking = false;
+			}
+		}, 400);
+	});
 
 	// ── Password Strength Calculation ──
 	const passwordStrength = $derived.by(() => {
@@ -101,15 +228,21 @@
 		}
 	});
 
+	/** Trạng thái khớp confirmPassword */
+	const confirmMatch = $derived.by(() => {
+		if (!formData.confirmPassword) return null; // null = chưa nhập
+		return formData.confirmPassword === formData.password;
+	});
+
 	// Trạng thái disabled nút submit
 	const status = $derived.by(() => {
 		const current = {
-			firstname: formData.firstname.trim(),
-			midname: formData.midname.trim() || undefined,
-			lastname: formData.lastname.trim(),
-			username: formData.username.trim(),
-			email: formData.email.trim(),
-			password: formData.password
+			firstname: formData.firstname?.trim() ?? '',
+			midname: formData.midname?.trim() || undefined,
+			lastname: formData.lastname?.trim() ?? '',
+			username: formData.username?.trim() ?? '',
+			email: formData.email?.trim() ?? '',
+			password: formData.password ?? ''
 		};
 
 		const hasRequired =
@@ -120,6 +253,10 @@
 			!!current.password &&
 			formData.password.length >= 8 &&
 			formData.password === formData.confirmPassword &&
+			!usernameStatus.taken &&
+			!emailStatus.taken &&
+			!usernameStatus.checking &&
+			!emailStatus.checking &&
 			agreeTerms;
 
 		return {
@@ -129,23 +266,23 @@
 
 	// ── Validation trước khi gửi ──
 	function validateForm(): string | undefined {
-		if (!formData.lastname.trim() || !formData.firstname.trim()) {
+		if (!formData.lastname?.trim() || !formData.firstname?.trim()) {
 			return lang === 'vi'
 				? 'Vui lòng nhập đầy đủ Họ và Tên'
 				: 'Please enter both first and last name';
 		}
-		if (!formData.username.trim()) {
+		if (!formData.username?.trim()) {
 			return lang === 'vi' ? 'Vui lòng nhập tên đăng nhập' : 'Please enter a username';
 		}
-		if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(formData.username.trim())) {
+		if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(formData.username?.trim() ?? '')) {
 			return lang === 'vi'
 				? 'Tên đăng nhập từ 3-30 ký tự (chữ cái, số, gạch dưới, gạch ngang)'
 				: 'Username must be 3-30 characters (letters, numbers, underscores, dashes)';
 		}
-		if (!formData.email.trim()) {
+		if (!formData.email?.trim()) {
 			return lang === 'vi' ? 'Vui lòng nhập địa chỉ email' : 'Please enter your email';
 		}
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email?.trim() ?? '')) {
 			return lang === 'vi' ? 'Định dạng email không hợp lệ' : 'Invalid email format';
 		}
 		if (!formData.password) {
@@ -184,13 +321,13 @@
 
 		try {
 			const requestBody: RegisterRequestBody = {
-				firstname: formData.firstname.trim(),
-				midname: formData.midname.trim() || undefined,
-				lastname: formData.lastname.trim(),
-				username: formData.username.trim(),
-				email: formData.email.trim(),
-				password: formData.password,
-				publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki')
+				firstname: formData.firstname?.trim() ?? '',
+				midname: formData.midname?.trim() || undefined,
+				lastname: formData.lastname?.trim() ?? '',
+				username: formData.username?.trim() ?? '',
+				email: formData.email?.trim() ?? '',
+				password: formData.password ?? '',
+				publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.publicKey, 'spki')
 			};
 
 			const response = await encryption.fetchSecure(
@@ -199,7 +336,7 @@
 					method: 'POST',
 					body: requestBody
 				},
-				{ privateKey: encryptionKeys.private, publicKey: encryptionKeys.public }
+				encryptionKeys
 			);
 
 			loading = false;
@@ -252,19 +389,38 @@
 		formData.confirmPassword = '';
 		agreeTerms = false;
 		formError = undefined;
+		previousSubmited = undefined;
+		if (usernameTimeoutId) clearTimeout(usernameTimeoutId);
+		if (emailTimeoutId) clearTimeout(emailTimeoutId);
+		usernameStatus = {
+			checking: false,
+			checked: false,
+			taken: false,
+			available: false
+		};
+		emailStatus = {
+			checking: false,
+			checked: false,
+			taken: false,
+			available: false
+		};
 	}
 
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
-		if (!client.browser.layers) client.browser.layers = new SvelteMap();
 
 		// Khởi tạo cặp khoá RSA tạm thời
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
-		encryptionKeys = { private: privateKey, public: publicKey };
+		encryptionKeys = { privateKey, publicKey };
 
 		requestAnimationFrame(() => {
 			mounted = true;
 		});
+	});
+
+	onDestroy(() => {
+		if (usernameTimeoutId) clearTimeout(usernameTimeoutId);
+		if (emailTimeoutId) clearTimeout(emailTimeoutId);
 	});
 </script>
 
@@ -283,7 +439,7 @@
 </svelte:head>
 
 <div class="register-page" class:mounted>
-	<!-- ════ Left Panel: Brand & Feature Highlights (Identical Theme to Login) ════ -->
+	<!-- ════ Left Panel: Brand & Feature Highlights ════ -->
 	<div class="register-panel-left" aria-hidden="true">
 		<div class="orb orb-1"></div>
 		<div class="orb orb-2"></div>
@@ -362,7 +518,12 @@
 
 			<!-- Error Alert -->
 			{#if formError}
-				<div class="register-alert register-alert--error" role="alert">
+				<div
+					class="register-alert register-alert--error"
+					role="alert"
+					aria-live="assertive"
+					aria-atomic="true"
+				>
 					<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="alert-icon">
 						<path
 							fill-rule="evenodd"
@@ -375,37 +536,42 @@
 			{/if}
 
 			<!-- Register Form -->
-			<Form onSubmit={handleRegister}>
-				<!-- Name grid: Lastname, Midname, Firstname (or First, Middle, Last based on locale) -->
-				<div class="name-grid">
-					<TextField name="lastname" required>
-						<Label>{pageContents.textFields.lastname[lang] ?? 'Last name'}</Label>
-						<Input
-							bind:value={formData.lastname}
-							placeholder={{ vi: 'Nguyễn', en: 'Doe' }}
-							class="name-input"
-						/>
-						<FieldMessages />
-					</TextField>
-					<TextField name="midname">
-						<Label>{pageContents.textFields.midname[lang] ?? 'Middle name'}</Label>
-						<Input
-							bind:value={formData.midname}
-							placeholder={{ vi: 'Văn', en: 'Middle' }}
-							class="name-input"
-						/>
-						<FieldMessages />
-					</TextField>
-					<TextField name="firstname" required>
-						<Label>{pageContents.textFields.firstname[lang] ?? 'First name'}</Label>
-						<Input
-							bind:value={formData.firstname}
-							placeholder={{ vi: 'An', en: 'John' }}
-							class="name-input"
-						/>
-						<FieldMessages />
-					</TextField>
-				</div>
+			<Form onSubmit={handleRegister} onReset={handleReset}>
+				<!-- Name fieldset: Lastname, Midname, Firstname -->
+				<fieldset class="name-fieldset" aria-label={lang === 'vi' ? 'Họ và tên' : 'Full name'}>
+					<div class="name-grid">
+						<TextField name="lastname" required>
+							<Label>{pageContents.textFields.lastname[lang] ?? 'Last name'}</Label>
+							<Input
+								bind:value={formData.lastname}
+								placeholder={{ vi: 'Nguyễn', en: 'Doe' }}
+								autocomplete="family-name"
+								class="name-input"
+							/>
+							<FieldMessages />
+						</TextField>
+						<TextField name="midname">
+							<Label>{pageContents.textFields.midname[lang] ?? 'Middle name'}</Label>
+							<Input
+								bind:value={formData.midname}
+								placeholder={{ vi: 'Văn', en: 'Middle' }}
+								autocomplete="additional-name"
+								class="name-input"
+							/>
+							<FieldMessages />
+						</TextField>
+						<TextField name="firstname" required>
+							<Label>{pageContents.textFields.firstname[lang] ?? 'First name'}</Label>
+							<Input
+								bind:value={formData.firstname}
+								placeholder={{ vi: 'An', en: 'John' }}
+								autocomplete="given-name"
+								class="name-input"
+							/>
+							<FieldMessages />
+						</TextField>
+					</div>
+				</fieldset>
 
 				<!-- Username field -->
 				<TextField name="username" required>
@@ -421,11 +587,23 @@
 						<Input
 							bind:value={formData.username}
 							placeholder={{ vi: 'Nhập tên đăng nhập', en: 'Enter username' }}
-							class="register-input"
+							autocomplete="username"
+							loading={usernameStatus.checking}
+							class="register-input {usernameStatus.checked ? (usernameStatus.taken ? 'confirm-mismatch' : 'confirm-match') : ''}"
 						/>
 					</div>
-					<Description class="form-hint">{pageContents.hints.usernameHint[lang]}</Description>
-					<FieldMessages />
+					{#if usernameStatus.checked && usernameStatus.taken}
+						<Description persistent={true} color="error" class="form-hint error-hint">
+							{usernameStatus.message?.[currentLang] ?? 'Username is already taken'}
+						</Description>
+					{:else if usernameStatus.checked && usernameStatus.available}
+						<Description persistent={true} color="success" class="form-hint success-hint">
+							{usernameStatus.message?.[currentLang] ?? 'Username is available'}
+						</Description>
+					{:else}
+						<Description class="form-hint">{pageContents.hints.usernameHint[lang]}</Description>
+						<FieldMessages />
+					{/if}
 				</TextField>
 
 				<!-- Email field -->
@@ -438,12 +616,25 @@
 						</svg>
 						<Input
 							type="email"
+							inputmode="email"
 							bind:value={formData.email}
 							placeholder={{ vi: 'Nhập địa chỉ email', en: 'Enter your email' }}
-							class="register-input"
+							autocomplete="email"
+							loading={emailStatus.checking}
+							class="register-input {emailStatus.checked ? (emailStatus.taken ? 'confirm-mismatch' : 'confirm-match') : ''}"
 						/>
 					</div>
-					<FieldMessages />
+					{#if emailStatus.checked && emailStatus.taken}
+						<Description persistent={true} color="error" class="form-hint error-hint">
+							{emailStatus.message?.[currentLang] ?? 'Email is already registered'}
+						</Description>
+					{:else if emailStatus.checked && emailStatus.available}
+						<Description persistent={true} color="success" class="form-hint success-hint">
+							{emailStatus.message?.[currentLang] ?? 'Email is available'}
+						</Description>
+					{:else}
+						<FieldMessages />
+					{/if}
 				</TextField>
 
 				<!-- Password field -->
@@ -461,19 +652,24 @@
 							type="password"
 							bind:value={formData.password}
 							placeholder={{ vi: 'Nhập mật khẩu', en: 'Enter your password' }}
+							autocomplete="new-password"
 							class="register-input"
 						/>
 					</div>
 
-					<!-- Password Strength Indicator -->
+					<!-- Password Strength Indicator — 4-segment bars -->
 					{#if formData.password}
-						<div class="strength-meter">
-							<div class="strength-track">
-								<div
-									class="strength-fill"
-									style:width="{passwordStrength.percent}%"
-									style:background-color={passwordStrength.color}
-								></div>
+						<div class="strength-meter" aria-label={passwordStrength.label}>
+							<div class="strength-segments">
+								{#each [1, 2, 3, 4] as seg}
+									<div
+										class="strength-seg"
+										class:active={passwordStrength.score >= seg}
+										style:background-color={passwordStrength.score >= seg
+											? passwordStrength.color
+											: undefined}
+									></div>
+								{/each}
 							</div>
 							<span class="strength-label" style:color={passwordStrength.color}>
 								{passwordStrength.label}
@@ -499,15 +695,17 @@
 							type="password"
 							bind:value={formData.confirmPassword}
 							placeholder={{ vi: 'Nhập lại mật khẩu', en: 'Confirm your password' }}
-							class="register-input"
+							autocomplete="new-password"
+							class="register-input {confirmMatch === false ? 'confirm-mismatch' : confirmMatch === true ? 'confirm-match' : ''}"
 						/>
 					</div>
-					{#if formData.confirmPassword && formData.password !== formData.confirmPassword}
-						<Description class="form-hint error-hint">
+					{#if confirmMatch === false}
+						<Description persistent={true} color="error" class="form-hint error-hint">
 							{pageContents.hints.confirmPasswordHint[lang] ?? 'Passwords do not match'}
 						</Description>
+					{:else}
+						<FieldMessages />
 					{/if}
-					<FieldMessages />
 				</TextField>
 
 				<!-- Terms & Conditions Checkbox -->
@@ -530,7 +728,7 @@
 					</Checkbox>
 				</div>
 
-				<!-- Action Buttons (Consistent with Login) -->
+				<!-- Action Buttons -->
 				<div class="register-actions">
 					<Button
 						class="register-btn-submit"
@@ -548,8 +746,6 @@
 						color="error"
 						type="reset"
 						variant="ghost"
-						onClick={handleReset}
-						disabled={loading}
 					>
 						{pageContents.buttons.reset[lang] ?? 'Reset'}
 					</Button>
@@ -564,7 +760,7 @@
 			<!-- Switch to Login -->
 			<div class="register-login-link">
 				<Button variant="link" color="primary" class="login-link-btn" to="/login">
-					{pageContents.signIn[lang] ?? 'Sign in now'}
+					<span>{pageContents.signIn[lang] ?? 'Sign in now'}</span>
 					<svg class="link-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 						<path
 							fill-rule="evenodd"
@@ -773,6 +969,7 @@
 		background: var(--background, #09090b);
 		position: relative;
 		overflow-y: auto;
+		overflow-x: hidden;
 		max-height: 100dvh;
 
 		&::before {
@@ -794,7 +991,7 @@
 		max-width: 480px;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 1.25rem; /* đồng nhất với login-card */
 		padding: 1rem 0;
 
 		/* Entrance animation */
@@ -870,14 +1067,37 @@
 		40%, 80% { transform: translateX(5px); }
 	}
 
-	/* ══ Name Grid ══ */
-	.name-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr 1fr;
-		gap: 0.625rem;
+	/* ══ Name Fieldset ══ */
+	.name-fieldset {
+		border: none;
+		padding: 0;
+		margin: 0;
+		min-width: 0;
 	}
 
-	@media (max-width: 520px) {
+	/* ══ Name Grid — 3 breakpoints ══ */
+	.name-grid {
+		display: grid;
+		gap: 0.625rem;
+		/* Desktop: 3 cột đều */
+		grid-template-columns: 1fr 1fr 1fr;
+	}
+
+	/* Tablet trung bình: Họ + Tên đệm row 1, Tên row 2 */
+	@media (max-width: 680px) {
+		.name-grid {
+			grid-template-columns: 1fr 1fr;
+			gap: 0.625rem;
+
+			/* Firstname (thứ 3) span full width */
+			:global(.textField-root:nth-child(3)) {
+				grid-column: 1 / -1;
+			}
+		}
+	}
+
+	/* Mobile: 1 cột */
+	@media (max-width: 420px) {
 		.name-grid {
 			grid-template-columns: 1fr;
 			gap: 0.75rem;
@@ -888,7 +1108,7 @@
 		transition: border-color 0.2s, box-shadow 0.2s !important;
 	}
 
-	/* ══ Input Wrapper with Icon (Identical to Login) ══ */
+	/* ══ Input Wrapper with Icon ══ */
 	.input-wrapper {
 		position: relative;
 		width: 100%;
@@ -911,6 +1131,92 @@
 		transition: border-color 0.2s, box-shadow 0.2s !important;
 	}
 
+	/* Confirm password mismatch — full error style matching color-error */
+	:global(.confirm-mismatch) {
+		--color: var(--error) !important;
+		--background: var(--error-100) !important;
+		--border-color: var(--error) !important;
+		border-color: var(--error) !important;
+		box-shadow: 0 0 0 2px rgb(239 68 68 / 0.12) !important;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.confirm-mismatch) {
+			--background: var(--error-600) !important;
+		}
+	}
+
+	:global(.confirm-mismatch.focus),
+	:global(.confirm-mismatch:hover:not(.disabled)),
+	:global(.confirm-mismatch.hover:not(.disabled)) {
+		@media (prefers-color-scheme: dark) {
+			--background: var(--error-600) !important;
+		}
+		@media (prefers-color-scheme: light) {
+			--background: var(--error-300) !important;
+		}
+	}
+	:global(.confirm-mismatch.focus) {
+		--border-color: var(--error-500) !important;
+		border-color: var(--error-500) !important;
+	}
+
+	:global(.confirm-match) {
+		--color: var(--success) !important;
+		--background: var(--success-100) !important;
+		--border-color: var(--success) !important;
+		border-color: var(--success) !important;
+		box-shadow: 0 0 0 2px rgb(16 185 129 / 0.1) !important;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.confirm-match) {
+			--background: var(--success-800) !important;
+		}
+	}
+
+	:global(.confirm-match.focus),
+	:global(.confirm-match:hover:not(.disabled)),
+	:global(.confirm-match.hover:not(.disabled)) {
+		@media (prefers-color-scheme: dark) {
+			--background: var(--success-800) !important;
+		}
+		@media (prefers-color-scheme: light) {
+			--background: var(--success-200) !important;
+		}
+	}
+	:global(.confirm-match.focus) {
+		--border-color: var(--success-500) !important;
+		border-color: var(--success-500) !important;
+	}
+
+	/* ══ Confirm icon ══ */
+	.confirm-icon {
+		position: absolute;
+		right: 2.75rem; /* để lại space cho nút show-password */
+		top: 50%;
+		transform: translateY(-50%);
+		width: 1rem;
+		height: 1rem;
+		pointer-events: none;
+		z-index: 3;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+
+		svg {
+			width: 100%;
+			height: 100%;
+		}
+
+		&.match {
+			color: #10b981;
+		}
+		&.mismatch {
+			color: #ef4444;
+		}
+	}
+
 	:global(.form-hint) {
 		font-size: 0.75rem !important;
 		color: var(--foreground-400, #71717a) !important;
@@ -918,36 +1224,41 @@
 	}
 
 	:global(.error-hint) {
-		color: #f87171 !important;
+		color: var(--error, #ef4444) !important;
 	}
 
-	/* ══ Password Strength ══ */
+	:global(.success-hint) {
+		color: var(--success, #10b981) !important;
+	}
+
+	/* ══ Password Strength — 4-segment bars ══ */
 	.strength-meter {
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		margin-top: 0.35rem;
+		margin-top: 0.375rem;
+	}
 
-		.strength-track {
-			flex: 1;
-			height: 4px;
-			background: rgba(255, 255, 255, 0.08);
-			border-radius: 9999px;
-			overflow: hidden;
-		}
+	.strength-segments {
+		flex: 1;
+		display: flex;
+		gap: 3px;
+	}
 
-		.strength-fill {
-			height: 100%;
-			border-radius: 9999px;
-			transition: width 0.3s ease, background-color 0.3s ease;
-		}
+	.strength-seg {
+		flex: 1;
+		height: 4px;
+		border-radius: 9999px;
+		background: rgba(255, 255, 255, 0.1);
+		transition: background-color 0.3s ease;
+	}
 
-		.strength-label {
-			font-size: 0.725rem;
-			font-weight: 600;
-			min-width: 45px;
-			text-align: right;
-		}
+	.strength-label {
+		font-size: 0.725rem;
+		font-weight: 600;
+		min-width: 52px;
+		text-align: right;
+		transition: color 0.3s ease;
 	}
 
 	/* ══ Terms row ══ */
@@ -978,11 +1289,11 @@
 		}
 	}
 
-	/* ══ Actions (Identical to Login) ══ */
+	/* ══ Actions ══ */
 	.register-actions {
 		display: flex;
 		gap: 0.625rem;
-		margin-top: 0.35rem;
+		margin-top: 0.25rem; /* đồng nhất với login */
 	}
 
 	:global(.register-btn-submit) {
@@ -1021,6 +1332,7 @@
 	.register-login-link {
 		display: flex;
 		justify-content: center;
+		margin-top: 0.25rem;
 	}
 
 	:global(.login-link-btn) {
@@ -1029,16 +1341,26 @@
 		display: inline-flex !important;
 		align-items: center !important;
 		gap: 0.375rem !important;
-		transition: gap 0.2s ease !important;
+		text-decoration: none !important;
+		transition: gap 0.2s ease, color 0.2s ease !important;
 
 		&:hover {
-			gap: 0.625rem !important;
+			gap: 0.5rem !important;
+			text-decoration: none !important;
+
+			span {
+				text-decoration: underline;
+				text-underline-offset: 3px;
+			}
 		}
 	}
 
 	.link-arrow {
 		width: 14px;
 		height: 14px;
+		flex-shrink: 0;
+		display: inline-block;
+		vertical-align: middle;
 		transition: transform 0.2s ease;
 	}
 
@@ -1047,22 +1369,36 @@
 	}
 
 	/* ══ Terms Modal ══ */
+	/* ══ Terms Modal ══ */
 	:global(.terms-modal-box) {
 		background: #18181b !important;
-		border: 1px solid rgba(255, 255, 255, 0.12) !important;
-		border-radius: 1rem !important;
+		border: 1px solid rgba(255, 255, 255, 0.15) !important;
+		border-radius: 1.25rem !important;
+		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+		max-width: min(34rem, calc(100vw - 2rem)) !important;
+		max-height: calc(100dvh - 3rem) !important;
+		display: flex !important;
+		flex-direction: column !important;
+		overflow: hidden !important;
+		padding: 1.5rem !important;
 	}
 
 	:global(.terms-modal-header) {
 		font-weight: 700 !important;
-		font-size: 1.15rem !important;
+		font-size: 1.2rem !important;
 		color: #f4f4f5 !important;
+		padding-bottom: 0.85rem !important;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+		flex-shrink: 0 !important;
 	}
 
 	:global(.terms-modal-body) {
 		color: #a1a1aa !important;
 		font-size: 0.875rem !important;
 		line-height: 1.6 !important;
+		overflow-y: auto !important;
+		padding: 1rem 0.25rem !important;
+		max-height: calc(100dvh - 13rem) !important;
 	}
 
 	.modal-intro {
@@ -1077,9 +1413,9 @@
 		gap: 0.75rem;
 
 		.clause-item {
-			padding: 0.65rem 0.85rem;
-			background: rgba(255, 255, 255, 0.03);
-			border-radius: 0.5rem;
+			padding: 0.75rem 0.95rem;
+			background: rgba(255, 255, 255, 0.04);
+			border-radius: 0.6rem;
 			border-left: 3px solid #6366f1;
 
 			p {
@@ -1091,7 +1427,10 @@
 	:global(.terms-modal-footer) {
 		display: flex !important;
 		justify-content: flex-end !important;
-		gap: 0.5rem !important;
+		gap: 0.75rem !important;
+		padding-top: 0.85rem !important;
+		border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+		flex-shrink: 0 !important;
 	}
 
 	/* ══ Responsive ══ */

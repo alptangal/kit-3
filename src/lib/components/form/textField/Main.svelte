@@ -9,10 +9,17 @@
 	import { SvelteSet } from 'svelte/reactivity';
 
 	let { children, ...props }: TextFieldProps = $props();
+	let _initialCaptured = false;
+	let _wasFocused = false;
 	let configs: TextFieldConfigs = $state({
+		// initialValue nằm trong $state → getter changed reactive với nó
+		initialValue: undefined as string | undefined,
 		status: {
+			touched: false,
 			get changed() {
-				return configs.previousValue !== configs.value;
+				// So sánh giá trị hiện tại vs giá trị mốc ban đầu (chuẩn hóa undefined thành ''):
+				// false → pristine, true → dirty
+				return (configs.initialValue ?? '') !== (configs.value ?? '');
 			}
 		},
 		get size() {
@@ -71,6 +78,10 @@
 			return eventDefault;
 		},
 		setValue(input) {
+			if (!_initialCaptured) {
+				configs.initialValue = input;
+				_initialCaptured = true;
+			}
 			configs.previousValue = configs.value;
 			configs.value = input;
 		},
@@ -108,14 +119,40 @@
 			}
 		},
 		reset() {
+			_wasFocused = false;
+			configs.status.touched = false;
 			if (configs.children?.input) configs.children.input.reset();
-			requestAnimationFrame(() => {
-				configs.previousValue = undefined;
-			});
+			// Khôi phục configs.value ngay lập tức → changed getter báo false mà không cần RAF
+			configs.value = configs.initialValue;
+			configs.previousValue = configs.initialValue;
+			if (configs.validation) configs.validation.isValid = undefined;
 		}
 	});
 	const formContext = getFormContext();
 	setTextFieldContext(configs);
+
+	// Lắng nghe dữ liệu ban đầu từ formContext.data nếu có
+	$effect(() => {
+		if (formContext?.data && props.name && props.name in formContext.data && !_initialCaptured) {
+			const init = formContext.data[props.name];
+			configs.initialValue = init != null ? String(init) : '';
+			if (configs.value === undefined) {
+				configs.value = configs.initialValue;
+			}
+			_initialCaptured = true;
+		}
+	});
+
+	// Theo dõi chu kỳ focus -> blur để đánh dấu touched (kích hoạt validation khi blur)
+	$effect(() => {
+		const isFocused = configs.status.focus;
+		if (isFocused) {
+			_wasFocused = true;
+		} else if (_wasFocused && !isFocused) {
+			configs.status.touched = true;
+		}
+	});
+
 	onMount(() => {
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();

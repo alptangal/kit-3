@@ -30,7 +30,10 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	actived?: boolean;
 	transitionDisabled?: boolean;
 	color?: Color;
-	onClick?: (event?: Event) => void | Promise<void>;
+	/** Callback khi click — hỗ trợ cả `onClick` (React-style) lẫn `onclick` (Svelte 5 chuẩn) */
+	onClick?: (event?: MouseEvent | Event) => void | Promise<void>;
+	/** Svelte 5 chuẩn: alias của onClick */
+	onclick?: (event?: MouseEvent | Event) => void | Promise<void>;
 	/** Callback khi giữ nút ≥ longPressDuration ms */
 	onLongPress?: (event?: PointerEvent) => void | Promise<void>;
 	/** Thời gian giữ để kích hoạt long press (ms, default: 500) */
@@ -38,8 +41,14 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	delay?: number | `${number}s` | `${number}ms` | 'none';
 	transitionDuration?: number | `${number}s` | `${number}ms` | 'none';
 	loading?: boolean;
+	/** Hiện spinner quay thay vì icon leading khi đang loading (default: true) */
+	loadingSpinner?: boolean;
 	loadingDuration?: number | `${number}s` | `${number}ms`;
 	to?: string;
+	/** Thuộc tính HTML <a> — chỉ dùng khi có `to` */
+	target?: '_blank' | '_self' | '_parent' | '_top';
+	/** Thuộc tính rel cho thẻ <a> */
+	rel?: string;
 	/** Text tooltip hiện khi hover — cũng được dùng làm aria-label nếu aria-label không set */
 	tooltip?: string;
 	/** aria-label tường minh cho screen reader */
@@ -76,3 +85,5 @@ export interface ButtonConfigs extends BasicConfigs {
 	disabled?: boolean;
 }
 
+/** Alias tương thích ngược */
+export type Button = ButtonProps;

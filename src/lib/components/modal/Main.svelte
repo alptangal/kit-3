@@ -45,7 +45,6 @@
 					events: {
 						load(_, data) {
 							if (data?.node instanceof HTMLElement) {
-								let name = performance.now();
 								data.node.classList.add('layer');
 								if (!client.browser) {
 									client.browser = {};
@@ -59,10 +58,14 @@
 								if (rootEntry) {
 									const rootLayer = rootEntry[0];
 									rootLayer.parentElement?.appendChild(data.node);
+								} else if (typeof document !== 'undefined' && document.body) {
+									document.body.appendChild(data.node);
 								}
 								return () => {
 									if (client.browser?.layers && data.node instanceof HTMLElement) {
 										client.browser.layers.delete(data.node);
+									}
+									if (data.node instanceof HTMLElement && data.node.parentElement) {
 										data.node.remove();
 									}
 								};
@@ -71,8 +74,10 @@
 						mousedown(e) {
 							const event = e as MouseEvent;
 							const target = event.target as HTMLElement;
-							if (!configs.isDimissable && !configs.children.container?.ref?.contains(target)) {
-								configs.display = false;
+							if (configs.isDimissable) {
+								if (target === configs.ref || !configs.children.container?.ref?.contains(target)) {
+									configs.display = false;
+								}
 							}
 						}
 					}
@@ -165,15 +170,30 @@
 <style lang="scss">
 	@use '$styles/sizes.scss';
 	.modal-root {
-		&.variant-blur {
-			-webkit-backdrop-filter: blur(var(--font-size));
-			backdrop-filter: blur(var(--font-size));
-		}
+		position: fixed;
+		inset: 0;
+		width: 100vw;
+		height: 100dvh;
+		z-index: 10000;
+		display: flex;
+		align-items: center;
 		justify-content: center;
-		width: 100%;
-		height: 100%;
-		position: absolute;
-		top: 0px;
-		left: 0px;
+		background: rgba(0, 0, 0, 0.65);
+		box-sizing: border-box;
+		padding: 1rem;
+		overflow: hidden;
+
+		&.variant-blur {
+			-webkit-backdrop-filter: blur(8px);
+			backdrop-filter: blur(8px);
+		}
+
+		&.variant-transparent {
+			background: transparent;
+		}
+
+		.contents {
+			display: contents;
+		}
 	}
 </style>

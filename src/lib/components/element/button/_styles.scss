@@ -1,4 +1,4 @@
-$colors: 'default', 'secondary', 'success', 'info', 'warning', 'error';
+$colors: 'default', 'secondary', 'success', 'info', 'warning', 'error', 'primary';
 $variants: 'solid', 'outline', 'soft', 'subtle', 'link', 'ghost';
 $colorRefs: (
 	'default': 'gray',
@@ -6,7 +6,8 @@ $colorRefs: (
 	'success': 'green',
 	'info': 'sky',
 	'warning': 'amber',
-	'error': 'red'
+	'error': 'red',
+	'primary': 'indigo'
 );
 $themes: 'dark', 'light';
 
@@ -28,7 +29,7 @@ $themes: 'dark', 'light';
 						}
 
 						@media (hover: hover) and (pointer: fine) {
-							&:hover:not(.disabled) {
+							&:hover:not(.disabled):not(.loading) {
 								--background: var(--color-#{$ref}-500);
 								--color: white;
 							}
@@ -50,7 +51,7 @@ $themes: 'dark', 'light';
 						}
 
 						@media (hover: hover) and (pointer: fine) {
-							&:hover:not(.disabled) {
+							&:hover:not(.disabled):not(.loading) {
 								@media (prefers-color-scheme: dark) {
 									--background: var(--color-#{$ref}-950);
 								}
@@ -79,9 +80,10 @@ $themes: 'dark', 'light';
 						}
 						--color: var(--foreground);
 						@media (hover: hover) and (pointer: fine) {
-							&:hover:not(.disabled) {
+							&:hover:not(.disabled):not(.loading) {
 								@media (prefers-color-scheme: dark) {
-									--background: var(--color--#{$ref}-900);
+									// BUG FIX: was --color--#{$ref}-900 (typo)
+									--background: var(--color-#{$ref}-900);
 								}
 								@media (prefers-color-scheme: light) {
 									--background: var(--color-#{$ref}-300);
@@ -90,7 +92,8 @@ $themes: 'dark', 'light';
 						}
 						&.button-tapped {
 							@media (prefers-color-scheme: dark) {
-								--background: var(--color--#{$ref}-900);
+								// BUG FIX: was --color--#{$ref}-900 (typo)
+								--background: var(--color-#{$ref}-900);
 							}
 							@media (prefers-color-scheme: light) {
 								--background: var(--color-#{$ref}-300);
@@ -108,7 +111,7 @@ $themes: 'dark', 'light';
 							--border-color: var(--color-#{$ref}-500);
 						}
 						@media (hover: hover) and (pointer: fine) {
-							&:hover:not(.disabled) {
+							&:hover:not(.disabled):not(.loading) {
 								--background: var(--color-#{$ref}-200);
 							}
 						}
@@ -126,11 +129,21 @@ $themes: 'dark', 'light';
 							--color: var(--color-#{$ref}-500);
 						}
 						@media (hover: hover) and (pointer: fine) {
-							&:hover:not(.disabled) {
+							&:hover:not(.disabled):not(.loading) {
 								@if $color== 'default' {
 									--color: var(--foreground-500);
 								} @else {
-									--color: var(--color-#{$ref}-700);
+									@media (prefers-color-scheme: dark) {
+										--color: var(--color-#{$ref}-400);
+									}
+									@media (prefers-color-scheme: light) {
+										--color: var(--color-#{$ref}-700);
+									}
+								}
+								text-decoration: none;
+								.button-render {
+									text-decoration: underline;
+									text-underline-offset: 3px;
 								}
 							}
 						}
@@ -138,7 +151,12 @@ $themes: 'dark', 'light';
 							@if $color== 'default' {
 								--color: var(--foreground-500);
 							} @else {
-								--color: var(--color-#{$ref}-700);
+								@media (prefers-color-scheme: dark) {
+									--color: var(--color-#{$ref}-400);
+								}
+								@media (prefers-color-scheme: light) {
+									--color: var(--color-#{$ref}-700);
+								}
 							}
 						}
 					}
@@ -152,7 +170,7 @@ $themes: 'dark', 'light';
 							--color: var(--color-#{$ref}-500);
 						}
 						@media (hover: hover) and (pointer: fine) {
-							&:hover:not(.disabled) {
+							&:hover:not(.disabled):not(.loading) {
 								@media (prefers-color-scheme: dark) {
 									--background: var(--color-#{$ref}-950);
 								}
@@ -175,85 +193,33 @@ $themes: 'dark', 'light';
 		}
 	}
 	&.transition {
-		transition: all ease-in-out var(--transition-duration);
+		transition:
+			background var(--transition-duration, 200ms) ease-in-out,
+			color var(--transition-duration, 200ms) ease-in-out,
+			border-color var(--transition-duration, 200ms) ease-in-out,
+			transform var(--transition-duration, 200ms) ease-in-out,
+			opacity var(--transition-duration, 200ms) ease-in-out;
 	}
+	// ── Disabled State (chuẩn hoá dark/light) ──
 	&.disabled {
 		--cursor: not-allowed;
-		&::before {
-			content: '';
-			position: absolute;
-			top: 0px;
-			left: 0px;
-			width: 100%;
-			height: 100%;
-			border-radius: var(--border-radius);
-			background: var(--color-gray-200);
-			opacity: 0.4;
-			touch-action: none;
-			pointer-events: none;
-		}
+		opacity: 0.5;
+		pointer-events: none;
 	}
+	// ── Loading State ──
 	&.loading {
-		--background: transparent !important;
-		&.color-default {
-			--loading-background: linear-gradient(
-				100deg,
-				var(--color-gray-200) 0%,
-				var(--color-gray-300) 25%,
-				white 50%,
-				var(--color-gray-400) 75%,
-				var(--color-gray-200) 100%
-			);
-		}
-		&.color-secondary {
-			--loading-background: linear-gradient(
-				100deg,
-				var(--color-cyan-200) 0%,
-				var(--color-cyan-300) 25%,
-				white 50%,
-				var(--color-cyan-400) 75%,
-				var(--color-cyan-200) 100%
-			);
-		}
-		&.color-success {
-			--loading-background: linear-gradient(
-				100deg,
-				var(--color-green-200) 0%,
-				var(--color-green-300) 25%,
-				white 50%,
-				var(--color-green-400) 75%,
-				var(--color-green-200) 100%
-			);
-		}
-		&.color-error {
-			--loading-background: linear-gradient(
-				100deg,
-				var(--color-red-200) 0%,
-				var(--color-red-300) 25%,
-				white 50%,
-				var(--color-red-400) 75%,
-				var(--color-red-200) 100%
-			);
-		}
-		&.color-warning {
-			--loading-background: linear-gradient(
-				100deg,
-				var(--color-amber-200) 0%,
-				var(--color-amber-300) 25%,
-				white 50%,
-				var(--color-amber-400) 75%,
-				var(--color-amber-200) 100%
-			);
-		}
-		&.color-info {
-			--loading-background: linear-gradient(
-				100deg,
-				var(--color-sky-200) 0%,
-				var(--color-sky-300) 25%,
-				white 50%,
-				var(--color-sky-400) 75%,
-				var(--color-sky-200) 100%
-			);
+		cursor: not-allowed;
+		@each $color, $ref in $colorRefs {
+			&.color-#{$color} {
+				--loading-background: linear-gradient(
+					100deg,
+					var(--color-#{$ref}-200) 0%,
+					var(--color-#{$ref}-300) 25%,
+					white 50%,
+					var(--color-#{$ref}-400) 75%,
+					var(--color-#{$ref}-200) 100%
+				);
+			}
 		}
 		&::before {
 			content: '';
@@ -264,11 +230,11 @@ $themes: 'dark', 'light';
 			height: 100%;
 			border-radius: var(--border-radius);
 			background: var(--loading-background);
-			opacity: 0.8;
+			opacity: 0.7;
 			backdrop-filter: blur(999px);
 			background-size: 200% 100%;
 			background-position: 0% 0%;
-			animation: shimmer var(--loading-duration) linear infinite;
+			animation: shimmer var(--loading-duration, 1.5s) linear infinite;
 		}
 		@keyframes shimmer {
 			0% {
@@ -279,9 +245,17 @@ $themes: 'dark', 'light';
 			}
 		}
 	}
-	&[data-tap='true'] {
-		transform: scale(0.995);
+	// ── Tap / Active press animation ──
+	&[data-tap='true'],
+	&:active:not(.disabled):not(.loading) {
+		transform: scale(0.97);
 	}
+	// ── Focus Visible (keyboard navigation) ──
+	&:focus-visible:not(.disabled) {
+		outline: 2px solid var(--color-indigo-500);
+		outline-offset: 2px;
+	}
+	// ── Base styles ──
 	color: var(--color);
 	background: var(--background);
 	border-radius: var(--border-radius);
@@ -289,7 +263,6 @@ $themes: 'dark', 'light';
 	border-style: solid;
 	border-color: var(--border-color);
 	font-size: var(--font-size);
-	// max-width: 100%;
 	padding-inline: var(--padding);
 	line-height: var(--line-height);
 	overflow: hidden;
@@ -299,21 +272,63 @@ $themes: 'dark', 'light';
 	gap: var(--gap);
 	cursor: var(--cursor);
 	opacity: var(--opacity);
-	touch-action: none;
+	touch-action: manipulation; // giảm delay 300ms tap, tránh double-tap-zoom, giảm long-press ambiguity
 	position: relative;
 	transform: scale(1);
 	-webkit-touch-callout: none; // chặn context menu long-press trên iOS Safari
 	-webkit-user-select: none;
 	user-select: none;
-	touch-action: manipulation; // giảm delay 300ms tap, tránh double-tap-zoom, giảm long-press ambiguity
+
+	// ── Link Variant Overrides ──
+	&.variant-link {
+		padding-inline: 0;
+		border-width: 0;
+		min-width: 0;
+		height: auto;
+		line-height: inherit;
+		background: transparent;
+		--border-color: transparent;
+		overflow: visible;
+
+		&[data-tap='true'],
+		&:active:not(.disabled):not(.loading) {
+			transform: none;
+			opacity: 0.8;
+		}
+	}
+	// ── Overflow visible when tooltip or link ──
+	&.has-tooltip {
+		overflow: visible;
+	}
 
 	.button-render {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: inherit;
+		line-height: inherit;
+		position: relative;
+		z-index: 1;
 	}
-	// Ripple effect
-	.button-ripple {
+	// ── Spinner khi loading ──
+	.button-spinner {
+		width: 1em;
+		height: 1em;
+		border: 2px solid currentColor;
+		border-top-color: transparent;
+		border-radius: 50%;
+		animation: button-spin 0.7s linear infinite;
+		flex-shrink: 0;
+		position: relative;
+		z-index: 1;
+	}
+	@keyframes button-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	// ── Ripple effect ──
+	:global(.button-ripple) {
 		position: absolute;
 		border-radius: 50%;
 		background: currentColor;
@@ -322,22 +337,32 @@ $themes: 'dark', 'light';
 		animation: button-ripple-anim 0.6s linear;
 		pointer-events: none;
 	}
-	// Tooltip
+	// ── Tooltip (custom, bỏ native title) ──
 	.button-tooltip {
 		position: absolute;
 		bottom: calc(100% + 6px);
 		left: 50%;
 		transform: translateX(-50%);
-		background: rgba(0, 0, 0, 0.75);
+		background: rgba(0, 0, 0, 0.82);
 		color: #fff;
-		font-size: 0.75em;
-		padding: 3px 8px;
-		border-radius: 4px;
+		font-size: 0.72em;
+		padding: 4px 9px;
+		border-radius: 5px;
 		white-space: nowrap;
 		pointer-events: none;
 		opacity: 0;
 		transition: opacity 0.15s ease;
 		z-index: 9999;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+		&::after {
+			content: '';
+			position: absolute;
+			top: 100%;
+			left: 50%;
+			transform: translateX(-50%);
+			border: 4px solid transparent;
+			border-top-color: rgba(0, 0, 0, 0.82);
+		}
 	}
 	&:hover .button-tooltip,
 	&:focus-visible .button-tooltip {

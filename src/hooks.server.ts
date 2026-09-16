@@ -38,3 +38,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	return resolve(event);
 };
+
+export const handleError = ({ error }) => {
+	import('fs').then(fs => {
+		fs.writeFileSync('d:/nodejs/svelte/kit-3/last_ssr_error.log', String(error?.stack || error));
+	});
+	return {
+		message: error instanceof Error ? error.message : 'Unknown error'
+	};
+};

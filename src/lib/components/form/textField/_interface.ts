@@ -9,12 +9,15 @@ export interface TextFieldProps extends BasicProps {
 }
 export interface TextFieldConfigs extends BasicConfigs {
 	size: Size;
+	/** Giá trị mốc ban đầu khi component mount — dùng để xác định changed và reset */
+	initialValue?: string;
 	status: {
 		hover?: boolean;
 		focus?: boolean;
 		changed?: boolean;
 		reseting?: boolean;
 		selectAll?: boolean;
+		touched?: boolean;
 	};
 	disabled?: boolean;
 	loading?: boolean;

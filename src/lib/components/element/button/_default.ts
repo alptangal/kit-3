@@ -1,5 +1,8 @@
-import type { Button } from './_interface';
+import type { ButtonProps } from './_interface';
 
-export const defaultButton: Button = {
+/** Alias tương thích ngược (Button type đã được đổi thành ButtonProps) */
+export type Button = ButtonProps;
+
+export const defaultButton: ButtonProps = {
 	class: 'flex gap-1 justify-center items-center'
 };

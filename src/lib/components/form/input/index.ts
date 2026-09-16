@@ -48,10 +48,12 @@ export const defaultValidation: {
 			},
 			message: {
 				invalid: {
-					en: `${fieldName ?? 'this field'} is required`
+					en: `${fieldName ?? 'this field'} is required`,
+					vi: `${fieldName ?? 'Trường này'} là bắt buộc`
 				},
 				valid: {
-					en: `${fieldName ?? 'this field'} is valid`
+					en: `${fieldName ?? 'this field'} is valid`,
+					vi: `${fieldName ?? 'Trường này'} hợp lệ`
 				}
 			}
 		};
@@ -122,12 +124,21 @@ export function createDefaultInputEvents(
 					if (event.detail == 2 && value?.length) {
 						configs.status.selectAll = true;
 						if (target instanceof HTMLInputElement && value?.length) {
-							target.setSelectionRange(0, value.length);
+							try {
+								if (['text', 'search', 'url', 'tel', 'password'].includes(target.type)) {
+									target.setSelectionRange(0, value.length);
+								} else {
+									target.select();
+								}
+							} catch (e) {
+								// Ignore for unsupported types
+							}
 						}
 					}
 				},
 				focus(e) {
 					configs.input.status.focus = true;
+					configs.status.focus = true;
 					requestAnimationFrame(() => {
 						configs.ref?.classList.add('animation-bounce');
 						setTimeout(() => {

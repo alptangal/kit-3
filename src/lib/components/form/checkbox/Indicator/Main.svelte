@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { convertToMiliseconds, convertToPixels, styleSynced } from '$modules';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { releaseCheckboxIndicatorDefault, setCheckboxIndicatorContext } from '.';
 	import type { CheckboxIndicatorConfigs, CheckboxIndicatorProps } from '../_interface';
 	import { getCheckboxContext } from '..';
@@ -48,11 +48,14 @@
 		}
 	});
 	const checkboxContext = getCheckboxContext();
+	if (checkboxContext) {
+		checkboxContext.children.indicator = configs;
+	}
 	setCheckboxIndicatorContext(configs);
 
-	onMount(() => {
-		if (checkboxContext) {
-			checkboxContext.children.indicator = configs;
+	onDestroy(() => {
+		if (checkboxContext && checkboxContext.children.indicator === configs) {
+			checkboxContext.children.indicator = undefined;
 		}
 	});
 </script>

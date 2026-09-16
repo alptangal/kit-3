@@ -35,6 +35,15 @@
 		get encryptDisabled() {
 			return props.encryptDisabled;
 		},
+		get data() {
+			return props.data;
+		},
+		status: {
+			get changed() {
+				if (!configs.childrens?.size) return false;
+				return [...configs.childrens.values()].some((children) => children.status?.changed === true);
+			}
+		},
 		get event() {
 			const defaultEvents: FormConfigs['event'] = [
 				{
@@ -70,6 +79,12 @@
 								configs.loading = false;
 								if (props.onResponse) props.onResponse();
 							}
+						},
+						reset: {
+							handler(e) {
+								e.preventDefault();
+								configs.reset();
+							}
 						}
 					}
 				}
@@ -93,6 +108,7 @@
 			if (configs.childrens?.size) {
 				[...configs.childrens.values()].forEach((children) => children.reset());
 			}
+			if (props.onReset) props.onReset();
 		},
 		get onReset() {
 			return props.onReset;

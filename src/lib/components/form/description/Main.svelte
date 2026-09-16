@@ -26,13 +26,27 @@
 				textFieldContext?.size ?? checkboxContext?.size ?? client.browser?.size ?? 'md';
 			const defaultSize = sizeIndex[sizeIndex.indexOf(parentSize) - 1];
 			return defaultSize;
+		},
+		get persistent() {
+			return props.persistent ?? false;
+		},
+		get autoHide() {
+			return props.autoHide ?? true;
 		}
 	});
 	const textFieldContext = getTextFieldContext();
 	const checkboxContext = getCheckboxContext();
+
+	const shouldRender = $derived.by(() => {
+		if (configs.persistent || !configs.autoHide) return true;
+		const hasMessages =
+			Boolean(textFieldContext?.children?.input?.validation.messages?.size) ||
+			Boolean(checkboxContext?.validation.messages?.size);
+		return !hasMessages;
+	});
 </script>
 
-{#if (textFieldContext && !textFieldContext.children?.input?.validation.messages?.size) || !textFieldContext}
+{#if shouldRender}
 	<svelte:element
 		this={props.as ?? 'div'}
 		bind:this={configs.ref}
@@ -49,5 +63,25 @@
 	.description-root {
 		font-size: var(--font-size);
 		color: var(--color);
+
+		&.color-description-error {
+			--color: var(--error);
+			color: var(--error);
+		}
+		&.color-description-success {
+			--color: var(--success);
+			color: var(--success);
+		}
+		&.color-description-warning {
+			--color: var(--warning);
+			color: var(--warning);
+		}
+		&.color-description-info {
+			--color: var(--info, var(--color-sky-500));
+			color: var(--info, var(--color-sky-500));
+		}
+		&.color-description-default {
+			--color: var(--foreground-400, #71717a);
+		}
 	}
 </style>

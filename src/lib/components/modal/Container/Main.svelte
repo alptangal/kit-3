@@ -38,8 +38,15 @@
 	});
 
 	onMount(() => {
-		if (modalContext?.children.contentWrapper && configs.ref) {
-			while (modalContext.children.contentWrapper.firstChild) {
+		if (
+			modalContext?.children.contentWrapper &&
+			configs.ref &&
+			configs.ref.parentElement !== modalContext.children.contentWrapper
+		) {
+			while (
+				modalContext.children.contentWrapper.firstChild &&
+				modalContext.children.contentWrapper.firstChild !== configs.ref
+			) {
 				configs.ref.appendChild(modalContext.children.contentWrapper.firstChild);
 			}
 		}
@@ -58,21 +65,28 @@
 <style lang="scss">
 	@use '$styles/sizes.scss';
 	.modal-container-root {
+		position: relative;
+		background: var(--default-200, #18181b);
+		border-radius: var(--border-radius, 1rem);
+		padding: var(--padding, 1.25rem);
+		width: var(--width, 32rem);
+		max-width: calc(100vw - 2rem);
+		max-height: calc(100dvh - 2.5rem);
+		overflow-y: auto;
+		box-sizing: border-box;
+		box-shadow:
+			0 25px 50px -12px rgba(0, 0, 0, 0.6),
+			0 0 0 1px rgba(255, 255, 255, 0.1);
+		z-index: 10001;
+
 		&.placement-center {
-			top: 50%;
+			margin: auto;
 		}
 		&.placement-top {
-			top: 0;
+			margin: 2rem auto auto auto;
 		}
 		&.placement-bottom {
-			bottom: 0;
+			margin: auto auto 2rem auto;
 		}
-		background: var(--default-200);
-		border-radius: var(--border-radius);
-		padding: var(--padding);
-		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
-		width: var(--width);
 	}
 </style>

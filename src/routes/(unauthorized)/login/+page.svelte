@@ -352,7 +352,7 @@
 			<!-- Link sang trang đăng ký -->
 			<div class="login-register-link">
 				<Button variant="link" color="primary" class="register-link-btn" to="/register">
-					{pageContents.register[lang] ?? 'Create account'}
+					<span>{pageContents.register[lang] ?? 'Create account'}</span>
 					<svg class="link-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 						<path
 							fill-rule="evenodd"
@@ -701,6 +701,7 @@
 	.login-register-link {
 		display: flex;
 		justify-content: center;
+		margin-top: 0.25rem;
 	}
 
 	:global(.register-link-btn) {
@@ -709,16 +710,26 @@
 		display: inline-flex !important;
 		align-items: center !important;
 		gap: 0.375rem !important;
-		transition: gap 0.2s ease !important;
+		text-decoration: none !important;
+		transition: gap 0.2s ease, color 0.2s ease !important;
 
 		&:hover {
-			gap: 0.625rem !important;
+			gap: 0.5rem !important;
+			text-decoration: none !important;
+
+			span {
+				text-decoration: underline;
+				text-underline-offset: 3px;
+			}
 		}
 	}
 
 	.link-arrow {
 		width: 14px;
 		height: 14px;
+		flex-shrink: 0;
+		display: inline-block;
+		vertical-align: middle;
 		transition: transform 0.2s ease;
 	}
 
