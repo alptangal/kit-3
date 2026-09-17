@@ -39,6 +39,7 @@ export interface ModalProps extends Omit<BasicProps, 'size'> {
 	variant?: 'opaque' | 'blur' | 'transparent';
 	placement?: 'auto' | 'top' | 'bottom' | 'center';
 	isDimissable?: boolean;
+	transitionType?: 'fly' | 'slide' | 'fade' | 'none';
 }
 export interface ModalConfigs extends Omit<BasicConfigs, 'size'> {
 	size: ModalProps['size'];
@@ -49,4 +50,11 @@ export interface ModalConfigs extends Omit<BasicConfigs, 'size'> {
 	};
 	isDimissable: boolean;
 	display?: boolean;
+	transitionType?: ModalProps['transitionType'];
+	ariaIds: {
+		modalId: string;
+		headerId: string;
+		bodyId: string;
+		footerId: string;
+	};
 }

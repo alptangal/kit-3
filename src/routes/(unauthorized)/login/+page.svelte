@@ -5,6 +5,7 @@
 	import { Button } from '$components/element';
 	import {
 		Checkbox,
+		Description,
 		FieldMessages,
 		Form,
 		Input,
@@ -13,10 +14,13 @@
 	} from '$components/form';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { pageContents } from '.';
 	import type { LoginConfigs, LoginRequestBody } from './_interface';
 	import { isEqual } from 'es-toolkit';
+
+	// ── Constants ──
+	const REMEMBER_STORAGE_KEY = 'app:rememberedUsername';
 
 	// ===== State =====
 	let configs: LoginConfigs = $state({
@@ -36,46 +40,108 @@
 	/** Thông báo thành công khi vừa đăng ký xong (từ ?registered=1) */
 	let registeredSuccess = $state(false);
 
-	/** Trạng thái mount để trigger entrance animation */
+	/** Trạng thái mount để trigger entrance animation — parity with register */
 	let mounted = $state(false);
 
 	/** Cặp khoá RSA tạm thời để mã hoá body khi gửi lên server */
-	let encryptionKeys:
-		| undefined
-		| {
-				public: CryptoKey;
-				private: CryptoKey;
-		  };
-
-	// Trạng thái disabled nút submit
-	const status = $derived.by(() => {
-		const currentSubmit = {
-			username: configs.username.value,
-			password: configs.password.value,
-			remember: configs.remember.checked
-		};
-		return {
-			disabled:
-				loading ||
-				isEqual(currentSubmit, previousSubmited) ||
-				!configs.username.value ||
-				!configs.password.value
-		};
-	});
+	let encryptionKeys: undefined | { public: CryptoKey; private: CryptoKey } = $state(undefined);
 
 	// Ngôn ngữ hiện tại
 	const lang = $derived(client.browser?.language ?? 'en');
+	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
+
+	// ── Derived: input validity for disabled parity ──
+	const isUsernamePresent = $derived(!!configs.username.value?.trim());
+	const isPasswordPresent = $derived(!!configs.password.value);
+
+	// Trạng thái disabled nút submit — consistent with register: loading + duplicate guard + required
+	const status = $derived.by(() => {
+		const currentSubmit = {
+			username: configs.username.value?.trim() ?? '',
+			password: configs.password.value ?? '',
+			remember: configs.remember.checked
+		};
+		const hasRequired = !!currentSubmit.username && !!currentSubmit.password;
+		return {
+			disabled: loading || !hasRequired || isEqual(currentSubmit, previousSubmited)
+		};
+	});
+
+	// ── Clear formError on new input — FIX required by task ──
+	$effect(() => {
+		// Track username / password / remember so any keystroke clears the banner
+		void configs.username.value;
+		void configs.password.value;
+		// Do not clear on initial mount when formError is undefined
+		if (formError !== undefined) {
+			// Use queueMicrotask to avoid writing during render flush warnings in some Svelte versions
+			// but direct assignment is safe in $effect; keep simple:
+			formError = undefined;
+		}
+	});
+
+	// ── Remember me persistence: sync to localStorage when toggled / typed ──
+	$effect(() => {
+		const doRemember = configs.remember.checked;
+		const uname = configs.username.value?.trim() ?? '';
+		if (typeof localStorage === 'undefined') return;
+		try {
+			if (!doRemember) {
+				// User unchecked — remove persisted username
+				localStorage.removeItem(REMEMBER_STORAGE_KEY);
+			} else if (uname) {
+				localStorage.setItem(REMEMBER_STORAGE_KEY, uname);
+			}
+		} catch {
+			// ignore quota / privacy mode errors
+		}
+	});
+
+	// ── Validation — parity with register (username/email field, password) ──
+	function validateForm(): string | undefined {
+		const raw = configs.username.value?.trim() ?? '';
+		if (!raw) {
+			return lang === 'vi' ? 'Vui lòng nhập tên đăng nhập hoặc email' : 'Please enter username or email';
+		}
+		// If contains @ treat as email, otherwise username
+		if (raw.includes('@')) {
+			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+				return lang === 'vi' ? 'Định dạng email không hợp lệ' : 'Invalid email format';
+			}
+		} else {
+			if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(raw)) {
+				return lang === 'vi'
+					? 'Tên đăng nhập từ 3-30 ký tự (chữ cái, số, gạch dưới, gạch ngang, dấu chấm)'
+					: 'Username must be 3-30 characters (letters, numbers, _, ., -)';
+			}
+		}
+		if (!configs.password.value) {
+			return lang === 'vi' ? 'Vui lòng nhập mật khẩu' : 'Please enter password';
+		}
+		if (configs.password.value.length < 8) {
+			return lang === 'vi'
+				? 'Mật khẩu phải chứa ít nhất 8 ký tự'
+				: 'Password must be at least 8 characters';
+		}
+		return undefined;
+	}
 
 	// ===== Hàm đăng nhập =====
 	async function handleLogin() {
-		if (!configs.username.value || !configs.password.value || !encryptionKeys || loading) return;
+		if (!configs.username.value?.trim() || !configs.password.value || !encryptionKeys || loading) return;
+
+		const validationError = validateForm();
+		if (validationError) {
+			formError = validationError;
+			return;
+		}
 
 		// Xoá lỗi cũ
 		formError = undefined;
 		loading = true;
 
 		const requestBody: LoginRequestBody = {
-			username: configs.username.value,
+			username: configs.username.value.trim(),
 			password: configs.password.value,
 			remember: configs.remember.checked,
 			publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki')
@@ -91,8 +157,6 @@
 				{ privateKey: encryptionKeys.private, publicKey: encryptionKeys.public }
 			);
 
-			loading = false;
-
 			if (response.ok) {
 				// Lưu lại thông tin submit lần này để ngăn submit lại
 				previousSubmited = {
@@ -101,10 +165,19 @@
 					remember: requestBody.remember
 				};
 
+				// Remember me persistence — localStorage (and cookie fallback if needed server sets it)
+				try {
+					if (requestBody.remember && typeof localStorage !== 'undefined') {
+						localStorage.setItem(REMEMBER_STORAGE_KEY, requestBody.username);
+					} else if (typeof localStorage !== 'undefined') {
+						localStorage.removeItem(REMEMBER_STORAGE_KEY);
+					}
+				} catch {}
+
 				// Hiển thị toast thành công
 				client.browser?.toasts?.create({
-					title: pageContents.responseOk[lang] ?? 'Login success',
-					description: response.message ? response.message[lang] : undefined,
+					title: pageContents.responseOk[lang] ?? (lang === 'vi' ? 'Đăng nhập thành công' : 'Login successful'),
+					description: response.message ? (response.message[lang] ?? response.message.en) : undefined,
 					color: 'success'
 				});
 
@@ -114,13 +187,14 @@
 			} else {
 				// Hiển thị lỗi inline trên form
 				formError =
-					(response.message ? response.message[lang] : undefined) ??
+					(response.message ? (response.message[lang] ?? response.message.en) : undefined) ??
 					pageContents.responseFail[lang] ??
-					'Login failed';
+					(lang === 'vi' ? 'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin!' : 'Login failed. Please check your credentials!');
 			}
 		} catch (e) {
-			loading = false;
 			formError = e instanceof Error ? e.message : String(e);
+		} finally {
+			loading = false;
 		}
 	}
 
@@ -130,23 +204,44 @@
 		configs.password.value = '';
 		configs.remember.checked = false;
 		formError = undefined;
+		previousSubmited = undefined;
+		try {
+			if (typeof localStorage !== 'undefined') localStorage.removeItem(REMEMBER_STORAGE_KEY);
+		} catch {}
 	}
 
-	// ===== Mount: tạo khoá RSA + kiểm tra query param =====
+	// ===== Mount: tạo khoá RSA + kiểm tra query param + restore Remember me =====
 	onMount(async () => {
+		if (!client.browser) client.browser = {};
+
 		// Tạo cặp khoá RSA tạm thời cho phiên đăng nhập này
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { private: privateKey, public: publicKey };
+
+		// Restore Remember me — persistence via localStorage
+		try {
+			if (typeof localStorage !== 'undefined') {
+				const saved = localStorage.getItem(REMEMBER_STORAGE_KEY);
+				if (saved) {
+					configs.username.value = saved;
+					configs.remember.checked = true;
+				}
+			}
+		} catch {}
 
 		// Kiểm tra nếu vừa đăng ký thành công (redirect từ /register)
 		if (page.url.searchParams.get('registered') === '1') {
 			registeredSuccess = true;
 		}
 
-		// Trigger entrance animation
+		// Trigger entrance animation — parity with register (rAF)
 		requestAnimationFrame(() => {
 			mounted = true;
 		});
+	});
+
+	onDestroy(() => {
+		// No timers to clear, but keep hook for parity / future use
 	});
 </script>
 
@@ -246,7 +341,7 @@
 
 			<!-- Thông báo đăng ký thành công -->
 			{#if registeredSuccess}
-				<div class="login-alert login-alert--success" role="alert">
+				<div class="login-alert login-alert--success" role="alert" aria-live="polite">
 					<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="alert-icon">
 						<path
 							fill-rule="evenodd"
@@ -259,16 +354,21 @@
 			{/if}
 
 			<!-- Form đăng nhập -->
-			<Form onSubmit={handleLogin}>
+			<Form onSubmit={handleLogin} onReset={handleReset}>
 				<TextField name="username" required>
 					<Label>{pageContents.username[lang] ?? 'Username / Email'}</Label>
 					<div class="input-wrapper">
 						<svg class="input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-							<path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+							<path
+								fill-rule="evenodd"
+								d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+								clip-rule="evenodd"
+							/>
 						</svg>
 						<Input
 							bind:value={configs.username.value}
 							placeholder={{ vi: 'Nhập tên đăng nhập hoặc email', en: 'Enter username or email' }}
+							autocomplete="username"
 							class="login-input"
 						/>
 					</div>
@@ -289,6 +389,7 @@
 							type="password"
 							bind:value={configs.password.value}
 							placeholder={{ vi: 'Nhập mật khẩu', en: 'Enter your password' }}
+							autocomplete="current-password"
 							class="login-input"
 						/>
 					</div>
@@ -307,7 +408,7 @@
 
 				<!-- Thông báo lỗi inline -->
 				{#if formError}
-					<div class="login-alert login-alert--error" role="alert">
+					<div class="login-alert login-alert--error" role="alert" aria-live="assertive" aria-atomic="true">
 						<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="alert-icon">
 							<path
 								fill-rule="evenodd"
@@ -368,7 +469,8 @@
 
 <style lang="scss">
 	/* ═══════════════════════════════════════════════
-	   LOGIN PAGE — PREMIUM REDESIGN
+	   LOGIN PAGE — PREMIUM REDESIGN (parity with register)
+	   Tokens: spacing/colors/animations mirrored from register
 	   ═══════════════════════════════════════════════ */
 
 	.login-page {
@@ -379,7 +481,7 @@
 		overflow: hidden;
 	}
 
-	/* ══ Left Decorative Panel ══ */
+	/* ══ Left Decorative Panel — identical to register ══ */
 	.login-panel-left {
 		position: relative;
 		flex: 0 0 45%;
@@ -395,7 +497,7 @@
 		}
 	}
 
-	/* Animated gradient orbs */
+	/* Animated gradient orbs — same palette / blur / animation as register */
 	.orb {
 		position: absolute;
 		border-radius: 50%;
@@ -436,7 +538,7 @@
 		66% { transform: translate(-15px, 20px) scale(0.96); }
 	}
 
-	/* Dot grid overlay */
+	/* Dot grid overlay — same token as register */
 	.grid-overlay {
 		position: absolute;
 		inset: 0;
@@ -445,37 +547,37 @@
 		pointer-events: none;
 	}
 
-	/* Panel content */
+	/* Panel content — spacing parity: gap 2rem, padding 3rem, max-width 420px */
 	.panel-content {
 		position: relative;
 		z-index: 1;
 		display: flex;
 		flex-direction: column;
 		gap: 2rem;
-		padding: 3rem 3.5rem;
-		max-width: 480px;
+		padding: 3rem;
+		max-width: 420px;
 	}
 
 	.brand-logo svg {
 		width: 56px;
 		height: 56px;
-		filter: drop-shadow(0 8px 24px rgb(99 102 241 / 0.5));
+		filter: drop-shadow(0 8px 24px rgba(99, 102, 241, 0.45));
 	}
 
 	.panel-headline {
-		font-size: 2.5rem;
+		font-size: 2.25rem;
 		font-weight: 700;
 		line-height: 1.15;
-		color: #fff;
+		color: #ffffff;
 		letter-spacing: -0.02em;
 		margin: 0;
 	}
 
 	.panel-desc {
-		font-size: 1rem;
-		color: rgb(255 255 255 / 0.65);
+		font-size: 0.95rem;
+		color: rgba(255, 255, 255, 0.65);
 		line-height: 1.6;
-		margin: 0.4rem 0 0;
+		margin: 0.5rem 0 0;
 	}
 
 	.panel-text {
@@ -489,13 +591,13 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.85rem;
+		gap: 0.875rem;
 
 		li {
 			display: flex;
 			align-items: center;
 			gap: 0.75rem;
-			color: rgb(255 255 255 / 0.8);
+			color: rgba(255, 255, 255, 0.85);
 			font-size: 0.9rem;
 		}
 	}
@@ -513,7 +615,7 @@
 		box-shadow: 0 2px 8px rgb(99 102 241 / 0.4);
 	}
 
-	/* ══ Right Form Panel ══ */
+	/* ══ Right Form Panel — same background wash & scroll as register ══ */
 	.login-panel-right {
 		flex: 1 1 55%;
 		display: flex;
@@ -522,6 +624,9 @@
 		padding: 2rem 1.5rem;
 		background: var(--background, #09090b);
 		position: relative;
+		overflow-y: auto;
+		overflow-x: hidden;
+		max-height: 100dvh;
 
 		&::before {
 			content: '';
@@ -534,7 +639,7 @@
 		}
 	}
 
-	/* ══ Card ══ */
+	/* ══ Card — gap 1.25rem parity, entrance animation 0.5s ease ══ */
 	.login-card {
 		position: relative;
 		z-index: 1;
@@ -543,8 +648,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;
+		padding: 1rem 0;
 
-		/* Entrance animation */
+		/* Entrance animation — parity with register */
 		opacity: 0;
 		transform: translateY(20px);
 		transition: opacity 0.5s ease, transform 0.5s ease;
@@ -555,13 +661,13 @@
 		transform: translateY(0);
 	}
 
-	/* ══ Card Header ══ */
+	/* ══ Card Header — gap/margin parity ══ */
 	.login-header {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
+		gap: 0.35rem;
+		margin-bottom: 0.25rem;
 		text-align: center;
 	}
 
@@ -569,7 +675,7 @@
 		width: 44px;
 		height: 44px;
 		filter: drop-shadow(0 4px 16px rgb(99 102 241 / 0.4));
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.25rem;
 	}
 
 	.login-title {
@@ -581,12 +687,12 @@
 	}
 
 	.login-subtitle {
-		font-size: 0.875rem;
+		font-size: 0.85rem;
 		color: var(--foreground-400, #71717a);
 		margin: 0;
 	}
 
-	/* ══ Alert banners ══ */
+	/* ══ Alert banners — same tokens as register ══ */
 	.login-alert {
 		display: flex;
 		align-items: flex-start;
@@ -622,9 +728,10 @@
 		40%, 80% { transform: translateX(5px); }
 	}
 
-	/* ══ Input wrapper with icon ══ */
+	/* ══ Input wrapper with icon — parity ══ */
 	.input-wrapper {
 		position: relative;
+		width: 100%;
 
 		.input-icon {
 			position: absolute;
@@ -635,7 +742,7 @@
 			height: 1rem;
 			color: var(--foreground-400, #71717a);
 			pointer-events: none;
-			z-index: 1;
+			z-index: 2;
 		}
 	}
 
@@ -662,7 +769,7 @@
 		}
 	}
 
-	/* ══ Actions ══ */
+	/* ══ Actions — gap/margin parity ══ */
 	.login-actions {
 		display: flex;
 		gap: 0.625rem;
@@ -675,7 +782,11 @@
 		letter-spacing: 0.01em;
 	}
 
-	/* ══ Divider ══ */
+	:global(.login-btn-reset) {
+		font-weight: 500 !important;
+	}
+
+	/* ══ Divider — identical to register ══ */
 	.login-divider {
 		display: flex;
 		align-items: center;
@@ -740,7 +851,7 @@
 	/* ══ Responsive ══ */
 	@media (max-width: 900px) {
 		.login-panel-right {
-			padding: 2.5rem 1.25rem;
+			padding: 2rem 1.25rem;
 		}
 	}
 

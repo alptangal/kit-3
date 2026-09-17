@@ -17,6 +17,12 @@
 		},
 		get color() {
 			if (props.color) return props.color;
+			// Đọc từ computed color của input nếu có
+			if (textFieldContext?.children?.input?.color) {
+				const inputColor = textFieldContext.children.input.color;
+				if (inputColor !== 'default') return inputColor;
+			}
+			// Fallback về validation.isValid
 			if (typeof textFieldContext?.children?.input?.validation.isValid == 'boolean')
 				return textFieldContext?.children?.input?.validation.isValid ? 'success' : 'error';
 			if (checkboxContext?.required) {

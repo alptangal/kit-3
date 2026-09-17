@@ -1,13 +1,19 @@
 <script lang="ts">
 	import { styleSynced } from '$modules';
 	import { client } from '$store/basic.svelte';
-	import { fly } from 'svelte/transition';
-	import { getCheckboxContext } from '../checkbox';
 	import { sizeIndex } from '../description';
 	import { getTextFieldContext } from '../textField';
+	import { getCheckboxContext } from '../checkbox';
+	import { useMessageDisplay } from '../composables/useMessageDisplay.svelte';
 	import type { fieldMessagesConfigs, FieldMessagesProps } from './_interface';
 
 	let { ...props }: FieldMessagesProps = $props();
+	const textFieldContext = getTextFieldContext();
+	const checkboxContext = getCheckboxContext();
+
+	// shared message display composable (unified pattern with Description)
+	const messageDisplay = useMessageDisplay({ showValid: props.showValid });
+
 	let configs: fieldMessagesConfigs = $state({
 		get size() {
 			if (props.size) return props.size;
@@ -20,30 +26,16 @@
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
 		get messages() {
-			return (
-				textFieldContext?.children?.input?.validation.messages ??
-				checkboxContext?.validation.messages
-			);
+			return messageDisplay.rawMessages;
 		}
 	});
-	const textFieldContext = getTextFieldContext();
-	const checkboxContext = getCheckboxContext();
-	const visibleMessages = $derived.by(() => {
-		const msgs = [...(configs.messages ?? []).values()].filter((item) => item.content);
-		const hasInvalid = msgs.some((item) => item.kind === 'invalid');
-		if (hasInvalid) {
-			return msgs.filter((item) => item.kind === 'invalid');
-		}
-		if (props.showValid) {
-			return msgs.filter((item) => item.kind === 'valid');
-		}
-		return [];
-	});
+
+	const visibleMessages = $derived(messageDisplay.visibleMessages);
 </script>
 
 <svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
 	{#each visibleMessages as item, key (key)}
-		<p class={item.kind}>{item.content![client.browser?.language ?? 'en']}</p>
+		<p class={item.kind}>{messageDisplay.formatContent(item)}</p>
 	{/each}
 </svelte:element>
 

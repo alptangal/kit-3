@@ -16,11 +16,12 @@
 	}
 </script>
 
-<svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
+<svelte:element this={props.as ?? 'footer'} bind:this={configs.ref} class={configs.style}>
 	{@render children?.()}
 </svelte:element>
 
 <style lang="scss">
 	.modal-footer-root {
+		@apply flex gap-2 justify-end;
 	}
 </style>

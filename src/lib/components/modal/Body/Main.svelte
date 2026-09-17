@@ -16,7 +16,7 @@
 	}
 </script>
 
-<svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
+<svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style} role="document">
 	{@render children?.()}
 </svelte:element>
 

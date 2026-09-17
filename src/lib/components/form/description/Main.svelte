@@ -4,10 +4,23 @@
 	import { fly } from 'svelte/transition';
 	import { sizeIndex } from '.';
 	import { getTextFieldContext } from '../textField';
-	import type { DescriptionConfigs, DescriptionProps } from './_interface';
 	import { getCheckboxContext } from '../checkbox';
+	import { useMessageDisplay } from '../composables/useMessageDisplay.svelte';
+	import type { DescriptionConfigs, DescriptionProps } from './_interface';
 
 	let { children, ...props }: DescriptionProps = $props();
+	const textFieldContext = getTextFieldContext();
+	const checkboxContext = getCheckboxContext();
+
+	// shared message display — unified with FieldMessages pattern
+	const messageDisplay = useMessageDisplay({
+		showValid: false,
+		persistent: props.persistent,
+		autoHide: props.autoHide
+	});
+
+	const shouldRender = $derived(messageDisplay.shouldRenderDescription);
+
 	let configs: DescriptionConfigs = $state({
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
@@ -33,16 +46,6 @@
 		get autoHide() {
 			return props.autoHide ?? true;
 		}
-	});
-	const textFieldContext = getTextFieldContext();
-	const checkboxContext = getCheckboxContext();
-
-	const shouldRender = $derived.by(() => {
-		if (configs.persistent || !configs.autoHide) return true;
-		const hasMessages =
-			Boolean(textFieldContext?.children?.input?.validation.messages?.size) ||
-			Boolean(checkboxContext?.validation.messages?.size);
-		return !hasMessages;
 	});
 </script>
 

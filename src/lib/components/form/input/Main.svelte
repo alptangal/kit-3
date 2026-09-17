@@ -85,12 +85,15 @@
 	});
 
 	const colorDerived = $derived.by(() => {
+		// Ưu tiên props.color nếu được set explicitly
+		if (props.color) return props.color;
+
 		if (props.validation || requiredDerived || typeDerived == 'email') {
 			if (configs?.validation?.isValid != 'pending') {
 				return configs?.validation?.isValid ? 'success' : 'error';
 			}
 		}
-		return props.color ?? 'default';
+		return 'default';
 	});
 
 	const requiredDerived = $derived(props.required ?? textFieldContext?.required);

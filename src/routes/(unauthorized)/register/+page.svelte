@@ -36,6 +36,9 @@
 	let mounted = $state(false);
 	let showTermsModal = $state(false);
 
+	// Honeypot — hidden from real users, bots fill it
+	let honeypot = $state('');
+
 	/** Cặp khoá RSA tạm thời cho phiên đăng ký */
 	let encryptionKeys = $state<
 		| undefined
@@ -89,129 +92,287 @@
 
 	let usernameTimeoutId: ReturnType<typeof setTimeout> | undefined;
 	let emailTimeoutId: ReturnType<typeof setTimeout> | undefined;
+	// Sequence to discard stale fetch results
+	let usernameSeq = 0;
+	let emailSeq = 0;
+
+	function resetUsernameStatus() {
+		usernameStatus.checking = false;
+		usernameStatus.checked = false;
+		usernameStatus.taken = false;
+		usernameStatus.available = false;
+		usernameStatus.message = undefined;
+	}
+	function resetEmailStatus() {
+		emailStatus.checking = false;
+		emailStatus.checked = false;
+		emailStatus.taken = false;
+		emailStatus.available = false;
+		emailStatus.message = undefined;
+	}
 
 	$effect(() => {
-		if (!encryptionKeys) return;
+		const keysReady = !!encryptionKeys;
 		const raw = formData.username?.trim() ?? '';
+
+		if (!keysReady) {
+			if (usernameTimeoutId) {
+				clearTimeout(usernameTimeoutId);
+				usernameTimeoutId = undefined;
+			}
+			// Do not mark checking when keys not ready; keep status neutral but not loading
+			if (usernameStatus.checking) usernameStatus.checking = false;
+			return;
+		}
+
 		if (!raw) {
-			usernameStatus.checking = false;
-			usernameStatus.checked = false;
-			usernameStatus.taken = false;
-			usernameStatus.available = false;
-			usernameStatus.message = undefined;
+			if (usernameTimeoutId) {
+				clearTimeout(usernameTimeoutId);
+				usernameTimeoutId = undefined;
+			}
+			resetUsernameStatus();
 			return;
 		}
 
 		if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(raw)) {
-			usernameStatus.checking = false;
-			usernameStatus.checked = false;
-			usernameStatus.taken = false;
-			usernameStatus.available = false;
-			usernameStatus.message = undefined;
+			if (usernameTimeoutId) {
+				clearTimeout(usernameTimeoutId);
+				usernameTimeoutId = undefined;
+			}
+			resetUsernameStatus();
 			return;
 		}
 
 		if (usernameTimeoutId) clearTimeout(usernameTimeoutId);
 		usernameStatus.checking = true;
 
+		const seq = ++usernameSeq;
+		const snapshot = raw;
+
 		usernameTimeoutId = setTimeout(async () => {
+			// Re-check keys at execution time — debounce waits until keys ready, but keys may have been cleared
+			if (!encryptionKeys) {
+				if (seq === usernameSeq) usernameStatus.checking = false;
+				return;
+			}
+			// Stale snapshot check before request
+			const current = formData.username?.trim() ?? '';
+			if (current !== snapshot || seq !== usernameSeq) {
+				if (seq === usernameSeq) usernameStatus.checking = false;
+				return;
+			}
 			try {
 				const data = (await encryption.fetchSecure(
 					'/api/register/check',
 					{
 						method: 'POST',
-						body: { username: raw }
+						body: { username: snapshot }
 					},
 					encryptionKeys
 				)) as any;
+				// Discard stale response
+				if (seq !== usernameSeq) return;
+				if (formData.username?.trim() !== snapshot) return;
+
 				if (data.ok && data.username && data.username.valid) {
 					usernameStatus.checked = true;
-					usernameStatus.taken = data.username.taken;
-					usernameStatus.available = data.username.available;
+					usernameStatus.taken = !!data.username.taken;
+					usernameStatus.available = !!data.username.available;
 					usernameStatus.message = data.username.message;
+				} else {
+					// valid==false or unexpected payload -> treat as not checked
+					resetUsernameStatus();
 				}
 			} catch (e) {
 				console.error('Error checking username:', e);
+				if (seq === usernameSeq) {
+					// keep checked false so UI doesn't show stale success
+					usernameStatus.checked = false;
+				}
 			} finally {
-				usernameStatus.checking = false;
+				if (seq === usernameSeq) usernameStatus.checking = false;
 			}
 		}, 400);
 	});
 
 	$effect(() => {
-		if (!encryptionKeys) return;
+		const keysReady = !!encryptionKeys;
 		const raw = formData.email?.trim() ?? '';
+
+		if (!keysReady) {
+			if (emailTimeoutId) {
+				clearTimeout(emailTimeoutId);
+				emailTimeoutId = undefined;
+			}
+			if (emailStatus.checking) emailStatus.checking = false;
+			return;
+		}
+
 		if (!raw) {
-			emailStatus.checking = false;
-			emailStatus.checked = false;
-			emailStatus.taken = false;
-			emailStatus.available = false;
-			emailStatus.message = undefined;
+			if (emailTimeoutId) {
+				clearTimeout(emailTimeoutId);
+				emailTimeoutId = undefined;
+			}
+			resetEmailStatus();
 			return;
 		}
 
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
-			emailStatus.checking = false;
-			emailStatus.checked = false;
-			emailStatus.taken = false;
-			emailStatus.available = false;
-			emailStatus.message = undefined;
+			if (emailTimeoutId) {
+				clearTimeout(emailTimeoutId);
+				emailTimeoutId = undefined;
+			}
+			resetEmailStatus();
 			return;
 		}
 
 		if (emailTimeoutId) clearTimeout(emailTimeoutId);
 		emailStatus.checking = true;
 
+		const seq = ++emailSeq;
+		const snapshot = raw;
+
 		emailTimeoutId = setTimeout(async () => {
+			if (!encryptionKeys) {
+				if (seq === emailSeq) emailStatus.checking = false;
+				return;
+			}
+			const current = formData.email?.trim() ?? '';
+			if (current !== snapshot || seq !== emailSeq) {
+				if (seq === emailSeq) emailStatus.checking = false;
+				return;
+			}
 			try {
 				const data = (await encryption.fetchSecure(
 					'/api/register/check',
 					{
 						method: 'POST',
-						body: { email: raw }
+						body: { email: snapshot }
 					},
 					encryptionKeys
 				)) as any;
+				if (seq !== emailSeq) return;
+				if (formData.email?.trim() !== snapshot) return;
+
 				if (data.ok && data.email && data.email.valid) {
 					emailStatus.checked = true;
-					emailStatus.taken = data.email.taken;
-					emailStatus.available = data.email.available;
+					emailStatus.taken = !!data.email.taken;
+					emailStatus.available = !!data.email.available;
 					emailStatus.message = data.email.message;
+				} else {
+					resetEmailStatus();
 				}
 			} catch (e) {
 				console.error('Error checking email:', e);
+				if (seq === emailSeq) emailStatus.checked = false;
 			} finally {
-				emailStatus.checking = false;
+				if (seq === emailSeq) emailStatus.checking = false;
 			}
 		}, 400);
 	});
 
-	// ── Password Strength Calculation ──
-	const passwordStrength = $derived.by(() => {
-		const pwd = formData.password;
+	// ── Password Strength — sophisticated scoring ──
+	function estimatePasswordStrength(
+		pwd: string,
+		username?: string,
+		email?: string
+	): { score: number; label: string; percent: number; color: string; feedback?: string } {
 		if (!pwd) return { score: 0, label: '', percent: 0, color: 'transparent' };
 
-		let score = 0;
-		if (pwd.length >= 8) score++;
-		if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score++;
-		if (/\d/.test(pwd)) score++;
-		if (/[^a-zA-Z\d\s]/.test(pwd)) score++;
+		const len = pwd.length;
+		// Enforce minimum length — short passwords always weak
+		const weakResult = {
+			score: 1,
+			label: pageContents.passwordStrength.weak[lang] ?? 'Weak',
+			percent: 25,
+			color: '#ef4444'
+		};
+		if (len < 8) return weakResult;
 
-		if (score <= 1) {
+		let rawScore = 0;
+
+		// Length contribution (0-3)
+		if (len >= 8) rawScore += 1;
+		if (len >= 12) rawScore += 1;
+		if (len >= 16) rawScore += 1;
+
+		// Variety (0-3) — how many character classes present
+		let varieties = 0;
+		if (/[a-z]/.test(pwd)) varieties++;
+		if (/[A-Z]/.test(pwd)) varieties++;
+		if (/\d/.test(pwd)) varieties++;
+		if (/[^A-Za-z0-9\s]/.test(pwd)) varieties++;
+		if (varieties >= 2) rawScore += 1;
+		if (varieties >= 3) rawScore += 1;
+		if (varieties >= 4) rawScore += 1;
+
+		// Deductions
+		const lower = pwd.toLowerCase();
+		const commonList = [
+			'password',
+			'123456',
+			'12345678',
+			'123456789',
+			'qwerty',
+			'abc123',
+			'letmein',
+			'admin',
+			'welcome',
+			'iloveyou',
+			'monkey',
+			'dragon',
+			'111111',
+			'123123',
+			'qwerty123',
+			'password1',
+			'1234',
+			'000000',
+			'sunshine',
+			'princess',
+			'football',
+			'654321',
+			'starwars'
+		];
+		const isCommon = commonList.some((c) => lower === c || lower.includes(c));
+		if (isCommon) rawScore -= 2;
+
+		// Sequential characters (abc, 123, etc.)
+		const sequentialRe =
+			/(?:012|123|234|345|456|567|678|789|890|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz|qwe|wer|ert|rty|tyu|yui|uio|asd|sdf|dfg|fgh|ghj|hjk|jkl|zxc|xcv|cvb|vbn|bnm)/i;
+		if (sequentialRe.test(pwd)) rawScore -= 1;
+
+		// Repeated chars (aaa, 111)
+		if (/(.)\1{2,}/.test(pwd)) rawScore -= 1;
+
+		// Keyboard patterns
+		if (/(?:qwerty|asdf|zxcv|qaz|wsx|edc|qazwsx|1qaz|zaq1)/i.test(pwd)) rawScore -= 1;
+
+		// Contains username / email local part
+		if (username && username.length >= 3 && lower.includes(username.toLowerCase())) rawScore -= 1;
+		if (email) {
+			const local = email.split('@')[0]?.toLowerCase();
+			if (local && local.length >= 3 && lower.includes(local)) rawScore -= 1;
+		}
+
+		// Clamp rawScore 0-6
+		rawScore = Math.max(0, Math.min(rawScore, 6));
+
+		// Map rawScore 0-6 -> normalized 1-4
+		if (rawScore <= 1) {
 			return {
 				score: 1,
 				label: pageContents.passwordStrength.weak[lang] ?? 'Weak',
 				percent: 25,
 				color: '#ef4444'
 			};
-		} else if (score === 2) {
+		} else if (rawScore === 2) {
 			return {
 				score: 2,
 				label: pageContents.passwordStrength.fair[lang] ?? 'Fair',
 				percent: 50,
 				color: '#f59e0b'
 			};
-		} else if (score === 3) {
+		} else if (rawScore <= 4) {
 			return {
 				score: 3,
 				label: pageContents.passwordStrength.good[lang] ?? 'Good',
@@ -226,6 +387,14 @@
 				color: '#10b981'
 			};
 		}
+	}
+
+	const passwordStrength = $derived.by(() => {
+		return estimatePasswordStrength(
+			formData.password,
+			formData.username?.trim(),
+			formData.email?.trim()
+		);
 	});
 
 	/** Trạng thái khớp confirmPassword */
@@ -234,7 +403,7 @@
 		return formData.confirmPassword === formData.password;
 	});
 
-	// Trạng thái disabled nút submit
+	// Trạng thái disabled nút submit — ignore midname when undefined/empty for duplicate check
 	const status = $derived.by(() => {
 		const current = {
 			firstname: formData.firstname?.trim() ?? '',
@@ -259,13 +428,27 @@
 			!emailStatus.checking &&
 			agreeTerms;
 
+		const normalizeForCompare = (obj: typeof current | typeof previousSubmited) => {
+			if (!obj) return obj;
+			const copy: Record<string, unknown> = { ...obj };
+			if (copy['midname'] === undefined || copy['midname'] === '') delete copy['midname'];
+			return copy;
+		};
+
+		const isDuplicate =
+			previousSubmited !== undefined &&
+			isEqual(normalizeForCompare(current), normalizeForCompare(previousSubmited));
+
 		return {
-			disabled: loading || !hasRequired || isEqual(current, previousSubmited)
+			disabled: loading || !hasRequired || isDuplicate
 		};
 	});
 
 	// ── Validation trước khi gửi ──
 	function validateForm(): string | undefined {
+		if (honeypot.trim() !== '') {
+			return lang === 'vi' ? 'Yêu cầu bị từ chối' : 'Request rejected';
+		}
 		if (!formData.lastname?.trim() || !formData.firstname?.trim()) {
 			return lang === 'vi'
 				? 'Vui lòng nhập đầy đủ Họ và Tên'
@@ -308,6 +491,11 @@
 
 	// ── Xử lý Đăng ký ──
 	async function handleRegister() {
+		// Honeypot bot check — silently reject
+		if (honeypot.trim() !== '') {
+			formError = lang === 'vi' ? 'Yêu cầu bị từ chối' : 'Request rejected';
+			return;
+		}
 		if (status.disabled || !encryptionKeys || loading) return;
 
 		const validationError = validateForm();
@@ -387,11 +575,21 @@
 		formData.email = '';
 		formData.password = '';
 		formData.confirmPassword = '';
+		honeypot = '';
 		agreeTerms = false;
 		formError = undefined;
 		previousSubmited = undefined;
-		if (usernameTimeoutId) clearTimeout(usernameTimeoutId);
-		if (emailTimeoutId) clearTimeout(emailTimeoutId);
+		if (usernameTimeoutId) {
+			clearTimeout(usernameTimeoutId);
+			usernameTimeoutId = undefined;
+		}
+		if (emailTimeoutId) {
+			clearTimeout(emailTimeoutId);
+			emailTimeoutId = undefined;
+		}
+		usernameSeq++;
+		emailSeq++;
+		// Replace objects to ensure reactivity for any watchers that rely on identity
 		usernameStatus = {
 			checking: false,
 			checked: false,
@@ -419,8 +617,14 @@
 	});
 
 	onDestroy(() => {
-		if (usernameTimeoutId) clearTimeout(usernameTimeoutId);
-		if (emailTimeoutId) clearTimeout(emailTimeoutId);
+		if (usernameTimeoutId) {
+			clearTimeout(usernameTimeoutId);
+			usernameTimeoutId = undefined;
+		}
+		if (emailTimeoutId) {
+			clearTimeout(emailTimeoutId);
+			emailTimeoutId = undefined;
+		}
 	});
 </script>
 
@@ -537,6 +741,21 @@
 
 			<!-- Register Form -->
 			<Form onSubmit={handleRegister} onReset={handleReset}>
+				<!-- Honeypot — bots fill this, humans never see it -->
+				<div class="hp-field" aria-hidden="true">
+					<label for="hp_website">Website</label>
+					<input
+						id="hp_website"
+						name="website"
+						type="text"
+						bind:value={honeypot}
+						autocomplete="off"
+						tabindex="-1"
+						aria-hidden="true"
+						disabled={loading}
+					/>
+				</div>
+
 				<!-- Name fieldset: Lastname, Midname, Firstname -->
 				<fieldset class="name-fieldset" aria-label={lang === 'vi' ? 'Họ và tên' : 'Full name'}>
 					<div class="name-grid">
@@ -547,6 +766,7 @@
 								placeholder={{ vi: 'Nguyễn', en: 'Doe' }}
 								autocomplete="family-name"
 								class="name-input"
+								disabled={loading}
 							/>
 							<FieldMessages />
 						</TextField>
@@ -557,6 +777,7 @@
 								placeholder={{ vi: 'Văn', en: 'Middle' }}
 								autocomplete="additional-name"
 								class="name-input"
+								disabled={loading}
 							/>
 							<FieldMessages />
 						</TextField>
@@ -567,6 +788,7 @@
 								placeholder={{ vi: 'An', en: 'John' }}
 								autocomplete="given-name"
 								class="name-input"
+								disabled={loading}
 							/>
 							<FieldMessages />
 						</TextField>
@@ -589,6 +811,8 @@
 							placeholder={{ vi: 'Nhập tên đăng nhập', en: 'Enter username' }}
 							autocomplete="username"
 							loading={usernameStatus.checking}
+							disabled={loading}
+							color={usernameStatus.checked ? (usernameStatus.taken ? 'error' : 'success') : undefined}
 							class="register-input {usernameStatus.checked ? (usernameStatus.taken ? 'confirm-mismatch' : 'confirm-match') : ''}"
 						/>
 					</div>
@@ -621,6 +845,8 @@
 							placeholder={{ vi: 'Nhập địa chỉ email', en: 'Enter your email' }}
 							autocomplete="email"
 							loading={emailStatus.checking}
+							disabled={loading}
+							color={emailStatus.checked ? (emailStatus.taken ? 'error' : 'success') : undefined}
 							class="register-input {emailStatus.checked ? (emailStatus.taken ? 'confirm-mismatch' : 'confirm-match') : ''}"
 						/>
 					</div>
@@ -653,14 +879,15 @@
 							bind:value={formData.password}
 							placeholder={{ vi: 'Nhập mật khẩu', en: 'Enter your password' }}
 							autocomplete="new-password"
+							disabled={loading}
 							class="register-input"
 						/>
 					</div>
 
 					<!-- Password Strength Indicator — 4-segment bars -->
 					{#if formData.password}
-						<div class="strength-meter" aria-label={passwordStrength.label}>
-							<div class="strength-segments">
+						<div class="strength-meter" aria-label={passwordStrength.label} aria-live="polite">
+							<div class="strength-segments" role="progressbar" aria-valuenow={passwordStrength.percent} aria-valuemin="0" aria-valuemax="100">
 								{#each [1, 2, 3, 4] as seg}
 									<div
 										class="strength-seg"
@@ -696,12 +923,17 @@
 							bind:value={formData.confirmPassword}
 							placeholder={{ vi: 'Nhập lại mật khẩu', en: 'Confirm your password' }}
 							autocomplete="new-password"
+							disabled={loading}
 							class="register-input {confirmMatch === false ? 'confirm-mismatch' : confirmMatch === true ? 'confirm-match' : ''}"
 						/>
 					</div>
 					{#if confirmMatch === false}
 						<Description persistent={true} color="error" class="form-hint error-hint">
 							{pageContents.hints.confirmPasswordHint[lang] ?? 'Passwords do not match'}
+						</Description>
+					{:else if confirmMatch === true}
+						<Description persistent={true} color="success" class="form-hint success-hint">
+							{lang === 'vi' ? 'Mật khẩu khớp' : 'Passwords match'}
 						</Description>
 					{:else}
 						<FieldMessages />
@@ -710,15 +942,17 @@
 
 				<!-- Terms & Conditions Checkbox -->
 				<div class="terms-row">
-					<Checkbox bind:checked={agreeTerms}>
+					<Checkbox bind:checked={agreeTerms} disabled={loading}>
 						<span class="terms-text">
 							{pageContents.terms.agreeLabel[lang] ?? 'I agree to the'}
 							<button
 								type="button"
 								class="terms-link-btn"
+								disabled={loading}
 								onclick={(e) => {
 									e.preventDefault();
 									e.stopPropagation();
+									if (loading) return;
 									showTermsModal = true;
 								}}
 							>
@@ -746,6 +980,7 @@
 						color="error"
 						type="reset"
 						variant="ghost"
+						disabled={loading}
 					>
 						{pageContents.buttons.reset[lang] ?? 'Reset'}
 					</Button>
@@ -828,6 +1063,33 @@
 		width: 100%;
 		font-family: 'Inter', system-ui, sans-serif;
 		overflow: hidden;
+	}
+
+	/* Honeypot — off-screen, not display:none so bots still see it but humans & autofill don't */
+	.hp-field {
+		position: absolute !important;
+		left: -5000px !important;
+		top: auto !important;
+		width: 1px !important;
+		height: 1px !important;
+		overflow: hidden !important;
+		opacity: 0 !important;
+		pointer-events: none !important;
+		white-space: nowrap !important;
+
+		label {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			white-space: nowrap;
+		}
+
+		input {
+			position: absolute;
+			left: -5000px;
+		}
 	}
 
 	/* ══ Left Decorative Panel (Identical to Login) ══ */
@@ -1190,33 +1452,7 @@
 		border-color: var(--success-500) !important;
 	}
 
-	/* ══ Confirm icon ══ */
-	.confirm-icon {
-		position: absolute;
-		right: 2.75rem; /* để lại space cho nút show-password */
-		top: 50%;
-		transform: translateY(-50%);
-		width: 1rem;
-		height: 1rem;
-		pointer-events: none;
-		z-index: 3;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-
-		svg {
-			width: 100%;
-			height: 100%;
-		}
-
-		&.match {
-			color: #10b981;
-		}
-		&.mismatch {
-			color: #ef4444;
-		}
-	}
-
+	
 	:global(.form-hint) {
 		font-size: 0.75rem !important;
 		color: var(--foreground-400, #71717a) !important;
@@ -1286,6 +1522,12 @@
 
 		&:hover {
 			color: #a78bfa;
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+			pointer-events: none;
 		}
 	}
 

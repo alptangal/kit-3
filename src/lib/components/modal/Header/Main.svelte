@@ -51,7 +51,7 @@
 	onMount(() => {});
 </script>
 
-<svelte:element this={props.as ?? 'div'} bind:this={configs.ref} class={configs.style}>
+<svelte:element this={props.as ?? 'header'} bind:this={configs.ref} class={configs.style}>
 	{@render children?.()}
 	{#if configs.actionButton.close?.display}
 		<Button
@@ -61,12 +61,13 @@
 			color="error"
 			variant="outline"
 			class="px-0! h-fit!"
+			aria-label="Close modal"
 		/>
 	{/if}
 </svelte:element>
 
 <style lang="scss">
 	.modal-header-root {
-		@apply flex gap-2;
+		@apply flex gap-2 items-center;
 	}
 </style>
