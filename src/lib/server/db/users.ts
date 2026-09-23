@@ -194,12 +194,12 @@ export class Users {
 		return this.documentKey;
 	}
 
-	static async getBy(input: Partial<Pick<User, 'emailBlindIndex' | 'usernameBlindIndex'>>) {
-		const { usernameBlindIndex, emailBlindIndex } = input;
-		if (!usernameBlindIndex && !emailBlindIndex) throw new TranslatableError(contents.get);
+	static async getBy(input: Partial<Pick<User, 'emailBlindIndex' | 'usernameBlindIndex' | 'phoneBlindIndex'>>) {
+		const { usernameBlindIndex, emailBlindIndex, phoneBlindIndex } = input;
+		if (!usernameBlindIndex && !emailBlindIndex && !phoneBlindIndex) throw new TranslatableError(contents.get);
 
-		const fieldName = usernameBlindIndex ? 'usernameBlindIndex' : 'emailBlindIndex';
-		const keyword = (usernameBlindIndex ?? emailBlindIndex) as string;
+		const fieldName = usernameBlindIndex ? 'usernameBlindIndex' : emailBlindIndex ? 'emailBlindIndex' : 'phoneBlindIndex';
+		const keyword = (usernameBlindIndex ?? emailBlindIndex ?? phoneBlindIndex) as string;
 
 		try {
 			const response = await cbUsers.query.document.search({
@@ -252,6 +252,15 @@ export class Users {
 		excludeDocumentKey?: string
 	): Promise<boolean> {
 		const found = Users.onlyActive(await Users.getBy({ usernameBlindIndex }));
+		if (found.length === 0) return false;
+		if (excludeDocumentKey) return found.some((d) => d._id !== excludeDocumentKey);
+		return true;
+	}
+	static async isPhoneTaken(
+		phoneBlindIndex: string,
+		excludeDocumentKey?: string
+	): Promise<boolean> {
+		const found = Users.onlyActive(await Users.getBy({ phoneBlindIndex }));
 		if (found.length === 0) return false;
 		if (excludeDocumentKey) return found.some((d) => d._id !== excludeDocumentKey);
 		return true;

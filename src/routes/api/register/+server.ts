@@ -16,6 +16,8 @@ const cbUserStatus = cbData('user_status');
 const MIN_PASSWORD_LENGTH = 8;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_REGEX = /^[a-zA-Z0-9_.-]{3,30}$/;
+// Giống PHONE_REGEX trong api/register/check — chấp nhận +XX hoặc số nội địa, 6-21 ký tự
+const PHONE_REGEX = /^\+?[0-9][0-9\s\-]{5,20}$/;
 
 const registerMessages = {
 	systemUnavailable: {
@@ -49,6 +51,14 @@ const registerMessages = {
 	usernameTaken: {
 		vi: 'Tên đăng nhập này đã được sử dụng',
 		en: 'Username is already taken'
+	} as TranslateContent,
+	invalidPhone: {
+		vi: 'Số điện thoại không hợp lệ',
+		en: 'Invalid phone number'
+	} as TranslateContent,
+	phoneTaken: {
+		vi: 'Số điện thoại này đã được sử dụng',
+		en: 'Phone number is already taken'
 	} as TranslateContent,
 	createFailed: {
 		vi: 'Tạo tài khoản thất bại, vui lòng thử lại sau',
@@ -117,6 +127,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (password.length < MIN_PASSWORD_LENGTH) {
 			return respond({ message: registerMessages.passwordLength, ok: false }, 400);
 		}
+		// Phone tùy chọn — chỉ validate định dạng khi user nhập
+		if (normalizedPhone && !PHONE_REGEX.test(normalizedPhone)) {
+			return respond({ message: registerMessages.invalidPhone, ok: false }, 400);
+		}
 
 		// 5. Tính toán Blind Index song song
 		const [emailBlindIndex, usernameBlindIndex, phoneBlindIndex] = await Promise.all([
@@ -126,9 +140,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		]);
 
 		// 6. Kiểm tra trùng lặp email và username đồng thời
-		const [emailTaken, usernameTaken] = await Promise.all([
+		// Phone tùy chọn — chỉ check trùng khi user nhập, bỏ qua với chuỗi rỗng
+		const [emailTaken, usernameTaken, phoneTaken] = await Promise.all([
 			Users.isEmailTaken(emailBlindIndex),
-			Users.isUsernameTaken(usernameBlindIndex)
+			Users.isUsernameTaken(usernameBlindIndex),
+			normalizedPhone ? Users.isPhoneTaken(phoneBlindIndex) : Promise.resolve(false)
 		]);
 
 		if (emailTaken) {
@@ -136,6 +152,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 		if (usernameTaken) {
 			return respond({ message: registerMessages.usernameTaken, ok: false }, 409);
+		}
+		if (phoneTaken) {
+			return respond({ message: registerMessages.phoneTaken, ok: false }, 409);
 		}
 
 		// 7. Thiết lập mã hoá user vault DEK và mã hoá dữ liệu nhạy cảm
