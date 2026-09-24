@@ -4,6 +4,7 @@ import type { Handle } from '@sveltejs/kit';
 import { systemVault, initSystemVault } from '$store/initSystemVault';
 import { initApp } from '$store/init-app';
 import { verifyAccessToken } from '$lib/server/jwt';
+import { resolveLang, localize } from '$lib/server/i18n';
 
 declare global {
 	// eslint-disable-next-line no-var
@@ -58,7 +59,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
 
 	// Public paths that don't require authentication
-	const publicPaths = ['/login', '/register', '/forgot-password', '/api/login', '/api/register', '/api/forgot-password'];
+	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password'];
 	const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
 
 	// API routes that don't require authentication
@@ -76,8 +77,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Check token expiration for API routes too
 	if (isApiRoute && !isPublicPath && !event.locals.user) {
+		// 401 body cũng chỉ chứa đúng ngôn ngữ client đang dùng
+		const lang = resolveLang(event.request.headers.get('accept-language'));
 		return new Response(JSON.stringify({
-			message: { vi: 'Phiên đăng nhập đã hết hạn', en: 'Session expired' },
+			message: localize({ vi: 'Phiên đăng nhập đã hết hạn', en: 'Session expired' }, lang),
 			ok: false
 		}), {
 			status: 401,

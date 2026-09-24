@@ -5,6 +5,7 @@ import { encryption } from '$modules/encryption';
 import { systemVault } from '$store/initSystemVault';
 import { Users } from '$lib/server/db/users';
 import type { TranslateContent } from '$interfaces/basic';
+import { resolveLang, localizePayload } from '$lib/server/i18n';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_REGEX = /^[a-zA-Z0-9_.-]{3,30}$/;
@@ -40,17 +41,23 @@ function checkRateLimit(identifier: string): RateLimitResult {
 }
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
+	const lang = resolveLang(request.headers.get('accept-language'));
+
 	try {
 		// 1. Kiểm tra systemVault đã sẵn sàng
 		if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {
 			return json(
-				{
-					ok: false,
-					message: {
-						vi: 'Hệ thống đang khởi tạo kho mã hoá — vui lòng thử lại sau',
-						en: 'Service unavailable — system initializing'
-					}
-				},
+				localizePayload(
+					{
+						ok: false,
+						message: {
+							vi: 'Hệ thống đang khởi tạo kho mã hoá — vui lòng thử lại sau',
+							en: 'Service unavailable — system initializing'
+						}
+					},
+					lang
+				),
 				{ status: 503 }
 			);
 		}
@@ -77,13 +84,16 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 		if (!publicKeyB64) {
 			return json(
-				{
-					ok: false,
-					message: {
-						vi: 'Thiếu khoá phiên client (public key)',
-						en: 'Missing session public key'
-					}
-				},
+				localizePayload(
+					{
+						ok: false,
+						message: {
+							vi: 'Thiếu khoá phiên client (public key)',
+							en: 'Missing session public key'
+						}
+					},
+					lang
+				),
 				{ status: 400 }
 			);
 		}
@@ -93,7 +103,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		const respond = async (payload: any, status = 200) => {
 			const enc = await encryption.encryptWithPublicKeyHybrid(
 				sessionPublicKey,
-				JSON.stringify(payload)
+				JSON.stringify(localizePayload(payload, lang))
 			);
 			return json(enc, { status });
 		};
@@ -289,13 +299,16 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	} catch (error) {
 		console.error('Error in /api/register/check:', error);
 		return json(
-			{
-				ok: false,
-				message: {
-					vi: 'Đã xảy ra lỗi khi kiểm tra dữ liệu',
-					en: 'An error occurred while checking data'
-				}
-			},
+			localizePayload(
+				{
+					ok: false,
+					message: {
+						vi: 'Đã xảy ra lỗi khi kiểm tra dữ liệu',
+						en: 'An error occurred while checking data'
+					}
+				},
+				lang
+			),
 			{ status: 500 }
 		);
 	}

@@ -7,6 +7,7 @@ import { systemVault } from '$store/initSystemVault';
 import type { RegisterRequestBody } from '../../(unauthorized)/register/_interface';
 import { Users } from '$lib/server/db/users';
 import type { User } from '$modules/schema';
+import { resolveLang, localizePayload } from '$lib/server/i18n';
 
 const collectionName = 'users';
 const cbUsers = cbData(collectionName);
@@ -71,11 +72,14 @@ const registerMessages = {
 };
 
 export const POST: RequestHandler = async ({ request }) => {
+	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
+	const lang = resolveLang(request.headers.get('accept-language'));
+
 	try {
 		// 1. Kiểm tra systemVault đã sẵn sàng
 		if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {
 			return json(
-				{ message: registerMessages.systemUnavailable, ok: false },
+				localizePayload({ message: registerMessages.systemUnavailable, ok: false }, lang),
 				{ status: 503 }
 			);
 		}
@@ -95,14 +99,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		const { publicKeyB64 } = dataDecrypted;
 
 		if (!publicKeyB64) {
-			return json({ message: registerMessages.missingSessionKey, ok: false }, { status: 400 });
+			return json(
+				localizePayload({ message: registerMessages.missingSessionKey, ok: false }, lang),
+				{ status: 400 }
+			);
 		}
 		const sessionPublicKey = await encryption.importPublicKey(publicKeyB64);
 
 		const respond = async (payload: ServerResponse, status = 200) => {
 			const enc = await encryption.encryptWithPublicKeyHybrid(
 				sessionPublicKey,
-				JSON.stringify(payload)
+				JSON.stringify(localizePayload(payload, lang))
 			);
 			return json(enc, { status });
 		};

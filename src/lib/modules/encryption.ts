@@ -387,9 +387,20 @@ const fetchSecure = async (
 		JSON.stringify(payload)
 	);
 
+	// Gửi ngôn ngữ client đang dùng để server thu gọn message về đúng 1 ngôn ngữ đó.
+	// Dynamic import vì store dùng runes ($effect.root) — chỉ load được trên client;
+	// fetchSecure cũng chỉ chạy trên client, nên import hỏng thì fallback 'en'.
+	let lang = 'en';
+	try {
+		const { client } = await import('$store/basic.svelte');
+		lang = client.browser?.language ?? 'en';
+	} catch {
+		// giữ fallback 'en'
+	}
+
 	const res = await fetch(url, {
 		method: options.method ?? 'POST',
-		headers: { 'content-type': 'application/json' }, // thiếu trước đây
+		headers: { 'content-type': 'application/json', 'Accept-Language': lang },
 		body: JSON.stringify(encryptedBody)
 	});
 

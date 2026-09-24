@@ -6,8 +6,12 @@ import type { LoginRequestBody } from '../../(unauthorized)/login/_interface';
 import type { ServerResponse } from '$interfaces/basic';
 import { Users } from '$lib/server/db/users';
 import { dev } from '$app/environment';
+import { resolveLang, localizePayload } from '$lib/server/i18n';
 
 export const POST: RequestHandler = async ({ request, getClientAddress, cookies }) => {
+	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
+	const lang = resolveLang(request.headers.get('accept-language'));
+
 	try {
 		// ── 1. Kiểm tra system vault đã sẵn sàng ──
 		if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {
@@ -40,7 +44,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 		const respond = async (payload: ServerResponse, status = 200) => {
 			const enc = await encryption.encryptWithPublicKeyHybrid(
 				sessionPublicKey,
-				JSON.stringify(payload)
+				JSON.stringify(localizePayload(payload, lang))
 			);
 			return json(enc, { status });
 		};
