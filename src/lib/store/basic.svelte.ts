@@ -135,7 +135,7 @@ export const profile = $state({
 		if (bodyBackgroundColor && themeMetaTag) {
 			themeMetaTag.setAttribute('content', bodyBackgroundColor);
 		}
-		if (!this._theme) document.body.style.background = `hsl(var(--background))`;
+		if (!this._theme) document.body.style.background = `var(--background)`;
 		return th;
 	},
 	set theme(val: AppTheme) {
@@ -153,7 +153,7 @@ export const profile = $state({
 		function animationTheme() {
 			const currentTime = performance.now();
 			const percent = ((currentTime - startAt) * 100) / duration;
-			document.body.style.background = `radial-gradient(circle at ${profile.cursor.x}px ${profile.cursor.y}px, hsl(var(--background)) ${Math.min(percent, 100)}%,hsl(var(--background-invert)) )`;
+			document.body.style.background = `radial-gradient(circle at ${profile.cursor.x}px ${profile.cursor.y}px, var(--background) ${Math.min(percent, 100)}%,var(--background-invert) )`;
 			if (Math.min(percent, 100) == 100 && profile.timeId.theme.requestAnimation) {
 				cancelAnimationFrame(profile.timeId.theme.requestAnimation);
 			} else {

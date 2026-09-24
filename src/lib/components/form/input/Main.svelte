@@ -31,6 +31,9 @@
 	let { value = $bindable(), disabled = $bindable(), ...props }: InputProps = $props();
 	// Ghi nhớ giá trị ban đầu khi component được tạo ra, dùng để reset về đúng mốc ban đầu
 	let _initialValue: string | undefined = value;
+
+	// Generate unique ID for label association if not provided
+	const inputId = $derived(props.id ?? (textFieldContext?.name ? `field-${textFieldContext.name}` : undefined));
 	const typeDerived = $derived(props.type ?? 'text');
 	const sizeDerived = $derived(props.size ?? textFieldContext?.size ?? formContext?.size ?? client.browser?.size ?? 'md');
 	const roundedDerived = $derived(props.rounded ?? sizeDerived);
@@ -88,10 +91,17 @@
 		// Ưu tiên props.color nếu được set explicitly
 		if (props.color) return props.color;
 
+		// Khi đang loading (realtime check) → trả về default (màu trung tính)
+		// Check both external loading prop and internal validation loading state
+		if (props.loading || configs?.loading) return 'default';
+
 		if (props.validation || requiredDerived || typeDerived == 'email') {
-			if (configs?.validation?.isValid != 'pending') {
-				return configs?.validation?.isValid ? 'success' : 'error';
-			}
+			const isValid = configs?.validation?.isValid;
+			if (isValid == 'pending') return 'default';
+			// Trường rỗng chưa từng validate (chưa blur nên chưa có process) → màu trung tính,
+			// tránh hiển thị error đỏ ngay khi mount (regression: color-error mặc định)
+			if (!isValid && !configs?.validation?.process && !value) return 'default';
+			return isValid ? 'success' : 'error';
 		}
 		return 'default';
 	});
@@ -163,11 +173,15 @@
 		}
 		const firstAt = value.indexOf('@');
 		const lastAt = value.lastIndexOf('@');
-		// Trigger khi có đúng 1 ký tự '@'
+		// Trigger khi có đúng 1 ký tự '@' VÀ có ít nhất 1 ký tự hợp lệ trước @
 		if (firstAt === -1 || firstAt !== lastAt) {
 			return null;
 		}
 		const prefix = value.slice(0, firstAt);
+		// Yêu cầu ít nhất 1 ký tự trước @
+		if (prefix.length < 1) {
+			return null;
+		}
 		const query = value.slice(firstAt + 1).toLowerCase();
 		return { prefix, query };
 	});
@@ -211,12 +225,138 @@
 		matchingEmailDomains.length > 0
 	);
 
+	// ── Phone Auto-complete Suggestions ──
+	let phoneSuggestionsDismissed = $state(false);
+	let phoneHighlightedIndex = $state(0);
+
+	// Common country codes with popular phone formats
+	const defaultPhoneCountryCodes = [
+		{ code: '+1', name: 'United States', format: '(XXX) XXX-XXXX', mask: '(###) ###-####', example: '+1 (555) 123-4567' },
+		{ code: '+44', name: 'United Kingdom', format: 'XXXX XXXXXXX', mask: '#### #######', example: '+44 7911 123456' },
+		{ code: '+84', name: 'Vietnam', format: 'XX XXXX XXXX', mask: '## #### ####', example: '+84 90 123 4567' },
+		{ code: '+86', name: 'China', format: 'XXX XXXX XXXX', mask: '### #### ####', example: '+86 138 1234 5678' },
+		{ code: '+81', name: 'Japan', format: 'XX XXXX XXXX', mask: '## #### ####', example: '+81 90 1234 5678' },
+		{ code: '+82', name: 'South Korea', format: 'XX XXXX XXXX', mask: '## #### ####', example: '+82 10 1234 5678' },
+		{ code: '+65', name: 'Singapore', format: 'XXXX XXXX', mask: '#### ####', example: '+65 8123 4567' },
+		{ code: '+60', name: 'Malaysia', format: 'XX XXXX XXXX', mask: '## #### ####', example: '+60 12 345 6789' },
+		{ code: '+66', name: 'Thailand', format: 'XX XXXX XXXX', mask: '## #### ####', example: '+66 81 234 5678' },
+		{ code: '+62', name: 'Indonesia', format: 'XX XXXX XXXX', mask: '## #### ####', example: '+62 812 345 6789' },
+		{ code: '+63', name: 'Philippines', format: 'XXX XXX XXXX', mask: '### ### ####', example: '+63 917 123 4567' },
+		{ code: '+91', name: 'India', format: 'XXXXX XXXXX', mask: '##### #####', example: '+91 98765 43210' },
+		{ code: '+49', name: 'Germany', format: 'XXXX XXXXXXX', mask: '#### #######', example: '+49 170 1234567' },
+		{ code: '+33', name: 'France', format: 'XX XX XX XX XX', mask: '## ## ## ## ##', example: '+33 6 12 34 56 78' },
+		{ code: '+39', name: 'Italy', format: 'XXX XXXXXXX', mask: '### #######', example: '+39 320 1234567' },
+		{ code: '+34', name: 'Spain', format: 'XXX XX XX XX', mask: '### ## ## ##', example: '+34 600 12 34 56' },
+		{ code: '+55', name: 'Brazil', format: 'XX XXXXX XXXX', mask: '## ##### ####', example: '+55 11 91234 5678' },
+		{ code: '+7', name: 'Russia', format: 'XXX XXX XX XX', mask: '### ### ## ##', example: '+7 916 123 45 67' },
+		{ code: '+27', name: 'South Africa', format: 'XX XXX XXXX', mask: '## ### ####', example: '+27 82 123 4567' },
+		{ code: '+61', name: 'Australia', format: 'X XXXX XXXX', mask: '# #### ####', example: '+61 412 345 678' },
+	];
+
+	const phoneSuggestEnabled = $derived(props.phoneSuggest ?? (typeDerived === 'phone'));
+	const phoneCountryCodesDerived = $derived(props.phoneCountryCodes ?? defaultPhoneCountryCodes);
+
+	const phonePartsDerived = $derived.by(() => {
+		if (!phoneSuggestEnabled || typeof value !== 'string') {
+			return null;
+		}
+		// For phone, we match based on the starting digits (country code)
+		// Remove non-digits for matching
+		const digitsOnly = value.replace(/\D/g, '');
+		if (!digitsOnly) return null;
+
+		// Check if we have a potential country code prefix
+		// Match when user has typed at least 1 digit
+		if (digitsOnly.length >= 1) {
+			return { digitsOnly, query: digitsOnly };
+		}
+		return null;
+	});
+
+	const matchingPhoneCountries = $derived.by(() => {
+		if (!phonePartsDerived) return [];
+		const { query, digitsOnly } = phonePartsDerived;
+		return phoneCountryCodesDerived.filter((country) => {
+			const countryCodeDigits = country.code.replace(/\D/g, '');
+			// Match country code prefix
+			// Show if query is a prefix of country code AND user hasn't typed more digits than the country code
+			return countryCodeDigits.startsWith(query) && digitsOnly.length <= countryCodeDigits.length;
+		});
+	});
+
+	// Reset index khi danh sách country code gợi ý thay đổi
+	$effect(() => {
+		if (phoneHighlightedIndex >= matchingPhoneCountries.length) {
+			phoneHighlightedIndex = 0;
+		}
+	});
+
+	// Mở lại gợi ý khi người dùng thay đổi giá trị
+	let _prevValueForPhoneSuggest: string | undefined = undefined;
+	$effect(() => {
+		if (value !== _prevValueForPhoneSuggest) {
+			_prevValueForPhoneSuggest = value;
+			phoneSuggestionsDismissed = false;
+		}
+	});
+
+	// Quản lý trạng thái focus cho phone suggestions
+	let isInteractingWithPhoneSuggestions = $state(false);
+	let phoneSuggestionsFocusHeld = $state(false);
+
+	const phoneSuggestionsOpen = $derived(
+		phoneSuggestEnabled &&
+		!phoneSuggestionsDismissed &&
+		(isFocused || isInteractingWithPhoneSuggestions) &&
+		phonePartsDerived !== null &&
+		matchingPhoneCountries.length > 0
+	);
+
 	function selectEmailDomain(domain: string) {
 		if (!emailPartsDerived) return;
-		value = `${emailPartsDerived.prefix}@${domain}`;
-		_prevValueForSuggest = value;
+		const newVal = `${emailPartsDerived.prefix}@${domain}`;
+		value = newVal;
+		_prevValueForSuggest = newVal;
 		emailSuggestionsDismissed = true;
 		isInteractingWithSuggestions = false;
+		const inputRef = configs.input.email?.ref as HTMLInputElement | undefined;
+		if (inputRef) {
+			requestAnimationFrame(() => {
+				inputRef.focus();
+				try {
+					inputRef.setSelectionRange(newVal.length, newVal.length);
+				} catch {}
+			});
+		}
+	}
+
+	function selectPhoneCountry(country: typeof defaultPhoneCountryCodes[0]) {
+		if (!phonePartsDerived) return;
+		// If user just typed digits, prepend the country code
+		const currentValue = value;
+		const digitsOnly = currentValue.replace(/\D/g, '');
+		const countryCodeDigits = country.code.replace(/\D/g, '');
+
+		// If the current value already starts with this country code (with +), don't duplicate
+		if (digitsOnly.startsWith(countryCodeDigits) && currentValue.startsWith('+')) {
+			return;
+		}
+
+		// If the current digits are a prefix of the country code (e.g., user typed "8" and selects "+86"),
+		// replace the prefix with the full country code
+		if (countryCodeDigits.startsWith(digitsOnly)) {
+			value = country.code + ' ';
+		} else if (digitsOnly === countryCodeDigits && !currentValue.startsWith('+')) {
+			// User typed full country code digits but without + (e.g., "84" for +84)
+			value = country.code + ' ';
+		} else {
+			// Otherwise prepend the country code
+			value = country.code + (digitsOnly ? ' ' + digitsOnly : '');
+		}
+		_prevValueForPhoneSuggest = value;
+		phoneSuggestionsDismissed = true;
+		isInteractingWithPhoneSuggestions = false;
+
 		const type =
 			configs.type === 'password' || configs.type === 'email' || configs.type === 'phone'
 				? configs.type
@@ -237,41 +377,125 @@
 	}
 
 	function handleEmailKeydown(e: KeyboardEvent) {
-		if (!emailSuggestEnabled) return;
-		if (emailSuggestionsOpen && matchingEmailDomains.length > 0) {
+	if (!emailSuggestEnabled) return;
+	if (emailSuggestionsOpen && matchingEmailDomains.length > 0) {
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			e.stopPropagation();
+			emailHighlightedIndex = (emailHighlightedIndex + 1) % matchingEmailDomains.length;
+			return;
+		}
+		if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			e.stopPropagation();
+			emailHighlightedIndex =
+				(emailHighlightedIndex - 1 + matchingEmailDomains.length) % matchingEmailDomains.length;
+			return;
+		}
+		if (e.key === 'Enter' || e.key === 'Tab') {
+			e.preventDefault();
+			e.stopPropagation();
+			const chosen = matchingEmailDomains[emailHighlightedIndex] ?? matchingEmailDomains[0];
+			if (chosen) {
+				selectEmailDomain(chosen);
+			}
+			return;
+		}
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			emailSuggestionsDismissed = true;
+			return;
+		}
+	}
+}
+
+function handlePhoneKeydown(e: KeyboardEvent) {
+		if (!phoneSuggestEnabled) return;
+		if (phoneSuggestionsOpen && matchingPhoneCountries.length > 0) {
 			if (e.key === 'ArrowDown') {
 				e.preventDefault();
 				e.stopPropagation();
-				emailHighlightedIndex = (emailHighlightedIndex + 1) % matchingEmailDomains.length;
+				phoneHighlightedIndex = (phoneHighlightedIndex + 1) % matchingPhoneCountries.length;
 				return;
 			}
 			if (e.key === 'ArrowUp') {
 				e.preventDefault();
 				e.stopPropagation();
-				emailHighlightedIndex =
-					(emailHighlightedIndex - 1 + matchingEmailDomains.length) % matchingEmailDomains.length;
+				phoneHighlightedIndex =
+					(phoneHighlightedIndex - 1 + matchingPhoneCountries.length) % matchingPhoneCountries.length;
 				return;
 			}
 			if (e.key === 'Enter' || e.key === 'Tab') {
 				e.preventDefault();
 				e.stopPropagation();
-				const chosen = matchingEmailDomains[emailHighlightedIndex] ?? matchingEmailDomains[0];
+				const chosen = matchingPhoneCountries[phoneHighlightedIndex] ?? matchingPhoneCountries[0];
 				if (chosen) {
-					selectEmailDomain(chosen);
+					selectPhoneCountry(chosen);
 				}
 				return;
 			}
 			if (e.key === 'Escape') {
 				e.preventDefault();
 				e.stopPropagation();
-				emailSuggestionsDismissed = true;
+				phoneSuggestionsDismissed = true;
 				return;
 			}
 		}
 	}
 
+	// Helper function to get country flag emoji from country code
+	function getCountryFlag(countryCode: string): string {
+		const code = countryCode.replace('+', '');
+		const countryFlags: Record<string, string> = {
+			'1': '🇺🇸', // US/Canada
+			'44': '🇬🇧', // UK
+			'84': '🇻🇳', // Vietnam
+			'86': '🇨🇳', // China
+			'81': '🇯🇵', // Japan
+			'82': '🇰🇷', // South Korea
+			'65': '🇸🇬', // Singapore
+			'60': '🇲🇾', // Malaysia
+			'66': '🇹🇭', // Thailand
+			'62': '🇮🇩', // Indonesia
+			'63': '🇵🇭', // Philippines
+			'91': '🇮🇳', // India
+			'49': '🇩🇪', // Germany
+			'33': '🇫🇷', // France
+			'39': '🇮🇹', // Italy
+			'34': '🇪🇸', // Spain
+			'55': '🇧🇷', // Brazil
+			'7': '🇷🇺', // Russia
+			'27': '🇿🇦', // South Africa
+			'61': '🇦🇺', // Australia
+		};
+		return countryFlags[code] || '🌐';
+	}
+
+	// Stable reactive state for password visibility
+	let passwordStatus = $state({
+		_showing: undefined as undefined | boolean,
+		get showing() {
+			if (this._showing == undefined) return props.showPassword;
+			return this._showing;
+		},
+		set showing(v) {
+			this._showing = v;
+		}
+	});
+
 	let configs: InputConfigs = $state({
-		status: {},
+		status: {
+			get changed() {
+				// So sánh giá trị hiện tại vs mốc ban đầu (closure _initialValue,
+				// chuẩn hóa undefined thành ''): false → pristine, true → dirty.
+				// Button submit disabled-logic và Form.status.changed đọc getter này
+				// qua formContext.childrens — Input đăng ký vào childrens nhưng trước
+				// đây không có changed → form chỉ chứa Input bị coi là pristine vĩnh viễn
+				// (submit disabled dù đã nhập dữ liệu).
+				return (_initialValue ?? '') !== (configs.value ?? '');
+			}
+		},
 		get type() { return typeDerived; },
 		get size() { return sizeDerived; },
 		get rounded() { return roundedDerived; },
@@ -293,14 +517,25 @@
 		get caseSensitive() { return caseSensitiveDerived; },
 		validation: {
 			get isValid() {
-				if (!props.validation && !configs.required && configs.type !== 'email') return undefined;
+				// No validation needed for optional fields without custom validation and not email type
+				if (!props.validation && !configs.required && configs.type !== 'email') return true;
+
+				// If validation process exists, use its results
 				if (configs.validation.process) {
 					const operator = props.validation?.operator ?? 'and';
 					const results = [...configs.validation.process.values()];
 					if (results.some((rs) => rs == 'pending')) return 'pending';
 					return operator == 'and' ? results.every((rs) => rs) : results.some((rs) => rs);
 				}
-				return 'pending';
+
+				// No validation process yet (e.g., no blur yet) - for required fields, check value presence
+				if (configs.required) {
+					const val = configs.value ?? '';
+					return val.trim().length > 0;
+				}
+
+				// Optional field with no validation process yet - consider valid
+				return true;
 			}
 		},
 		get event() {
@@ -494,6 +729,10 @@
 				}
 			},
 			password: {
+				get showPassword() {
+					return passwordStatus.showing;
+				},
+				status: passwordStatus,
 				get style() {
 					return configs.input.text.style;
 				},
@@ -551,7 +790,15 @@
 					return configs.input.text.event;
 				}
 			},
-			phone: {},
+			phone: {
+			get style() {
+				return configs.input.text.style;
+			},
+			get event() {
+				if (configs.disabled) return [];
+				return configs.input.text.event;
+			}
+		},
 			number: {
 				get style() {
 					return [...(configs.input.text.style ?? []), 'input-editor-number'];
@@ -903,22 +1150,18 @@
 			},
 			showPassword: {
 				get display() { return showPasswordDisplayDerived; },
-				status: {
-					_showing: undefined as undefined | boolean,
-					get showing() {
-						if (this._showing == undefined) return props.showPassword;
-						return this._showing;
-					},
-					set showing(v) {
-						this._showing = v;
-					}
-				},
+				status: passwordStatus,
 				event: [
 					{
 						events: {
-							mousedown() {
-								configs.input.password.showPassword = !configs.input.password.showPassword;
-								if (configs.input.password.showPassword) {
+							mousedown(e) {
+								// Prevent focus loss on mousedown
+								e.preventDefault();
+							},
+							click() {
+								const newShowing = !passwordStatus.showing;
+								passwordStatus.showing = newShowing;
+								if (newShowing) {
 									configs.input.password.value = value;
 								}
 								requestAnimationFrame(() => {
@@ -1043,6 +1286,8 @@
 							? promises.every((isValid) => isValid)
 							: promises.some((isValid) => isValid)
 					);
+						const overallValid = operator == 'and' ? promises.every((isValid) => isValid) : promises.some((isValid) => isValid);
+						configs.validation.isValid = overallValid;
 					if (configs.ref && configs.validation.isValid != 'pending') {
 						configs.ref.classList.remove('validation-loading');
 					}
@@ -1168,7 +1413,17 @@
 				},
 				options: { stopPropagation: true }
 			},
-			keydown() {}
+			keydown: {
+				handler(e: KeyboardEvent) {
+					const type = configs.type as 'text' | 'email' | 'password' | 'number' | 'phone';
+					const ref = configs.input[type]?.ref as HTMLElement | undefined;
+					// Allow Enter/Space to focus the input when root div is focused
+					if ((e.key === 'Enter' || e.key === ' ') && ref && !configs.status.focus) {
+						e.preventDefault();
+						configs.focus();
+					}
+				}
+			}
 		};
 	}
 	function getDefaultValidators(): (ValidationCompact | ValidationFull)[] {
@@ -1223,6 +1478,10 @@
 			textFieldContext.status.focus = configs.status.focus ?? configs.input.status.focus;
 			textFieldContext.loading = configs.loading;
 		}
+		// Sync configs.value with bound value prop for validation getter
+		if (configs.value !== value) {
+			configs.value = value;
+		}
 	});
 	$effect(() => {
 		if (
@@ -1270,6 +1529,11 @@
 			if (!textFieldContext.children) textFieldContext.children = {};
 			textFieldContext.children.input = configs;
 		}
+		// Register this Input with the Form context for validation
+		if (formContext) {
+			if (!formContext.childrens) formContext.childrens = new SvelteSet();
+			formContext.childrens.add(configs);
+		}
 	});
 	onDestroy(() => {
 		value = undefined;
@@ -1308,6 +1572,7 @@
 				placeholder={placeholderDerived}
 				readonly={client.browser?.isMobile}
 				inputmode={client.browser?.isMobile ? 'none' : undefined}
+				id={inputId}
 				{@attach handleEvents(configs.input.number.event)}
 			/>
 			{#if client.browser?.isMobile}
@@ -1348,13 +1613,18 @@
 				class={[
 					...( configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].style ?? []),
 					highlightSegmentsDerived && configs.type !== 'password' ? 'input-transparent-text' : '',
-					'bg-transparent outline-none border-none w-full'
+											'bg-transparent outline-none border-none w-full',
+						((configs.actionButtons.clear.display && value) || configs.actionButtons.copy.display || configs.type == 'password') ? 'pr-10' : ''
 				]}
 				placeholder={placeholderDerived}
 				autocomplete={props.autocomplete ?? 'off' as FullAutoFill}
 				inputmode={props.inputmode}
 				name={nameDerived}
-				onkeydown={handleEmailKeydown}
+					id={inputId}
+				onkeydown={(e) => {
+						handleEmailKeydown(e);
+						handlePhoneKeydown(e);
+					}}
 				{@attach handleEvents(configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].event)}
 			/>
 		</div>
@@ -1369,8 +1639,8 @@
 				icon={configs.actionButtons.copy.status.copied
 					? iconify['check-rounded']
 					: iconify['content-paste-rounded']}
-				class="input-paste p-0!"
-				size={configs.size}
+				class="input-paste p-1!"
+				size="xs"
 				aspect-square
 				color="success"
 				events={configs.actionButtons.paste.event}
@@ -1378,24 +1648,50 @@
 			/>
 		{:else if value}
 			{#if configs.actionButtons.clear.display}
-				<Button
-					bind:this={configs.actionButtons.clear.component}
-					icon={iconify['close-rounded']}
-					size={configs.size}
-					aspect-square
-					events={configs.actionButtons.clear.event}
-					class="input-clear p-0!"
-					color="error"
-					variant="ghost"
-				/>
+				{#if configs.loading}
+					<!-- Loading indicator during validation/realtime check -->
+					<div class="input-loading-indicator p-1!" aria-live="polite" aria-label="Validating...">
+						<svg class="spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+							<path
+								d="M12 2C12 2 12 4 12 4"
+								stroke="currentColor"
+								stroke-width="3"
+								stroke-linecap="round"
+								stroke-dasharray="12 24"
+								stroke-dashoffset="0"
+							>
+								<animateTransform
+									attributeName="transform"
+									type="rotate"
+									from="0 12 12"
+									to="360 12 12"
+									dur="1s"
+									repeatCount="indefinite"
+								/>
+							</path>
+						</svg>
+					</div>
+				{:else}
+					<Button
+						bind:this={configs.actionButtons.clear.component}
+						icon={iconify['close-rounded']}
+						size="xs"
+						aspect-square
+						events={configs.actionButtons.clear.event}
+						class="input-clear p-1!"
+						color="error"
+						variant="ghost"
+					/>
+				{/if}
 			{/if}
 			{#if configs.actionButtons.copy.display}
 				<Button
 					icon={configs.actionButtons.copy.status.copied
 						? iconify['check-rounded']
 						: iconify['content-copy-outline-rounded']}
-					class="input-copy p-0!"
-					size={configs.size}
+					class="input-copy p-1!"
+					size="xs"
 					aspect-square
 					color="success"
 					events={configs.actionButtons.copy.event}
@@ -1414,9 +1710,10 @@
 				icon={configs.input.password.showPassword
 					? iconify['password-2-off-rounded']
 					: iconify['password-2-rounded']}
-				class="p-0!"
+				class="p-1!"
 				events={configs.actionButtons.showPassword.event}
-				size={configs.size}
+				size="xs"
+				aspect-square
 			/>
 		{/if}
 	</div>
@@ -1435,6 +1732,17 @@
 			class="email-suggestions-popup"
 			role="listbox"
 			aria-label="Email domain suggestions"
+			tabindex="0"
+			onfocus={() => {
+				suggestionsFocusHeld = true;
+				isInteractingWithSuggestions = true;
+			}}
+			onblur={() => {
+				suggestionsFocusHeld = false;
+				if (!configs?.status?.focus && !configs?.input?.status?.focus) {
+					isInteractingWithSuggestions = false;
+				}
+			}}
 			onpointerenter={() => {
 				isInteractingWithSuggestions = true;
 			}}
@@ -1452,6 +1760,29 @@
 			}}
 			onclick={(e) => {
 				e.stopPropagation();
+			}}
+			onkeydown={(e) => {
+				if (e.key === 'ArrowDown') {
+					e.preventDefault();
+					e.stopPropagation();
+					emailHighlightedIndex = (emailHighlightedIndex + 1) % matchingEmailDomains.length;
+				} else if (e.key === 'ArrowUp') {
+					e.preventDefault();
+					e.stopPropagation();
+					emailHighlightedIndex =
+						(emailHighlightedIndex - 1 + matchingEmailDomains.length) % matchingEmailDomains.length;
+				} else if (e.key === 'Enter' || e.key === 'Tab') {
+					e.preventDefault();
+					e.stopPropagation();
+					const chosen = matchingEmailDomains[emailHighlightedIndex] ?? matchingEmailDomains[0];
+					if (chosen) {
+						selectEmailDomain(chosen);
+					}
+				} else if (e.key === 'Escape') {
+					e.preventDefault();
+					e.stopPropagation();
+					emailSuggestionsDismissed = true;
+				}
 			}}
 		>
 			<div class="email-suggestions-header">
@@ -1502,6 +1833,113 @@
 			</div>
 		</div>
 	{/if}
+
+		{#if phoneSuggestionsOpen && matchingPhoneCountries.length > 0}
+			<div
+				class="phone-suggestions-popup"
+				role="listbox"
+				aria-label="Phone country code suggestions"
+				tabindex="0"
+				onfocus={() => {
+					phoneSuggestionsFocusHeld = true;
+					isInteractingWithPhoneSuggestions = true;
+				}}
+				onblur={() => {
+					phoneSuggestionsFocusHeld = false;
+					if (!configs?.status?.focus && !configs?.input?.status?.focus) {
+						isInteractingWithPhoneSuggestions = false;
+					}
+				}}
+				onpointerenter={() => {
+					isInteractingWithPhoneSuggestions = true;
+				}}
+				onpointerleave={() => {
+					isInteractingWithPhoneSuggestions = false;
+					if (!configs?.status?.focus && !configs?.input?.status?.focus) {
+						phoneSuggestionsFocusHeld = false;
+					}
+				}}
+				onpointerdown={(e) => {
+					e.stopPropagation();
+				}}
+				onmousedown={(e) => {
+					e.stopPropagation();
+				}}
+				onclick={(e) => {
+					e.stopPropagation();
+				}}
+				onkeydown={(e) => {
+					if (e.key === 'ArrowDown') {
+						e.preventDefault();
+						e.stopPropagation();
+						phoneHighlightedIndex = (phoneHighlightedIndex + 1) % matchingPhoneCountries.length;
+					} else if (e.key === 'ArrowUp') {
+						e.preventDefault();
+						e.stopPropagation();
+						phoneHighlightedIndex =
+							(phoneHighlightedIndex - 1 + matchingPhoneCountries.length) % matchingPhoneCountries.length;
+					} else if (e.key === 'Enter' || e.key === 'Tab') {
+						e.preventDefault();
+						e.stopPropagation();
+						const chosen = matchingPhoneCountries[phoneHighlightedIndex] ?? matchingPhoneCountries[0];
+						if (chosen) {
+							selectPhoneCountry(chosen);
+						}
+					} else if (e.key === 'Escape') {
+						e.preventDefault();
+						e.stopPropagation();
+						phoneSuggestionsDismissed = true;
+					}
+				}}
+			>
+				<div class="phone-suggestions-header">
+					<span>Chọn mã quốc gia</span>
+				</div>
+				<div class="phone-suggestions-list">
+					{#each matchingPhoneCountries as country, idx (country.code)}
+						<button
+							type="button"
+							role="option"
+							aria-selected={phoneHighlightedIndex === idx}
+							class="phone-suggestion-item {phoneHighlightedIndex === idx ? 'active' : ''}"
+							onpointerdown={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								selectPhoneCountry(country);
+							}}
+							onmousedown={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								selectPhoneCountry(country);
+							}}
+							onclick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								selectPhoneCountry(country);
+							}}
+							ontouchstart={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								selectPhoneCountry(country);
+							}}
+							onmouseenter={() => {
+								phoneHighlightedIndex = idx;
+							}}
+						>
+							<span class="phone-suggestion-flag">{getCountryFlag(country.code)}</span>
+							<span class="phone-suggestion-info">
+								<span class="phone-suggestion-code">{country.code}</span>
+								<span class="phone-suggestion-name">{country.name}</span>
+							</span>
+							<span class="phone-suggestion-format">{country.format}</span>
+							{#if phoneHighlightedIndex === idx}
+								<span class="phone-suggestion-hint">Tab ↵</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
 </svelte:element>
 
 <style lang="scss">

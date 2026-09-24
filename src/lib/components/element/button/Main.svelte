@@ -1,15 +1,16 @@
 <script lang="ts">
-//$components/element/button/Main.svelte
+	//$components/element/button/Main.svelte
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
 	import { pick } from 'es-toolkit/compat';
-	import type { ButtonConfigs, ButtonProps } from './_interface';
+	import type { ButtonConfigs, ButtonProps, ButtonTypes } from './_interface';
 	import { Icon } from '$components/element';
 	import type { EventListener } from '$components/interface';
 	import { getFormContext } from '$components/form/form';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
 	let { children, ...props }: ButtonProps = $props();
 	const formContext = getFormContext();
 
@@ -28,7 +29,7 @@
 			!props.transitionDisabled ? 'transition' : undefined,
 			`color-${colorDerived}`,
 			configs.status?.tap || props.actived ? `button-tapped` : undefined,
-			tooltipDerived ? 'has-tooltip' : undefined
+			tooltipDerived ? 'has_tooltip' : undefined
 		];
 		const propStyles: (string | undefined)[] | undefined | string =
 			typeof props.class == 'object' && !Array.isArray(props.class)
@@ -39,7 +40,7 @@
 
 	const loadingDerived = $derived.by(() => {
 		if (props.loading) return props.loading;
-		if (typeDerived == 'submit' && formContext?.loading) return formContext.loading;
+		if (typeDerived === 'submit' && formContext?.loading) return formContext.loading;
 		return undefined;
 	});
 
@@ -80,7 +81,9 @@
 				if (!formContext.validation.isValid) return true;
 				// Submit: disabled khi form pristine VÀ không có dữ liệu ban đầu từ props
 				if (formContext.childrens?.size) {
-					const allPristine = [...formContext.childrens.values()].every((child) => !child.status.changed);
+					const allPristine = [...formContext.childrens.values()].every(
+						(child) => !child.status.changed
+					);
 					if (allPristine) {
 						const hasInitialData =
 							formContext.data != null ||
@@ -89,7 +92,8 @@
 									const val = (child as { initialValue?: string }).initialValue;
 									return val !== undefined && val !== '';
 								}
-								if ('checked' in child) return (child as { checked?: boolean }).checked !== undefined;
+								if ('checked' in child)
+									return (child as { checked?: boolean }).checked !== undefined;
 								return false;
 							});
 						return !hasInitialData;
@@ -100,7 +104,7 @@
 		return false;
 	});
 
-	const typeDerived = $derived(props.type ?? 'button');
+	const typeDerived = $derived<ButtonTypes>(props.type ?? 'button');
 	const variantDerived = $derived(props.variant ?? 'solid');
 	const sizeDerived = $derived(props.size ?? formContext?.size ?? client.browser?.size ?? 'md');
 	const colorDerived = $derived(props.color ?? 'default');
@@ -165,6 +169,27 @@
 			: undefined
 	);
 
+	/** Xử lý navigation client-side cho thẻ <a> khi có `to` */
+	function handleNavigationClick(e: MouseEvent | PointerEvent) {
+		if (!props.to) return;
+		if (!browser) return;
+
+		// Chỉ xử lý left click, không có modifier keys
+		const mouseEvent = e as MouseEvent;
+		if (mouseEvent.button !== 0) return;
+		if (mouseEvent.metaKey || mouseEvent.ctrlKey || mouseEvent.shiftKey || mouseEvent.altKey)
+			return;
+
+		e.preventDefault();
+		const href = hrefDerived;
+		if (href) {
+			goto(href, {
+				replaceState: props.replace ?? false,
+				keepFocus: props.keepFocus ?? false
+			});
+		}
+	}
+
 	/** Tạo và phát ripple effect tại vị trí click */
 	function spawnRipple(e: MouseEvent | PointerEvent, node: HTMLElement) {
 		const rect = node.getBoundingClientRect();
@@ -179,231 +204,277 @@
 		node.appendChild(ripple);
 		const tid = setTimeout(() => ripple.remove(), 600);
 		// Cleanup nếu component bị unmount trước khi timeout
-		return () => { clearTimeout(tid); ripple.remove(); };
+		return () => {
+			clearTimeout(tid);
+			ripple.remove();
+		};
 	}
 
 	const eventDerived = $derived.by(() => {
-		const defaultEvent: EventListener = {
-			load(e, data) {
-				const node = data?.node;
-				if (!(node instanceof HTMLElement)) return;
-				// Keyboard shortcut — attach to window keydown
-				if (shortcutDerived?.length) {
-					const handleKey = (ev: KeyboardEvent) => {
-						if (disabledDerived || loadingDerived) return;
-						// Không kích hoạt khi người dùng đang nhập liệu trong input/textarea/select/contenteditable
-						const activeEl = document.activeElement;
-						if (
-							activeEl &&
-							(activeEl.tagName === 'INPUT' ||
-								activeEl.tagName === 'TEXTAREA' ||
-								activeEl.tagName === 'SELECT' ||
-								(activeEl as HTMLElement).isContentEditable)
-						) {
-							return;
-						}
-						const key = ev.key.toLowerCase();
-						if (shortcutDerived.includes(key)) {
-							ev.preventDefault();
-							node.click();
-						}
-					};
-					window.addEventListener('keydown', handleKey);
-					return () => window.removeEventListener('keydown', handleKey);
-				}
-			},
-			pointerdown: {
-				handler(e) {
-					if (disabledDerived || loadingDerived) return;
-
-					// 1. Instant Tap animation (Mobile optimized)
-					if (delayDerived) {
-						if (!configs.status) configs.status = {};
-						if (!configs.timeId) configs.timeId = new Map();
-						const prevTap = configs.timeId.get('animation-tap');
-						if (prevTap) clearTimeout(prevTap);
-						configs.status.tap = true;
-					}
-
-					// 2. Instant Ripple effect (Mobile optimized)
-					if (rippleDerived && configs.ref) {
-						spawnRipple(e as PointerEvent, configs.ref);
-					}
-
-					// 3. Long press start
-					if (props.onLongPress) {
-						if (!configs.status) configs.status = {};
-						if (!configs.timeId) configs.timeId = new Map();
-						const prevLp = configs.timeId.get('long-press');
-						if (prevLp) clearTimeout(prevLp);
-
-						// Store start coordinates to detect scroll distance
-						configs.status.pointerStartX = (e as PointerEvent).clientX;
-						configs.status.pointerStartY = (e as PointerEvent).clientY;
-
-						configs.timeId.set(
-							'long-press',
-							setTimeout(async () => {
-								if (!configs.status) configs.status = {};
-								configs.status.longPress = true;
-								configs.status.longPressFired = true; // Flag to block upcoming click
-								await props.onLongPress!(e as PointerEvent);
-								if (configs.status) configs.status.longPress = false;
-							}, longPressDurationDerived)
-						);
+		const defaultEvent: { events: EventListener } = {
+			events: {
+				load(e, data) {
+					const node = data?.node;
+					if (!(node instanceof HTMLElement)) return;
+					// Keyboard shortcut — attach to window keydown
+					if (shortcutDerived?.length) {
+						const handleKey = (ev: KeyboardEvent) => {
+							if (disabledDerived || loadingDerived) return;
+							// Không kích hoạt khi người dùng đang nhập liệu trong input/textarea/select/contenteditable
+							const activeEl = document.activeElement;
+							if (
+								activeEl &&
+								(activeEl.tagName === 'INPUT' ||
+									activeEl.tagName === 'TEXTAREA' ||
+									activeEl.tagName === 'SELECT' ||
+									(activeEl as HTMLElement).isContentEditable)
+							) {
+								return;
+							}
+							const key = ev.key.toLowerCase();
+							if (shortcutDerived.includes(key)) {
+								ev.preventDefault();
+								node.click();
+							}
+						};
+						window.addEventListener('keydown', handleKey);
+						return () => window.removeEventListener('keydown', handleKey);
 					}
 				},
-				options: {}
-			},
-			pointermove: {
-				handler(e) {
-					if (disabledDerived || loadingDerived) return;
+				pointerdown: {
+					handler(e) {
+						if (disabledDerived || loadingDerived) return;
 
-					// Cancel long-press if moved (scrolling on mobile)
-					const lpId = configs.timeId?.get('long-press');
-					if (lpId && configs.status?.pointerStartX !== undefined && configs.status?.pointerStartY !== undefined) {
-						const pe = e as PointerEvent;
-						const deltaX = Math.abs(pe.clientX - configs.status.pointerStartX);
-						const deltaY = Math.abs(pe.clientY - configs.status.pointerStartY);
-						if (deltaX > 10 || deltaY > 10) { // 10px threshold
-							clearTimeout(lpId);
-							configs.timeId?.delete('long-press');
-							if (configs.status) {
-								configs.status.pointerStartX = undefined;
-								configs.status.pointerStartY = undefined;
+						// 1. Instant Tap animation (Mobile optimized)
+						if (delayDerived) {
+							if (!configs.status) configs.status = {};
+							if (!configs.timeId) configs.timeId = new Map();
+							const prevTap = configs.timeId.get('animation-tap');
+							if (prevTap) clearTimeout(prevTap);
+							configs.status.tap = true;
+						}
+
+						// 2. Instant Ripple effect (Mobile optimized)
+						if (rippleDerived && configs.ref) {
+							spawnRipple(e as PointerEvent, configs.ref);
+						}
+
+						// 3. Long press start
+						if (props.onLongPress) {
+							if (!configs.status) configs.status = {};
+							if (!configs.timeId) configs.timeId = new Map();
+							const prevLp = configs.timeId.get('long-press');
+							if (prevLp) clearTimeout(prevLp);
+
+							// Store start coordinates to detect scroll distance
+							configs.status.pointerStartX = (e as PointerEvent).clientX;
+							configs.status.pointerStartY = (e as PointerEvent).clientY;
+
+							configs.timeId.set(
+								'long-press',
+								setTimeout(async () => {
+									if (!configs.status) configs.status = {};
+									configs.status.longPress = true;
+									configs.status.longPressFired = true; // Flag to block upcoming click
+									await props.onLongPress!(e as PointerEvent);
+									if (configs.status) configs.status.longPress = false;
+								}, longPressDurationDerived)
+							);
+						}
+					},
+					options: {}
+				},
+				pointermove: {
+					handler(e) {
+						if (disabledDerived || loadingDerived) return;
+
+						// Cancel long-press if moved (scrolling on mobile)
+						const lpId = configs.timeId?.get('long-press');
+						if (
+							lpId &&
+							configs.status?.pointerStartX !== undefined &&
+							configs.status?.pointerStartY !== undefined
+						) {
+							const pe = e as PointerEvent;
+							const deltaX = Math.abs(pe.clientX - configs.status.pointerStartX);
+							const deltaY = Math.abs(pe.clientY - configs.status.pointerStartY);
+							if (deltaX > 10 || deltaY > 10) {
+								// 10px threshold
+								clearTimeout(lpId);
+								configs.timeId?.delete('long-press');
+								if (configs.status) {
+									configs.status.pointerStartX = undefined;
+									configs.status.pointerStartY = undefined;
+								}
 							}
 						}
-					}
+					},
+					options: {}
 				},
-				options: {}
-			},
-			pointerup: {
-				handler() {
-					// Revert tap animation
-					if (delayDerived && configs.status?.tap) {
-						if (!configs.timeId) configs.timeId = new Map();
-						configs.timeId.set(
-							'animation-tap',
-							setTimeout(() => {
-								if (configs.status) configs.status.tap = false;
-							}, delayDerived)
-						);
-					}
+				pointerup: {
+					handler() {
+						// Revert tap animation
+						if (delayDerived && configs.status?.tap) {
+							if (!configs.timeId) configs.timeId = new Map();
+							configs.timeId.set(
+								'animation-tap',
+								setTimeout(() => {
+									if (configs.status) configs.status.tap = false;
+								}, delayDerived)
+							);
+						}
 
-					// Cancel long-press if released early
-					const lpId = configs.timeId?.get('long-press');
-					if (lpId) {
-						clearTimeout(lpId);
-						configs.timeId?.delete('long-press');
-					}
-					if (configs.status) {
-						configs.status.longPress = false;
-						configs.status.pointerStartX = undefined;
-						configs.status.pointerStartY = undefined;
-					}
+						// Cancel long-press if released early
+						const lpId = configs.timeId?.get('long-press');
+						if (lpId) {
+							clearTimeout(lpId);
+							configs.timeId?.delete('long-press');
+						}
+						if (configs.status) {
+							configs.status.longPress = false;
+							configs.status.pointerStartX = undefined;
+							configs.status.pointerStartY = undefined;
+						}
+					},
+					options: {}
 				},
-				options: {}
-			},
-			pointerleave: {
-				handler() {
-					// Revert tap animation
-					if (configs.status?.tap) {
-						configs.status.tap = false;
-						const prevTap = configs.timeId?.get('animation-tap');
-						if (prevTap) clearTimeout(prevTap);
-					}
+				pointerleave: {
+					handler() {
+						// Revert tap animation
+						if (configs.status?.tap) {
+							configs.status.tap = false;
+							const prevTap = configs.timeId?.get('animation-tap');
+							if (prevTap) clearTimeout(prevTap);
+						}
 
-					// Cancel long-press
-					const lpId = configs.timeId?.get('long-press');
-					if (lpId) {
-						clearTimeout(lpId);
-						configs.timeId?.delete('long-press');
-					}
-					if (configs.status) {
-						configs.status.longPress = false;
-						configs.status.pointerStartX = undefined;
-						configs.status.pointerStartY = undefined;
-					}
+						// Cancel long-press
+						const lpId = configs.timeId?.get('long-press');
+						if (lpId) {
+							clearTimeout(lpId);
+							configs.timeId?.delete('long-press');
+						}
+						if (configs.status) {
+							configs.status.longPress = false;
+							configs.status.pointerStartX = undefined;
+							configs.status.pointerStartY = undefined;
+						}
+					},
+					options: {}
 				},
-				options: {}
-			},
 				click: {
-					async handler(e) {
+					handler: async (
+						e?: Event | MouseEvent | TouchEvent | KeyboardEvent,
+						data?: { node?: HTMLElement | Window | Document | Body | VisualViewport }
+					): Promise<void> => {
+						// Handle client-side navigation for <a> tag with `to` prop
+						if (tagDerived === 'a' && props.to) {
+							const mouseEvent = e as MouseEvent | PointerEvent;
+							if (mouseEvent) {
+								handleNavigationClick(mouseEvent);
+								// If navigation was handled (not prevented by modifiers), don't continue
+								if (
+									mouseEvent.button === 0 &&
+									!mouseEvent.metaKey &&
+									!mouseEvent.ctrlKey &&
+									!mouseEvent.shiftKey &&
+									!mouseEvent.altKey
+								) {
+									return;
+								}
+							}
+						}
 						// Block click khi loading hoặc disabled
 						if (loadingDerived || disabledDerived) return;
 						// Ignore click if long-press was just fired
 						if (configs.status?.longPressFired) {
-						configs.status.longPressFired = false;
-						return;
-					}
-
-					// Debounce — reject if still in cooldown
-					if (debounceDerived) {
-						if (configs.status?.debouncing) return;
-						if (!configs.status) configs.status = {};
-						if (!configs.timeId) configs.timeId = new Map();
-						configs.status.debouncing = true;
-						configs.timeId.set(
-							'debounce',
-							setTimeout(() => {
-								if (configs.status) configs.status.debouncing = false;
-							}, debounceDerived)
-						);
-					}
-
-					// Confirm dialog
-					if (props.confirmText) {
-						const confirmed = window.confirm(props.confirmText);
-						if (!confirmed) return;
-					}
-
-					if (typeDerived == 'reset' && formContext?.childrens?.size) {
-						[...formContext.childrens.values()].forEach((field) => {
-							field.reset();
-						});
-						if (formContext.onReset) formContext.onReset();
-					}
-
-					// Navigation — hỗ trợ mọi variant, không chỉ link
-					if (props.to && typeof props.to === 'string' && tagDerived !== 'a') {
-						await goto(hrefDerived ?? props.to);
-					}
-
-					if (typeDerived == 'submit' && formContext) {
-						formContext.disabled = true;
-						formContext.loading = true;
-					}
-					try {
-						if (onClickHandler) await onClickHandler(e);
-					} finally {
-						if (typeDerived == 'submit' && formContext) {
-							formContext.loading = false;
-							formContext.disabled = false;
+							configs.status.longPressFired = false;
+							return;
 						}
-					}
-				},
-				options: {}
+
+						// Debounce — reject if still in cooldown
+						if (debounceDerived) {
+							if (configs.status?.debouncing) return;
+							if (!configs.status) configs.status = {};
+							if (!configs.timeId) configs.timeId = new Map();
+							configs.status.debouncing = true;
+							configs.timeId.set(
+								'debounce',
+								setTimeout(() => {
+									if (configs.status) configs.status.debouncing = false;
+								}, debounceDerived)
+							);
+						}
+
+						// Confirm dialog
+						if (props.confirmText) {
+							const confirmed = window.confirm(props.confirmText);
+							if (!confirmed) return;
+						}
+
+						if (typeDerived === 'reset' && formContext?.childrens?.size) {
+							[...formContext.childrens.values()].forEach((field) => {
+								field.reset();
+							});
+							if (formContext.onReset) formContext.onReset();
+						}
+						if (typeDerived === 'submit' && formContext) {
+							formContext.disabled = true;
+							formContext.loading = true;
+						}
+						try {
+							if (onClickHandler && e instanceof MouseEvent) await onClickHandler(e);
+						} finally {
+							if (typeDerived === 'submit' && formContext) {
+								formContext.loading = false;
+								formContext.disabled = false;
+							}
+						}
+					},
+					options: {}
+				}
 			}
 		};
 		return [
-			{ events: defaultEvent },
+			{ events: defaultEvent.events },
 			...(props.events ?? [])
 		];
 	});
 
 	let configs: ButtonConfigs = $state({
 		status: {},
-		get style() { return styleDerived; },
-		get loading() { return loadingDerived; },
-		get disabled() { return disabledDerived; },
-		get type() { return typeDerived; },
-		get variant() { return variantDerived; },
-		get size() { return sizeDerived; },
-		get color() { return colorDerived; },
-		get delay() { return delayDerived; },
-		get transitionDuration() { return transitionDurationDerived; },
-		get loadingDuration() { return loadingDurationDerived; },
-		get event() { return eventDerived; }
+		get style() {
+			return styleDerived;
+		},
+		get loading() {
+			return loadingDerived;
+		},
+		get disabled() {
+			return disabledDerived;
+		},
+		get type() {
+			return typeDerived;
+		},
+		get variant() {
+			return variantDerived;
+		},
+		get size() {
+			return sizeDerived;
+		},
+		get color() {
+			return colorDerived;
+		},
+		get delay() {
+			return delayDerived;
+		},
+		get transitionDuration() {
+			return transitionDurationDerived;
+		},
+		get loadingDuration() {
+			return loadingDurationDerived;
+		},
+		get event() {
+			return eventDerived;
+		}
 	});
 
 	export { configs };
@@ -413,12 +484,12 @@
 	this={tagDerived}
 	bind:this={configs.ref}
 	type={tagDerived === 'button' ? configs.type : undefined}
-	href={hrefDerived}
+	href={tagDerived === 'a' ? hrefDerived : undefined}
 	target={props.to ? (props.target ?? '_self') : undefined}
 	rel={props.to && props.target === '_blank' ? (props.rel ?? 'noopener noreferrer') : props.rel}
 	class={configs.style}
-	disabled={tagDerived === 'button' ? (disabledDerived || undefined) : undefined}
-	aria-disabled={(disabledDerived || loadingDerived) ? 'true' : undefined}
+	disabled={tagDerived === 'button' ? disabledDerived || undefined : undefined}
+	aria-disabled={disabledDerived || loadingDerived ? 'true' : undefined}
 	aria-busy={loadingDerived ? 'true' : undefined}
 	data-tap={configs.status?.tap}
 	data-long-press={configs.status?.longPress}

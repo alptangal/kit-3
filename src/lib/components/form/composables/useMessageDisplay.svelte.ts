@@ -11,9 +11,15 @@ export interface MessageEntry {
 }
 export type MessagesMap = Map<string | ((output?: string | boolean) => boolean | Promise<boolean>), MessageEntry>;
 
-export function useMessageDisplay(options: { showValid?: boolean; persistent?: boolean; autoHide?: boolean } = {}) {
+// Accept options as a getter function to preserve reactivity
+export function useMessageDisplay(optionsGetter: () => { showValid?: boolean; persistent?: boolean; autoHide?: boolean }) {
 	const textFieldContext = getTextFieldContext();
 	const checkboxContext = getCheckboxContext();
+
+	// Make options reactive using $derived.by to capture prop reactivity and avoid state_referenced_locally warnings
+	const showValid = $derived.by(() => optionsGetter().showValid ?? false);
+	const persistent = $derived.by(() => optionsGetter().persistent ?? false);
+	const autoHide = $derived.by(() => optionsGetter().autoHide ?? true);
 
 	const rawMessages = $derived<MessagesMap | undefined>(
 		(textFieldContext?.children?.input?.validation.messages as MessagesMap | undefined) ??
@@ -31,13 +37,13 @@ export function useMessageDisplay(options: { showValid?: boolean; persistent?: b
 	// FieldMessages: show invalid always, valid only if showValid
 	const visibleMessages = $derived.by<MessageEntry[]>(() => {
 		if (hasInvalid) return allWithContent.filter((m) => m.kind === 'invalid');
-		if (options.showValid) return allWithContent.filter((m) => m.kind === 'valid');
+		if (showValid) return allWithContent.filter((m) => m.kind === 'valid');
 		return [];
 	});
 
 	// Description: hide when there are messages unless persistent or !autoHide
 	const shouldRenderDescription = $derived.by(() => {
-		if (options.persistent || options.autoHide === false) return true;
+		if (persistent || autoHide === false) return true;
 		return !hasAnyMessages;
 	});
 

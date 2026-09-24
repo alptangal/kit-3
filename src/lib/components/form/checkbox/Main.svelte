@@ -13,15 +13,25 @@
 	let { children, checked = $bindable(), ...props }: CheckboxProps = $props();
 	const formContext = getFormContext();
 	// Ghi nhớ giá trị checked ban đầu để reset về đúng mốc đầu tiên (hỗ trợ cả formContext.data)
-	let _initialChecked: boolean | undefined =
-		formContext?.data && props.name && props.name in formContext.data
-			? Boolean(formContext.data[props.name])
-			: checked;
-	let configs: CheckboxConfigs = $state({
-		previousValue: _initialChecked,
+	// Use local variable for initial value - will be properly captured by configs getters
+	let _initialChecked: boolean | undefined = undefined;
+
+let configs: CheckboxConfigs = $state({
+		get previousValue() {
+			if (_initialChecked === undefined) {
+				const name = props.name;
+				const data = formContext?.data;
+				if (data && name && name in data) {
+					_initialChecked = Boolean(data[name]);
+				} else {
+					_initialChecked = checked;
+				}
+			}
+			return _initialChecked;
+		},
 		status: {
 			get changed() {
-				return Boolean(checked) !== Boolean(_initialChecked);
+				return Boolean(checked) !== Boolean(configs.previousValue);
 			}
 		},
 		get style() {
@@ -51,11 +61,7 @@
 			return checked;
 		},
 		get duration() {
-			return (
-				convertToMiliseconds(props.duration) ??
-				convertToMiliseconds(client.browser?.duration) ??
-				300
-			);
+			return convertToMiliseconds(props.duration) ?? convertToMiliseconds(client.browser?.duration) ?? 300;
 		},
 		get delay() {
 			return convertToMiliseconds(props.delay);
@@ -70,6 +76,7 @@
 					events: {
 						mousedown: {
 							handler(e, data) {
+								if (configs.disabled) return;
 								if (data?.node instanceof HTMLElement) {
 									checked = !checked;
 								}
@@ -103,8 +110,16 @@
 		},
 		reset() {
 			// Khôi phục về checked ban đầu (khi mount), không phải luôn xóa thành undefined
-			checked = _initialChecked;
-			configs.previousValue = _initialChecked;
+			const initialValue = _initialChecked ?? (() => {
+				const name = props.name;
+				const data = formContext?.data;
+				if (data && name && name in data) {
+					return Boolean(data[name]);
+				}
+				return checked;
+			})();
+			checked = initialValue;
+			_initialChecked = initialValue;
 			configs.validation.messages = undefined;
 			configs.validation.isValid = undefined;
 			if (configs.timeId) {

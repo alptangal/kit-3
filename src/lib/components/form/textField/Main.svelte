@@ -13,7 +13,11 @@
 	let _wasFocused = false;
 	let configs: TextFieldConfigs = $state({
 		// initialValue nằm trong $state → getter changed reactive với nó
-		initialValue: undefined as string | undefined,
+		// Capture initial value at creation time (mount) from the bound value or formContext.data
+		initialValue: (() => {
+			// Will be set in onMount - placeholder
+			return undefined as string | undefined;
+		})(),
 		status: {
 			touched: false,
 			get changed() {
@@ -41,6 +45,9 @@
 		},
 		get disabled() {
 			return props.disabled ?? formContext?.disabled ?? undefined;
+		},
+		get loading() {
+			return props.loading ?? formContext?.loading ?? false;
 		},
 		get event() {
 			if (this.disabled) return [];
@@ -78,10 +85,6 @@
 			return eventDefault;
 		},
 		setValue(input) {
-			if (!_initialCaptured) {
-				configs.initialValue = input;
-				_initialCaptured = true;
-			}
 			configs.previousValue = configs.value;
 			configs.value = input;
 		},
@@ -116,6 +119,10 @@
 			setValid(v) {
 				if (!configs.validation) return;
 				configs.validation.isValid = v;
+			},
+			get isValid() {
+				// Delegate to child input's validation if available
+				return configs.children?.input?.validation?.isValid ?? undefined;
 			}
 		},
 		reset() {
@@ -153,11 +160,30 @@
 		}
 	});
 
-	onMount(() => {
-		if (formContext) {
-			if (!formContext.childrens) formContext.childrens = new SvelteSet();
-			formContext.childrens.add(configs);
+	// Sync value and validation from child Input to TextField
+	$effect(() => {
+		const childInput = configs.children?.input;
+		if (childInput) {
+			// Sync value
+			if (childInput.value !== undefined && configs.value !== childInput.value) {
+				configs.value = childInput.value;
+			}
+			// Expose child's validation state
+			if (childInput.validation) {
+				configs.validation = childInput.validation;
+			}
 		}
+	});
+
+	onMount(() => {
+		// Capture initial value at mount time - this is the pristine state
+		if (!_initialCaptured) {
+			configs.initialValue = configs.value ?? '';
+			_initialCaptured = true;
+		}
+		// NOTE: Do NOT add TextField to formContext.childrens.
+		// The child Input component will register itself in its own onMount.
+		// This avoids duplicate registration and ensures Form validates the actual Input components.
 	});
 </script>
 
@@ -173,6 +199,8 @@
 <style lang="scss">
 	.textField-root {
 		--cursor: text;
+		width: 100%;
+		min-width: 0;
 		&.hover {
 		}
 		&.disabled {

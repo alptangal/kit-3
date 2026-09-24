@@ -6,9 +6,16 @@
 	import { client } from '$store/basic.svelte';
 	import { setFormContext } from '.';
 	import type { FormConfigs, FormProps } from './_interface';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	let { children, ...props }: FormProps = $props();
+	// Guard re-entry phiến bản (non-reactive) — chặn submit thứ hai trong khi
+	// submit trước đó còn đang await. Button-click được chặn bởi disabled, nhưng
+	// đường Enter key đi thẳng vào form submit event, không qua Button.
+	let submitting = false;
 	let configs: FormConfigs = $state({
+		// Initialize childrens as SvelteSet for reactivity
+		childrens: new SvelteSet(),
 		_loading: undefined as undefined | boolean,
 		get loading() {
 			if (!configs.childrens?.size) return false;
@@ -50,10 +57,33 @@
 					events: {
 						submit: {
 							async handler(e) {
-								if (props.onSubmit) props.onSubmit();
+								// preventDefault phải chạy trước guard — nếu return sớm
+								// khi đang submitting, browser sẽ native-submit (reload trang).
 								const event = e as SubmitEvent;
 								event.preventDefault();
-								if (!configs.validation.isValid || !configs.action) return;
+								if (submitting) return;
+								// Always call onSubmit — page tự validate bên trong handler
+								// (vd handleLogin set formError khi validateForm fail), nên phải chạy
+								// cả khi configs.validation.isValid false.
+								// Await + giữ loading trong suốt onSubmit — thay cơ chế cũ nằm ở
+								// Button onClick (bỏ để hết double-call), đồng thời bao phủ đường
+								// Enter key vốn không đi qua Button click handler.
+								configs.disabled = true;
+								configs.loading = true;
+								submitting = true;
+								try {
+									if (props.onSubmit) await props.onSubmit();
+								} finally {
+									configs.disabled = false;
+									configs.loading = false;
+									submitting = false;
+								}
+								// Chỉ submit API khi có action thật — action mặc định '#' nghĩa là
+								// page tự xử lý qua onSubmit (fetchSecure), không post form đi đâu.
+								// Trước đây '#' là truthy nên rơi vào apiFetch('#', {method:'get', body})
+								// → page error "Request with GET/HEAD method cannot have body".
+								const hasAction = configs.action && configs.action !== '#';
+								if (!hasAction || !configs.validation.isValid) return;
 								const jsonData: { [k: string]: string | boolean | undefined | null } = {};
 								[...(configs.childrens?.values() ?? [])].forEach((children) => {
 									if ('checked' in children) {
@@ -94,9 +124,17 @@
 		validation: {
 			get isValid() {
 				if (configs.childrens?.size) {
-					return [...configs.childrens.values()].every(
+					const childrenArray = [...configs.childrens.values()];
+					// Filter to only check children that have validation (required fields)
+					// Skip checkboxes and other components with undefined validation
+					const validatedChildren = childrenArray.filter(child =>
+						child.validation && child.validation.isValid !== undefined
+					);
+					if (validatedChildren.length === 0) return true;
+
+					return validatedChildren.every(
 						(children) =>
-							children.validation?.isValid !== false &&
+							children.validation?.isValid === true &&
 							children.loading != true &&
 							children.validation?.isValid != 'pending'
 					);

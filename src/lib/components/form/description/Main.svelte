@@ -13,11 +13,15 @@
 	const checkboxContext = getCheckboxContext();
 
 	// shared message display — unified with FieldMessages pattern
-	const messageDisplay = useMessageDisplay({
+	// Use $derived.by to properly capture props reactivity
+	const persistent = $derived.by(() => props.persistent ?? false);
+	const autoHide = $derived.by(() => props.autoHide ?? true);
+	// Pass as getter function to preserve reactivity in useMessageDisplay
+	const messageDisplay = useMessageDisplay(() => ({
 		showValid: false,
-		persistent: props.persistent,
-		autoHide: props.autoHide
-	});
+		persistent,
+		autoHide
+	}));
 
 	const shouldRender = $derived(messageDisplay.shouldRenderDescription);
 
@@ -64,6 +68,12 @@
 	@use '$styles/sizes.scss';
 	@use '$styles/colors.scss';
 	.description-root {
+		/* Ghi đè utility `size-*` của Tailwind (size-xs = w/h 20rem) — class size-* của
+		   project chỉ mang biến CSS, component này phải tự co theo nội dung */
+		width: auto;
+		height: auto;
+		min-width: 0;
+		min-height: 0;
 		font-size: var(--font-size);
 		color: var(--color);
 

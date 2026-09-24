@@ -7,6 +7,7 @@ import { systemVault } from '$store/initSystemVault';
 import type { RegisterRequestBody } from '../../(unauthorized)/register/_interface';
 import { Users } from '$lib/server/db/users';
 import type { User } from '$modules/schema';
+import { resolveLang, localizePayload } from '$lib/server/i18n';
 
 const collectionName = 'users';
 const cbUsers = cbData(collectionName);
@@ -16,6 +17,8 @@ const cbUserStatus = cbData('user_status');
 const MIN_PASSWORD_LENGTH = 8;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_REGEX = /^[a-zA-Z0-9_.-]{3,30}$/;
+// Giống PHONE_REGEX trong api/register/check — chấp nhận +XX hoặc số nội địa, 6-21 ký tự
+const PHONE_REGEX = /^\+?[0-9][0-9\s\-]{5,20}$/;
 
 const registerMessages = {
 	systemUnavailable: {
@@ -50,6 +53,14 @@ const registerMessages = {
 		vi: 'Tên đăng nhập này đã được sử dụng',
 		en: 'Username is already taken'
 	} as TranslateContent,
+	invalidPhone: {
+		vi: 'Số điện thoại không hợp lệ',
+		en: 'Invalid phone number'
+	} as TranslateContent,
+	phoneTaken: {
+		vi: 'Số điện thoại này đã được sử dụng',
+		en: 'Phone number is already taken'
+	} as TranslateContent,
 	createFailed: {
 		vi: 'Tạo tài khoản thất bại, vui lòng thử lại sau',
 		en: 'Failed to create user account'
@@ -61,11 +72,14 @@ const registerMessages = {
 };
 
 export const POST: RequestHandler = async ({ request }) => {
+	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
+	const lang = resolveLang(request.headers.get('accept-language'));
+
 	try {
 		// 1. Kiểm tra systemVault đã sẵn sàng
 		if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {
 			return json(
-				{ message: registerMessages.systemUnavailable, ok: false },
+				localizePayload({ message: registerMessages.systemUnavailable, ok: false }, lang),
 				{ status: 503 }
 			);
 		}
@@ -85,14 +99,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		const { publicKeyB64 } = dataDecrypted;
 
 		if (!publicKeyB64) {
-			return json({ message: registerMessages.missingSessionKey, ok: false }, { status: 400 });
+			return json(
+				localizePayload({ message: registerMessages.missingSessionKey, ok: false }, lang),
+				{ status: 400 }
+			);
 		}
 		const sessionPublicKey = await encryption.importPublicKey(publicKeyB64);
 
 		const respond = async (payload: ServerResponse, status = 200) => {
 			const enc = await encryption.encryptWithPublicKeyHybrid(
 				sessionPublicKey,
-				JSON.stringify(payload)
+				JSON.stringify(localizePayload(payload, lang))
 			);
 			return json(enc, { status });
 		};
@@ -117,6 +134,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (password.length < MIN_PASSWORD_LENGTH) {
 			return respond({ message: registerMessages.passwordLength, ok: false }, 400);
 		}
+		// Phone tùy chọn — chỉ validate định dạng khi user nhập
+		if (normalizedPhone && !PHONE_REGEX.test(normalizedPhone)) {
+			return respond({ message: registerMessages.invalidPhone, ok: false }, 400);
+		}
 
 		// 5. Tính toán Blind Index song song
 		const [emailBlindIndex, usernameBlindIndex, phoneBlindIndex] = await Promise.all([
@@ -126,9 +147,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		]);
 
 		// 6. Kiểm tra trùng lặp email và username đồng thời
-		const [emailTaken, usernameTaken] = await Promise.all([
+		// Phone tùy chọn — chỉ check trùng khi user nhập, bỏ qua với chuỗi rỗng
+		const [emailTaken, usernameTaken, phoneTaken] = await Promise.all([
 			Users.isEmailTaken(emailBlindIndex),
-			Users.isUsernameTaken(usernameBlindIndex)
+			Users.isUsernameTaken(usernameBlindIndex),
+			normalizedPhone ? Users.isPhoneTaken(phoneBlindIndex) : Promise.resolve(false)
 		]);
 
 		if (emailTaken) {
@@ -136,6 +159,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 		if (usernameTaken) {
 			return respond({ message: registerMessages.usernameTaken, ok: false }, 409);
+		}
+		if (phoneTaken) {
+			return respond({ message: registerMessages.phoneTaken, ok: false }, 409);
 		}
 
 		// 7. Thiết lập mã hoá user vault DEK và mã hoá dữ liệu nhạy cảm

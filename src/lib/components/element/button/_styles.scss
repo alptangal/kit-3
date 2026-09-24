@@ -255,10 +255,28 @@ $themes: 'dark', 'light';
 		outline: 2px solid var(--color-indigo-500);
 		outline-offset: 2px;
 	}
+	// ── Size-based min-height (sync with Input component) ──
+	&.size-xs { --min-height: 1.875rem; }  // 30px
+	&.size-sm { --min-height: 2.5rem; }    // 40px
+	&.size-md { --min-height: 2.875rem; }  // 46px
+	&.size-lg { --min-height: 2.875rem; }  // 46px
+	&.size-xl { --min-height: 3.125rem; }  // 50px
+	&.size-2xl { --min-height: var(--font-size); }
+	&.size-3xl { --min-height: var(--font-size); }
+	&.size-4xl { --min-height: var(--font-size); }
+	&.size-5xl { --min-height: var(--font-size); }
+	&.size-6xl { --min-height: var(--font-size); }
+	&.size-7xl { --min-height: var(--font-size); }
+	&.size-8xl { --min-height: var(--font-size); }
+	&.size-9xl { --min-height: var(--font-size); }
+
+	min-height: var(--min-height, 2.5rem);
+	height: var(--min-height, 2.5rem);
+
 	// ── Base styles ──
 	color: var(--color);
 	background: var(--background);
-	border-radius: var(--border-radius);
+	border-radius: var(--border-radius-md);
 	border-width: var(--border-width);
 	border-style: solid;
 	border-color: var(--border-color);
@@ -278,6 +296,15 @@ $themes: 'dark', 'light';
 	-webkit-touch-callout: none; // chặn context menu long-press trên iOS Safari
 	-webkit-user-select: none;
 	user-select: none;
+
+	// ── Aspect Square (for icon-only buttons in Input actions) ──
+	&.aspect-square {
+		aspect-ratio: 1 / 1;
+		padding-inline: 0;
+		min-width: 0;
+		width: var(--min-height, 2.5rem); // match Input min-height
+		flex-shrink: 0;
+	}
 
 	// ── Link Variant Overrides ──
 	&.variant-link {

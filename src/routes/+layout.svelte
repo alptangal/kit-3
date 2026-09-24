@@ -140,6 +140,8 @@
 	});
 	onNavigate((navigation) => {
 		if (!document.startViewTransition) return;
+		if (navigation.from?.url.href === navigation.to?.url.href) return;
+
 		return new Promise((resolve) => {
 			document.startViewTransition(async () => {
 				resolve();

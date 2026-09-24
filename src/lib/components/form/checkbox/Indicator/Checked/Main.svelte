@@ -9,6 +9,7 @@
 	import { convertToMiliseconds, convertToPixels, styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
+	import { onMount } from 'svelte';
 	import { type DistanceUnits } from '$components/interface';
 
 	let { children, ...props }: CheckboxIndicatorCheckedProps = $props();
@@ -49,6 +50,31 @@
 		}
 	});
 	const checkboxIndicatorContext = getCheckboxIndicatorContext();
+
+	// Set stroke-width and stroke color on mount
+	let svgRef: SVGSVGElement | null = null;
+	onMount(() => {
+		if (svgRef) {
+			const checkboxRoot = svgRef.closest('.checkbox-indicator-root');
+			if (checkboxRoot) {
+				const computedStyle = getComputedStyle(checkboxRoot);
+				// Use the actual computed border-width for stroke-width so checkmark thickness matches checkbox border
+				let borderWidth = computedStyle.getPropertyValue('--border-width');
+				let color = computedStyle.getPropertyValue('--color');
+				// Provide fallback for border-width (1px default)
+				if (borderWidth) {
+					svgRef.setAttribute('stroke-width', borderWidth.trim());
+				} else {
+					svgRef.setAttribute('stroke-width', '2'); // Default to 2px for visibility
+				}
+				if (color) {
+					svgRef.setAttribute('stroke', color.trim());
+				} else {
+					svgRef.setAttribute('stroke', 'white');
+				}
+			}
+		}
+	});
 </script>
 
 <svelte:element
@@ -66,6 +92,7 @@
 			viewBox="0 0 24 24"
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"
+			bind:this={svgRef}
 		>
 			<polyline
 				points="4 12 9 17 20 6"
@@ -74,29 +101,7 @@
 				pathLength="1"
 				class="check-draw"
 				stroke="white"
-				{@attach handleEvents([
-					{
-						events: {
-							load(_, data) {
-								setTimeout(() => {
-									if (data?.node && configs.ref) {
-										const ref = data.node as HTMLElement;
-										let fixedSize: string | number = getComputedStyle(configs.ref).getPropertyValue(
-											'--font-size'
-										);
-										fixedSize = convertToPixels(fixedSize as DistanceUnits) ?? 0;
-										let borderWidth = getComputedStyle(configs.ref).getPropertyValue(
-											'--border-width'
-										);
-										let color = getComputedStyle(configs.ref).getPropertyValue('--color');
-										ref.setAttribute('stroke-width', `calc((24 / ${fixedSize}) * ${borderWidth})`);
-										ref.setAttribute('stroke', color);
-									}
-								}, configs.duration);
-							}
-						}
-					}
-				])}
+				stroke-width="2"
 			/>
 		</svg>
 	{/if}
@@ -105,8 +110,9 @@
 <style lang="scss">
 	@use '$styles/colors.scss';
 	.checkbox-indicator-checked {
-		width: var(--font-size);
-		height: var(--font-size);
+		/* Match the 20px size of checkbox-indicator-root */
+		width: 1.25rem;
+		height: 1.25rem;
 	}
 
 	.check-draw {

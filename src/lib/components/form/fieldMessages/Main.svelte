@@ -12,13 +12,18 @@
 	const checkboxContext = getCheckboxContext();
 
 	// shared message display composable (unified pattern with Description)
-	const messageDisplay = useMessageDisplay({ showValid: props.showValid });
+	// Use $derived.by to properly capture props reactivity
+	const showValid = $derived.by(() => props.showValid ?? false);
+	// Pass as getter function to preserve reactivity in useMessageDisplay
+	const messageDisplay = useMessageDisplay(() => ({ showValid }));
 
 	let configs: fieldMessagesConfigs = $state({
 		get size() {
 			if (props.size) return props.size;
-			const defaultSize =
-				sizeIndex[sizeIndex.indexOf(textFieldContext?.size ?? client.browser?.size ?? 'md') - 1];
+			const textFieldSize = textFieldContext?.size ?? client.browser?.size ?? 'md';
+			const sizeIdx = sizeIndex.indexOf(textFieldSize);
+			// Use same size as textField, or one smaller if available (not for xs)
+			const defaultSize = sizeIndex[Math.max(0, sizeIdx - 1)];
 			return defaultSize;
 		},
 		get style() {
@@ -43,6 +48,12 @@
 	@use '$styles/colors.scss';
 	@use '$styles/sizes.scss';
 	.fieldMessages-root {
+		/* Ghi đè utility `size-*` của Tailwind (size-xs = w/h 20rem) — class size-* của
+		   project chỉ mang biến CSS, component này phải tự co theo nội dung */
+		width: auto;
+		height: auto;
+		min-width: 0;
+		min-height: 0;
 		.valid {
 			color: var(--success);
 		}

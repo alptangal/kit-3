@@ -51,6 +51,10 @@ export const pageContents: { [k: string]: any } = {
 			vi: 'Địa chỉ Email',
 			en: 'Email address'
 		},
+		phone: {
+			vi: 'Số điện thoại',
+			en: 'Phone number'
+		},
 		password: {
 			vi: 'Mật khẩu',
 			en: 'Password'
@@ -72,6 +76,10 @@ export const pageContents: { [k: string]: any } = {
 		confirmPasswordHint: {
 			vi: 'Mật khẩu xác nhận phải khớp với mật khẩu ở trên',
 			en: 'Must match the password entered above'
+		},
+		phoneHint: {
+			vi: 'Tùy chọn - dùng để khôi phục tài khoản và nhận thông báo',
+			en: 'Optional - for account recovery and notifications'
 		}
 	},
 	terms: {

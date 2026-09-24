@@ -58,6 +58,8 @@ export interface InputProps extends BasicProps {
 	autocomplete?: FullAutoFill | null | undefined;
 	/** HTML inputmode attribute — hiển thị đúng keyboard trên mobile */
 	inputmode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
+	/** HTML id attribute — dùng cho label association */
+	id?: string;
 	actionButtons?: {
 		clear?: {
 			display?: boolean;
@@ -91,6 +93,16 @@ export interface InputProps extends BasicProps {
 	emailDomains?: string[];
 	/** Bật/tắt gợi ý email auto-complete (mặc định bật khi type='email') */
 	emailSuggest?: boolean;
+	/** Danh sách mã quốc gia cho phone auto-complete */
+	phoneCountryCodes?: Array<{
+		code: string;
+		name: string;
+		format: string;
+		mask: string;
+		example: string;
+	}>;
+	/** Bật/tắt gợi ý phone auto-complete (mặc định bật khi type='phone') */
+	phoneSuggest?: boolean;
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;
@@ -118,6 +130,8 @@ export interface InputConfigs extends BasicConfigs {
 			clientX: number;
 			clientY: number;
 		};
+		/** dirty so với mốc ban đầu — Button/Form submit disabled-logic đọc qua formContext.childrens */
+		changed?: boolean;
 		reseting?: boolean;
 	};
 	input: { [k in Exclude<InputTypes, 'password' | 'number'>]: BasicConfigs } & {

@@ -61,6 +61,12 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	ripple?: boolean;
 	confirmText?: string;
 	debounce?: number;
+	/** Thay thế history entry thay vì push mới (mặc định: false) */
+	replace?: boolean;
+	/** Giữ focus sau navigation (mặc định: false) */
+	keepFocus?: boolean;
+	/** Override tag render (mặc định: tự động 'button' hoặc 'a' khi có `to`) */
+	as?: 'button' | 'a';
 }
 
 export interface ButtonConfigs extends BasicConfigs {

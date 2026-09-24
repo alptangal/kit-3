@@ -1,8 +1,10 @@
 // hooks.server.ts
 import type { MetaUser } from '$interfaces/basic';
 import type { Handle } from '@sveltejs/kit';
-import { systemVault } from '$store/initSystemVault';
+import { systemVault, initSystemVault } from '$store/initSystemVault';
 import { initApp } from '$store/init-app';
+import { verifyAccessToken } from '$lib/server/jwt';
+import { resolveLang, localize } from '$lib/server/i18n';
 
 declare global {
 	// eslint-disable-next-line no-var
@@ -14,8 +16,34 @@ if (!globalThis.__appInitialized) {
 	await initApp();
 }
 
+// Ensure system vault is initialized before handling requests
+await initSystemVault();
+
 async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
-	return undefined;
+	try {
+		const payload = await verifyAccessToken(token);
+
+		// Extract user info from JWT payload
+		// JWT payload contains: userId, username, roleId, statusId, iat, exp, jti
+		const user: MetaUser = {
+			firstName: payload.username,
+			lastName: '',
+			dob: '',
+			region: 'South-Eastern Asia',
+			country: 'VN',
+			gender: 'Male',
+			phone: '',
+			email: '',
+			username: payload.username,
+			password: '', // Don't expose password
+			role: payload.roleId.includes('owner') ? 'admin' : payload.roleId.includes('manager') ? 'staff' : 'customer'
+		};
+
+		return user;
+	} catch (error) {
+		console.error('[hooks.server] Token verification failed:', error);
+		return undefined;
+	}
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -29,11 +57,35 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = token ? await getUserFromToken(token) : undefined;
 
 	const { pathname } = event.url;
-	if (pathname.startsWith('/admin') && event.locals.user?.role !== 'admin') {
-		return new Response(null, { status: 303, headers: { location: '/login' } });
+
+	// Public paths that don't require authentication
+	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password'];
+	const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
+
+	// API routes that don't require authentication
+	const isApiRoute = pathname.startsWith('/api/');
+
+	// For (authorized) routes, check authentication
+	if (!isPublicPath && !isApiRoute && !event.locals.user) {
+		// Store the original URL for redirect after login
+		const redirectUrl = encodeURIComponent(pathname + event.url.search);
+		return new Response(null, {
+			status: 303,
+			headers: { location: `/login?redirect=${redirectUrl}` }
+		});
 	}
-	if (pathname.startsWith('/profile') && !event.locals.user) {
-		return new Response(null, { status: 303, headers: { location: '/login' } });
+
+	// Check token expiration for API routes too
+	if (isApiRoute && !isPublicPath && !event.locals.user) {
+		// 401 body cũng chỉ chứa đúng ngôn ngữ client đang dùng
+		const lang = resolveLang(event.request.headers.get('accept-language'));
+		return new Response(JSON.stringify({
+			message: localize({ vi: 'Phiên đăng nhập đã hết hạn', en: 'Session expired' }, lang),
+			ok: false
+		}), {
+			status: 401,
+			headers: { 'Content-Type': 'application/json' }
+		});
 	}
 
 	return resolve(event);
@@ -41,7 +93,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 export const handleError = ({ error }) => {
 	import('fs').then(fs => {
-		fs.writeFileSync('d:/nodejs/svelte/kit-3/last_ssr_error.log', String(error?.stack || error));
+		const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
+		fs.writeFileSync('d:/nodejs/svelte/kit-3/last_ssr_error.log', errorMessage);
 	});
 	return {
 		message: error instanceof Error ? error.message : 'Unknown error'

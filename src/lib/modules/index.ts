@@ -222,7 +222,7 @@ export async function apiFetch(
 ): Promise<ServerResponse> {
 	const res = await fetch(url, {
 		method: options.method ?? 'post',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', 'Accept-Language': client.browser?.language ?? 'en' },
 		body: options.body ? JSON.stringify(options.body) : undefined
 	});
 

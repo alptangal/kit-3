@@ -664,6 +664,20 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 	--min-width-7xl: calc(var(--spacing) * 52);
 	--min-width-8xl: calc(var(--spacing) * 56);
 	--min-width-9xl: calc(var(--spacing) * 60);
+
+	--min-height-xs: 1.875rem;  // 30px
+	--min-height-sm: 2.125rem;  // 34px
+	--min-height-md: 2.5rem;    // 40px
+	--min-height-lg: 2.875rem;  // 46px
+	--min-height-xl: 3.125rem;  // 50px
+	--min-height-2xl: var(--font-size);
+	--min-height-3xl: var(--font-size);
+	--min-height-4xl: var(--font-size);
+	--min-height-5xl: var(--font-size);
+	--min-height-6xl: var(--font-size);
+	--min-height-7xl: var(--font-size);
+	--min-height-8xl: var(--font-size);
+	--min-height-9xl: var(--font-size);
 	--min-width-button-xs: calc(var(--spacing) * 12);
 	--min-width-button-sm: calc(var(--spacing) * 16);
 	--min-width-button-md: calc(var(--spacing) * 20);

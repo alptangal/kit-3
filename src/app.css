@@ -1,2 +1,117 @@
 @import 'tailwindcss';
 @import '$styles/theme.scss';
+
+/* ══════════════════════════════════════════════════════
+   MODERN APP VIEW TRANSITIONS
+   Fluid, Apple/Vercel-inspired page transitions with cubic-bezier easing
+   ══════════════════════════════════════════════════════ */
+
+@keyframes page-fade-out {
+	from {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+	to {
+		opacity: 0;
+		transform: scale(0.985) translateY(-8px);
+	}
+}
+
+@keyframes page-fade-in {
+	from {
+		opacity: 0;
+		transform: scale(1.012) translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+	mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+	animation-name: page-fade-out;
+}
+
+::view-transition-new(root) {
+	animation-name: page-fade-in;
+}
+
+/* Auth Card shared element transition */
+::view-transition-group(auth-card) {
+	animation-duration: 320ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Auth Logo shared element transition */
+::view-transition-group(auth-logo-sm) {
+	animation-duration: 300ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Auth Title shared element transition */
+::view-transition-group(auth-title) {
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Auth Subtitle shared element transition */
+::view-transition-group(auth-subtitle) {
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Auth Panel Background — NO transition (stays fixed) */
+::view-transition-group(auth-panel-bg) {
+	animation-duration: 0ms !important;
+}
+::view-transition-old(auth-panel-bg),
+::view-transition-new(auth-panel-bg) {
+	animation: none !important;
+	opacity: 1 !important;
+}
+
+/* Auth Panel Content shared element transitions */
+::view-transition-group(auth-panel-content) {
+	animation-duration: 320ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-group(auth-panel-logo) {
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-group(auth-panel-text) {
+	animation-duration: 300ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-group(auth-panel-features) {
+	animation-duration: 350ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Accessibility: Respect user reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-old(root),
+	::view-transition-new(root),
+	::view-transition-group(auth-card),
+	::view-transition-group(auth-logo-sm),
+	::view-transition-group(auth-title),
+	::view-transition-group(auth-subtitle),
+	::view-transition-group(auth-panel-content),
+	::view-transition-group(auth-panel-logo),
+	::view-transition-group(auth-panel-text),
+	::view-transition-group(auth-panel-features),
+	::view-transition-group(auth-panel-bg) {
+		animation-duration: 100ms !important;
+		animation-name: none !important;
+	}
+}
