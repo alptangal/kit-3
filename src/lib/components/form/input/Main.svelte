@@ -555,7 +555,6 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 								if (textFieldContext) textFieldContext.status.touched = true;
 								if (!configs.validation.process) configs.validation.process = new SvelteMap();
 								const operator = 'and' as const;
-								configs.validation.process.set('blur', 'pending');
 								await processingValidation('blur', defaultValidators, operator);
 							}
 						}
@@ -610,7 +609,6 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 
 											if (finalHandles.length === 0) return;
 
-											configs.validation.process.set(evName, 'pending');
 											await processingValidation(evName, finalHandles, operator);
 										}
 									];
@@ -665,13 +663,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 															if (!configs.validation.process)
 																configs.validation.process = new SvelteMap();
 															if (typeof data == 'object' && Array.isArray(data)) {
-																configs.validation.process.set(evName, 'pending');
 																const operator = props.validation?.operator ?? 'and';
 																await processingValidation(evName, data, operator);
 															} else if (typeof data == 'object') {
 																const operator =
 																	data.operator ?? props.validation?.operator ?? 'and';
-																configs.validation.process.set(evName, 'pending');
 																await processingValidation(evName, data.handles, operator);
 															}
 														}
@@ -756,13 +752,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 															if (!configs.validation.process)
 																configs.validation.process = new SvelteMap();
 															if (typeof data == 'object' && Array.isArray(data)) {
-																configs.validation.process.set(evName, 'pending');
 																const operator = props.validation?.operator ?? 'and';
 																await processingValidation(evName, data, operator);
 															} else if (typeof data == 'object') {
 																const operator =
 																	data.operator ?? props.validation?.operator ?? 'and';
-																configs.validation.process.set(evName, 'pending');
 																await processingValidation(evName, data.handles, operator);
 															}
 														}
@@ -824,13 +818,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 															if (!configs.validation.process)
 																configs.validation.process = new SvelteMap();
 															if (typeof data == 'object' && Array.isArray(data)) {
-																configs.validation.process.set(evName, 'pending');
 																const operator = props.validation?.operator ?? 'and';
 																await processingValidation(evName, data, operator);
 															} else if (typeof data == 'object') {
 																const operator =
 																	data.operator ?? props.validation?.operator ?? 'and';
-																configs.validation.process.set(evName, 'pending');
 																await processingValidation(evName, data.handles, operator);
 															}
 														}
@@ -1248,7 +1240,6 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		if (resolver) {
 			resolver();
 		}
-		configs.loading = true;
 
 		return new Promise<void>((resolve) => {
 			resolver = resolve;
@@ -1256,10 +1247,16 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			configs.timeId.set(
 				name,
 				setTimeout(async () => {
+					// Pending + loading chỉ bật khi validation thực sự chạy (trong timer),
+					// không bật đồng bộ ngay khi nhận event: nếu không, blur xảy ra giữa
+					// pointerdown→pointerup của cú click nhanh sẽ disable nút submit
+					// (Form quét childrens) và nuốt click.
+					if (!configs.validation.process) configs.validation.process = new SvelteMap();
+					configs.validation.process.set(eventName, 'pending');
+					configs.loading = true;
 					if (configs.ref) {
 						configs.ref.classList.add('validation-loading');
 					}
-					if (!configs.validation.process) configs.validation.process = new SvelteMap();
 					const promises = await Promise.all(
 						handles.map(async (validateHandler) => {
 							if (!configs.validation.messages) configs.validation.messages = new SvelteMap();

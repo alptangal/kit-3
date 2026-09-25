@@ -203,6 +203,10 @@ export const collectionSchemas = {
 				required: true
 			},
 
+			// === Password reset flow (Task 1) — optional, hashed token tìm qua search API ===
+			passwordResetTokenHash: { type: 'string', searchable: true, sortable: false, selectable: false },
+			passwordResetTokenExpiresAt: { type: 'string', searchable: false, sortable: false, selectable: false },
+
 			// Chỉ áp dụng cho role 'customer' — nhân viên/quản lý không cần các field này
 			customerTierEncrypted: {
 				type: 'string',

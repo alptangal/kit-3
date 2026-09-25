@@ -9,7 +9,8 @@ writeFileSync(LOG, `=== TEST RUN ${new Date().toISOString()} ===\n`);
 const tests = [
   'tests/login-final.mjs',
   'tests/register-final.mjs',
-  'tests/forgot-password-test.mjs'
+  'tests/forgot-password-test.mjs',
+  'tests/reset-password-test.mjs'
 ];
 
 function runOne(test) {

@@ -234,7 +234,7 @@ export class Users {
 	 * đã xoá mềm này vẫn là "đã dùng", khiến 1 email/username KHÔNG BAO GIỜ dùng lại được
 	 * sau khi user tự xoá tài khoản. Nay chỉ tính các bản ghi còn active (deletedAt rỗng).
 	 */
-	private static onlyActive(docs?: UserDocument[]): UserDocument[] {
+	static onlyActive(docs?: UserDocument[]): UserDocument[] {
 		return (docs ?? []).filter((d) => !d.deletedAt);
 	}
 
@@ -335,6 +335,79 @@ export class Users {
 			return Boolean(privateKey);
 		} catch {
 			return false;
+		}
+	}
+
+	/**
+	 * Task 1: Lưu hash của password-reset token lên user doc.
+	 * Token gốc chỉ tồn tại trong email link; DB chỉ lưu SHA-256 hash.
+	 */
+	static async createPasswordResetToken(
+		documentKey: string,
+		passwordResetTokenHash: string,
+		passwordResetTokenExpiresAt: string
+	): Promise<boolean> {
+		try {
+			const res = await cbUsers.document.update({
+				documentKey,
+				content: { passwordResetTokenHash, passwordResetTokenExpiresAt } as Partial<User> as User
+			});
+			return res.ok === true;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Task 1: Self-service reset — token-gated variant của admin resetPassword,
+	 * KHÔNG cần ActorContext vì token chính là bằng chứng sở hữu.
+	 * setupVault(newPassword) sinh vault triple mới → swap 3 field + updatedAt + clear token.
+	 */
+	static async resetPasswordWithToken(
+		passwordResetTokenHash: string,
+		newPassword: string
+	): Promise<{ ok: boolean; reason?: 'invalid' | 'expired' }> {
+		// 1. Tìm user theo token hash (field searchable trong schema)
+		let docs: UserDocument[] | undefined;
+		try {
+			const res = await cbUsers.query.document.search({
+				conditions: [{ fieldName: 'passwordResetTokenHash', keyword: passwordResetTokenHash }],
+				limit: 1
+			});
+			if (!res.ok) return { ok: false, reason: 'invalid' };
+			docs = res.data as UserDocument[] | undefined;
+		} catch {
+			return { ok: false, reason: 'invalid' };
+		}
+		const doc = docs?.[0];
+		if (!doc || !doc._id || doc.deletedAt) return { ok: false, reason: 'invalid' };
+
+		// 2. Kiểm tra hết hạn (1h)
+		const expiresAt = doc['passwordResetTokenExpiresAt'] as string | undefined | null;
+		if (!expiresAt || new Date(expiresAt).getTime() < Date.now()) {
+			return { ok: false, reason: 'expired' };
+		}
+
+		// 3. Vault reset — mirror admin resetPassword: setupVault(newPassword) → swap triple
+		const vault = await encryption.setupVault(newPassword);
+		const instance = Users.fromDocument(doc);
+		try {
+			const res = await cbUsers.document.update({
+				documentKey: instance.getDocumentKey()!,
+				content: {
+					vaultSaltB64: vault.storageRecord.saltB64,
+					vaultDekIvB64: vault.storageRecord.dekIvB64,
+					vaultWrappedDekB64: vault.storageRecord.wrappedDekB64,
+					updatedAt: new Date().toISOString(),
+					// One-time use: clear token ngay khi reset thành công
+					passwordResetTokenHash: null,
+					passwordResetTokenExpiresAt: null
+				} as Partial<User> as User
+			});
+			if (!res.ok) return { ok: false, reason: 'invalid' };
+			return { ok: true };
+		} catch {
+			return { ok: false, reason: 'invalid' };
 		}
 	}
 
