@@ -1,24 +1,40 @@
 import { dev } from '$app/environment';
+import { DevTransport } from './email/devTransport';
+import { SmtpTransport } from './email/smtpTransport';
+import type { EmailMessage, EmailService, EmailTransport } from './email/_interface';
 
-/**
- * Outbox dev — store email trong memory + log console.
- * globalThis-backed để sống qua Vite HMR module reload.
- * Task 3 sẽ nâng cấp thành EmailService interface (SMTP-ready).
- * Production (dev=false): no-op — Task 3 sẽ cắm transport thật.
- */
-type DevEmail = { to: string; subject: string; html: string; sentAt: string };
+const devTransport = new DevTransport();
 
-const g = globalThis as unknown as { __devOutbox?: DevEmail[] };
-const outbox = (g.__devOutbox ??= []);
-
-export function sendDevEmail(to: string, subject: string, html: string): void {
-	if (!dev) return; // production: im lặng cho đến khi Task 3 cắm SMTP transport
-	const email: DevEmail = { to, subject, html, sentAt: new Date().toISOString() };
-	outbox.push(email);
-	if (outbox.length > 50) outbox.shift(); // giữ 50 email gần nhất
-	console.log(`[DEV EMAIL] to=${to} subject="${subject}"`);
+// Chọn transport theo môi trường: dev → outbox; production → SMTP nếu cấu hình, throw nếu không
+function createTransport(): EmailTransport {
+	if (dev) return devTransport;
+	const host = process.env.SMTP_HOST;
+	const port = Number(process.env.SMTP_PORT ?? '587');
+	const user = process.env.SMTP_USER ?? '';
+	const pass = process.env.SMTP_PASS ?? '';
+	const from = process.env.SMTP_FROM ?? user;
+	if (host) return new SmtpTransport({ host, port, user, pass, from });
+	return devTransport; // production chưa cấu hình SMTP → outbox + console (không mất email)
 }
 
-export function getDevOutbox(): DevEmail[] {
-	return outbox;
+const service: EmailService = {
+	async sendEmail(message: EmailMessage): Promise<void> {
+		await createTransport().send(message);
+	},
+	getOutbox(): EmailMessage[] {
+		return devTransport.readOutbox();
+	}
+};
+
+export function getEmailService(): EmailService {
+	return service;
+}
+
+/** Facade — Task 1/2 call sites giữ nguyên (fire-and-forget, sync signature). */
+export function sendDevEmail(to: string, subject: string, html: string): void {
+	service.sendEmail({ to, subject, html }).catch((e) => console.error('[email] send failed:', e));
+}
+
+export function getDevOutbox(): EmailMessage[] {
+	return service.getOutbox();
 }

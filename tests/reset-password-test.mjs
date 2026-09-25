@@ -43,6 +43,10 @@ try {
 		return res.ok ? await res.json() : null;
 	});
 	check('3. forgot-password với email seed → outbox có email reset', outboxRes && Array.isArray(outboxRes.emails) && outboxRes.emails.length > 0);
+	// Task 3: outbox email phải giữ cấu trúc EmailMessage {to, subject, html} qua facade refactor
+	check('3b. Outbox email có cấu trúc EmailMessage {to, subject, html}',
+		outboxRes && outboxRes.emails?.[0] && typeof outboxRes.emails[0].to === 'string'
+		&& typeof outboxRes.emails[0].subject === 'string' && typeof outboxRes.emails[0].html === 'string');
 	let resetUrl = null;
 	if (outboxRes?.emails?.length) {
 		const last = outboxRes.emails[outboxRes.emails.length - 1];
