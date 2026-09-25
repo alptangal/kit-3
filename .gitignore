@@ -1,0 +1,6 @@
+# Build output
+.svelte-kit/
+node_modules/
+
+# Superpowers SDD workspaces (plan briefs, ledgers, review packages)
+.superpowers/
