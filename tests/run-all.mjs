@@ -12,7 +12,8 @@ const tests = [
   'tests/forgot-password-test.mjs',
   'tests/reset-password-test.mjs',
   'tests/verify-email-test.mjs',
-  'tests/input-split-test.mjs'
+  'tests/input-split-test.mjs',
+  'tests/visual-keyboard-test.mjs'
 ];
 
 function runOne(test) {
