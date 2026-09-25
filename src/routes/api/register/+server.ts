@@ -8,6 +8,8 @@ import type { RegisterRequestBody } from '../../(unauthorized)/register/_interfa
 import { Users } from '$lib/server/db/users';
 import type { User } from '$modules/schema';
 import { resolveLang, localizePayload } from '$lib/server/i18n';
+import { sendDevEmail } from '$lib/server/email';
+import { dev } from '$app/environment';
 
 const collectionName = 'users';
 const cbUsers = cbData(collectionName);
@@ -172,9 +174,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			encryption.encryptData(dek, JSON.stringify({})).then((r) => JSON.stringify(r))
 		]);
 
-		// 8. Đảm bảo role và status hợp lệ (mặc định role-customer và status-active)
+		// 8. Đảm bảo role và status hợp lệ (mặc định role-customer; pending_verification cho tới khi verify email)
 		const roleId = 'role-customer';
-		const statusId = 'status-active';
+		const statusId = 'status-pending_verification';
 
 		const now = new Date().toISOString();
 		const newKey = `${collectionName}::${crypto.randomUUID()}`;
@@ -223,6 +225,23 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (!createUserRes.ok) {
 			return respond({ message: registerMessages.createFailed, ok: false }, 500);
 		}
+
+		// Task 2: sinh email verification token — hash lưu trên user doc, token gốc trong link email
+		const rawVerifyToken = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+		const verifyTokenHash = await encryption.getDataHash(rawVerifyToken);
+		cbUsers.document
+			.update({
+				documentKey: newKey,
+				content: { emailVerificationTokenHash: verifyTokenHash } as Partial<User> as User
+			})
+			.catch((e) => console.error('[register] save verify token failed', e));
+		const baseUrl = dev ? 'https://localhost:3000' : `https://${request.headers.get('host')}`;
+		const verifyUrl = `${baseUrl}/verify-email?token=${rawVerifyToken}`;
+		sendDevEmail(
+			normalizedEmail,
+			'Xác nhận email / Verify your email',
+			`<p>Nhấn liên kết để xác nhận email (hiệu lực 1 giờ):</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`
+		);
 
 		return respond(
 			{

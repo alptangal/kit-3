@@ -411,6 +411,43 @@ export class Users {
 		}
 	}
 
+	/**
+	 * Task 2: Verify email bằng token — set emailVerifiedAt + statusId='status-active' + clear token.
+	 */
+	static async verifyEmailWithToken(
+		emailVerificationTokenHash: string
+	): Promise<{ ok: boolean; reason?: 'invalid' }> {
+		let docs: UserDocument[] | undefined;
+		try {
+			const res = await cbUsers.query.document.search({
+				conditions: [{ fieldName: 'emailVerificationTokenHash', keyword: emailVerificationTokenHash }],
+				limit: 1
+			});
+			if (!res.ok) return { ok: false, reason: 'invalid' };
+			docs = res.data as UserDocument[] | undefined;
+		} catch {
+			return { ok: false, reason: 'invalid' };
+		}
+		const doc = docs?.[0];
+		if (!doc || !doc._id || doc.deletedAt) return { ok: false, reason: 'invalid' };
+
+		try {
+			const res = await cbUsers.document.update({
+				documentKey: doc._id,
+				content: {
+					statusId: 'status-active',
+					emailVerifiedAt: new Date().toISOString(),
+					emailVerificationTokenHash: null,
+					updatedAt: new Date().toISOString()
+				} as Partial<User> as User
+			});
+			if (!res.ok) return { ok: false, reason: 'invalid' };
+			return { ok: true };
+		} catch {
+			return { ok: false, reason: 'invalid' };
+		}
+	}
+
 	async delete(): Promise<{ success: boolean; messages?: TranslateContent }> {
 		if (!this.user) throw new TranslatableError(contents.notInitialized);
 		if (!this.documentKey) {

@@ -207,6 +207,10 @@ export const collectionSchemas = {
 			passwordResetTokenHash: { type: 'string', searchable: true, sortable: false, selectable: false },
 			passwordResetTokenExpiresAt: { type: 'string', searchable: false, sortable: false, selectable: false },
 
+			// === Email verification flow (Task 2) — optional ===
+			emailVerificationTokenHash: { type: 'string', searchable: true, sortable: false, selectable: false },
+			emailVerifiedAt: { type: 'string', searchable: false, sortable: false, selectable: true },
+
 			// Chỉ áp dụng cho role 'customer' — nhân viên/quản lý không cần các field này
 			customerTierEncrypted: {
 				type: 'string',

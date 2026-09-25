@@ -53,8 +53,8 @@ export const pageContents: { [k: string]: TranslateContent } = {
 
 	// ── Thông báo đăng ký thành công (redirect từ /register) ──
 	registeredSuccess: {
-		vi: 'Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.',
-		en: 'Registration successful! Please sign in to continue.'
+		vi: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận tài khoản trước khi đăng nhập.',
+		en: 'Registration successful! Please check your email to verify your account before signing in.'
 	},
 
 	// ── Khu vực link đăng ký ──
