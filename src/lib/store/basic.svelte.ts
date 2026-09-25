@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import type { NumbericKey } from '$components/keyboard/numberic_old/_interface';
+import { useVisualKeyboard } from '$components/keyboard/useVisualKeyboard.svelte';
 import {
 	type MetaSystem,
 	type AppTheme,
@@ -9,7 +9,6 @@ import {
 	type Screen
 } from '$interfaces/basic';
 import { convertToMiliseconds, detectBrowserType } from '$modules';
-import type { SvelteComponent } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import type { FlyParams } from 'svelte/transition';
 
@@ -20,77 +19,12 @@ export const profile = $state({
 			requestAnimation: null as null | number
 		}
 	},
-	visualKeyboard: {
-		component: null as null | SvelteComponent,
-		get ref() {
-			if (this.component) return this.component.configs.ref;
-			return undefined;
-		},
-		timeId: {
-			requestAnimation: null as null | number
-		},
-		isShow: false,
-		_height: null as null | number,
-		get height() {
-			if (browser && !this._height) return (visualViewport?.height ?? 0) / 3;
-			return this._height;
-		},
-		hasHeightValue: false,
-		set height(val) {
-			if (val && val > 0) {
-				this._height = val;
-				this.hasHeightValue = true;
-			}
-		},
-		_focusOn: null as null | HTMLElement,
-		get focusOn() {
-			return this._focusOn;
-		},
-		set focusOn(el) {
-			if (!el) {
-				document.body.style.height = `${document.body.getAttribute('height-bu')}px`;
-				document.body.removeAttribute('height-bu');
-				this._focusOn = null;
-			} else {
-				if (profile.visualKeyboard.timeId.requestAnimation) {
-					cancelAnimationFrame(profile.visualKeyboard.timeId.requestAnimation);
-				}
-				profile.visualKeyboard.timeId.requestAnimation = requestAnimationFrame(() => {
-					this._focusOn = el;
-					this.processFocus(el);
-					if (this.fallbackFocusOn) this.fallbackFocusOn();
-				});
-			}
-		},
-		fallbackFocusOn: null as null | (() => void),
-		onKeyup: undefined as undefined | ((val: NumbericKey) => void),
-		processFocus: (el: HTMLElement) => {
-			if (profile.browser.type && profile.browser.type.includes('mobile')) {
-				const refRect = el.getBoundingClientRect();
-
-				const bodyH = document.body.scrollHeight;
-				setTimeout(() => {
-					el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-				}, profile.delay);
-				if (
-					profile.visualKeyboard.height &&
-					window.innerHeight - refRect.bottom < profile.visualKeyboard.height &&
-					bodyH - el.scrollTop < profile.visualKeyboard.height
-				) {
-					document.body.setAttribute('height-bu', document.body.style.getPropertyValue('height'));
-					document.body.style.height = `${document.body.offsetHeight + (profile.visualKeyboard.height ?? 0 - (window.innerHeight - refRect.bottom))}px`;
-					window.scrollTo({ top: document.body.offsetHeight, behavior: 'smooth' });
-				} else if (
-					profile.visualKeyboard.height &&
-					window.innerHeight - refRect.bottom < profile.visualKeyboard.height &&
-					bodyH - el.scrollTop > profile.visualKeyboard.height
-				) {
-					window.scrollTo({ top: el.scrollTop, behavior: 'smooth' });
-				}
-			}
-		},
-		input: null as null | ((input: string) => void)
-	},
+	// Task 5: extract sang useVisualKeyboard hook — shape + reactivity giữ nguyên qua alias.
+	// browser type + delay truyền qua getter closures (hook không import profile — tránh circular).
+	visualKeyboard: useVisualKeyboard({
+		getBrowserType: () => profile.browser.type,
+		getDelay: () => profile.delay
+	}),
 	screen: {
 		height: null,
 		width: null

@@ -1,2 +1,3 @@
 import { default as Number } from './number/Main.svelte';
-export const Keyboard = Object.assign('Keyboard', { Number });
+import { default as Visual } from './VisualKeyboard.svelte';
+export const Keyboard = Object.assign('Keyboard', { Number, Visual });
