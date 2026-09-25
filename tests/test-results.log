@@ -1,0 +1,186 @@
+=== TEST RUN 2026-09-25T10:45:55.203Z ===
+Console: [vite] connecting...
+Console: [vite] connected.
+========== LOGIN PAGE COMPREHENSIVE TEST ==========
+Initial (empty): disabled=true, aria-disabled=true
+After username only: disabled=true, aria-disabled=true
+After username blur: disabled=true, aria-disabled=true
+After password filled (focused): disabled=false, aria-disabled=null
+After password blur: disabled=false, aria-disabled=null
+
+========== SHOW/HIDE PASSWORD ==========
+Before: password
+After click: text
+After second click: password
+
+========== VALIDATION ERROR DISPLAY ==========
+Alert after Enter with empty fields (expect 0, button disabled): [33m0[39m
+Console: [handleLogin] Called, username: nonexistent_user_xyz password: password123
+Console: [handleLogin] validationError: undefined
+Console: Failed to load resource: the server responded with a status of 401 ()
+auth-alert--error count after failed login: [33m1[39m
+auth-alert--error text:  Invalid username/email or password
+FieldMessages elements: [
+  {
+    "className": "fieldMessages-root size-xs s-pQQc9TQS3q2Y",
+    "text": "",
+    "display": "block",
+    "visibility": "visible"
+  },
+  {
+    "className": "fieldMessages-root size-xs s-pQQc9TQS3q2Y",
+    "text": "",
+    "display": "block",
+    "visibility": "visible"
+  }
+]
+
+========== LABEL-INPUT ASSOCIATION ==========
+Label-Input association: [
+  {
+    "name": "username",
+    "id": "field-username",
+    "hasId": true,
+    "labelsWithFor": 1,
+    "wrappingLabel": false,
+    "ariaLabel": null,
+    "ariaLabelledBy": null
+  },
+  {
+    "name": "password",
+    "id": "field-password",
+    "hasId": true,
+    "labelsWithFor": 1,
+    "wrappingLabel": false,
+    "ariaLabel": null,
+    "ariaLabelledBy": null
+  }
+]
+
+========== CHECKBOX DETAILS ==========
+Checkbox details: {
+  "width": "20px",
+  "height": "20px",
+  "borderWidth": "2px",
+  "borderColor": "rgb(2, 6, 24)",
+  "borderRadius": "4px",
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "display": "flex",
+  "alignItems": "center",
+  "justifyContent": "center",
+  "className": "checkbox-indicator-root size-sm color-default rounded-sm s-L0N8-kF3MYq_",
+  "hasCheckmark": false,
+  "checkmarkAttrs": null
+}
+Checkbox checked: {
+  "className": "checkbox-indicator-root size-sm color-default rounded-sm s-L0N8-kF3MYq_",
+  "hasCheckmark": true,
+  "checkmarkAttrs": {
+    "strokeWidth": "2px",
+    "stroke": "hsl(201.82 24.44% 8.82%)",
+    "strokeDasharray": null,
+    "strokeDashoffset": null
+  }
+}
+
+========== INPUT BORDER COLORS ==========
+Default (unfocused):
+  Username: {
+  borderColor: [32m'rgb(0, 151, 79)'[39m,
+  backgroundColor: [32m'rgb(220, 252, 231)'[39m,
+  className: [32m'input-root size-sm variant-secondary rounded-sm color-success auth-input s-QjuUwB7bxiUp'[39m
+}
+  Password: {
+  borderColor: [32m'rgb(0, 151, 79)'[39m,
+  backgroundColor: [32m'rgb(123, 241, 168)'[39m,
+  className: [32m'input-root size-sm focus variant-secondary rounded-sm color-success auth-input s-QjuUwB7bxiUp animation-bounce'[39m
+}
+  Username focus: { borderColor: [32m'rgb(0, 151, 79)'[39m, boxShadow: [32m'none'[39m }
+  Username error: {
+  borderColor: [32m'rgb(0, 151, 79)'[39m,
+  boxShadow: [32m'none'[39m,
+  className: [32m'input-root size-sm variant-secondary rounded-sm color-success auth-input s-QjuUwB7bxiUp'[39m
+}
+  Username success: {
+  borderColor: [32m'rgb(0, 151, 79)'[39m,
+  boxShadow: [32m'none'[39m,
+  className: [32m'input-root size-sm variant-secondary rounded-sm color-success auth-input s-QjuUwB7bxiUp'[39m
+}
+
+========== EMAIL AUTOCOMPLETE SUGGESTIONS ==========
+Email suggestions popup count: [33m1[39m
+Popup style: { zIndex: [32m'99999'[39m, display: [32m'block'[39m }
+Email suggestion items: [33m1[39m
+
+========== LOGIN PAGE TESTS COMPLETE ==========
+Console: [vite] connecting...
+Console: [vite] connected.
+========== REGISTER PAGE COMPREHENSIVE TEST ==========
+
+── Test 1: Default color state (regression fix) ──
+username: className="input-root size-sm variant-secondary rounded-sm color-default s-QjuUwB7bxiUp"
+  ✅ PASS: neutral at rest (border=rgba(0, 0, 0, 0))
+email: className="input-root size-sm variant-secondary rounded-sm color-default s-QjuUwB7bxiUp"
+  ✅ PASS: neutral at rest (border=rgba(0, 0, 0, 0))
+password: className="input-root size-sm variant-secondary rounded-sm color-default s-QjuUwB7bxiUp"
+  ✅ PASS: neutral at rest (border=rgba(0, 0, 0, 0))
+
+── Test 2: Color after typed+blur (should turn valid) ──
+username after fill+blur: input-root size-sm variant-secondary rounded-sm color-success s-QjuUwB7bxiUp
+✅ PASS: success after valid input
+
+── Test 3: Email autocomplete popup ──
+Popup count after "test@": 1 (expect ≥1)
+Popup style/hit-test: {
+  zIndex: [32m'99999'[39m,
+  w: [33m478[39m,
+  h: [33m279.703125[39m,
+  hitTestEl: [32m'email-suggestions-popup s-QjuUwB7bxiUp'[39m
+}
+Input value after suggestion click: test@gmail.com ✅ PASS
+Popup count after just "test" (no @): 0 (expect 0)
+
+── Test 4: Phone autocomplete popup ──
+Phone input count: [33m1[39m
+Phone popup count after "+84": [33m1[39m ✅ PASS
+
+── Test 5: Clear button vs loading indicator ──
+Action buttons count while checking: [33m5[39m
+
+========== REGISTER PAGE TEST COMPLETE ==========
+Console: [vite] connecting...
+Console: [vite] connected.
+========== FORGOT PASSWORD PAGE TEST ==========
+Initial (empty): disabled=true
+Invalid format: disabled=true
+Unregistered email: disabled=true
+error-hint visible (unregistered): [33m1[39m
+error-hint text: Email is available
+Registered (real taken=true): disabled=false
+success-hint visible: [33m1[39m
+success-hint text: Email is already registered
+✅ PASS: submit enabled when email is registered (taken=true)
+
+========== INPUT COLOR STATES ==========
+Input root class (taken=true state): input-root size-sm focus variant-secondary rounded-sm color-success auth-input confirm-match s-QjuUwB7bxiUp
+
+========== FORGOT PASSWORD TEST COMPLETE ==========
+PASS: 1. /reset-password không token → hiện invalid state
+PASS: 2. garbage token → invalid state
+PASS: 3. forgot-password với email seed → outbox có email reset
+PASS: 3b. Outbox email có cấu trúc EmailMessage {to, subject, html}
+PASS: 4. Email reset chứa link /reset-password?token=
+PASS: 5. password/confirm mismatch → submit disabled
+PASS: 6. Reset thành công → success hint
+[console.error] Failed to load resource: the server responded with a status of 400 ()
+PASS: 7. Token replay → invalid error
+PASS: 8. Restore password gốc thành công
+
+=== KẾT QUẢ: 9 pass, 0 fail ===
+PASS: 1. verify-email garbage token → invalid state (không crash)
+PASS: 2. verify-email không token → invalid state
+PASS: 3a. resend-verification email không tồn tại → ok:true
+PASS: 3b. resend-verification email tồn tại → ok:true
+PASS: 3c. Hai response message GIỐNG HỆT nhau (anti-enumeration)
+
+=== KẾT QUẢ: 5 pass, 0 fail ===

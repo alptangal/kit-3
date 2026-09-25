@@ -109,6 +109,8 @@
 	const requiredDerived = $derived(props.required ?? textFieldContext?.required);
 
 	let _disabled: undefined | boolean = $state(undefined);
+	// Visual number keyboard cleanup — gán ở showVisualNumberKb(), gọi ở window mousedown (không cần reactive)
+	let visualNumberKbCleaner: (() => void) | undefined;
 	const disabledDerived = $derived.by(() => {
 		if (disabled) return disabled;
 		return _disabled ?? formContext?.disabled;
@@ -215,6 +217,8 @@
 
 	// Quản lý trạng thái focus: input đang focus HOẶC chuột đang trên popup
 	let isInteractingWithSuggestions = $state(false);
+	// Focus-hold cho email popup: mousedown giữ focus để click suggestion không mất popup
+	let suggestionsFocusHeld = $state(false);
 	const isFocused = $derived(!!(configs?.status?.focus || configs?.input?.status?.focus));
 
 	const emailSuggestionsOpen = $derived(

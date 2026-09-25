@@ -1,4 +1,7 @@
 export { default as Input } from './input/Main.svelte';
+export { default as EmailInput } from './inputEmail/Main.svelte';
+export { default as PhoneInput } from './inputPhone/Main.svelte';
+export { default as PasswordInput } from './inputPassword/Main.svelte';
 export { default as Form } from './form/Main.svelte';
 export { default as Label } from './label/Main.svelte';
 export { default as TextField } from './textField/Main.svelte';
