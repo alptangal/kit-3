@@ -46,7 +46,8 @@ vi.mock('$modules/couchbase/clients', () => {
 // Import hooks.server.ts — module-level awaits (initApp/initSystemVault) đều đã mock.
 // Relative path: file này nằm ở src/lib/server/admin → src/hooks.server cách 3 cấp.
 const { getUserFromToken } = await import('../../../hooks.server');
-const { __mockRolesGet } = await import('$modules/couchbase/clients');
+// Mock __mock* không có trong type thật của clients.ts — ép kiểu như race-condition tests
+const { __mockRolesGet } = (await import('$modules/couchbase/clients')) as any;
 
 /** Tạo session cookie giống /api/login: base64 JSON { userId, username, roleId, issuedAt } */
 function makeSessionToken(payload: { userId: string; username: string; roleId: string; issuedAt: number }) {

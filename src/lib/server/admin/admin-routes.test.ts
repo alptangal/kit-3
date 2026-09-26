@@ -105,14 +105,19 @@ vi.mock('$env/static/private', () => ({
 }));
 
 const { encryption } = await import('$modules/encryption');
-const { __mockUsers, __mockRoles, __mockDetailRoles } = await import('$modules/couchbase/clients');
+// Mocks __mock* không có trong type thật của clients.ts — ép kiểu như race-condition tests
+const { __mockUsers, __mockRoles, __mockUserStatus, __mockDetailRoles } = (await import(
+	'$modules/couchbase/clients'
+)) as any;
 
 // Import route handlers SAU khi mọi dependency đã mock
-const listRoute = await import('$routes/api/admin/users/list/+server');
-const createRoute = await import('$routes/api/admin/users/create/+server');
+// Relative path: file này nằm ở src/lib/server/admin → src/routes cách 3 cấp.
+// ('$routes' không phải alias trong vite.config.ts/svelte.config.js)
+const listRoute = await import('../../../routes/api/admin/users/list/+server');
+const createRoute = await import('../../../routes/api/admin/users/create/+server');
 
 /** Request body mã hoá — decrypt trả đúng JSON mình muốn gửi. */
-function mockEncryptedBody(payload: unknown) {
+function mockEncryptedBody(payload: Record<string, unknown>) {
 	vi.mocked(encryption.decryptWithPrivateKeyHybrid).mockResolvedValue(
 		JSON.stringify({ publicKeyB64: 'session-pk-b64', ...payload })
 	);
@@ -121,7 +126,12 @@ function mockEncryptedBody(payload: unknown) {
 /** Response đã mã hoá — encrypt trả payload gốc để assert nội dung. */
 function captureEncryptedResponse() {
 	vi.mocked(encryption.encryptWithPublicKeyHybrid).mockImplementation(
-		async (_pk: CryptoKey, plaintext: string) => ({ plaintext })
+		async (_pk: CryptoKey, plaintext: string) =>
+			({ plaintext } as unknown as {
+				encryptedSessionKeyB64: string;
+				ivB64: string;
+				ciphertextB64: string;
+			})
 	);
 	vi.mocked(encryption.importPublicKey).mockResolvedValue({} as CryptoKey);
 }
@@ -237,6 +247,10 @@ describe('/api/admin/users/create', () => {
 		// Actor 'owner' tra level theo name; role mới ('role-staff') tra theo documentKey
 		__mockRoles.search.mockResolvedValue(mockGetResponse(true, [{ level: 100 }]));
 		__mockRoles.get.mockResolvedValue(mockGetResponse(true, { level: 10, name: 'staff' }));
+		// createUser kiểm tra statusId mặc định ('status-active') tồn tại trong user_status
+		__mockUserStatus.get.mockResolvedValue(
+			mockGetResponse(true, { name: 'active', canLogin: true })
+		);
 		__mockUsers.get.mockResolvedValue(mockGetResponse(true, { branchId: 'branch-1' }));
 
 		vi.mocked(encryption.hmacBlindIndex).mockResolvedValue('blind-index');

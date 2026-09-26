@@ -106,9 +106,10 @@ vi.mock('$env/static/private', () => ({
 	username_owner: 'owner'
 }));
 
-const { __mockUsers, __mockRoles, __mockUserStatus, __mockDetailRoles } = await import(
+// Mocks __mock* không có trong type thật của clients.ts — ép kiểu như race-condition tests
+const { __mockUsers, __mockRoles, __mockUserStatus, __mockDetailRoles } = (await import(
 	'$modules/couchbase/clients'
-);
+)) as any;
 
 /** Làm mock document.get cho users trả về 1 target user theo roleId/branchId cho trước. */
 function mockTargetUser(roleId: string, opts: { deletedAt?: string | null; documentKey?: string } = {}) {
