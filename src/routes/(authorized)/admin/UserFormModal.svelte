@@ -434,7 +434,14 @@
 						<Button color="success" type="submit" {loading} disabled={loading || !encryptionKeys}>
 							{isCreate ? pageContents.createUser[lang] : pageContents.actions.edit[lang]}
 						</Button>
-						<Button color="default" variant="ghost" disabled={loading} onClick={() => (display = false)}>
+						<Button
+							color="default"
+							variant="ghost"
+							disabled={loading}
+							onClick={() => {
+								display = false;
+							}}
+						>
 							{pageContents.modals.cancel[lang]}
 						</Button>
 					</div>
