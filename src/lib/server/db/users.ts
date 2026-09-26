@@ -15,6 +15,7 @@ const collectionName = 'users';
 const cbUsers = cbData(collectionName);
 const cbUserStatus = cbData('user_status');
 const cbRoles = cbData('name_roles');
+const cbDetailRoles = cbData('detail_roles');
 
 // SỬA: dùng để build keyspace đầy đủ `bucket`.`scope`.`collection` cho các câu N1QL
 // viết tay trong UserAdminService.list() — trước đó chỉ dùng bare `users`,
@@ -132,6 +133,10 @@ const adminMessages = {
 		en: 'User restored successfully'
 	} as TranslateContent
 };
+
+// Exported cho src/lib/server/admin/api.ts — dùng so sánh identity (===) để map
+// messages từ service sang HTTP status code phù hợp.
+export { adminMessages, authMessages };
 
 type UserDocument = User & { _id: string };
 
@@ -1175,5 +1180,51 @@ export class UserAdminService {
 		const items = (dataRes.data?.results ?? []) as SafeUserDocument[];
 
 		return { success: true, items, total, page, pageSize };
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Catalog read helpers — đọc các collection seeded (name_roles, user_status,
+	// detail_roles) cho màn hình admin (dropdown role/status, bảng phân quyền).
+	// Dùng cùng pattern couchbase Data API (document.query N1QL với keyspace
+	// fully-qualified) như list() ở trên và PermissionChecker.getAllGrants().
+	// ─────────────────────────────────────────────────────────────────────
+
+	/** Toàn bộ roles trong name_roles (sắp xếp theo level giảm dần). */
+	static async listRoles(): Promise<
+		{ success: false; messages: TranslateContent } | { success: true; roles: unknown[] }
+	> {
+		const keyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`name_roles\``;
+		const res = await cbRoles.document.query({
+			statement: `SELECT META().id AS documentKey, name, displayName, description, level, isSystem, createdAt, updatedAt FROM ${keyspace} ORDER BY level DESC`,
+			readonly: true
+		});
+		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
+		return { success: true, roles: res.data?.results ?? [] };
+	}
+
+	/** Toàn bộ statuses trong user_status. */
+	static async listStatuses(): Promise<
+		{ success: false; messages: TranslateContent } | { success: true; statuses: unknown[] }
+	> {
+		const keyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`user_status\``;
+		const res = await cbUserStatus.document.query({
+			statement: `SELECT META().id AS documentKey, name, description, canLogin, createdAt, updatedAt FROM ${keyspace}`,
+			readonly: true
+		});
+		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
+		return { success: true, statuses: res.data?.results ?? [] };
+	}
+
+	/** Toàn bộ grants trong detail_roles (roleName + permissionKey + scope). */
+	static async listGrants(): Promise<
+		{ success: false; messages: TranslateContent } | { success: true; grants: unknown[] }
+	> {
+		const keyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`detail_roles\``;
+		const res = await cbDetailRoles.document.query({
+			statement: `SELECT roleName, permissionKey, scope FROM ${keyspace}`,
+			readonly: true
+		});
+		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
+		return { success: true, grants: res.data?.results ?? [] };
 	}
 }

@@ -35,7 +35,11 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 // Default configurations per endpoint
 const ENDPOINT_CONFIGS: Record<string, RateLimitConfig> = {
 	'/api/login': { maxRequests: 5, windowMs: 60_000 }, // 5 req/min
-	'/api/register': { maxRequests: 3, windowMs: 60_000 } // 3 req/min
+	'/api/register': { maxRequests: 3, windowMs: 60_000 }, // 3 req/min
+	// Admin API — prefix '/api/admin' khớp mọi route /api/admin/** qua prefix matching
+	// trong getConfig() (không đụng '/api/login' và '/api/register' vì chúng không
+	// nằm dưới prefix này)
+	'/api/admin': { maxRequests: 60, windowMs: 60_000 } // 60 req/min
 };
 
 // Whitelisted paths that bypass rate limiting
