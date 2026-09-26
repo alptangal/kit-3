@@ -8,3 +8,11 @@ tests/*.log
 
 # Superpowers SDD workspaces (plan briefs, ledgers, review packages)
 .superpowers/
+CLAUDE.md
+.claude/
+
+# PartyKit: track source + config, ignore deps/build/env
+partykit/node_modules/
+partykit/build/
+partykit/public/dist/
+partykit/.env

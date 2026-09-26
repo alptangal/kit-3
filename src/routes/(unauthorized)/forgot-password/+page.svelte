@@ -13,7 +13,7 @@
 	import { AuthLayout } from '$components/layout';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import { pageContents } from '.';
 	import type { ForgotPasswordRequestBody } from './_interface';
 
@@ -39,120 +39,15 @@
 	>(undefined);
 
 	const lang = $derived(client.browser?.language ?? 'en');
-	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
 
-	// ── Realtime Check State for Email ──
-	let emailStatus = $state<{
-		checking: boolean;
-		checked: boolean;
-		taken: boolean;
-		available: boolean;
-		message?: { vi: string; en: string };
-	}>({
-		checking: false,
-		checked: false,
-		taken: false,
-		available: false
-	});
-
-	let emailTimeoutId: ReturnType<typeof setTimeout> | undefined;
-	let emailSeq = 0;
-
-	function resetEmailStatus() {
-		emailStatus.checking = false;
-		emailStatus.checked = false;
-		emailStatus.taken = false;
-		emailStatus.available = false;
-		emailStatus.message = undefined;
-	}
-
-	$effect(() => {
-		const keysReady = !!encryptionKeys;
-		const raw = formData.email?.trim() ?? '';
-
-		if (!keysReady) {
-			if (emailTimeoutId) {
-				clearTimeout(emailTimeoutId);
-				emailTimeoutId = undefined;
-			}
-			if (emailStatus.checking) emailStatus.checking = false;
-			return;
-		}
-
-		if (!raw) {
-			if (emailTimeoutId) {
-				clearTimeout(emailTimeoutId);
-				emailTimeoutId = undefined;
-			}
-			resetEmailStatus();
-			return;
-		}
-
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
-			if (emailTimeoutId) {
-				clearTimeout(emailTimeoutId);
-				emailTimeoutId = undefined;
-			}
-			resetEmailStatus();
-			return;
-		}
-
-		if (emailTimeoutId) clearTimeout(emailTimeoutId);
-		emailStatus.checking = true;
-
-		const seq = ++emailSeq;
-		const snapshot = raw;
-
-		emailTimeoutId = setTimeout(async () => {
-			if (!encryptionKeys) {
-				if (seq === emailSeq) emailStatus.checking = false;
-				return;
-			}
-			const current = formData.email?.trim() ?? '';
-			if (current !== snapshot || seq !== emailSeq) {
-				if (seq === emailSeq) emailStatus.checking = false;
-				return;
-			}
-			try {
-				const data = (await encryption.fetchSecure(
-					'/api/register/check',
-					{
-						method: 'POST',
-						body: { email: snapshot }
-					},
-					encryptionKeys
-				)) as any;
-				if (seq !== emailSeq) return;
-				if (formData.email?.trim() !== snapshot) return;
-
-				if (data.ok && data.email && data.email.valid) {
-					emailStatus.checked = true;
-					emailStatus.taken = !!data.email.taken;
-					emailStatus.available = !!data.email.available;
-					emailStatus.message = data.email.message;
-				} else {
-					resetEmailStatus();
-				}
-			} catch (e) {
-				console.error('Error checking email:', e);
-				if (seq === emailSeq) {
-					emailStatus.checked = false;
-				}
-			} finally {
-				if (seq === emailSeq) emailStatus.checking = false;
-			}
-		}, 400);
-	});
 
 	// Trạng thái disabled nút submit
 	const status = $derived.by(() => {
 		const hasRequired = !!formData.email?.trim() && formData.email.length >= 3;
 		const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email?.trim() ?? '');
-		const emailAvailable = emailStatus.checked && emailStatus.taken; // Email must exist to reset
-		const notChecking = !emailStatus.checking;
 
 		return {
-			disabled: loading || !hasRequired || !isValidEmail || !emailAvailable || !notChecking
+			disabled: loading || !hasRequired || !isValidEmail
 		};
 	});
 
@@ -167,9 +62,6 @@
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email?.trim() ?? '')) {
 			return lang === 'vi' ? 'Định dạng email không hợp lệ' : 'Invalid email format';
 		}
-		if (emailStatus.checked && !emailStatus.taken) {
-			return lang === 'vi' ? 'Email này chưa được đăng ký' : 'This email is not registered';
-		}
 		return undefined;
 	}
 
@@ -181,12 +73,6 @@
 			return;
 		}
 		if (status.disabled || !encryptionKeys || loading) return;
-
-		const validationError = validateForm();
-		if (validationError) {
-			formError = validationError;
-			return;
-		}
 
 		formError = undefined;
 		loading = true;
@@ -242,17 +128,6 @@
 		honeypot = '';
 		formError = undefined;
 		success = false;
-		if (emailTimeoutId) {
-			clearTimeout(emailTimeoutId);
-			emailTimeoutId = undefined;
-		}
-		emailSeq++;
-		emailStatus = {
-			checking: false,
-			checked: false,
-			taken: false,
-			available: false
-		};
 	}
 
 	onMount(async () => {
@@ -261,13 +136,6 @@
 		// Khởi tạo cặp khoá RSA tạm thời
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
-	});
-
-	onDestroy(() => {
-		if (emailTimeoutId) {
-			clearTimeout(emailTimeoutId);
-			emailTimeoutId = undefined;
-		}
 	});
 </script>
 
@@ -300,22 +168,6 @@
 	{#if !success}
 		<!-- Forgot Password Form -->
 		<Form onSubmit={handleForgotPassword} onReset={handleReset}>
-			<!-- Honeypot — bots fill this, humans never see it -->
-			<div class="hp-field" aria-hidden="true">
-				<label for="hp_website">Website</label>
-				<input
-					id="hp_website"
-					name="website"
-					type="text"
-					bind:value={honeypot}
-					autocomplete="off"
-					tabindex="-1"
-					aria-hidden="true"
-					disabled={loading}
-				/>
-			</div>
-
-			<!-- Email field -->
 			<TextField name="email" required>
 				<Label>{pageContents.email[lang] ?? 'Email'}</Label>
 				<div class="auth-input-wrapper">
@@ -329,25 +181,14 @@
 						bind:value={formData.email}
 						placeholder={{ vi: 'Nhập địa chỉ email', en: 'Enter your email' }}
 						autocomplete="email"
-						loading={emailStatus.checking}
+						loading={loading}
 						disabled={loading}
-						color={emailStatus.checked ? (emailStatus.taken ? 'success' : 'error') : undefined}
-						class="auth-input {emailStatus.checked ? (emailStatus.taken ? 'confirm-match' : 'confirm-mismatch') : ''}"
+						class="auth-input"
 						actionButtons={{ showPassword: { display: false } }}
 					/>
 				</div>
-				{#if emailStatus.checked && emailStatus.taken}
-					<Description persistent={true} color="success" class="form-hint success-hint">
-						{emailStatus.message?.[currentLang] ?? 'Email is registered'}
-					</Description>
-				{:else if emailStatus.checked && emailStatus.available}
-					<Description persistent={true} color="error" class="form-hint error-hint">
-						{emailStatus.message?.[currentLang] ?? 'Email is not registered'}
-					</Description>
-				{:else}
-					<Description class="form-hint">{lang === 'vi' ? 'Nhập email đã đăng ký để nhận liên kết đặt lại' : 'Enter your registered email to receive reset link'}</Description>
-					<FieldMessages />
-				{/if}
+				<Description class="form-hint">{lang === 'vi' ? 'Nhập email đã đăng ký để nhận liên kết đặt lại' : 'Enter your registered email to receive reset link'}</Description>
+				<FieldMessages />
 			</TextField>
 
 			<!-- Action Buttons -->
@@ -390,23 +231,6 @@
 			<p class="success-desc" style="color: var(--foreground-400, #71717a); line-height: 1.6; margin: 0 0 2rem;">
 				{pageContents.successDesc[lang] ?? 'We have sent a password reset link to your email address. Please check your inbox (and spam folder).'}
 			</p>
-			<div class="auth-actions" style="justify-content: center;">
-				<Button
-					variant="link"
-					color="primary"
-					class="auth-switch-btn"
-					onClick={() => goto('/login')}
-				>
-					{pageContents.backToLogin[lang] ?? 'Back to login'}
-					<svg class="link-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-						<path
-							fill-rule="evenodd"
-							d="M2 8a.75.75 0 01.75-.75h8.69L8.22 4.03a.75.75 0 011.06-1.06l4.5 4.5a.75.75 0 010 1.06l-4.5 4.5a.75.75 0 01-1.06-1.06l3.22-3.22H2.75A.75.75 0 012 8z"
-							clip-rule="evenodd"
-						/>
-					</svg>
-				</Button>
-			</div>
 		</div>
 	{/if}
 
@@ -419,7 +243,7 @@
 		<!-- Switch to Login -->
 		<div class="auth-switch-link">
 			<Button variant="link" color="primary" class="auth-switch-btn" to="/login">
-				<span>{pageContents.backToLogin[lang] ?? 'Back to login'}</span>
+				<span>{pageContents.backToLogin[lang] ?? "Back to login"}</span>
 				<svg class="link-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 					<path
 						fill-rule="evenodd"
@@ -430,6 +254,7 @@
 			</Button>
 		</div>
 	{/snippet}
+
 </AuthLayout>
 
 <style lang="scss">
