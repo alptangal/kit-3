@@ -113,6 +113,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			return respond({ ok: false, message: forgotPasswordMessages.tooManyRequests }, 429);
 		}
 
+
 		// 4. Validate email
 		if (!email?.trim()) {
 			return respond({ message: forgotPasswordMessages.missingEmail, ok: false }, 400);
