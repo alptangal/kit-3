@@ -238,6 +238,24 @@ export class Users {
 		return (docs ?? []).filter((d) => !d.deletedAt);
 	}
 
+	/**
+	 * Encode blind index (base64) thành URL-safe base64url để dùng làm documentKey.
+	 * Blind index từ HMAC-SHA256 là base64 chuẩn (có thể chứa '+', '/', '=') —
+	 * không an toàn cho URL path. base64url thay thế: '+' -> '-', '/' -> '_', bỏ '=' padding.
+	 */
+	private static encodeDocumentKey(blindIndex: string): string {
+		return blindIndex.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	}
+
+	/**
+	 * Tạo documentKey xác định từ emailBlindIndex.
+	 * Dùng email làm khóa chính vì email là định danh duy nhất ưu tiên.
+	 * Format: `users::${base64url(emailBlindIndex)}`
+	 */
+	private static makeDocumentKey(emailBlindIndex: string): string {
+		return `${collectionName}::${this.encodeDocumentKey(emailBlindIndex)}`;
+	}
+
 	static async isEmailTaken(
 		emailBlindIndex: string,
 		excludeDocumentKey?: string
@@ -497,49 +515,54 @@ export class Users {
 	async save(): Promise<{ success: boolean; messages?: TranslateContent; data?: unknown }> {
 		if (!this.user) throw new TranslatableError(contents.notInitialized);
 		if (!this.documentKey) {
-			const [emailTaken, usernameTaken] = await Promise.all([
-				Users.isEmailTaken(this.user.emailBlindIndex),
-				Users.isUsernameTaken(this.user.usernameBlindIndex)
-			]);
-			if (emailTaken) return { success: false, messages: authMessages.emailTaken };
-			if (usernameTaken) return { success: false, messages: authMessages.usernameTaken };
-			// LƯU Ý (chưa sửa ở đây): giữa 2 lần check trên và create() bên dưới vẫn tồn tại
-			// race condition (check-then-act) — 2 request đăng ký cùng lúc cùng email/username
-			// vẫn có thể lọt qua cả hai. Cách khắc phục triệt để là dùng documentKey xác định
-			// (vd theo usernameBlindIndex) để tận dụng tính atomic của document.create(), giống
-			// cách seed-data.ts đang tạo tài khoản admin với key `${collectionName}-${username}`.
-			// Việc này cần sửa thêm ở dataApi (encodeURIComponent documentKey khi build URL,
-			// vì blind index base64 có thể chứa '/', '+', '=' làm hỏng URL path) nên không đổi
-			// trong phạm vi file này.
-		}
-		if (this.documentKey) {
-			const documentKey = this.documentKey;
+			// Tạo mới: dùng documentKey xác định từ emailBlindIndex để tận dụng tính atomic của
+			// document.create() — create() FAIL với status 409 (CONFLICT) nếu key đã tồn tại,
+			// loại bỏ race condition check-then-act giữa isEmailTaken/isUsernameTaken và create().
+			// documentKey cần base64url vì blind index base64 có thể chứa '+', '/', '='
+			// làm hỏng URL path của Data API.
+			const documentKey = Users.makeDocumentKey(this.user.emailBlindIndex);
+
 			try {
-				const now = new Date().toISOString();
-				// SỬA: Gán lại updatedAt vào instance memory this.user để dữ liệu trong bộ nhớ luôn đồng bộ
-				this.user.updatedAt = now;
-				const res = await cbUsers.document.update({
+				const res = await cbUsers.document.create({
 					documentKey,
-					content: { ...this.user, updatedAt: now }
+					content: { ...this.user, createdAt: new Date().toISOString() }
 				});
-				if (!res.ok) return { success: false, messages: users.document.update.error };
-				return { success: true, messages: users.document.update.success };
-			} catch {
-				return { success: false, messages: users.document.update.error };
+
+				if (!res.ok) {
+					// Conflict 409 — email hoặc username đã tồn tại (cả 2 unique theo blind index).
+					// emailBlindIndex là khóa chính của documentKey nên ưu tiên kiểm tra email trước.
+					if (res.status === 409) {
+						const [emailTaken, usernameTaken] = await Promise.all([
+							Users.isEmailTaken(this.user.emailBlindIndex),
+							Users.isUsernameTaken(this.user.usernameBlindIndex)
+						]);
+						if (emailTaken) return { success: false, messages: authMessages.emailTaken };
+						if (usernameTaken) return { success: false, messages: authMessages.usernameTaken };
+					}
+					return { success: false, messages: users.document.create.error };
+				}
+				this.documentKey = documentKey;
+				return { success: true, messages: users.document.create.success };
+			} catch (e) {
+				console.error('[Users.save] create failed:', e);
+				return { success: false, messages: users.document.create.error };
 			}
 		}
 
+		// Đã có documentKey -> đây là update, không phải create mới
+		const documentKey = this.documentKey;
 		try {
-			const newKey = `${collectionName}::${crypto.randomUUID()}`;
-			const res = await cbUsers.document.create({
-				documentKey: newKey,
-				content: { ...this.user, createdAt: new Date().toISOString() }
+			const now = new Date().toISOString();
+			// SỬA: Gán lại updatedAt vào instance memory this.user để dữ liệu trong bộ nhớ luôn đồng bộ
+			this.user.updatedAt = now;
+			const res = await cbUsers.document.update({
+				documentKey,
+				content: { ...this.user, updatedAt: now }
 			});
-			if (!res.ok) return { success: false, messages: users.document.create.error };
-			this.documentKey = newKey;
-			return { success: true, messages: users.document.create.success };
+			if (!res.ok) return { success: false, messages: users.document.update.error };
+			return { success: true, messages: users.document.update.success };
 		} catch {
-			return { success: false, messages: users.document.create.error };
+			return { success: false, messages: users.document.update.error };
 		}
 	}
 }
@@ -706,7 +729,9 @@ export class UserAdminService {
 		]);
 
 		const now = new Date().toISOString();
-		const newKey = `${collectionName}::${crypto.randomUUID()}`;
+		// documentKey xác định từ emailBlindIndex (giống Users.save) — create() FAIL với 409
+		// nếu key đã tồn tại, loại bỏ race condition check-then-act giữa isEmailTaken và create().
+		const newKey = Users.makeDocumentKey(emailBlindIndex);
 
 		const userDoc: User = {
 			firstname: data.firstname,
@@ -748,7 +773,20 @@ export class UserAdminService {
 				documentKey: newKey,
 				content: userDoc
 			});
-			if (!res.ok) return { success: false, messages: adminMessages.createFailed };
+			if (!res.ok) {
+				// Conflict 409 — email/username đã tồn tại do request cùng lúc lọt qua check ở trên.
+				// Tra lại blind index NGAY TẠI ĐIỂM NÀY (bản ghi vừa được request kia ghi xong)
+				// thay vì dùng kết quả check cũ — kết quả cũ có thể đã stale giữa chừng.
+				if (res.status === 409) {
+					const [emailTaken, usernameTaken] = await Promise.all([
+						Users.isEmailTaken(emailBlindIndex),
+						Users.isUsernameTaken(usernameBlindIndex)
+					]);
+					if (emailTaken) return { success: false, messages: authMessages.emailTaken };
+					if (usernameTaken) return { success: false, messages: authMessages.usernameTaken };
+				}
+				return { success: false, messages: adminMessages.createFailed };
+			}
 			return { success: true, messages: adminMessages.userCreated, documentKey: newKey };
 		} catch {
 			return { success: false, messages: adminMessages.createFailed };

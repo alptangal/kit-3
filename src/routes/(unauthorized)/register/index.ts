@@ -51,10 +51,6 @@ export const pageContents: { [k: string]: any } = {
 			vi: 'Địa chỉ Email',
 			en: 'Email address'
 		},
-		phone: {
-			vi: 'Số điện thoại',
-			en: 'Phone number'
-		},
 		password: {
 			vi: 'Mật khẩu',
 			en: 'Password'
@@ -62,6 +58,10 @@ export const pageContents: { [k: string]: any } = {
 		confirmPassword: {
 			en: 'Confirm password',
 			vi: 'Xác nhận mật khẩu'
+		},
+		phone: {
+			vi: 'Số điện thoại',
+			en: 'Phone number'
 		}
 	},
 	hints: {
@@ -78,8 +78,8 @@ export const pageContents: { [k: string]: any } = {
 			en: 'Must match the password entered above'
 		},
 		phoneHint: {
-			vi: 'Tùy chọn - dùng để khôi phục tài khoản và nhận thông báo',
-			en: 'Optional - for account recovery and notifications'
+			vi: 'Nhập số điện thoại Việt Nam (VD: 09xxxxxxxx hoặc +849xxxxxxxx)',
+			en: 'Enter Vietnamese phone number (e.g., 09xxxxxxxx or +849xxxxxxxx)'
 		}
 	},
 	terms: {
