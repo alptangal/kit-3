@@ -5,6 +5,7 @@ import { systemVault, initSystemVault } from '$store/initSystemVault';
 import { initApp } from '$store/init-app';
 import { verifyAccessToken } from '$lib/server/jwt';
 import { resolveLang, localize } from '$lib/server/i18n';
+import { cbData } from '$modules/couchbase/clients';
 
 declare global {
 	// eslint-disable-next-line no-var
@@ -19,7 +20,84 @@ if (!globalThis.__appInitialized) {
 // Ensure system vault is initialized before handling requests
 await initSystemVault();
 
-async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
+// ── Role name lookup (roleId → roleName) ──
+// Session cookie chỉ chứa roleId (documentKey trong name_roles, vd 'role-owner'),
+// nhưng PermissionChecker/UserAdminService cần roleName ('owner') để tra detail_roles.
+// Cache 60s mirroring grantsCache trong permission-checker.ts — name_roles ít thay đổi.
+const ROLE_CACHE_TTL_MS = 60_000;
+const cbRoles = cbData('name_roles');
+const roleNameCache = new Map<string, { roleName: string | null; expiresAt: number }>();
+
+async function getRoleNameByRoleId(roleId: string): Promise<string | null> {
+	const cached = roleNameCache.get(roleId);
+	if (cached && cached.expiresAt > Date.now()) {
+		return cached.roleName;
+	}
+	let roleName: string | null = null;
+	try {
+		const res = await cbRoles.document.get({ documentKey: roleId });
+		if (res.ok && res.data) {
+			const name = (res.data as { name?: string }).name;
+			if (typeof name === 'string' && name) roleName = name;
+		}
+	} catch (e) {
+		console.error('[hooks.server] Role lookup failed:', e);
+	}
+	// Chỉ cache khi tra thành công — lỗi tạm thời (mạng/token) không bị khoá cả TTL
+	if (roleName !== null) {
+		roleNameCache.set(roleId, { roleName, expiresAt: Date.now() + ROLE_CACHE_TTL_MS });
+	}
+	return roleName;
+}
+
+/** Session token dạng base64 JSON hiện tại: { userId, username, roleId, issuedAt } */
+interface Base64SessionPayload {
+	userId?: string;
+	username?: string;
+	roleId?: string;
+	issuedAt?: number;
+}
+
+/** Session tối đa 30 ngày (khớp maxAge cookie khi remember=true) */
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Parse session cookie dạng base64 JSON mà /api/login thực sự ghi ngày nay
+ * (login chưa ký JWT — cookie là base64 JSON thuần, xem ghi chú trong login +server.ts).
+ * Trả về payload + roleName đã tra từ name_roles, hoặc undefined nếu không hợp lệ.
+ */
+async function getUserFromBase64Session(
+	token: string
+): Promise<
+	{ userId: string; username: string; roleId: string; roleName: string | null } | undefined
+> {
+	let payload: Base64SessionPayload;
+	try {
+		// Buffer.from(token, 'base64') bỏ qua ký tự không hợp lệ thay vì throw,
+		// nên JSON.parse là bước xác thực thực sự — payload rác sẽ throw ở đây.
+		payload = JSON.parse(Buffer.from(token, 'base64').toString('utf-8')) as Base64SessionPayload;
+	} catch {
+		return undefined;
+	}
+
+	if (!payload || typeof payload !== 'object') return undefined;
+	if (!payload.userId || !payload.username || !payload.roleId) return undefined;
+
+	// Token quá hạn 30 ngày — coi như session đã hết hạn
+	if (typeof payload.issuedAt !== 'number' || Date.now() - payload.issuedAt > SESSION_MAX_AGE_MS) {
+		return undefined;
+	}
+
+	const roleName = await getRoleNameByRoleId(payload.roleId);
+	return { userId: payload.userId, username: payload.username, roleId: payload.roleId, roleName };
+}
+
+/**
+ * Dual-path: thử verifyAccessToken (JWT ES256) trước — future-proof cho khi login
+ * chuyển hẳn sang JWT thật; nếu fail thì fallback về parse base64 JSON session
+ * cookie mà login hiện đang ghi. KHÔNG đổi verifyAccessToken hay format cookie login.
+ */
+export async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 	try {
 		const payload = await verifyAccessToken(token);
 
@@ -36,14 +114,40 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 			email: '',
 			username: payload.username,
 			password: '', // Don't expose password
-			role: payload.roleId.includes('owner') ? 'admin' : payload.roleId.includes('manager') ? 'staff' : 'customer'
+			userId: payload.userId,
+			roleId: payload.roleId,
+			roleName:
+				typeof payload.roleId === 'string'
+					? (await getRoleNameByRoleId(payload.roleId)) ?? undefined
+					: undefined
 		};
 
 		return user;
-	} catch (error) {
-		console.error('[hooks.server] Token verification failed:', error);
+	} catch {
+		// Không phải JWT hợp lệ — thử parse base64 JSON session của login
+	}
+
+	const session = await getUserFromBase64Session(token);
+	if (!session) {
+		console.error('[hooks.server] Session token không hợp lệ hoặc đã hết hạn');
 		return undefined;
 	}
+
+	return {
+		firstName: session.username,
+		lastName: '',
+		dob: '',
+		region: 'South-Eastern Asia',
+		country: 'VN',
+		gender: 'Male',
+		phone: '',
+		email: '',
+		username: session.username,
+		password: '', // Don't expose password
+		userId: session.userId,
+		roleId: session.roleId,
+		roleName: session.roleName ?? undefined
+	};
 }
 
 export const handle: Handle = async ({ event, resolve }) => {

@@ -134,6 +134,14 @@ export interface MetaUser {
 	username: string;
 	password: string;
 	role?: 'admin' | 'staff' | 'customer';
+	/** documentKey của user trong Couchbase (vd 'users::...') — từ session token */
+	userId?: string;
+	/** documentKey của role trong name_roles (vd 'role-owner') — từ session token */
+	roleId?: string;
+	/** Tên role (vd 'owner' | 'manager') — tra từ name_roles theo roleId */
+	roleName?: string;
+	/** Chi nhánh của user (nếu có) — dùng cho scope 'own_branch' của PermissionChecker */
+	branchId?: string;
 }
 export type Region = // Africa
 	| 'Northern Africa'
