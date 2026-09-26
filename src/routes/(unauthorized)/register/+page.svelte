@@ -58,13 +58,14 @@
 				lastname: string;
 				username: string;
 				email: string;
+				phone: string;
 				password: string;
 		} = undefined;
 
 	const lang = $derived(client.browser?.language ?? 'en');
 	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
 
-	// ── Realtime Check State for Username & Email ──
+	// ── Realtime Check State for Username, Email & Phone ──
 	let usernameStatus = $state<{
 		checking: boolean;
 		checked: boolean;
@@ -91,11 +92,26 @@
 		available: false
 	});
 
+	let phoneStatus = $state<{
+		checking: boolean;
+		checked: boolean;
+		taken: boolean;
+		available: boolean;
+		message?: { vi: string; en: string };
+	}>({
+		checking: false,
+		checked: false,
+		taken: false,
+		available: false
+	});
+
 	let usernameTimeoutId: ReturnType<typeof setTimeout> | undefined;
 	let emailTimeoutId: ReturnType<typeof setTimeout> | undefined;
+	let phoneTimeoutId: ReturnType<typeof setTimeout> | undefined;
 	// Sequence to discard stale fetch results
 	let usernameSeq = 0;
 	let emailSeq = 0;
+	let phoneSeq = 0;
 
 	function resetUsernameStatus() {
 		usernameStatus.checking = false;
@@ -110,6 +126,13 @@
 		emailStatus.taken = false;
 		emailStatus.available = false;
 		emailStatus.message = undefined;
+	}
+	function resetPhoneStatus() {
+		phoneStatus.checking = false;
+		phoneStatus.checked = false;
+		phoneStatus.taken = false;
+		phoneStatus.available = false;
+		phoneStatus.message = undefined;
 	}
 
 	$effect(() => {
@@ -266,6 +289,82 @@
 		}, 400);
 	});
 
+	$effect(() => {
+		const keysReady = !!encryptionKeys;
+		const raw = formData.phone?.trim() ?? '';
+
+		if (!keysReady) {
+			if (phoneTimeoutId) {
+				clearTimeout(phoneTimeoutId);
+				phoneTimeoutId = undefined;
+			}
+			if (phoneStatus.checking) phoneStatus.checking = false;
+			return;
+		}
+
+		if (!raw) {
+			if (phoneTimeoutId) {
+				clearTimeout(phoneTimeoutId);
+				phoneTimeoutId = undefined;
+			}
+			resetPhoneStatus();
+			return;
+		}
+
+		if (!/^\+?[0-9][0-9\s-]{6,19}$/.test(raw)) {
+			if (phoneTimeoutId) {
+				clearTimeout(phoneTimeoutId);
+				phoneTimeoutId = undefined;
+			}
+			resetPhoneStatus();
+			return;
+		}
+
+		if (phoneTimeoutId) clearTimeout(phoneTimeoutId);
+		phoneStatus.checking = true;
+
+		const seq = ++phoneSeq;
+		const snapshot = raw;
+
+		phoneTimeoutId = setTimeout(async () => {
+			if (!encryptionKeys) {
+				if (seq === phoneSeq) phoneStatus.checking = false;
+				return;
+			}
+			const current = formData.phone?.trim() ?? '';
+			if (current !== snapshot || seq !== phoneSeq) {
+				if (seq === phoneSeq) phoneStatus.checking = false;
+				return;
+			}
+			try {
+				const data = (await encryption.fetchSecure(
+					'/api/register/check',
+					{
+						method: 'POST',
+						body: { phone: snapshot }
+					},
+					encryptionKeys
+				)) as any;
+				if (seq !== phoneSeq) return;
+				if (formData.phone?.trim() !== snapshot) return;
+
+				if (data.ok && data.phone && data.phone.valid) {
+					phoneStatus.checked = true;
+					phoneStatus.taken = !!data.phone.taken;
+					phoneStatus.available = !!data.phone.available;
+					phoneStatus.message = data.phone.message;
+				} else {
+					resetPhoneStatus();
+				}
+			} catch (e) {
+				console.error('Error checking phone:', e);
+				if (seq === phoneSeq) phoneStatus.checked = false;
+			} finally {
+				if (seq === phoneSeq) phoneStatus.checking = false;
+			}
+		}, 400);
+	});
+
 	// ── Password Strength — sophisticated scoring ──
 	function estimatePasswordStrength(
 		pwd: string,
@@ -375,6 +474,7 @@
 			lastname: formData.lastname?.trim() ?? '',
 			username: formData.username?.trim() ?? '',
 			email: formData.email?.trim() ?? '',
+			phone: formData.phone?.trim() ?? '',
 			password: formData.password ?? ''
 		};
 
@@ -383,13 +483,16 @@
 			!!current.lastname &&
 			!!current.username &&
 			!!current.email &&
+			!!current.phone &&
 			!!current.password &&
 			formData.password.length >= 8 &&
 			formData.password === formData.confirmPassword &&
 			!usernameStatus.taken &&
 			!emailStatus.taken &&
+			!phoneStatus.taken &&
 			!usernameStatus.checking &&
 			!emailStatus.checking &&
+			!phoneStatus.checking &&
 			agreeTerms;
 
 		const normalizeForCompare = (obj: typeof current | typeof previousSubmited) => {
@@ -430,6 +533,12 @@
 		}
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email?.trim() ?? '')) {
 			return lang === 'vi' ? 'Định dạng email không hợp lệ' : 'Invalid email format';
+		}
+		if (!formData.phone?.trim()) {
+			return lang === 'vi' ? 'Vui lòng nhập số điện thoại' : 'Please enter your phone number';
+		}
+		if (!/^\+?[0-9][0-9\s\-]{5,20}$/.test(formData.phone?.trim() ?? '')) {
+			return lang === 'vi' ? 'Số điện thoại không hợp lệ' : 'Invalid phone number';
 		}
 		if (!formData.password) {
 			return lang === 'vi' ? 'Vui lòng nhập mật khẩu' : 'Please enter a password';
@@ -475,7 +584,7 @@
 				lastname: formData.lastname?.trim() ?? '',
 				username: formData.username?.trim() ?? '',
 				email: formData.email?.trim() ?? '',
-				phone: formData.phone?.trim() || undefined,
+				phone: formData.phone?.trim() ?? '',
 				password: formData.password ?? '',
 				publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.publicKey, 'spki')
 			};
@@ -498,6 +607,7 @@
 					lastname: requestBody.lastname,
 					username: requestBody.username,
 					email: requestBody.email,
+					phone: requestBody.phone ?? '',
 					password: requestBody.password
 				};
 
@@ -534,6 +644,7 @@
 		formData.lastname = '';
 		formData.username = '';
 		formData.email = '';
+		formData.phone = '';
 		formData.password = '';
 		formData.confirmPassword = '';
 		honeypot = '';
@@ -548,8 +659,13 @@
 			clearTimeout(emailTimeoutId);
 			emailTimeoutId = undefined;
 		}
+		if (phoneTimeoutId) {
+			clearTimeout(phoneTimeoutId);
+			phoneTimeoutId = undefined;
+		}
 		usernameSeq++;
 		emailSeq++;
+		phoneSeq++;
 		usernameStatus = {
 			checking: false,
 			checked: false,
@@ -557,6 +673,12 @@
 			available: false
 		};
 		emailStatus = {
+			checking: false,
+			checked: false,
+			taken: false,
+			available: false
+		};
+		phoneStatus = {
 			checking: false,
 			checked: false,
 			taken: false,
@@ -578,6 +700,10 @@
 		if (emailTimeoutId) {
 			clearTimeout(emailTimeoutId);
 			emailTimeoutId = undefined;
+		}
+		if (phoneTimeoutId) {
+			clearTimeout(phoneTimeoutId);
+			phoneTimeoutId = undefined;
 		}
 	});
 </script>
@@ -729,16 +855,18 @@
 			{/if}
 		</TextField>
 
-		<!-- Phone field (optional) -->
-		<TextField name="phone">
+		<!-- Phone field -->
+		<TextField name="phone" required>
 			<Label>{pageContents.textFields.phone[lang] ?? 'Phone number'}</Label>
 			<Input
 				type="phone"
 				inputmode="tel"
 				bind:value={formData.phone}
-				placeholder={{ vi: 'Nhập số điện thoại (tùy chọn)', en: 'Enter phone number (optional)' }}
+				placeholder={{ vi: 'Nhập số điện thoại', en: 'Enter phone number' }}
 				autocomplete="tel"
+				loading={phoneStatus.checking}
 				disabled={loading}
+				color={phoneStatus.checked ? (phoneStatus.taken ? 'error' : 'success') : undefined}
 				phoneSuggest={true}
 			>
 				{#snippet leading()}
@@ -747,8 +875,18 @@
 					</svg>
 				{/snippet}
 			</Input>
-			<Description class="form-hint">{pageContents.hints.phoneHint[lang] ?? 'Optional - for account recovery and notifications'}</Description>
-			<FieldMessages />
+			{#if phoneStatus.checked && phoneStatus.taken}
+				<Description persistent={true} color="error" class="form-hint error-hint">
+					{phoneStatus.message?.[currentLang] ?? 'Phone number is already taken'}
+				</Description>
+			{:else if phoneStatus.checked && phoneStatus.available}
+				<Description persistent={true} color="success" class="form-hint success-hint">
+					{phoneStatus.message?.[currentLang] ?? 'Phone number is available'}
+				</Description>
+			{:else}
+				<Description class="form-hint">{pageContents.hints.phoneHint[lang]}</Description>
+				<FieldMessages />
+			{/if}
 		</TextField>
 
 		<!-- Password field -->
