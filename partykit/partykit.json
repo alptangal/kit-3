@@ -6,5 +6,8 @@
 	"serve": {
 		"path": "public",
 		"build": "src/client.ts"
+	},
+	"vars": {
+		"PARTYKIT_INTERNAL_TOKEN": "dev-insecure-token-change-me"
 	}
 }

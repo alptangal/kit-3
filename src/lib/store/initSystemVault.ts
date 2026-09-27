@@ -2,6 +2,7 @@
 import { cbVault } from '$modules/couchbase/clients';
 import { encryption } from '$modules/encryption';
 import { vault_password, cb_collectionName_vault } from '$env/static/private';
+import { pushPublicKeyToPartyKit } from '$lib/server/partykit-push';
 
 export let systemVault: {
 	privateKey: CryptoKey;
@@ -109,4 +110,11 @@ export async function initSystemVault() {
 		}
 	}
 	systemVault = { publicKey, privateKey, indexKey };
+
+	// Push public key sang PartyKit (fire-and-forget, có retry + không bao giờ throw)
+	// để client lấy key qua WS thay vì HTTP mỗi lần fetchSecure.
+	encryption
+		.exportKeyToBase64(publicKey, 'spki')
+		.then((publicKeyB64) => pushPublicKeyToPartyKit(publicKeyB64))
+		.catch((e) => console.error('[initSystemVault] push public key to PartyKit failed:', e));
 }

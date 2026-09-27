@@ -12,6 +12,7 @@
  */
 
 import type { ServerResponse } from '$interfaces/basic';
+import * as serverKey from '$modules/server-key';
 // ============ Helpers: encode/decode để lưu DB (DB không lưu binary trực tiếp tốt) ============
 
 function bufToBase64(buf: ArrayLike<number> | ArrayBuffer) {
@@ -205,22 +206,32 @@ async function changePassword(
 		wrappedDekB64: bufToBase64(newWrappedDek)
 	};
 }
+// WS-first: lấy b64 từ module server-key (PartyKit WS + HTTP fallback).
+// Giữ tên/signature cũ; HTTP fetch /api/encryption/public-key vẫn là fallback bên trong.
+// SỬA: cache CryptoKey theo b64 — trước đây fetch key + import lại trên MỖI lần gọi
+// fetchSecure; giờ chỉ import lại khi b64 thay đổi (onServerKeyChange clear cache).
 async function getServerPublicKeyB64(): Promise<string | undefined> {
-	try {
-		const res = await fetch('/api/encryption/public-key');
-		if (res.ok) {
-			const js = await res.json();
-			return js['data']['publicKeyB64'];
-		}
-		return;
-	} catch (e) {
-		throw new Error('Something went wrong with api/public-key');
-	}
+	return await serverKey.getServerPublicKeyB64();
 }
+// Cache {b64, cryptoKey} — reuse CryptoKey khi key chưa đổi
+let serverPublicKeyCache: { b64: string; cryptoKey: CryptoKey } | undefined;
+
+function clearServerPublicKeyCache() {
+	serverPublicKeyCache = undefined;
+}
+serverKey.onServerKeyChange(() => {
+	clearServerPublicKeyCache();
+});
+
 async function getServerPublicKey(): Promise<CryptoKey | undefined> {
 	const serverPublicKeyB64 = await getServerPublicKeyB64();
-	if (serverPublicKeyB64) return await importPublicKey(serverPublicKeyB64);
-	return;
+	if (!serverPublicKeyB64) return;
+	if (serverPublicKeyCache && serverPublicKeyCache.b64 === serverPublicKeyB64) {
+		return serverPublicKeyCache.cryptoKey;
+	}
+	const cryptoKey = await importPublicKey(serverPublicKeyB64);
+	serverPublicKeyCache = { b64: serverPublicKeyB64, cryptoKey };
+	return cryptoKey;
 }
 async function generateRSAKeyPair() {
 	const keyPair = await crypto.subtle.generateKey(
