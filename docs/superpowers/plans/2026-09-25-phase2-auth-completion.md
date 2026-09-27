@@ -2123,3 +2123,31 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>
 3. **Test commands chạy trên MAIN checkout** (server port 3000 + node_modules ở đó); commit thực hiện trong WORKTREE. Copy-verify bằng Get-FileHash SHA256 mỗi file.
 4. **Cuối cùng:** review-package + code-reviewer (most capable model), re-grade findings, ONE fix pass Critical/Important (mỗi fix RED→GREEN + green suite), minors → ledger `Final: minor (deferred):`. Thu thập mọi `Ruling:` lines vào final message. Xóa workspace sau khi sạch.
 5. **KHÔNG push** — không bao giờ được yêu cầu. Origin có PAT nhúng — không echo URL.
+
+---
+
+## Phase 2 Verification Status (2026-09-27)
+
+Phase 2 (RBAC + Admin API + Admin UI + PartyKit WebSocket public-key) đã hoàn thành và verify end-to-end. Các bug nghiêm trọng được phát hiện và sửa trong quá trình verification:
+
+### Bug đã fix (commit 8225f95)
+1. **Reserved word N1QL 'scope'** — `PermissionChecker.getAllGrants()` và `UserAdminService.listGrants()` dùng `SELECT ... scope FROM detail_roles` → syntax error 400 mọi lần → grants cache rỗng → **mọi role mất toàn bộ quyền** (owner bounce khỏi /admin, admin API 403/500). Fix: `SELECT *` + unwrap `{ detail_roles: {...} }`.
+2. **Reserved word N1QL 'level'** — `UserAdminService.listRoles()` dùng `ORDER BY level` → 400 → /api/admin/roles trả 500. Fix: `SELECT META().id AS documentKey, *` + unwrap + sort bằng JS.
+3. **Layout group (authorized) trống** — `src/routes/(authorized)/+layout.svelte` rỗng từ commit gốc, thiếu `{@render children()}` → mọi trang authorised (/admin, /profile) render **trang trắng**. Fix: thêm `{@render children()}`.
+4. **partykit-push đọc process.env** — SvelteKit dev không populate process.env từ .env → push key lên PartyKit 401. Fix: `$env/dynamic/private` (commit a784324).
+5. **Rate limit /api/admin là dead code** — wired `applyRateLimit` vào `readAdminRequest` (commit 04aa94c).
+
+### Verification results
+- Unit tests: 103/103 pass (98 cũ + 5 regression test mới cho reserved word)
+- UI check: 61/61 pass, 2 skipped (chromium/firefox/webkit)
+- Owner login → /admin: bảng user load đầy đủ (roles tiếng Việt, status normalized), CRUD Change status (suspend → active) hoạt động end-to-end qua fetchSecure
+- Customer bị 303 về / khi vào /admin (RBAC guard đúng)
+- PartyKit: push key auth OK, WS broadcast + onConnect delivery OK, MITM qua WS bị bỏ qua (onMessage không nhận key update)
+- Register → pending_verification → verify-email (dev outbox) → login OK
+
+### Cần lưu ý
+- Password owner đã reset trong quá trình test: `OwnerTest2026!x` (reset bằng flow forgot-password — flow hoạt động đúng)
+- App log password ra console khi login attempt (`[handleLogin] Called, username: ... password: ...`) — nên xoá trong pass security tiếp theo
+- Localhost nằm trong WHITELIST_IPS của rate limit → không test được 429 qua curl local (by design)
+- HTTPS → wss://localhost bị mixed-content block → client auto fallback HTTP sau 700ms; muốn WS-first thật cần TLS proxy cho PartyKit (env PUBLIC_PARTYKIT_PROTOCOL đã có sẵn)
+- PartyKit node_modules cần 2 patch trên Windows (bin.mjs fileURLToPath, miniflare ReadableStream) — không track trong git
