@@ -12,6 +12,7 @@ import { systemVault } from '$store/initSystemVault';
 import { resolveLang, localizePayload } from '$lib/server/i18n';
 import { Users, adminMessages, authMessages, type ActorContext } from '$lib/server/db/users';
 import { cbData } from '$modules/couchbase/clients';
+import { applyRateLimit } from '$lib/server/rate-limit';
 import type { LanguageCode, ServerResponse, TranslateContent } from '$interfaces/basic';
 
 const cbRoles = cbData('name_roles');
@@ -27,6 +28,15 @@ export async function readAdminRequest<T>(event: RequestEvent): Promise<
 > {
 	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
 	const lang = resolveLang(event.request.headers.get('accept-language'));
+
+	// 0. Rate limit trước khi decrypt — tiết kiệm compute khi bị từ chối
+	// (config '/api/admin' trong rate-limit.ts khớp mọi route /api/admin/** qua prefix)
+	const rateLimited = await applyRateLimit(
+		event.request,
+		event.getClientAddress,
+		event.url.pathname
+	);
+	if (rateLimited) return { ok: false, response: rateLimited };
 
 	// 1. Kiểm tra systemVault đã sẵn sàng
 	if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {

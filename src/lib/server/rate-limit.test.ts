@@ -19,6 +19,7 @@ describe('Rate Limiting Module', () => {
 		resetRateLimit('192.168.1.2', '/api/register');
 		resetRateLimit('127.0.0.1', '/api/login');
 		resetRateLimit('::1', '/api/login');
+		resetRateLimit('10.0.0.5', '/api/admin/users/list');
 	});
 
 	describe('checkRateLimit', () => {
@@ -287,6 +288,31 @@ describe('Rate Limiting Module', () => {
 			const result = checkRateLimit('192.168.1.1', '/api/login');
 			expect(result.resetTime).toBeDefined();
 			expect(typeof result.resetTime).toBe('number');
+		});
+	});
+
+	describe('Admin API prefix matching', () => {
+		it('should allow 60 requests/min on /api/admin/** via prefix match', () => {
+			// 60 requests hợp lệ
+			for (let i = 0; i < 60; i++) {
+				expect(checkRateLimit('10.0.0.5', '/api/admin/users/list').allowed).toBe(true);
+			}
+			// Request 61 bị từ chối
+			const blocked = checkRateLimit('10.0.0.5', '/api/admin/users/list');
+			expect(blocked.allowed).toBe(false);
+			expect(blocked.remaining).toBe(0);
+			expect(blocked.retryAfter).toBeGreaterThan(0);
+		});
+
+		it('should apply same limit to every /api/admin/* subpath', () => {
+			for (let i = 0; i < 60; i++) {
+				expect(checkRateLimit('10.0.0.5', '/api/admin/users/set-role').allowed).toBe(true);
+			}
+			// Cùng prefix → cùng bucket per-path: set-role đầy thì delete cũng đầy
+			// (key gồm ip + pathname riêng từng path)
+			const blocked = checkRateLimit('10.0.0.5', '/api/admin/users/delete');
+			// pathname khác → entry riêng → vẫn allowed
+			expect(blocked.allowed).toBe(true);
 		});
 	});
 });

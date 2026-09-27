@@ -1,7 +1,11 @@
 // Test cho push public key sang PartyKit — retry/backoff, auth header, không throw
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { pushPublicKeyToPartyKit } from './partykit-push';
+// Module đọc env qua $env/dynamic/private — mock để điều khiển giá trị trong test
+const testEnv = vi.hoisted(() => ({}) as Record<string, string | undefined>);
+vi.mock('$env/dynamic/private', () => ({ env: testEnv }));
+
+const { pushPublicKeyToPartyKit } = await import('./partykit-push');
 
 const FAKE_KEY = 'A'.repeat(392); // giả lập base64 SPKI RSA-2048
 
@@ -11,8 +15,7 @@ describe('pushPublicKeyToPartyKit', () => {
 	beforeEach(() => {
 		vi.stubGlobal('fetch', fetchMock);
 		fetchMock.mockReset();
-		delete process.env.PARTYKIT_PUSH_URL;
-		delete process.env.PARTYKIT_INTERNAL_TOKEN;
+		for (const key of Object.keys(testEnv)) delete testEnv[key];
 	});
 
 	afterEach(() => {
@@ -34,8 +37,8 @@ describe('pushPublicKeyToPartyKit', () => {
 	});
 
 	it('dùng env PARTYKIT_PUSH_URL + PARTYKIT_INTERNAL_TOKEN khi có', async () => {
-		process.env.PARTYKIT_PUSH_URL = 'http://example.internal/party/server-keys';
-		process.env.PARTYKIT_INTERNAL_TOKEN = 'secret-token';
+		testEnv.PARTYKIT_PUSH_URL = 'http://example.internal/party/server-keys';
+		testEnv.PARTYKIT_INTERNAL_TOKEN = 'secret-token';
 		fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
 		await pushPublicKeyToPartyKit(FAKE_KEY);
