@@ -27,10 +27,6 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
   ],
-  webServer: {
-    command: 'echo "Server already running"',
-    url: `https://localhost:${process.env.UI_CHECK_PORT ?? 3000}`,
-    reuseExistingServer: true,
-    timeout: 5000,
-  },
+  // webServer block removed — dev server already running on port 3000
+  // (echo command in old config did not start a server, causing timeout)
 });
