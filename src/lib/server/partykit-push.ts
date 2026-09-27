@@ -1,5 +1,7 @@
 //$lib/server/partykit-push.ts
 
+import { env } from '$env/dynamic/private';
+
 /**
  * Push public key của system vault sang PartyKit (room "server-keys") khi SvelteKit boot.
  * PartyKit lưu key vào Durable Object và broadcast cho mọi WS client đang kết nối.
@@ -27,8 +29,8 @@ export async function pushPublicKeyToPartyKit(
 	publicKeyB64: string,
 	options?: { maxRetries?: number; initialBackoffMs?: number }
 ): Promise<void> {
-	const url = process.env.PARTYKIT_PUSH_URL ?? DEFAULT_PUSH_URL;
-	const token = process.env.PARTYKIT_INTERNAL_TOKEN ?? DEFAULT_TOKEN;
+	const url = env.PARTYKIT_PUSH_URL ?? DEFAULT_PUSH_URL;
+	const token = env.PARTYKIT_INTERNAL_TOKEN ?? DEFAULT_TOKEN;
 	const maxRetries = options?.maxRetries ?? MAX_RETRIES;
 	const initialBackoffMs = options?.initialBackoffMs ?? INITIAL_BACKOFF_MS;
 
