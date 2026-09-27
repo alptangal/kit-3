@@ -34,7 +34,10 @@ async function getAllGrants(): Promise<DetailRoleDoc[]> {
 		return grantsCache.data;
 	}
 	const res = await cbDetailRoles.document.query({
-		statement: `SELECT roleName, permissionKey, scope FROM ${detailRolesKeyspace}`,
+		// Lưu ý: không thể SELECT cột 'scope' trực tiếp — nó là từ khoá reserved trong
+		// N1QL và client này từ chối cả dạng backtick-escape. Dùng SELECT * rồi unwrap
+		// object con theo tên collection (Couchbase bọc mỗi row trong { <collection>: {...} }).
+		statement: `SELECT * FROM ${detailRolesKeyspace}`,
 		readonly: true
 	});
 	// SỬA: nếu query lỗi, KHÔNG nên cache kết quả rỗng (sẽ khoá quyền cả phút dù lỗi tạm thời
@@ -43,7 +46,11 @@ async function getAllGrants(): Promise<DetailRoleDoc[]> {
 		console.error('[PermissionChecker] getAllGrants query failed:', res.message ?? res.status);
 		return grantsCache?.data ?? []; // fallback về cache cũ (nếu có) thay vì luôn rỗng
 	}
-	const data = res.ok ? ((res.data?.results ?? []) as DetailRoleDoc[]) : [];
+	const data = res.ok
+		? (((res.data?.results ?? []) as Record<string, unknown>[]).map(
+				(row) => (row.detail_roles ?? row) as DetailRoleDoc
+			) as DetailRoleDoc[])
+		: [];
 	grantsCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
 	return data;
 }

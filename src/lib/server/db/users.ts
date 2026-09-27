@@ -1194,12 +1194,20 @@ export class UserAdminService {
 		{ success: false; messages: TranslateContent } | { success: true; roles: unknown[] }
 	> {
 		const keyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`name_roles\``;
+		// 'level' là từ khoá reserved N1QL (như 'scope' — xem permission-checker.ts),
+		// không SELECT được trực tiếp: SELECT * + unwrap + sort bằng JS.
 		const res = await cbRoles.document.query({
-			statement: `SELECT META().id AS documentKey, name, displayName, description, level, isSystem, createdAt, updatedAt FROM ${keyspace} ORDER BY level DESC`,
+			statement: `SELECT META().id AS documentKey, * FROM ${keyspace}`,
 			readonly: true
 		});
 		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
-		return { success: true, roles: res.data?.results ?? [] };
+		// Row: { documentKey, name_roles: { name, displayName, ... } }
+		const roles = ((res.data?.results ?? []) as Record<string, any>[]).map((row) => ({
+			documentKey: row.documentKey,
+			...(row.name_roles ?? {})
+		}));
+		roles.sort((a, b) => (b.level ?? 0) - (a.level ?? 0));
+		return { success: true, roles };
 	}
 
 	/** Toàn bộ statuses trong user_status. */
@@ -1220,11 +1228,16 @@ export class UserAdminService {
 		{ success: false; messages: TranslateContent } | { success: true; grants: unknown[] }
 	> {
 		const keyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`detail_roles\``;
+		// Không SELECT cột 'scope' trực tiếp — reserved word N1QL (xem permission-checker.ts).
+		// SELECT * rồi unwrap object con keyed theo tên collection.
 		const res = await cbDetailRoles.document.query({
-			statement: `SELECT roleName, permissionKey, scope FROM ${keyspace}`,
+			statement: `SELECT * FROM ${keyspace}`,
 			readonly: true
 		});
 		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
-		return { success: true, grants: res.data?.results ?? [] };
+		const grants = ((res.data?.results ?? []) as Record<string, unknown>[]).map(
+			(row) => row.detail_roles ?? row
+		);
+		return { success: true, grants };
 	}
 }
