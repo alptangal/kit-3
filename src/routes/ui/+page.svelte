@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { iconify } from '$assets/icons/iconify';
 	import { Button, Tooltip } from '$components/element';
-	import { Input } from '$components/form';
+	import { Input, Checkbox } from '$components/form';
 	import { onMount } from 'svelte';
+
+	let checkboxChecked = $state(false);
 
 	onMount(() => {});
 </script>
@@ -95,4 +97,5 @@
 			/>
 		{/snippet}
 	</Input>
+	<Checkbox bind:checked={checkboxChecked}>Checkbox demo</Checkbox>
 </div>

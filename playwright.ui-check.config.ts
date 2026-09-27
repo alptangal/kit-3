@@ -7,8 +7,10 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
+  // UI_CHECK_PORT cho phép chạy test với worktree dev server (vd 3001)
+  // khi port 3000 đã bị main checkout chiếm
   use: {
-    baseURL: 'https://localhost:3000',
+    baseURL: `https://localhost:${process.env.UI_CHECK_PORT ?? 3000}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -27,7 +29,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'echo "Server already running"',
-    url: 'https://localhost:3000',
+    url: `https://localhost:${process.env.UI_CHECK_PORT ?? 3000}`,
     reuseExistingServer: true,
     timeout: 5000,
   },

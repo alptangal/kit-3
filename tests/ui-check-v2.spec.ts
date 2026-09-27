@@ -3,6 +3,16 @@ import path from 'path';
 
 const screenshotDir = path.resolve(process.cwd(), 'test-results-ui-check');
 
+// Chụp clip quanh element nhưng clamp vào viewport để tránh
+// "Clipped area is either empty or outside the resulting image"
+function clipAround(page: any, box: { x: number; y: number; width: number; height: number }) {
+  const vw = page.viewportSize()?.width ?? 1280;
+  const vh = page.viewportSize()?.height ?? 720;
+  const width = Math.min(Math.max(box.width + 50, 200), vw - box.x);
+  const height = Math.min(Math.max(box.height + 50, 100), vh - box.y);
+  return { x: box.x, y: box.y, width: Math.max(width, 1), height: Math.max(height, 1) };
+}
+
 async function ensureDir(page: any, dir: string) {
   await page.evaluate((path: string) => {
     // @ts-ignore
@@ -14,8 +24,11 @@ async function ensureDir(page: any, dir: string) {
 const components = [
   { name: 'Button', selector: 'button' },
   { name: 'Tooltip-Trigger', selector: 'button svg, button:has-text("Tooltip")' },
-  { name: 'Input-Number', selector: 'input[type="number"]' },
-  { name: 'Checkbox', selector: 'input[type="checkbox"]' },
+  // Input component renders type="number" as a text input with class
+  // 'input-editor-number' (custom visual number keyboard design)
+  { name: 'Input-Number', selector: '.input-editor-number input' },
+  // Checkbox component renders a custom div.checkbox-root (no native input)
+  { name: 'Checkbox', selector: 'div.checkbox-root' },
 ];
 
 const projects = [devices['Desktop Chrome'], devices['Desktop Firefox'], devices['Desktop Safari']];
@@ -40,7 +53,7 @@ test.describe('UI Component Cross-Browser Check', () => {
       await expect(button).toBeVisible();
       const box = await button.boundingBox();
       if (box) {
-        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-default.png`, clip: { x: box.x, y: box.y, width: Math.max(box.width + 50, 200), height: Math.max(box.height + 50, 100) } });
+        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-default.png`, clip: clipAround(page, box) });
       } else {
         await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-default.png` });
       }
@@ -48,13 +61,13 @@ test.describe('UI Component Cross-Browser Check', () => {
       await button.hover();
       await page.waitForTimeout(300);
       if (box) {
-        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-hover.png`, clip: { x: box.x, y: box.y, width: Math.max(box.width + 50, 200), height: Math.max(box.height + 50, 100) } });
+        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-hover.png`, clip: clipAround(page, box) });
       }
 
       await button.focus();
       await page.waitForTimeout(300);
       if (box) {
-        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-focus.png`, clip: { x: box.x, y: box.y, width: Math.max(box.width + 50, 200), height: Math.max(box.height + 50, 100) } });
+        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-focus.png`, clip: clipAround(page, box) });
       }
     });
 
@@ -85,7 +98,7 @@ test.describe('UI Component Cross-Browser Check', () => {
     });
 
     test(`${projectName}: Input - default/focus/type`, async ({ page }) => {
-      const input = page.locator('input[type="number"]').first();
+      const input = page.locator('.input-editor-number input').first();
       if (await input.count() > 0) {
         const box = await input.boundingBox();
         await input.focus();
@@ -109,11 +122,13 @@ test.describe('UI Component Cross-Browser Check', () => {
 
   test('webkit: Sticky hover + clipboard API check', async ({ page, browserName }, testInfo) => {
     test.skip(browserName !== 'webkit');
-    const input = page.locator('input[type="number"]').first();
+    const input = page.locator('.input-editor-number input').first();
     if (await input.count() > 0) {
       const box = await input.boundingBox();
       if (box) {
-        await input.hover();
+        // Input component có overlay div chặn pointer events trên wrapper,
+        // nên dùng mouse.move tới tọa độ thay vì locator.hover()
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
         await page.waitForTimeout(500);
         const hoverBox = await input.boundingBox();
         // Check if sticky hover persists (box should not be null)
