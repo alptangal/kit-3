@@ -150,12 +150,12 @@
 			text-decoration: none;
 			font-size: 0.875rem;
 			border-radius: 0 0.25rem 0.25rem 0;
-			transition: background-color 0.2s, padding-left 0.2s;
+			transition: background-color 0.2s, transform 0.2s;
 			margin-left: -0.5rem;
 
 			&:hover {
 				background: var(--foreground-200, #27272a);
-				padding-left: 1rem;
+				transform: translateX(0.5rem);
 			}
 
 			&--active {
