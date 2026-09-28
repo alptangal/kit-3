@@ -133,6 +133,10 @@ const adminMessages = {
 	} as TranslateContent
 };
 
+// Exported cho src/lib/server/admin/api.ts — dùng so sánh identity (===) để map
+// messages từ service sang HTTP status code phù hợp.
+export { adminMessages, authMessages };
+
 type UserDocument = User & { _id: string };
 
 // SỬA (mới): danh sách field "an toàn" được phép trả ra ngoài cho tầng quản trị

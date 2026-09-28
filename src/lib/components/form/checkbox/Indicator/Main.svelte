@@ -80,9 +80,9 @@
 		@apply flex items-center justify-center;
 		/* Modern standard checkbox size: 20px (1.25rem) */
 		/* This is smaller than the size token system (xs=30px) for better UX */
-		width: 1.25rem;
-		height: 1.25rem;
-		--border-width: 2px; /* Define border-width CSS variable for checkmark stroke-width */
+		width: var(--min-height-sm);
+		height: var(--min-height-sm);
+		--border-width: var(--border-width-md); /* Define border-width CSS variable for checkmark stroke-width */
 		border-width: var(--border-width);
 		border-style: solid;
 		border-color: var(--color);
