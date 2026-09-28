@@ -10,7 +10,8 @@
 	import { beforeNavigate, onNavigate } from '$app/navigation';
 	import type { BasicProps } from '$components/interface.js';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { Toast, ToastWrapper } from '$components/element';
+	import { Toast } from '$components/element';
+import ToastWrapper from '$components/element/toast/Wrapper/Main.svelte';
 	let { data, children } = $props();
 
 	let configs = $state({

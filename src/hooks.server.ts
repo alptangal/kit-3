@@ -70,7 +70,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
 
 	// Public paths that don't require authentication
-	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui'];
+	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test'];
 	const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
 
 	// API routes that don't require authentication
