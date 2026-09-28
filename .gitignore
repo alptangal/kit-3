@@ -1,0 +1,19 @@
+# Build output
+.svelte-kit/
+node_modules/
+
+# E2E run logs (tests/run-all.mjs writes these every run)
+tests/test-results.log
+tests/*.log
+
+# Superpowers SDD workspaces (plan briefs, ledgers, review packages)
+.superpowers/
+CLAUDE.md
+.claude/
+
+# PartyKit: track source + config, ignore deps/build/env
+partykit/node_modules/
+partykit/build/
+partykit/public/dist/
+partykit/.env
+.env
