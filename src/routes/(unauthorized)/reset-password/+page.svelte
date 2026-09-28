@@ -34,7 +34,7 @@
 
 	// Token từ URL — không có hoặc quá ngắn → invalid state ngay lập tức
 	const resetToken = $derived(page.url.searchParams.get('token') ?? '');
-	let tokenInvalid = $state(resetToken.length < 32);
+	const tokenInvalid = $derived(resetToken.length < 32);
 
 	// Trạng thái disabled nút submit
 	const status = $derived.by(() => {

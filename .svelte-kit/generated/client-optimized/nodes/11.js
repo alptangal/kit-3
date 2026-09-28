@@ -1,0 +1,1 @@
+export { default as component } from "../../../../src/routes/(unauthorized)/forgot-password/+page.svelte";

@@ -34,7 +34,7 @@
 		</div>
 		<div class="footer__copyright">
 			<p>
-				{@if configs.showPoweredBy}
+				{#if configs.showPoweredBy}
 					© {#if configs.year}{configs.year}{/if} {configs.companyName || 'Công ty'}
 				{:else}
 					© {#if configs.year}{configs.year}{/if} All rights reserved

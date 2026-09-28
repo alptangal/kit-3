@@ -74,7 +74,7 @@
 				</button>
 			{/if}
 		</div>
-	</nav>
+</nav>
 {/if}
 
 <style lang="scss">
@@ -82,76 +82,76 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0.5rem 1rem;
-		background: var(--background, #09090b);
-		border-bottom: 1px solid var(--border, rgb(255 255 255 / 0.08));
-		min-height: 3rem;
+		padding: var(--padding-md) var(--padding-lg);
+		background: var(--background);
+		border-bottom: var(--border-width) solid var(--border, rgb(255 255 255 / 0.08));
+		min-height: var(--min-height-lg);
 		width: 100%;
 
 		&__left {
 			display: flex;
 			align-items: center;
-			gap: 0.5rem;
+			gap: var(--gap-md);
 		}
 		&__right {
 			display: flex;
 			align-items: center;
-			gap: 0.5rem;
+			gap: var(--gap-md);
 		}
 		&__avatar {
-			width: 2rem;
-			height: 2rem;
-			border-radius: 50%;
+			width: var(--min-height-md);
+			height: var(--min-height-md);
+			border-radius: var(--radius-full);
 			object-fit: cover;
 		}
 		&__name {
-			font-size: 0.875rem;
+			font-size: var(--font-size-sm);
 			font-weight: 500;
-			color: var(--foreground, #f4f4f5);
+			color: var(--foreground);
 		}
 		&__role {
-			font-size: 0.75rem;
-			color: var(--foreground-400, #71717a);
-			background: var(--foreground-200, #27272a);
-			padding: 0.125rem 0.5rem;
-			border-radius: var(--radius-full, 9999px);
+			font-size: var(--font-size-xs);
+			color: var(--foreground-400);
+			background: var(--foreground-200);
+			padding: var(--padding-xs) var(--padding-sm);
+			border-radius: var(--radius-full);
 		}
 		&__icon-btn {
 			position: relative;
 			background: transparent;
 			border: none;
 			cursor: pointer;
-			padding: 0.25rem;
-			color: var(--foreground, #f4f4f5);
-			border-radius: var(--radius-sm, 0.25rem);
+			padding: var(--padding-xs);
+			color: var(--foreground);
+			border-radius: var(--radius-sm);
 			&:hover {
-				background: var(--foreground-200, #27272a);
+				background: var(--foreground-200);
 			}
 			&--logout:hover {
-				background: var(--danger-500, #ef4444);
+				background: var(--danger-500);
 			}
 		}
 		&__icon {
-			font-size: 1.25rem;
+			font-size: var(--font-size-lg);
 		}
 		&__badge {
 			position: absolute;
-			top: -0.25rem;
-			right: -0.25rem;
-			background: var(--danger-500, #ef4444);
-			color: #fff;
-			font-size: 0.625rem;
+			top: calc(var(--padding-xs) * -1);
+			right: calc(var(--padding-xs) * -1);
+			background: var(--danger-500);
+			color: var(--color-white);
+			font-size: var(--font-size-xs);
 			font-weight: 600;
-			min-width: 1rem;
-			height: 1rem;
+			min-width: var(--min-height-xs);
+			height: var(--min-height-xs);
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			border-radius: var(--radius-full, 9999px);
+			border-radius: var(--radius-full);
 		}
 		&__placeholder {
-			color: var(--foreground-400, #71717a);
-			font-size: 0.875rem;
+			color: var(--foreground-400);
+			font-size: var(--font-size-sm);
 		}
 	}
 </style>

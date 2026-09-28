@@ -2,6 +2,10 @@ import { getContext, mount, setContext, unmount } from 'svelte';
 import type { CheckboxConfigs, CheckboxIndicatorProps } from './_interface';
 import { default as Indicator } from './Indicator/Main.svelte';
 import type { ValidationCompact, ValidationFull } from '../input/_interface';
+import Checkbox from './Main.svelte';
+
+export { default as Checkbox } from './Main.svelte';
+export type { CheckboxProps, CheckboxConfigs } from './_interface';
 
 const NAME = Symbol('checkbox-context');
 export function setCheckboxContext(context: CheckboxConfigs) {

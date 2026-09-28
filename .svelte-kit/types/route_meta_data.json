@@ -1,0 +1,148 @@
+{
+	"/(unauthorized)": [
+		"src/routes/+layout.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/(authorized)": [
+		"src/routes/+layout.server.ts"
+	],
+	"/": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(authorized/)": [],
+	"/(unauthorized)/about": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(authorized)/admin/brands": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(authorized)/admin/categories": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(authorized)/admin/products": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(authorized)/admin/variants": [
+		"src/routes/+layout.server.ts"
+	],
+	"/api/admin/brands/create": [
+		"src/routes/api/admin/brands/create/+server.ts"
+	],
+	"/api/admin/brands/delete": [
+		"src/routes/api/admin/brands/delete/+server.ts"
+	],
+	"/api/admin/brands/detail": [
+		"src/routes/api/admin/brands/detail/+server.ts"
+	],
+	"/api/admin/brands/list": [
+		"src/routes/api/admin/brands/list/+server.ts"
+	],
+	"/api/admin/brands/update": [
+		"src/routes/api/admin/brands/update/+server.ts"
+	],
+	"/api/admin/categories/create": [
+		"src/routes/api/admin/categories/create/+server.ts"
+	],
+	"/api/admin/categories/delete": [
+		"src/routes/api/admin/categories/delete/+server.ts"
+	],
+	"/api/admin/categories/detail": [
+		"src/routes/api/admin/categories/detail/+server.ts"
+	],
+	"/api/admin/categories/list": [
+		"src/routes/api/admin/categories/list/+server.ts"
+	],
+	"/api/admin/categories/update": [
+		"src/routes/api/admin/categories/update/+server.ts"
+	],
+	"/api/admin/products/create": [
+		"src/routes/api/admin/products/create/+server.ts"
+	],
+	"/api/admin/products/delete": [
+		"src/routes/api/admin/products/delete/+server.ts"
+	],
+	"/api/admin/products/detail": [
+		"src/routes/api/admin/products/detail/+server.ts"
+	],
+	"/api/admin/products/list": [
+		"src/routes/api/admin/products/list/+server.ts"
+	],
+	"/api/admin/products/update": [
+		"src/routes/api/admin/products/update/+server.ts"
+	],
+	"/api/admin/variants/create": [
+		"src/routes/api/admin/variants/create/+server.ts"
+	],
+	"/api/admin/variants/delete": [
+		"src/routes/api/admin/variants/delete/+server.ts"
+	],
+	"/api/admin/variants/detail": [
+		"src/routes/api/admin/variants/detail/+server.ts"
+	],
+	"/api/admin/variants/list": [
+		"src/routes/api/admin/variants/list/+server.ts"
+	],
+	"/api/admin/variants/update": [
+		"src/routes/api/admin/variants/update/+server.ts"
+	],
+	"/api/auth/refresh": [
+		"src/routes/api/auth/refresh/+server.ts"
+	],
+	"/api/dev-emails": [
+		"src/routes/api/dev-emails/+server.ts"
+	],
+	"/api/encryption/public-key": [
+		"src/routes/api/encryption/public-key/+server.ts"
+	],
+	"/api/forgot-password": [
+		"src/routes/api/forgot-password/+server.ts"
+	],
+	"/api/health": [
+		"src/routes/api/health/+server.ts"
+	],
+	"/api/login": [
+		"src/routes/api/login/+server.ts"
+	],
+	"/api/register": [
+		"src/routes/api/register/+server.ts"
+	],
+	"/api/register/check": [
+		"src/routes/api/register/check/+server.ts"
+	],
+	"/api/resend-verification": [
+		"src/routes/api/resend-verification/+server.ts"
+	],
+	"/api/reset-password": [
+		"src/routes/api/reset-password/+server.ts"
+	],
+	"/api/test": [
+		"src/routes/api/test/+server.ts"
+	],
+	"/api/verify-email": [
+		"src/routes/api/verify-email/+server.ts"
+	],
+	"/(unauthorized)/forgot-password": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(unauthorized)/login": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(unauthorized)/register": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(unauthorized)/reset-password": [
+		"src/routes/+layout.server.ts"
+	],
+	"/test": [
+		"src/routes/+layout.server.ts"
+	],
+	"/test/test1": [
+		"src/routes/+layout.server.ts"
+	],
+	"/ui": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(unauthorized)/verify-email": [
+		"src/routes/+layout.server.ts"
+	]
+}

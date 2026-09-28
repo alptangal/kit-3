@@ -23,6 +23,15 @@
 		brand: string;
 		isOpen: boolean;
 	}
+
+	function hasRole(roles?: string[]): boolean {
+		if (!roles || roles.length === 0) return true;
+		const userRoles = (window as any).__userRoles ?? [];
+		return roles.some(r => userRoles.includes(r));
+	}
+
+	let isMobile = $derived(client.browser?.isMobile ?? false);
+	let filteredItems = $derived(configs.items.filter(item => hasRole(item.roles)));
 </script>
 
 <svelte:head>
@@ -35,28 +44,26 @@
 </svelte:head>
 
 <div class="nav-wrapper">
-	{#if client.browser?.isMobile}
+	{#if isMobile}
 		<!-- Mobile: Overlay drawer -->
 		{#if configs.isOpen}
 			<div class="nav-overlay" on:click={() => (configs.isOpen = false)} />
 		{/if}
 		<div class="nav-sidebar {configs.isOpen ? 'nav-sidebar--open' : ''}">
-			<div class="nav-brand">{#if configs.brand}{configs.brand}{{/if}}</div>
+			<div class="nav-brand">{#if configs.brand}{configs.brand}{/if}</div>
 			<div class="nav-list">
-				{#each configs.items as item, i}
-					{#if !item.roles || (item.roles && item.roles.some(r => (window as any).__userRoles?.includes(r)))}
-						<a
-							href={item.href}
-							class="nav-item {item.active ? 'nav-item--active' : ''}"
-							on:click={() => {
-								configs.isOpen = false;
-								if (props.onToggle) props.onToggle();
-							}}
-						>
-							{#if item.icon}<span class="nav-icon">{item.icon}</span>{/if}
-							<span class="nav-label">{item.label}</span>
-						</a>
-					{/if}
+				{#each filteredItems as item, i}
+					<a
+						href={item.href}
+						class="nav-item {item.active ? 'nav-item--active' : ''}"
+						on:click={() => {
+							configs.isOpen = false;
+							if (props.onToggle) props.onToggle();
+						}}
+					>
+						{#if item.icon}<span class="nav-icon">{item.icon}</span>{/if}
+						<span class="nav-label">{item.label}</span>
+					</a>
 				{/each}
 			</div>
 		</div>
@@ -66,19 +73,17 @@
 	{:else}
 		<!-- Desktop: Sidebar -->
 		<div class="nav-sidebar nav-sidebar--desktop">
-			<div class="nav-brand">{#if configs.brand}{configs.brand}{{/if}}</div>
+			<div class="nav-brand">{#if configs.brand}{configs.brand}{/if}</div>
 			<div class="nav-list">
-				{#each configs.items as item, i}
-					{#if !item.roles || (item.roles && item.roles.some(r => (window as any).__userRoles?.includes(r)))}
-						<a
-							href={item.href}
-							class="nav-item {item.active ? 'nav-item--active' : ''}"
-							on:click={() => props.onToggle?.()}
-						>
-							{#if item.icon}<span class="nav-icon">{item.icon}</span>{/if}
-							<span class="nav-label">{item.label}</span>
-						</a>
-					{/if}
+				{#each filteredItems as item, i}
+					<a
+						href={item.href}
+						class="nav-item {item.active ? 'nav-item--active' : ''}"
+						on:click={() => props.onToggle?.()}
+					>
+						{#if item.icon}<span class="nav-icon">{item.icon}</span>{/if}
+						<span class="nav-label">{item.label}</span>
+					</a>
 				{/each}
 			</div>
 		</div>
@@ -96,17 +101,15 @@
 		top: 0;
 		left: 0;
 		height: 100vh;
-		width: 16rem;
-		background: var(--background, #09090b);
-		border-right: 1px solid var(--border, rgb(255 255 255 / 0.08));
+		width: var(--nav-width, 16rem);
+		background: var(--background);
+		border-right: var(--border-width) solid var(--border, rgb(255 255 255 / 0.08));
 		display: flex;
 		flex-direction: column;
 		transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
 		z-index: 1000;
 		overflow-y: auto;
 		overflow-x: hidden;
-
-		--nav-width: 16rem;
 
 		// Hidden state
 		transform: translateX(-100%);
@@ -126,47 +129,47 @@
 		&__brand {
 			display: flex;
 			align-items: center;
-			gap: 0.5rem;
-			padding: 1rem;
-			border-bottom: 1px solid var(--border, rgb(255 255 255 / 0.08));
-			font-size: 1.25rem;
+			gap: var(--gap-sm);
+			padding: var(--padding-md);
+			border-bottom: var(--border-width) solid var(--border, rgb(255 255 255 / 0.08));
+			font-size: var(--font-size-xl);
 			font-weight: 600;
-			color: var(--foreground, #f4f4f5);
+			color: var(--foreground);
 		}
 
 		&__list {
 			flex: 1;
 			display: flex;
 			flex-direction: column;
-			padding: 0.5rem 0;
+			padding: var(--gap-sm) 0;
 		}
 
 		&__item {
 			display: flex;
 			align-items: center;
-			gap: 0.75rem;
-			padding: 0.75rem 1rem;
-			color: var(--foreground, #f4f4f5);
+			gap: var(--gap-md);
+			padding: var(--padding-sm) var(--padding-md);
+			color: var(--foreground);
 			text-decoration: none;
-			font-size: 0.875rem;
-			border-radius: 0 0.25rem 0.25rem 0;
+			font-size: var(--font-size-sm);
+			border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 			transition: background-color 0.2s, transform 0.2s;
-			margin-left: -0.5rem;
+			margin-left: calc(var(--padding-sm) * -1);
 
 			&:hover {
-				background: var(--foreground-200, #27272a);
-				transform: translateX(0.5rem);
+				background: var(--foreground-200);
+				transform: translateX(var(--gap-sm));
 			}
 
 			&--active {
-				background: var(--foreground-200, #27272a);
+				background: var(--foreground-200);
 				margin-left: 0;
 				font-weight: 500;
 			}
 		}
 
 		&__icon {
-			font-size: 1rem;
+			font-size: var(--font-size-md);
 			opacity: 0.7;
 		}
 	}
@@ -184,13 +187,13 @@
 	.nav-toggle {
 		display: none;
 		position: fixed;
-		top: 1rem;
-		left: 1rem;
-		width: 2.5rem;
-		height: 2.5rem;
-		background: var(--background, #09090b);
-		border: 1px solid var(--border, rgb(255 255 255 / 0.08));
-		border-radius: 0.25rem;
+		top: var(--padding-md);
+		left: var(--padding-md);
+		width: var(--min-height-lg);
+		height: var(--min-height-lg);
+		background: var(--background);
+		border: var(--border-width) solid var(--border, rgb(255 255 255 / 0.08));
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 		z-index: 1001;
 		align-items: center;
@@ -198,7 +201,7 @@
 		transition: background-color 0.2s;
 
 		&:hover {
-			background: var(--foreground-200, #27272a);
+			background: var(--foreground-200);
 		}
 
 		@media (max-width: 768px) {
@@ -207,7 +210,7 @@
 	}
 
 	.nav-toggle-icon {
-		font-size: 1.5rem;
+		font-size: var(--font-size-2xl);
 	}
 
 	.nav-label {

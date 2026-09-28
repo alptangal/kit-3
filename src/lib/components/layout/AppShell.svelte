@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { Header } from './index';
-	import { MenuBar } from './menu-bar/Main.svelte';
-	import { NavigationBar } from './navigation-bar/Main.svelte';
+	import { Header, MenuBar, NavigationBar } from './index';
 	import type { BasicProps } from '$components/interface';
 	import type { NavigationItem } from './navigation-bar/Main.svelte';
 

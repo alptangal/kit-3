@@ -52,7 +52,7 @@
 	const checkboxIndicatorContext = getCheckboxIndicatorContext();
 
 	// Set stroke-width and stroke color on mount
-	let svgRef: SVGSVGElement | null = null;
+	let svgRef = $state<SVGSVGElement | null>(null);
 	onMount(() => {
 		if (svgRef) {
 			const checkboxRoot = svgRef.closest('.checkbox-indicator-root');
@@ -110,9 +110,9 @@
 <style lang="scss">
 	@use '$styles/colors.scss';
 	.checkbox-indicator-checked {
-		/* Match the 20px size of checkbox-indicator-root */
-		width: 1.25rem;
-		height: 1.25rem;
+		/* Match the size of checkbox-indicator-root */
+		width: var(--min-height-sm);
+		height: var(--min-height-sm);
 	}
 
 	.check-draw {

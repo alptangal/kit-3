@@ -155,5 +155,8 @@
 		height: fit-content;
 		padding-inline: var(--padding);
 		padding-block: calc(var(--padding) / 4);
+		background: var(--background);
+		color: var(--foreground);
+		box-shadow: var(--box-shadow-md);
 	}
 </style>

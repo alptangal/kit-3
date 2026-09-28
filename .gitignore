@@ -16,3 +16,4 @@ partykit/node_modules/
 partykit/build/
 partykit/public/dist/
 partykit/.env
+.env

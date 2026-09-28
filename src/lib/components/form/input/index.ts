@@ -2,6 +2,10 @@
 import type { InputConfigs, InputProps, ValidationCompact, ValidationFull } from './_interface';
 import type { TextFieldContext } from '../textField/_interface';
 import type { FormConfigs } from '../form/_interface';
+import Input from './Main.svelte';
+
+export { default as Input } from './Main.svelte';
+export type { InputProps, InputConfigs } from './_interface';
 
 export const text_keys_allowed = [
 	'arrowleft',
