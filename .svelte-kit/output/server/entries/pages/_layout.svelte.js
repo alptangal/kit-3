@@ -3,7 +3,7 @@ import { c as client, s as styleSynced, p as profile, S as SvelteMap } from "../
 import { o as onDestroy, s as setToastWrapperContext, T as Toast, M as Main$2 } from "../../chunks/index.js";
 import { M as MessageComponent } from "../../chunks/MessageComponent.js";
 import "clsx";
-/* empty css                                                    */
+/* empty css                                                  */
 import "@sveltejs/kit/internal";
 import "../../chunks/exports.js";
 import "../../chunks/utils.js";

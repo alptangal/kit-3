@@ -9,7 +9,7 @@ import { M as Main$4, C as Checkbox } from "../../../../chunks/index4.js";
 import { M as Modal } from "../../../../chunks/index3.js";
 import { c as client } from "../../../../chunks/basic.svelte.js";
 import "../../../../chunks/functions.js";
-/* empty css                                                          */
+/* empty css                                                        */
 import { A as AuthLayout } from "../../../../chunks/AuthLayout.js";
 import { isEqual } from "es-toolkit";
 import { M as Main$1, a as Main$2, b as Main$3, c as Main$5 } from "../../../../chunks/Main.js";

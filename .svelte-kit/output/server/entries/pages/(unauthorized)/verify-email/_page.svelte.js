@@ -7,7 +7,7 @@ import "@sveltejs/kit/internal/server";
 import "../../../../chunks/index.js";
 import { c as client } from "../../../../chunks/basic.svelte.js";
 import "../../../../chunks/functions.js";
-/* empty css                                                          */
+/* empty css                                                        */
 import { A as AuthLayout } from "../../../../chunks/AuthLayout.js";
 const pageContents = {
   title: { vi: "Xác nhận email", en: "Verify Email" },

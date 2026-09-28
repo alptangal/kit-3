@@ -38,9 +38,9 @@
       "_internal.js"
     ]
   },
-  "_AuthLayout.Ci_jPbnS.css": {
-    "file": "_app/immutable/assets/AuthLayout.Ci_jPbnS.css",
-    "src": "_AuthLayout.Ci_jPbnS.css"
+  "_AppShell.Ci_jPbnS.css": {
+    "file": "_app/immutable/assets/AppShell.Ci_jPbnS.css",
+    "src": "_AppShell.Ci_jPbnS.css"
   },
   "_AuthLayout.js": {
     "file": "chunks/AuthLayout.js",
@@ -49,7 +49,7 @@
       "_root.js"
     ],
     "css": [
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "_Main.js": {
@@ -442,10 +442,14 @@
     "src": "src/routes/(unauthorized)/about/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_functions.js"
+      "_functions.js",
+      "_exports.js",
+      "_utils.js",
+      "_root.js",
+      "_state.svelte.js"
     ],
     "css": [
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "src/routes/(unauthorized)/forgot-password/+page.svelte": {
@@ -466,7 +470,7 @@
     ],
     "css": [
       "_app/immutable/assets/_page.DiLfwbeA.css",
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "src/routes/(unauthorized)/login/+page.svelte": {
@@ -488,7 +492,7 @@
     ],
     "css": [
       "_app/immutable/assets/_page.BWJBUYHo.css",
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "src/routes/(unauthorized)/register/+page.svelte": {
@@ -512,7 +516,7 @@
     ],
     "css": [
       "_app/immutable/assets/_page.CrtNENKM.css",
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "src/routes/(unauthorized)/reset-password/+page.svelte": {
@@ -534,7 +538,7 @@
     ],
     "css": [
       "_app/immutable/assets/_page.B-eVCJUx.css",
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "src/routes/(unauthorized)/verify-email/+page.svelte": {
@@ -554,7 +558,7 @@
     ],
     "css": [
       "_app/immutable/assets/_page.DHTtOUzu.css",
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "src/routes/+error.svelte": {
@@ -589,7 +593,7 @@
     ],
     "css": [
       "_app/immutable/assets/_layout.DxXTd_3t.css",
-      "_app/immutable/assets/AuthLayout.Ci_jPbnS.css"
+      "_app/immutable/assets/AppShell.Ci_jPbnS.css"
     ]
   },
   "src/routes/api/admin/brands/create/+server.ts": {

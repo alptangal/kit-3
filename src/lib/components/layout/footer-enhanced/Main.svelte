@@ -34,7 +34,7 @@
 		</div>
 		<div class="footer__copyright">
 			<p>
-				{@if configs.showPoweredBy}
+				{#if configs.showPoweredBy}
 					© {#if configs.year}{configs.year}{/if} {configs.companyName || 'Công ty'}
 				{:else}
 					© {#if configs.year}{configs.year}{/if} All rights reserved
@@ -56,12 +56,12 @@
 
 <style lang="scss">
 	.footer {
-		background: var(--background);
-		border-top: var(--border-width) solid var(--border, rgb(255 255 255 / 0.08));
-		padding: var(--padding-xl) var(--padding-md);
+		background: var(--background, #09090b);
+		border-top: 1px solid var(--border, rgb(255 255 255 / 0.08));
+		padding: 1.5rem 1rem;
 		width: 100%;
-		color: var(--foreground-400);
-		font-size: var(--font-size-xs);
+		color: var(--foreground-400, #71717a);
+		font-size: 0.75rem;
 
 		&__container {
 			max-width: 120rem;
@@ -69,58 +69,54 @@
 			display: flex;
 			flex-wrap: wrap;
 			justify-content: space-between;
-			gap: var(--gap-md);
+			gap: 1rem;
 		}
 
 		&__brand {
-			font-size: var(--font-size-sm);
+			font-size: 0.875rem;
 			font-weight: 500;
-			color: var(--foreground);
-			margin-bottom: var(--gap-sm);
+			color: var(--foreground, #f4f4f5);
+			margin-bottom: 0.5rem;
 		}
 
 		&__links {
 			display: flex;
-			gap: var(--gap-md);
+			gap: 1rem;
 			flex-wrap: wrap;
-			margin-bottom: var(--gap-sm);
+			margin-bottom: 0.5rem;
 
 			&__link {
-				color: var(--foreground-400);
+				color: var(--foreground-400, #71717a);
 				text-decoration: none;
 				transition: color 0.2s;
 				&:hover {
-					color: var(--foreground);
+					color: var(--foreground, #f4f4f5);
 				}
 			}
 		}
 
 		&__copyright {
-			margin-top: var(--padding-md);
-			border-top: var(--border-width) solid var(--border, rgb(255 255 255 / 0.08));
-			padding-top: var(--padding-md);
+			margin-top: 1rem;
+			border-top: 1px solid var(--border, rgb(255 255 255 / 0.08));
+			padding-top: 1rem;
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
 			flex-wrap: wrap;
-			gap: var(--gap-sm);
+			gap: 0.5rem;
 
 			& p {
 				margin: 0;
 			}
-		}
 
-		&__toast-trigger {
-			cursor: pointer;
-			color: var(--foreground-400);
-			font-size: var(--font-size-xs);
-			&:hover {
-				color: var(--foreground);
+			&__trigger {
+				cursor: pointer;
+				color: var(--foreground-400, #71717a);
+				font-size: 0.75rem;
+				&:hover {
+					color: var(--foreground, #f4f4f5);
+				}
 			}
-		}
-
-		&__toast-icon {
-			font-size: var(--font-size-sm);
 		}
 	}
 </style>

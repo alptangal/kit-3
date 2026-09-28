@@ -1,5 +1,5 @@
 import { b as attr_class, h as escape_html, g as ensure_array_like, t as stringify } from "./root.js";
-/* empty css                                         */
+/* empty css                                       */
 function AuthPanelLeft($$renderer, $$props) {
   let { class: className = "", logo, headline, description, features } = $$props;
   $$renderer.push(`<div${attr_class(`auth-panel-left ${stringify(className)}`, "svelte-1f5rb6g")} aria-hidden="true"><div class="auth-panel-bg svelte-1f5rb6g"><div class="orb orb-1 svelte-1f5rb6g"></div> <div class="orb orb-2 svelte-1f5rb6g"></div> <div class="orb orb-3 svelte-1f5rb6g"></div> <div class="grid-overlay svelte-1f5rb6g"></div></div> <div class="panel-content svelte-1f5rb6g" style="view-transition-name: auth-panel-content;"><div class="brand-logo svelte-1f5rb6g" style="view-transition-name: auth-panel-logo;">`);

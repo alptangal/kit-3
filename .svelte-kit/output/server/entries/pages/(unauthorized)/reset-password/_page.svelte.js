@@ -5,7 +5,7 @@ import { M as Main } from "../../../../chunks/index.js";
 import { M as Main$4 } from "../../../../chunks/index4.js";
 import { c as client } from "../../../../chunks/basic.svelte.js";
 import "../../../../chunks/functions.js";
-/* empty css                                                          */
+/* empty css                                                        */
 import { A as AuthLayout } from "../../../../chunks/AuthLayout.js";
 import { M as Main$1, a as Main$2, b as Main$3, c as Main$6 } from "../../../../chunks/Main.js";
 import { M as Main$5 } from "../../../../chunks/Main2.js";
