@@ -1,0 +1,1 @@
+import"../chunks/Bzak7iHL.js";import"../chunks/CglxFxAJ.js";import{a,f as e}from"../chunks/D-udZLY0.js";var r=e('<div class="me-qsydv5"><h1>hello test</h1> <a href="/test/test1">test1</a></div>');function i(t){var o=r();a(t,o)}export{i as component};
