@@ -104,7 +104,7 @@ const options = {
     app: ({ head, body, assets, nonce, env }) => '<!doctype html>\r\n<html lang="en">\r\n	<head>\r\n		<meta charset="utf-8" />\r\n		<!--BEGIN SINGLE PWA-->\r\n		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />\r\n		<meta name="apple-mobile-web-app-capable" content="yes" />\r\n		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\r\n		<!--END SINGLE PWA-->\r\n		<meta\r\n			name="viewport"\r\n			content="width=device-width, initial-scale=1, shrink-to-fit=no, maximum-scale=1"\r\n		/>\r\n\r\n		<link href="/_app/immutable/assets/unocss-svelte-scoped-global.BUy7Ep5Q.css" rel="stylesheet" />\r\n		<!--------------------- -->\r\n		' + head + '\r\n	</head>\r\n	<body data-sveltekit-preload-data="hover">\r\n		<div style="display: contents">' + body + "</div>\r\n	</body>\r\n</html>\r\n",
     error
   },
-  version_hash: "v8iods"
+  version_hash: "52xuzj"
 };
 async function get_hooks() {
   let handle;

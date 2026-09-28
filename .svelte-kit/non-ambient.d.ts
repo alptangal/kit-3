@@ -29,7 +29,7 @@ declare module "$app/types" {
 	type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 
 	export interface AppTypes {
-		RouteId(): "/(unauthorized)" | "/(authorized)" | "/" | "/(authorized" | "/(authorized/)" | "/(unauthorized)/about" | "/(authorized)/admin" | "/(authorized)/admin/brands" | "/(authorized)/admin/categories" | "/(authorized)/admin/products" | "/(authorized)/admin/variants" | "/api" | "/api/admin" | "/api/admin/brands" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/products" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/variants" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth" | "/api/auth/refresh" | "/api/dev-emails" | "/api/encryption" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test" | "/api/test/data-encrypted" | "/api/verify-email" | "/(unauthorized)/forgot-password" | "/(unauthorized)/login" | "/(unauthorized)/register" | "/(unauthorized)/reset-password" | "/test" | "/test/test1" | "/ui" | "/(unauthorized)/verify-email";
+		RouteId(): "/(unauthorized)" | "/(authorized)" | "/" | "/(authorized" | "/(authorized/)" | "/(unauthorized)/about" | "/(authorized)/admin" | "/(authorized)/admin/brands" | "/(authorized)/admin/categories" | "/(authorized)/admin/products" | "/(authorized)/admin/variants" | "/api" | "/api/admin" | "/api/admin/brands" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/products" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/variants" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth" | "/api/auth/refresh" | "/api/dev-emails" | "/api/encryption" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/health" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test" | "/api/verify-email" | "/(unauthorized)/forgot-password" | "/(unauthorized)/login" | "/(unauthorized)/register" | "/(unauthorized)/reset-password" | "/test" | "/test/test1" | "/ui" | "/(unauthorized)/verify-email";
 		RouteParams(): {
 			
 		};
@@ -77,13 +77,13 @@ declare module "$app/types" {
 			"/api/encryption": Record<string, never>;
 			"/api/encryption/public-key": Record<string, never>;
 			"/api/forgot-password": Record<string, never>;
+			"/api/health": Record<string, never>;
 			"/api/login": Record<string, never>;
 			"/api/register": Record<string, never>;
 			"/api/register/check": Record<string, never>;
 			"/api/resend-verification": Record<string, never>;
 			"/api/reset-password": Record<string, never>;
 			"/api/test": Record<string, never>;
-			"/api/test/data-encrypted": Record<string, never>;
 			"/api/verify-email": Record<string, never>;
 			"/(unauthorized)/forgot-password": Record<string, never>;
 			"/(unauthorized)/login": Record<string, never>;
@@ -94,7 +94,7 @@ declare module "$app/types" {
 			"/ui": Record<string, never>;
 			"/(unauthorized)/verify-email": Record<string, never>
 		};
-		Pathname(): "/" | "/about" | "/admin/brands" | "/admin/categories" | "/admin/products" | "/admin/variants" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth/refresh" | "/api/dev-emails" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test/data-encrypted" | "/api/verify-email" | "/forgot-password" | "/login" | "/register" | "/reset-password" | "/test" | "/test/test1" | "/ui" | "/verify-email";
+		Pathname(): "/" | "/about" | "/admin/brands" | "/admin/categories" | "/admin/products" | "/admin/variants" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth/refresh" | "/api/dev-emails" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/health" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test" | "/api/verify-email" | "/forgot-password" | "/login" | "/register" | "/reset-password" | "/test" | "/test/test1" | "/ui" | "/verify-email";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/robots.txt" | string & {};
 	}

@@ -10,7 +10,7 @@ return {
 	assets: new Set(["robots.txt"]),
 	mimeTypes: {".txt":"text/plain"},
 	_: {
-		client: {start:"_app/immutable/entry/start.tkzawLim.js",app:"_app/immutable/entry/app.lVWFmUSj.js",imports:["_app/immutable/entry/start.tkzawLim.js","_app/immutable/chunks/CSYh6393.js","_app/immutable/chunks/C2u_6wXe.js","_app/immutable/chunks/D-udZLY0.js","_app/immutable/chunks/O7nlA-MD.js","_app/immutable/entry/app.lVWFmUSj.js","_app/immutable/chunks/PPVm8Dsz.js","_app/immutable/chunks/D-udZLY0.js","_app/immutable/chunks/C2u_6wXe.js","_app/immutable/chunks/Bzak7iHL.js","_app/immutable/chunks/BbFZgtEI.js","_app/immutable/chunks/C0Xf2en6.js","_app/immutable/chunks/FtqbYcpE.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.BnveY7fe.js",app:"_app/immutable/entry/app.BRgm0BqE.js",imports:["_app/immutable/entry/start.BnveY7fe.js","_app/immutable/chunks/B1H-i5Vu.js","_app/immutable/chunks/C2u_6wXe.js","_app/immutable/chunks/D-udZLY0.js","_app/immutable/chunks/ad1uuD-b.js","_app/immutable/entry/app.BRgm0BqE.js","_app/immutable/chunks/PPVm8Dsz.js","_app/immutable/chunks/D-udZLY0.js","_app/immutable/chunks/C2u_6wXe.js","_app/immutable/chunks/Bzak7iHL.js","_app/immutable/chunks/BbFZgtEI.js","_app/immutable/chunks/C0Xf2en6.js","_app/immutable/chunks/FtqbYcpE.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),
@@ -246,6 +246,13 @@ return {
 				endpoint: __memo(() => import('./entries/endpoints/api/forgot-password/_server.ts.js'))
 			},
 			{
+				id: "/api/health",
+				pattern: /^\/api\/health\/?$/,
+				params: [],
+				page: null,
+				endpoint: __memo(() => import('./entries/endpoints/api/health/_server.ts.js'))
+			},
+			{
 				id: "/api/login",
 				pattern: /^\/api\/login\/?$/,
 				params: [],
@@ -281,11 +288,11 @@ return {
 				endpoint: __memo(() => import('./entries/endpoints/api/reset-password/_server.ts.js'))
 			},
 			{
-				id: "/api/test/data-encrypted",
-				pattern: /^\/api\/test\/data-encrypted\/?$/,
+				id: "/api/test",
+				pattern: /^\/api\/test\/?$/,
 				params: [],
 				page: null,
-				endpoint: __memo(() => import('./entries/endpoints/api/test/data-encrypted/_server.ts.js'))
+				endpoint: __memo(() => import('./entries/endpoints/api/test/_server.ts.js'))
 			},
 			{
 				id: "/api/verify-email",

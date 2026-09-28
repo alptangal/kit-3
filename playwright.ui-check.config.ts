@@ -10,7 +10,7 @@ export default defineConfig({
   // UI_CHECK_PORT cho phép chạy test với worktree dev server (vd 3001)
   // khi port 3000 đã bị main checkout chiếm
   use: {
-    baseURL: "https://localhost:3007",
+    baseURL: "https://localhost:3001",
     trace: 'on-first-retry',
   },
   projects: [

@@ -97,6 +97,9 @@
 	"/api/forgot-password": [
 		"src/routes/api/forgot-password/+server.ts"
 	],
+	"/api/health": [
+		"src/routes/api/health/+server.ts"
+	],
 	"/api/login": [
 		"src/routes/api/login/+server.ts"
 	],
@@ -112,8 +115,8 @@
 	"/api/reset-password": [
 		"src/routes/api/reset-password/+server.ts"
 	],
-	"/api/test/data-encrypted": [
-		"src/routes/api/test/data-encrypted/+server.ts"
+	"/api/test": [
+		"src/routes/api/test/+server.ts"
 	],
 	"/api/verify-email": [
 		"src/routes/api/verify-email/+server.ts"

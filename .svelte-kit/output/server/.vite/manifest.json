@@ -1,31 +1,4 @@
 {
-  "../../../node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js": {
-    "file": "remote-entry.js",
-    "name": "remote-entry",
-    "src": "../../../node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js",
-    "isEntry": true,
-    "imports": [
-      "_shared.js",
-      "_server.js",
-      "_internal2.js"
-    ]
-  },
-  "../../../node_modules/@sveltejs/kit/src/runtime/server/index.js": {
-    "file": "index.js",
-    "name": "index",
-    "src": "../../../node_modules/@sveltejs/kit/src/runtime/server/index.js",
-    "isEntry": true,
-    "imports": [
-      "_shared.js",
-      "_false.js",
-      "_server.js",
-      "_routing.js",
-      "_exports.js",
-      "_utils.js",
-      "_root.js",
-      "_internal.js"
-    ]
-  },
   ".svelte-kit/generated/server/internal.js": {
     "file": "internal.js",
     "name": "internal",
@@ -291,6 +264,33 @@
   "_utils.js": {
     "file": "chunks/utils.js",
     "name": "utils"
+  },
+  "node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js": {
+    "file": "remote-entry.js",
+    "name": "remote-entry",
+    "src": "node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js",
+    "isEntry": true,
+    "imports": [
+      "_shared.js",
+      "_server.js",
+      "_internal2.js"
+    ]
+  },
+  "node_modules/@sveltejs/kit/src/runtime/server/index.js": {
+    "file": "index.js",
+    "name": "index",
+    "src": "node_modules/@sveltejs/kit/src/runtime/server/index.js",
+    "isEntry": true,
+    "imports": [
+      "_shared.js",
+      "_false.js",
+      "_server.js",
+      "_routing.js",
+      "_exports.js",
+      "_utils.js",
+      "_root.js",
+      "_internal.js"
+    ]
   },
   "src/hooks.server.ts": {
     "file": "entries/hooks.server.js",
@@ -839,6 +839,12 @@
       "_email.js"
     ]
   },
+  "src/routes/api/health/+server.ts": {
+    "file": "entries/endpoints/api/health/_server.ts.js",
+    "name": "entries/endpoints/api/health/_server.ts",
+    "src": "src/routes/api/health/+server.ts",
+    "isEntry": true
+  },
   "src/routes/api/login/+server.ts": {
     "file": "entries/endpoints/api/login/_server.ts.js",
     "name": "entries/endpoints/api/login/_server.ts",
@@ -906,15 +912,11 @@
       "_i18n.js"
     ]
   },
-  "src/routes/api/test/data-encrypted/+server.ts": {
-    "file": "entries/endpoints/api/test/data-encrypted/_server.ts.js",
-    "name": "entries/endpoints/api/test/data-encrypted/_server.ts",
-    "src": "src/routes/api/test/data-encrypted/+server.ts",
-    "isEntry": true,
-    "imports": [
-      "_encryption.js",
-      "_initSystemVault.js"
-    ]
+  "src/routes/api/test/+server.ts": {
+    "file": "entries/endpoints/api/test/_server.ts.js",
+    "name": "entries/endpoints/api/test/_server.ts",
+    "src": "src/routes/api/test/+server.ts",
+    "isEntry": true
   },
   "src/routes/api/verify-email/+server.ts": {
     "file": "entries/endpoints/api/verify-email/_server.ts.js",

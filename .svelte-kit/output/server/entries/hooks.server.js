@@ -382,7 +382,7 @@ const handle = async ({ event, resolve }) => {
   const token = event.cookies.get("session");
   event.locals.user = token ? await getUserFromToken(token) : void 0;
   const { pathname } = event.url;
-  const publicPaths = ["/login", "/register", "/forgot-password", "/api/encryption", "/api/login", "/api/register", "/api/forgot-password", "/reset-password", "/api/reset-password", "/api/dev-emails", "/verify-email", "/api/verify-email", "/api/resend-verification", "/ui"];
+  const publicPaths = ["/login", "/register", "/forgot-password", "/api/encryption", "/api/login", "/api/register", "/api/forgot-password", "/reset-password", "/api/reset-password", "/api/dev-emails", "/verify-email", "/api/verify-email", "/api/resend-verification", "/ui", "/api/health", "/api/test"];
   const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
   const isApiRoute = pathname.startsWith("/api/");
   if (!isPublicPath && !isApiRoute && !event.locals.user) {
