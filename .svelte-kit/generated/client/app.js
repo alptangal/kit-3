@@ -31,7 +31,8 @@ export const nodes = [
 	() => import('./nodes/19'),
 	() => import('./nodes/20'),
 	() => import('./nodes/21'),
-	() => import('./nodes/22')
+	() => import('./nodes/22'),
+	() => import('./nodes/23')
 ];
 
 export const server_loads = [0,3,4];
@@ -53,6 +54,7 @@ export const dictionary = {
 		"/test/test1": [20],
 		"/ui": [21],
 		"/ui/radiogroup": [22],
+		"/ui/toggle": [23],
 		"/(unauthorized)/verify-email": [18,[5]]
 	};
 
