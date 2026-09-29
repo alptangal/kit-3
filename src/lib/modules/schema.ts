@@ -34,7 +34,12 @@ const collectionsName = [
 	'system',
 	'refresh_tokens',
 	'token_rotation_logs',
-	'system_secrets' // <-- MỚI: dùng cho cbVault, xem clients.ts
+	'system_secrets', // <-- MỚI: dùng cho cbVault, xem clients.ts
+	// Phase 5 — Omnichannel E-commerce
+	'carts',
+	'checkouts',
+	'shipments',
+	'partykit_sync_state'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -820,6 +825,118 @@ export const collectionSchemas = {
 			version: { type: 'number', searchable: false, sortable: false, selectable: true },
 			createdAt: { type: 'date', searchable: false, sortable: false, selectable: true },
 			rotatedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
+		}
+	},
+
+	// ===== Phase 5: Omnichannel E-commerce =====
+	// Giỏ hàng khách hàng (session-based, possibly cart_id = userId)
+	carts: {
+		fields: {
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true }, // Branch mà khách chọn pickup/order từ
+
+			items: { type: 'array', searchable: false, sortable: false, selectable: true },
+			// [{ variantId, quantity, price, promotionApplied? }]
+
+			subtotal: { type: 'number', searchable: false, sortable: true, selectable: true },
+			discountAmount: { type: 'number', searchable: false, sortable: false, selectable: true },
+			appliedPromotionCode: { type: 'string', searchable: true, sortable: false, selectable: true },
+			total: { type: 'number', searchable: false, sortable: true, selectable: true },
+
+			expiresAt: { type: 'date', searchable: true, sortable: true, selectable: true }, // Giỏ hàng expires sau 30 ngày inactive
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// Thông tin checkout (shipping, billing address, payment method)
+	checkouts: {
+		fields: {
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			orderId: { type: 'string', searchable: true, sortable: false, selectable: true }, // Khi checkout → create order
+			cartId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// Địa chỉ giao hàng
+			shippingAddress: { type: 'object', searchable: false, sortable: false, selectable: true },
+			// { street, ward, district, province, postalCode, phoneNumber, recipientName }
+
+			// Địa chỉ hóa đơn (nếu khác shipping)
+			billingAddress: { type: 'object', searchable: false, sortable: false, selectable: true },
+
+			// Thông tin giao hàng
+			shippingMethod: { type: 'string', searchable: true, sortable: false, selectable: true },
+			// 'pickup' (click-and-collect) | 'ghn' | 'ghtk' | 'ahamove'
+			shippingCost: { type: 'number', searchable: false, sortable: false, selectable: true },
+
+			// Thanh toán
+			paymentMethod: { type: 'string', searchable: true, sortable: false, selectable: true },
+			// 'cash' | 'bank_pos' | 'momo' | 'zalopay' | 'bank_transfer' | 'cod' | 'loyalty_points'
+			paymentStatus: { type: 'string', searchable: true, sortable: true, selectable: true },
+			// 'pending' | 'processing' | 'completed' | 'failed'
+
+			notes: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+			// 'started' | 'completed' | 'abandoned' | 'converted_to_order'
+
+			expiresAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			completedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// Thông tin giao hàng (tích hợp GHN/GHTK/Ahamove)
+	shipments: {
+		fields: {
+			orderId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			provider: { type: 'string', searchable: true, sortable: false, selectable: true },
+			// 'ghn' | 'ghtk' | 'ahamove' | 'internal' (pickup)
+
+			trackingNumber: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			shippingAddress: { type: 'object', searchable: false, sortable: false, selectable: true },
+			recipientName: { type: 'string', searchable: true, sortable: false, selectable: true },
+			recipientPhone: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			weight: { type: 'number', searchable: false, sortable: false, selectable: true }, // kg
+			dimensions: { type: 'object', searchable: false, sortable: false, selectable: true },
+			// { length, width, height }
+
+			cost: { type: 'number', searchable: false, sortable: true, selectable: true },
+			estimatedDeliveryDate: { type: 'date', searchable: true, sortable: true, selectable: true },
+
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+			// 'pending' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'failed' | 'cancelled'
+
+			statusHistory: { type: 'array', searchable: false, sortable: false, selectable: true },
+			// [{ status, timestamp, notes }]
+
+			externalData: { type: 'object', searchable: false, sortable: false, selectable: true },
+			// Store provider-specific response (vd GHN order_code, webhook signature)
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// PartyKit realtime sync state (track room subscriptions, unack messages, etc)
+	partykit_sync_state: {
+		fields: {
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			subscribedRooms: { type: 'array', searchable: false, sortable: false, selectable: true },
+			// ['branch:branch-1', 'role:owner', ...]
+
+			lastSyncAt: { type: 'date', searchable: false, sortable: true, selectable: true },
+			lastMessageId: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			unackMessageCount: { type: 'number', searchable: false, sortable: false, selectable: true },
+
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+			// 'connected' | 'disconnected' | 'reconnecting'
+
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
 	}
 } as const satisfies Record<
