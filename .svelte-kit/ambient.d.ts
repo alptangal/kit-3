@@ -47,6 +47,7 @@ declare module '$env/static/private' {
 	export const ANTHROPIC_DEFAULT_OPUS_MODEL: string;
 	export const ANTHROPIC_DEFAULT_SONNET_MODEL: string;
 	export const APPDATA: string;
+	export const BASE_URL: string;
 	export const CLAUDECODE: string;
 	export const CLAUDE_CODE_AGENT: string;
 	export const CLAUDE_CODE_ALT_SCREEN_FULL_REPAINT: string;
@@ -68,6 +69,7 @@ declare module '$env/static/private' {
 	export const COMPUTERNAME: string;
 	export const COMSPEC: string;
 	export const COREPACK_ENABLE_AUTO_PIN: string;
+	export const DEV: string;
 	export const DriverData: string;
 	export const EDITOR: string;
 	export const EXEPATH: string;
@@ -81,10 +83,13 @@ declare module '$env/static/private' {
 	export const INVOCATION_ID: string;
 	export const LOCALAPPDATA: string;
 	export const LOGONSERVER: string;
+	export const MODE: string;
 	export const MSYSTEM: string;
 	export const NODE: string;
 	export const NoDefaultCurrentDirectoryInExePath: string;
 	export const NODE_ENV: string;
+	export const NODE_EXE: string;
+	export const NPM_CLI_JS: string;
 	export const npm_command: string;
 	export const npm_config_allow_scripts: string;
 	export const npm_config_cache: string;
@@ -106,6 +111,8 @@ declare module '$env/static/private' {
 	export const npm_package_json: string;
 	export const npm_package_name: string;
 	export const npm_package_version: string;
+	export const NPM_PREFIX_JS: string;
+	export const NPM_PREFIX_NPM_CLI_JS: string;
 	export const NUMBER_OF_PROCESSORS: string;
 	export const OneDrive: string;
 	export const OS: string;
@@ -117,6 +124,7 @@ declare module '$env/static/private' {
 	export const PROCESSOR_IDENTIFIER: string;
 	export const PROCESSOR_LEVEL: string;
 	export const PROCESSOR_REVISION: string;
+	export const PROD: string;
 	export const ProgramData: string;
 	export const PROGRAMFILES: string;
 	export const ProgramW6432: string;
@@ -132,11 +140,13 @@ declare module '$env/static/private' {
 	export const SYSTEMROOT: string;
 	export const TEMP: string;
 	export const TERM: string;
+	export const TEST: string;
 	export const TMP: string;
 	export const USERDOMAIN: string;
 	export const USERDOMAIN_ROAMINGPROFILE: string;
 	export const USERNAME: string;
 	export const USERPROFILE: string;
+	export const VITEST: string;
 	export const WINDIR: string;
 	export const WSLENV: string;
 	export const WT_PROFILE_ID: string;
@@ -236,6 +246,7 @@ declare module '$env/dynamic/private' {
 		ANTHROPIC_DEFAULT_OPUS_MODEL: string;
 		ANTHROPIC_DEFAULT_SONNET_MODEL: string;
 		APPDATA: string;
+		BASE_URL: string;
 		CLAUDECODE: string;
 		CLAUDE_CODE_AGENT: string;
 		CLAUDE_CODE_ALT_SCREEN_FULL_REPAINT: string;
@@ -257,6 +268,7 @@ declare module '$env/dynamic/private' {
 		COMPUTERNAME: string;
 		COMSPEC: string;
 		COREPACK_ENABLE_AUTO_PIN: string;
+		DEV: string;
 		DriverData: string;
 		EDITOR: string;
 		EXEPATH: string;
@@ -270,10 +282,13 @@ declare module '$env/dynamic/private' {
 		INVOCATION_ID: string;
 		LOCALAPPDATA: string;
 		LOGONSERVER: string;
+		MODE: string;
 		MSYSTEM: string;
 		NODE: string;
 		NoDefaultCurrentDirectoryInExePath: string;
 		NODE_ENV: string;
+		NODE_EXE: string;
+		NPM_CLI_JS: string;
 		npm_command: string;
 		npm_config_allow_scripts: string;
 		npm_config_cache: string;
@@ -295,6 +310,8 @@ declare module '$env/dynamic/private' {
 		npm_package_json: string;
 		npm_package_name: string;
 		npm_package_version: string;
+		NPM_PREFIX_JS: string;
+		NPM_PREFIX_NPM_CLI_JS: string;
 		NUMBER_OF_PROCESSORS: string;
 		OneDrive: string;
 		OS: string;
@@ -306,6 +323,7 @@ declare module '$env/dynamic/private' {
 		PROCESSOR_IDENTIFIER: string;
 		PROCESSOR_LEVEL: string;
 		PROCESSOR_REVISION: string;
+		PROD: string;
 		ProgramData: string;
 		PROGRAMFILES: string;
 		ProgramW6432: string;
@@ -321,11 +339,13 @@ declare module '$env/dynamic/private' {
 		SYSTEMROOT: string;
 		TEMP: string;
 		TERM: string;
+		TEST: string;
 		TMP: string;
 		USERDOMAIN: string;
 		USERDOMAIN_ROAMINGPROFILE: string;
 		USERNAME: string;
 		USERPROFILE: string;
+		VITEST: string;
 		WINDIR: string;
 		WSLENV: string;
 		WT_PROFILE_ID: string;
