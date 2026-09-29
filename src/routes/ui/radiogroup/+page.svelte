@@ -185,7 +185,7 @@
     padding: 1rem;
     background-color: var(--color-surface-accent);
     border-radius: 6px;
-    border-left: 3px solid var(--color-primary);
+    border-top: 2px solid var(--color-primary);
   }
 
   .state-display p {

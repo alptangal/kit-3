@@ -210,7 +210,7 @@
     margin-top: 1rem;
     background-color: var(--color-surface-accent);
     border-radius: 6px;
-    border-left: 3px solid var(--color-primary);
+    border-top: 2px solid var(--color-primary);
   }
 
   .state-display p {
@@ -239,7 +239,7 @@
     background-color: var(--color-surface-accent);
     padding: 1rem;
     border-radius: 6px;
-    border-left: 3px solid var(--color-info);
+    border-top: 2px solid var(--color-info);
   }
 
   .keyboard-guide ul {
