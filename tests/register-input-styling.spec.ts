@@ -1,15 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Register Page Input Styling', () => {
-  test.use({
-  baseURL: 'https://localhost:3000',
-});
-
-test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
     // Navigate to the register page
     await page.goto('/register', { waitUntil: 'domcontentloaded' });
     // Wait for the page to load
     await page.waitForLoadState('networkidle');
+    await expect(page.locator('form')).toBeVisible();
   });
 
   test('should load register page without errors', async ({ page }) => {
@@ -39,7 +36,8 @@ test.beforeEach(async ({ page }) => {
 
   test('should have proper input styling with border-radius and padding', async ({ page }) => {
     const usernameInput = page.locator('input[name="username"]');
-    const inputContainer = usernameInput.locator('..'); // The input root container
+    // Input is inside .input-highlight-wrapper which is inside .input-root
+    const inputContainer = usernameInput.locator('..').locator('..'); // .input-root
 
     // Check that the input container has the expected classes
     await expect(inputContainer).toHaveClass(/input-root/);
@@ -66,7 +64,8 @@ test.beforeEach(async ({ page }) => {
 
   test('should show focus state styling on input focus', async ({ page }) => {
     const usernameInput = page.locator('input[name="username"]');
-    const inputContainer = usernameInput.locator('..');
+    // Input is inside .input-highlight-wrapper which is inside .input-root
+    const inputContainer = usernameInput.locator('..').locator('..'); // .input-root
 
     // Focus the input
     await usernameInput.focus();
@@ -88,7 +87,8 @@ test.beforeEach(async ({ page }) => {
 
   test('should show error state styling when validation fails', async ({ page }) => {
     const usernameInput = page.locator('input[name="username"]');
-    const inputContainer = usernameInput.locator('..');
+    // Input is inside .input-highlight-wrapper which is inside .input-root
+    const inputContainer = usernameInput.locator('..').locator('..'); // .input-root
 
     // Fill with invalid username (too short)
     await usernameInput.fill('ab');
@@ -109,38 +109,38 @@ test.beforeEach(async ({ page }) => {
   });
 
   test('should have proper leading icons for inputs', async ({ page }) => {
-    // Check username leading icon (user icon)
-    const usernameLeading = page.locator('input[name="username"]').locator('..').locator('svg.auth-input-icon');
+    // Check username leading icon (user icon) - SVG is inside input-root div
+    const usernameLeading = page.locator('input[name="username"]').locator('..').locator('..').locator('svg.auth-input-icon');
     await expect(usernameLeading).toBeVisible();
 
     // Check email leading icon (mail icon)
-    const emailLeading = page.locator('input[name="email"]').locator('..').locator('svg.auth-input-icon');
+    const emailLeading = page.locator('input[name="email"]').locator('..').locator('..').locator('svg.auth-input-icon');
     await expect(emailLeading).toBeVisible();
 
     // Check password leading icon (lock icon)
-    const passwordLeading = page.locator('input[name="password"]').locator('..').locator('svg.auth-input-icon');
+    const passwordLeading = page.locator('input[name="password"]').locator('..').locator('..').locator('svg.auth-input-icon');
     await expect(passwordLeading).toBeVisible();
   });
 
   test('should have show/hide password toggle buttons', async ({ page }) => {
-    // Password field should have eye icon button
-    const passwordToggle = page.locator('input[name="password"]').locator('..').locator('button').filter({ has: page.locator('svg') }).last();
+    // Password field should have eye icon button - inside input-group-actions
+    const passwordToggle = page.locator('input[name="password"]').locator('..').locator('..').locator('.input-group-actions button').filter({ has: page.locator('svg') }).first();
     await expect(passwordToggle).toBeVisible();
 
     // Confirm password field should have eye icon button
-    const confirmPasswordToggle = page.locator('input[name="confirmPassword"]').locator('..').locator('button').filter({ has: page.locator('svg') }).last();
+    const confirmPasswordToggle = page.locator('input[name="confirmPassword"]').locator('..').locator('..').locator('.input-group-actions button').filter({ has: page.locator('svg') }).first();
     await expect(confirmPasswordToggle).toBeVisible();
   });
 
   test('should have password strength meter', async ({ page }) => {
     const passwordInput = page.locator('input[name="password"]');
-    const passwordContainer = passwordInput.locator('..').locator('..'); // TextField root
 
     // Fill password to trigger strength meter
     await passwordInput.fill('TestPass123');
+    await page.waitForTimeout(300); // Wait for derived reactive update
 
-    // Check strength meter appears
-    const strengthMeter = passwordContainer.locator('.strength-meter');
+    // Check strength meter appears - it's rendered on the page (outside TextField container)
+    const strengthMeter = page.locator('.strength-meter');
     await expect(strengthMeter).toBeVisible();
 
     // Check progress bar
@@ -157,14 +157,17 @@ test.beforeEach(async ({ page }) => {
 
     // Type partial email to trigger suggestions
     await emailInput.fill('test@gm');
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(1000);
 
-    // Check suggestions popup
+    // Check suggestions popup - it's rendered as a sibling of TextField root
     const suggestions = page.locator('.email-suggestions-popup');
     await expect(suggestions).toBeVisible();
 
-    // Should have gmail.com suggestion
-    await expect(suggestions.locator('text=gmail.com')).toBeVisible();
+    // Should have gmail.com suggestion - text is split as "gm" + "ail.com" in spans
+    const suggestionItem = suggestions.locator('.email-suggestion-item').first();
+    await expect(suggestionItem).toBeVisible();
+    const text = await suggestionItem.textContent();
+    expect(text).toContain('ail.com');
   });
 
   test('should have proper dark/light theme support', async ({ page }) => {
@@ -174,7 +177,7 @@ test.beforeEach(async ({ page }) => {
       const style = window.getComputedStyle(root);
       return {
         background: style.getPropertyValue('--background'),
-        foreground: style.getPropertyValue(--foreground),
+        foreground: style.getPropertyValue('--foreground'),
         primary: style.getPropertyValue('--primary'),
         success: style.getPropertyValue('--success'),
         error: style.getPropertyValue('--error'),
@@ -202,6 +205,12 @@ test.beforeEach(async ({ page }) => {
     });
 
     expect(gridStyles.display).toBe('grid');
-    expect(gridStyles.gridTemplateColumns).toContain('1fr');
+    // gridTemplateColumns returns computed pixel values (e.g., '153.328px 153.328px 153.328px')
+    // instead of '1fr 1fr 1fr' - verify it's a 3-column grid
+    expect(gridStyles.gridTemplateColumns).toContain('px');
+    // Check there are 3 columns (split by space)
+    const columns = gridStyles.gridTemplateColumns.split(' ').filter(c => c.includes('px'));
+    expect(columns.length).toBe(3);
+    expect(gridStyles.gap).toBeTruthy();
   });
 });

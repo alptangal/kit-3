@@ -8,9 +8,13 @@ const screenshotDir = path.resolve(process.cwd(), 'test-results-ui-check');
 function clipAround(page: any, box: { x: number; y: number; width: number; height: number }) {
   const vw = page.viewportSize()?.width ?? 1280;
   const vh = page.viewportSize()?.height ?? 720;
-  const width = Math.min(Math.max(box.width + 50, 200), vw - box.x);
-  const height = Math.min(Math.max(box.height + 50, 100), vh - box.y);
-  return { x: box.x, y: box.y, width: Math.max(width, 1), height: Math.max(height, 1) };
+  const padX = 25;
+  const padY = 25;
+  const x = Math.max(0, Math.min(box.x - padX, vw - 10));
+  const y = Math.max(0, Math.min(box.y - padY, vh - 10));
+  const width = Math.max(1, Math.min(box.width + padX * 2, vw - x));
+  const height = Math.max(1, Math.min(box.height + padY * 2, vh - y));
+  return { x, y, width, height };
 }
 
 async function ensureDir(page: any, dir: string) {
@@ -51,9 +55,14 @@ test.describe('UI Component Cross-Browser Check', () => {
     test(`${projectName}: Button - default/hover/focus`, async ({ page }) => {
       const button = page.locator('button').first();
       await expect(button).toBeVisible();
+      await button.scrollIntoViewIfNeeded();
       const box = await button.boundingBox();
       if (box) {
-        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-default.png`, clip: clipAround(page, box) });
+        try {
+          await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-default.png`, clip: clipAround(page, box) });
+        } catch {
+          await button.screenshot({ path: `${screenshotDir}/${projectName}-Button-default.png` });
+        }
       } else {
         await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-default.png` });
       }
@@ -61,13 +70,21 @@ test.describe('UI Component Cross-Browser Check', () => {
       await button.hover();
       await page.waitForTimeout(300);
       if (box) {
-        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-hover.png`, clip: clipAround(page, box) });
+        try {
+          await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-hover.png`, clip: clipAround(page, box) });
+        } catch {
+          await button.screenshot({ path: `${screenshotDir}/${projectName}-Button-hover.png` });
+        }
       }
 
       await button.focus();
       await page.waitForTimeout(300);
       if (box) {
-        await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-focus.png`, clip: clipAround(page, box) });
+        try {
+          await page.screenshot({ path: `${screenshotDir}/${projectName}-Button-focus.png`, clip: clipAround(page, box) });
+        } catch {
+          await button.screenshot({ path: `${screenshotDir}/${projectName}-Button-focus.png` });
+        }
       }
     });
 

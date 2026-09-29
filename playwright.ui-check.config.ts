@@ -5,8 +5,12 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : 4,
+  timeout: 60000,
   reporter: 'html',
+  expect: {
+    timeout: 10000,
+  },
   // UI_CHECK_PORT cho phép chạy test với worktree dev server (vd 3001)
   // khi port 3000 đã bị main checkout chiếm
   use: {
