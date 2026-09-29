@@ -4,3 +4,4 @@
 export * from './users';
 export * from './products';
 export * from './tokens';
+export * from './inventory';
