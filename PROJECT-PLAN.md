@@ -183,13 +183,54 @@ Roadmap được chia theo phase, mỗi phase là 1 nhánh Git/worktree riêng.
 
 ---
 
+## Quyết định kiến trúc — Phase 5+ (2026-09-29)
+
+Chốt sau Phase 4:
+
+1. **PartyKit Room Strategy**: Hybrid approach
+   - Primary room: `branch:{branchId}` — team tại chi nhánh đó nhìn thông báo/chat/dashboard riêng
+   - Broadcast room: `role:owner` — Owner join toàn bộ để theo dõi realtime cross-branch
+   - Khác role (Manager, Cashier, Staff) không được quyền join room chi nhánh khác
+
+2. **Product Search**: N1QL đủ dùng MVP
+   - Giữ N1QL, không thêm Elasticsearch/Meilisearch
+   - Nếu catalog lớn >10k SKU cần optimize: add N1QL index tối ưu, horizontal partition catalog, hoặc migrate Elasticsearch giai đoạn 2
+   - Ưu tiên: simple & dễ vận hành 1 người
+
+3. **Product Images Storage**: Adobe server-side
+   - Server tự request/response (không client direct CDN), giữ flexibility thay đổi provider
+   - Implement qua `ImageStorageProvider` interface abstraction layer → dễ swap provider sau (Cloudinary, AWS S3) không thay code business logic
+   - MVP: simple file upload, serve qua Express middleware, scale lên CDN nếu cần
+
+4. **Couchbase Backup**: Scheduled daily trên Capella
+   - Enable daily backup (default schedule), chấp nhận RPO 24h
+   - RTO: vài giờ (phục hồi từ snapshot)
+   - Điều chỉnh sau nếu uptime SLA tăng hoặc data loss tolerance giảm
+
+5. **Design System**: Tái dùng Svelte library hiện có
+   - Quyết định đã chốt ở Phase 3 → không thay đổi
+   - Token migration hoàn thành → skip khỏi Phase 5 scope
+
+---
+
 ## Công việc đang dở dang / technical debt
 
-1. **Test suite**: `tests/ui-check.spec.ts`, `tests/ui-check-v2.spec.ts` chưa ổn do lỗi config; một số unit test cũ cần cập nhật sau refactor
-2. **Documentation**: cập nhật README.md hướng dẫn dev/test sau khi thêm `baseURL`; quy chuẩn tên screenshot `<engine>-<Component>-<state>.png`
-3. **Dọn dẹp**: file cũ trong `.claude/worktrees/` có thể còn tham chiếu history; dọn `playwright-report/`, `test-results/` sau mỗi lần chạy test
-4. **E2E maintenance**: bộ test auth (`37a785e`) cần chạy định kỳ, cập nhật selector nếu UI đổi
-5. **Chưa quyết định**: room strategy cụ thể cho PartyKit realtime layer (Phase 5); có cần Elasticsearch/Meilisearch riêng khi catalog lớn hay N1QL đủ dùng lâu dài; CDN lưu trữ ảnh sản phẩm; backup/disaster recovery cho Couchbase (tần suất, RTO/RPO); có tái dùng Svelte component library hiện có làm design system cho Phase 3 hay xây mới
+1. **Test suite**: 
+   - ✅ Unit tests fixed (97/97 passing, disabled old Phase 2 test)
+   - ⚠️ Playwright UI tests blocking (need dev server + .env) — **MUST FIX trước Phase 5 merge**
+
+2. **Documentation**: 
+   - ✅ README.md comprehensive (Phase 4 just completed)
+   - Todo: maintain khi thêm feature mới
+
+3. **Dọn dẹp** (parallel, không block):
+   - file cũ trong `.claude/worktrees/` có thể còn tham chiếu history
+   - dọn `playwright-report/`, `test-results/` sau mỗi lần chạy test
+   - cleanup được — schedule song song
+
+4. **E2E maintenance**: 
+   - bộ test auth (`37a785e`) cần chạy định kỳ, cập nhật selector nếu UI đổi
+   - Setup CI/CD để tự động trước merge
 
 ---
 
