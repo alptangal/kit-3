@@ -1,0 +1,14 @@
+Error: Not found: /ui/radiogroup
+    at resolve (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\server\respond.js:716:13)
+    at D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\server\respond.js:469:11
+    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:63:14)
+    at with_request_store (file:///D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/node_modules/@sveltejs/kit/src/exports/internal/event.js:77:20)
+    at fn (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\server\respond.js:468:17)
+    at record_span (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\telemetry\record_span.js:9:10)
+    at resolve (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\server\respond.js:460:15)
+    at Object.handle (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\src\hooks.server.ts:102:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async fn (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\server\respond.js:456:12)
+    at async handle (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\server\respond.js:437:20)
+    at async internal_respond (D:\nodejs\svelte\kit-3\.claude\worktrees\fix-register-tests\node_modules\@sveltejs\kit\src\runtime\server\respond.js:411:10)
+    at async file:///D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/node_modules/@sveltejs/kit/src/exports/vite/dev/index.js:558:22

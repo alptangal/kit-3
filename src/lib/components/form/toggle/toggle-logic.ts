@@ -1,129 +1,59 @@
-/**
- * Toggle State Logic
- * Manages toggle/switch on/off state with accessibility
- */
-
 export interface ToggleState {
-  isOn: boolean;
-  disabled: boolean;
-  isFocused: boolean;
-  label: string;
-  ariaLabel?: string;
-  ariaDescription?: string;
+  isChecked: boolean;
+  isDisabled: boolean;
+  isLoading: boolean;
 }
 
-export const createToggleState = (
-  isOn: boolean = false,
-  config?: {
-    disabled?: boolean;
-    label?: string;
-    ariaLabel?: string;
-    ariaDescription?: string;
-  }
-): ToggleState => ({
-  isOn,
-  disabled: config?.disabled ?? false,
-  isFocused: false,
-  label: config?.label ?? 'Toggle',
-  ariaLabel: config?.ariaLabel,
-  ariaDescription: config?.ariaDescription,
-});
+export interface ToggleActions {
+  toggle: () => void;
+  setChecked: (checked: boolean) => void;
+  disable: (disabled: boolean) => void;
+  setLoading: (loading: boolean) => void;
+}
 
-export const toggle = (state: ToggleState): ToggleState => {
-  if (state.disabled) return state;
+export function createToggleState(
+  initialChecked: boolean = false,
+  initialDisabled: boolean = false
+): ToggleState & ToggleActions {
+  let state: ToggleState = {
+    isChecked: initialChecked,
+    isDisabled: initialDisabled,
+    isLoading: false,
+  };
 
   return {
-    ...state,
-    isOn: !state.isOn,
+    get isChecked() {
+      return state.isChecked;
+    },
+    get isDisabled() {
+      return state.isDisabled;
+    },
+    get isLoading() {
+      return state.isLoading;
+    },
+    toggle() {
+      if (!state.isDisabled && !state.isLoading) {
+        state.isChecked = !state.isChecked;
+      }
+    },
+    setChecked(checked: boolean) {
+      if (!state.isDisabled && !state.isLoading) {
+        state.isChecked = checked;
+      }
+    },
+    disable(disabled: boolean) {
+      state.isDisabled = disabled;
+    },
+    setLoading(loading: boolean) {
+      state.isLoading = loading;
+    },
   };
-};
+}
 
-export const turnOn = (state: ToggleState): ToggleState => {
-  if (state.disabled || state.isOn) return state;
+export function toggleOption(state: ToggleState): boolean {
+  return !state.isChecked;
+}
 
-  return {
-    ...state,
-    isOn: true,
-  };
-};
-
-export const turnOff = (state: ToggleState): ToggleState => {
-  if (state.disabled || !state.isOn) return state;
-
-  return {
-    ...state,
-    isOn: false,
-  };
-};
-
-export const setState = (
-  state: ToggleState,
-  isOn: boolean
-): ToggleState => {
-  if (state.disabled) return state;
-
-  if (state.isOn === isOn) return state;
-
-  return {
-    ...state,
-    isOn,
-  };
-};
-
-export const setDisabled = (
-  state: ToggleState,
-  disabled: boolean
-): ToggleState => ({
-  ...state,
-  disabled,
-  isFocused: disabled ? false : state.isFocused,
-});
-
-export const setFocused = (
-  state: ToggleState,
-  isFocused: boolean
-): ToggleState => {
-  if (state.disabled) return state;
-
-  return {
-    ...state,
-    isFocused,
-  };
-};
-
-export const handleKeydown = (
-  state: ToggleState,
-  key: string
-): ToggleState => {
-  if (state.disabled) return state;
-
-  if (key === ' ' || key === 'Enter') {
-    return toggle(state);
-  }
-
-  return state;
-};
-
-export const setLabel = (
-  state: ToggleState,
-  label: string
-): ToggleState => ({
-  ...state,
-  label,
-});
-
-export const setAriaLabel = (
-  state: ToggleState,
-  ariaLabel: string | undefined
-): ToggleState => ({
-  ...state,
-  ariaLabel,
-});
-
-export const setAriaDescription = (
-  state: ToggleState,
-  ariaDescription: string | undefined
-): ToggleState => ({
-  ...state,
-  ariaDescription,
-});
+export function isToggleDisabled(state: ToggleState): boolean {
+  return state.isDisabled || state.isLoading;
+}
