@@ -372,6 +372,22 @@ src/lib/components/data/table/
 
 ---
 
+## Phase 4 Task Status — Services Complete, UI Pending
+
+**Important**: Phase 4 tasks #30 (Pricing), #31 (POS Sessions), #32 (Stock Takes) have **backend services completed**:
+- PricingService ✅ — list, get, create, apply promotions
+- PosSessionService ✅ — open, close, record transactions, list, get
+- StockTakesService ✅ — start, add items, complete, apply adjustments, list, get
+
+**Admin UI for these tasks is NOT yet implemented** — pages currently use basic HTML.
+
+**Plan**: Days 6-7 of this Component Library task, after Priority 1 components (Select, RadioGroup, Toggle, Table) are complete, refactor Phase 4 admin UI pages (#30/#31/#32) to use the new components. This ensures:
+1. Components are battle-tested with real use cases
+2. Phase 4 UI is built on solid, reusable foundations
+3. No duplication of effort building multiple UI patterns
+
+---
+
 ## Phase 4 Pages to Refactor (Tech Debt)
 
 Once Priority 1 components ready:
