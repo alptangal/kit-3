@@ -214,6 +214,9 @@
 	"/ui/radiogroup": [
 		"src/routes/+layout.server.ts"
 	],
+	"/ui/table": [
+		"src/routes/+layout.server.ts"
+	],
 	"/ui/toggle": [
 		"src/routes/+layout.server.ts"
 	],

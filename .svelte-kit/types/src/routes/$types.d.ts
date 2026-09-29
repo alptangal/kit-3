@@ -10,7 +10,7 @@ type OutputDataShape<T> = MaybeWithVoid<Omit<App.PageData, RequiredKeys<T>> & Pa
 type EnsureDefined<T> = T extends null | undefined ? {} : T;
 type OptionalUnion<U extends Record<string, any>, A extends keyof U = U extends U ? keyof U : never> = U extends unknown ? { [P in Exclude<A, keyof U>]?: never } & U : never;
 export type Snapshot<T = any> = Kit.Snapshot<T>;
-type LayoutRouteId = RouteId | "/(authorized)/admin" | "/(authorized)/admin/brands" | "/(authorized)/admin/categories" | "/(authorized)/admin/products" | "/(authorized)/admin/variants" | "/(authorized)/profile" | "/(unauthorized)" | "/(unauthorized)/about" | "/(unauthorized)/forgot-password" | "/(unauthorized)/login" | "/(unauthorized)/register" | "/(unauthorized)/reset-password" | "/(unauthorized)/verify-email" | "/test" | "/test/test1" | "/ui" | "/ui/radiogroup" | "/ui/toggle" | null
+type LayoutRouteId = RouteId | "/(authorized)/admin" | "/(authorized)/admin/brands" | "/(authorized)/admin/categories" | "/(authorized)/admin/products" | "/(authorized)/admin/variants" | "/(authorized)/profile" | "/(unauthorized)" | "/(unauthorized)/about" | "/(unauthorized)/forgot-password" | "/(unauthorized)/login" | "/(unauthorized)/register" | "/(unauthorized)/reset-password" | "/(unauthorized)/verify-email" | "/test" | "/test/test1" | "/ui" | "/ui/radiogroup" | "/ui/table" | "/ui/toggle" | null
 type LayoutParams = RouteParams & {  }
 type LayoutServerParentData = EnsureDefined<{}>;
 type LayoutParentData = EnsureDefined<{}>;
