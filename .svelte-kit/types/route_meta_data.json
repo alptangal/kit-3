@@ -90,6 +90,21 @@
 	"/api/admin/inventory/stock/list": [
 		"src/routes/api/admin/inventory/stock/list/+server.ts"
 	],
+	"/api/admin/orders/cancel": [
+		"src/routes/api/admin/orders/cancel/+server.ts"
+	],
+	"/api/admin/orders/create": [
+		"src/routes/api/admin/orders/create/+server.ts"
+	],
+	"/api/admin/orders/get": [
+		"src/routes/api/admin/orders/get/+server.ts"
+	],
+	"/api/admin/orders/list": [
+		"src/routes/api/admin/orders/list/+server.ts"
+	],
+	"/api/admin/orders/update-status": [
+		"src/routes/api/admin/orders/update-status/+server.ts"
+	],
 	"/api/admin/products/create": [
 		"src/routes/api/admin/products/create/+server.ts"
 	],
@@ -152,6 +167,9 @@
 	],
 	"/api/auth/refresh": [
 		"src/routes/api/auth/refresh/+server.ts"
+	],
+	"/api/customer/orders/list": [
+		"src/routes/api/customer/orders/list/+server.ts"
 	],
 	"/api/dev-emails": [
 		"src/routes/api/dev-emails/+server.ts"
