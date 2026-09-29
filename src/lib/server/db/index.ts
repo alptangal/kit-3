@@ -5,3 +5,6 @@ export * from './users';
 export * from './products';
 export * from './tokens';
 export * from './inventory';
+export * from './pricing';
+export * from './pos-sessions';
+export * from './stock-takes';

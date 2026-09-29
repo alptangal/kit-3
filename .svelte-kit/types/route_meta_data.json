@@ -90,6 +90,21 @@
 	"/api/admin/inventory/stock/list": [
 		"src/routes/api/admin/inventory/stock/list/+server.ts"
 	],
+	"/api/admin/pos/sessions/close": [
+		"src/routes/api/admin/pos/sessions/close/+server.ts"
+	],
+	"/api/admin/pos/sessions/get": [
+		"src/routes/api/admin/pos/sessions/get/+server.ts"
+	],
+	"/api/admin/pos/sessions/list": [
+		"src/routes/api/admin/pos/sessions/list/+server.ts"
+	],
+	"/api/admin/pos/sessions/open": [
+		"src/routes/api/admin/pos/sessions/open/+server.ts"
+	],
+	"/api/admin/pos/sessions/transaction": [
+		"src/routes/api/admin/pos/sessions/transaction/+server.ts"
+	],
 	"/api/admin/products/create": [
 		"src/routes/api/admin/products/create/+server.ts"
 	],
@@ -105,8 +120,35 @@
 	"/api/admin/products/update": [
 		"src/routes/api/admin/products/update/+server.ts"
 	],
+	"/api/admin/promotions/create": [
+		"src/routes/api/admin/promotions/create/+server.ts"
+	],
+	"/api/admin/promotions/get": [
+		"src/routes/api/admin/promotions/get/+server.ts"
+	],
+	"/api/admin/promotions/list": [
+		"src/routes/api/admin/promotions/list/+server.ts"
+	],
 	"/api/admin/roles": [
 		"src/routes/api/admin/roles/+server.ts"
+	],
+	"/api/admin/stock-takes/add-items": [
+		"src/routes/api/admin/stock-takes/add-items/+server.ts"
+	],
+	"/api/admin/stock-takes/apply-adjustments": [
+		"src/routes/api/admin/stock-takes/apply-adjustments/+server.ts"
+	],
+	"/api/admin/stock-takes/complete": [
+		"src/routes/api/admin/stock-takes/complete/+server.ts"
+	],
+	"/api/admin/stock-takes/get": [
+		"src/routes/api/admin/stock-takes/get/+server.ts"
+	],
+	"/api/admin/stock-takes/list": [
+		"src/routes/api/admin/stock-takes/list/+server.ts"
+	],
+	"/api/admin/stock-takes/start": [
+		"src/routes/api/admin/stock-takes/start/+server.ts"
 	],
 	"/api/admin/users/create": [
 		"src/routes/api/admin/users/create/+server.ts"
@@ -167,6 +209,9 @@
 	],
 	"/api/login": [
 		"src/routes/api/login/+server.ts"
+	],
+	"/api/promotions/apply": [
+		"src/routes/api/promotions/apply/+server.ts"
 	],
 	"/api/register": [
 		"src/routes/api/register/+server.ts"
