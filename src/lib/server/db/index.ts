@@ -6,3 +6,4 @@ export * from './products';
 export * from './tokens';
 export * from './inventory';
 export * from './orders';
+export * from './suppliers';

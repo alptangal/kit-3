@@ -120,8 +120,29 @@
 	"/api/admin/products/update": [
 		"src/routes/api/admin/products/update/+server.ts"
 	],
+	"/api/admin/purchase-orders/create": [
+		"src/routes/api/admin/purchase-orders/create/+server.ts"
+	],
+	"/api/admin/purchase-orders/get": [
+		"src/routes/api/admin/purchase-orders/get/+server.ts"
+	],
+	"/api/admin/purchase-orders/list": [
+		"src/routes/api/admin/purchase-orders/list/+server.ts"
+	],
+	"/api/admin/purchase-orders/update-status": [
+		"src/routes/api/admin/purchase-orders/update-status/+server.ts"
+	],
 	"/api/admin/roles": [
 		"src/routes/api/admin/roles/+server.ts"
+	],
+	"/api/admin/suppliers/create": [
+		"src/routes/api/admin/suppliers/create/+server.ts"
+	],
+	"/api/admin/suppliers/get": [
+		"src/routes/api/admin/suppliers/get/+server.ts"
+	],
+	"/api/admin/suppliers/list": [
+		"src/routes/api/admin/suppliers/list/+server.ts"
 	],
 	"/api/admin/users/create": [
 		"src/routes/api/admin/users/create/+server.ts"
