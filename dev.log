@@ -1,0 +1,435 @@
+
+> kit-3@0.0.1 dev
+> vite dev --port 3000 --host --port 3000 --host
+
+
+  [32m[1mVITE[22m v7.3.6[39m  [2mready in [0m[1m2074[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttps://localhost:[1m3000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttps://10.2.0.2:[1m3000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttps://100.115.228.4:[1m3000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttps://192.168.144.1:[1m3000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttps://192.168.2.27:[1m3000[22m/[39m
+=== App initialization started ===
+[initApp] Vault ready
+[partykit-push] attempt 1 failed: fetch failed
+[initCollections] Starting...
+[partykit-push] attempt 2 failed: fetch failed
+[initCollections] Collection "users" already exists — skip
+[initCollections] Collection "webauthn_challenges" already exists — skip
+[initCollections] Collection "name_roles" already exists — skip
+[initCollections] Collection "permissions" already exists — skip
+[initCollections] Collection "detail_roles" already exists — skip
+[initCollections] Collection "user_status" already exists — skip
+[initCollections] Collection "products" already exists — skip
+[initCollections] Collection "product_variants" already exists — skip
+[initCollections] Collection "product_variant_attributes" already exists — skip
+[initCollections] Collection "inventory_stock" already exists — skip
+[initCollections] Collection "inventory_lots" already exists — skip
+[initCollections] Collection "stock_movements" already exists — skip
+[initCollections] Collection "orders" already exists — skip
+[initCollections] Collection "suppliers" already exists — skip
+[initCollections] Collection "purchase_orders" already exists — skip
+[initCollections] Collection "stock_transfers" already exists — skip
+[initCollections] Collection "stock_takes" already exists — skip
+[initCollections] Collection "brands" already exists — skip
+[initCollections] Collection "categories" already exists — skip
+[initCollections] Collection "branches" already exists — skip
+[initCollections] Collection "payments" already exists — skip
+[initCollections] Collection "order_returns" already exists — skip
+[initCollections] Collection "pos_sessions" already exists — skip
+[initCollections] Collection "promotions" already exists — skip
+[initCollections] Collection "loyalty_transactions" already exists — skip
+[initCollections] Collection "audit_logs" already exists — skip
+[initCollections] Collection "notifications" already exists — skip
+[initCollections] Collection "notification_templates" already exists — skip
+[initCollections] Collection "conversations" already exists — skip
+[initCollections] Collection "messages" already exists — skip
+[initCollections] Collection "system" already exists — skip
+[initCollections] Collection "refresh_tokens" already exists — skip
+[initCollections] Collection "token_rotation_logs" already exists — skip
+[initCollections] Collection "system_secrets" already exists — skip
+[initCollections] Done creating collections
+[initIndexes] Starting...
+[initIndexes] Index "idx_users_firstname" already exists — skip
+[initIndexes] Index "idx_users_midname" already exists — skip
+[partykit-push] attempt 3 failed: fetch failed
+[initIndexes] Index "idx_users_lastname" already exists — skip
+[initIndexes] Index "idx_users_description" already exists — skip
+[initIndexes] Index "idx_users_roleId" already exists — skip
+[initIndexes] Index "idx_users_statusId" already exists — skip
+[initIndexes] Index "idx_users_emailBlindIndex" already exists — skip
+[initIndexes] Index "idx_users_phoneBlindIndex" already exists — skip
+[initIndexes] Index "idx_users_usernameBlindIndex" already exists — skip
+[initIndexes] Index "idx_users_authMethod" already exists — skip
+[initIndexes] Index "idx_users_webauthnUserHandle" already exists — skip
+[initIndexes] Index "idx_users_mfaEnabled" already exists — skip
+[initIndexes] Index "idx_users_passwordResetTokenHash" already exists — skip
+[initIndexes] Index "idx_users_emailVerificationTokenHash" already exists — skip
+[initIndexes] Index "idx_users_loyaltyPoints" already exists — skip
+[initIndexes] Index "idx_users_branchId" already exists — skip
+[initIndexes] Index "idx_users_createdAt" already exists — skip
+[initIndexes] Index "idx_users_deletedAt" already exists — skip
+[initIndexes] Index "idx_name_roles_name" already exists — skip
+[partykit-push] attempt 4 failed: fetch failed
+[initIndexes] Index "idx_name_roles_displayName" already exists — skip
+[initIndexes] Index "idx_name_roles_description" already exists — skip
+[initIndexes] Index "idx_name_roles_level" already exists — skip
+[initIndexes] Index "idx_name_roles_isSystem" already exists — skip
+[initIndexes] Index "idx_name_roles_createdAt" already exists — skip
+[initIndexes] Index "idx_name_roles_updatedAt" already exists — skip
+[initIndexes] Index "idx_permissions_key" already exists — skip
+[initIndexes] Index "idx_permissions_resource" already exists — skip
+[initIndexes] Index "idx_permissions_action" already exists — skip
+[initIndexes] Index "idx_permissions_description" already exists — skip
+[initIndexes] Index "idx_permissions_createdAt" already exists — skip
+[initIndexes] Index "idx_detail_roles_roleName" already exists — skip
+[initIndexes] Index "idx_detail_roles_permissionKey" already exists — skip
+[initIndexes] Index "idx_detail_roles_scope" already exists — skip
+[initIndexes] Index "idx_detail_roles_createdAt" already exists — skip
+[initIndexes] Index "idx_user_status_name" already exists — skip
+[initIndexes] Index "idx_user_status_description" already exists — skip
+[initIndexes] Index "idx_user_status_canLogin" already exists — skip
+[initIndexes] Index "idx_user_status_createdAt" already exists — skip
+[initIndexes] Index "idx_user_status_updatedAt" already exists — skip
+[initIndexes] Index "idx_products_name" already exists — skip
+[initIndexes] Index "idx_products_description" already exists — skip
+[initIndexes] Index "idx_products_categoryId" already exists — skip
+[initIndexes] Index "idx_products_brandId" already exists — skip
+[initIndexes] Index "idx_products_hasVariants" already exists — skip
+[initIndexes] Index "idx_products_status" already exists — skip
+[initIndexes] Index "idx_products_createdBy" already exists — skip
+[initIndexes] Index "idx_products_createdAt" already exists — skip
+[initIndexes] Index "idx_products_updatedAt" already exists — skip
+[initIndexes] Index "idx_product_variants_productId" already exists — skip
+[initIndexes] Index "idx_product_variants_sku" already exists — skip
+[initIndexes] Index "idx_product_variants_barcode" already exists — skip
+[initIndexes] Index "idx_product_variants_displayName" already exists — skip
+[initIndexes] Index "idx_product_variants_price" already exists — skip
+[initIndexes] Index "idx_product_variants_trackLot" already exists — skip
+[initIndexes] Index "idx_product_variants_trackExpiry" already exists — skip
+[partykit-push] attempt 5 failed: fetch failed
+[partykit-push] gave up after max retries — clients will use HTTP fallback for public key
+[initIndexes] Index "idx_product_variants_status" already exists — skip
+[initIndexes] Index "idx_product_variants_createdAt" already exists — skip
+[initIndexes] Index "idx_product_variants_updatedAt" already exists — skip
+[initIndexes] Index "idx_product_variant_attributes_variantId" already exists — skip
+[initIndexes] Index "idx_product_variant_attributes_attributeTypeName" already exists — skip
+[initIndexes] Index "idx_product_variant_attributes_value" already exists — skip
+[initIndexes] Index "idx_inventory_stock_variantId" already exists — skip
+[initIndexes] Index "idx_inventory_stock_branchId" already exists — skip
+[initIndexes] Index "idx_inventory_stock_quantityOnHand" already exists — skip
+[initIndexes] Index "idx_inventory_stock_quantityReserved" already exists — skip
+[initIndexes] Index "idx_inventory_lots_variantId" already exists — skip
+[initIndexes] Index "idx_inventory_lots_branchId" already exists — skip
+[initIndexes] Index "idx_inventory_lots_lotNumber" already exists — skip
+[initIndexes] Index "idx_inventory_lots_quantityOnHand" already exists — skip
+[initIndexes] Index "idx_inventory_lots_manufacturedAt" already exists — skip
+[initIndexes] Index "idx_inventory_lots_expiresAt" already exists — skip
+[initIndexes] Index "idx_inventory_lots_receivedAt" already exists — skip
+[initIndexes] Index "idx_inventory_lots_supplierId" already exists — skip
+[initIndexes] Index "idx_inventory_lots_status" already exists — skip
+[initIndexes] Index "idx_inventory_lots_createdAt" already exists — skip
+[initIndexes] Index "idx_stock_movements_variantId" already exists — skip
+[initIndexes] Index "idx_stock_movements_branchId" already exists — skip
+[initIndexes] Index "idx_stock_movements_lotId" already exists — skip
+[initIndexes] Index "idx_stock_movements_type" already exists — skip
+[initIndexes] Index "idx_stock_movements_referenceType" already exists — skip
+[initIndexes] Index "idx_stock_movements_referenceId" already exists — skip
+[initIndexes] Index "idx_stock_movements_performedBy" already exists — skip
+[initIndexes] Index "idx_stock_movements_createdAt" already exists — skip
+[initIndexes] Index "idx_orders_orderCode" already exists — skip
+[initIndexes] Index "idx_orders_customerId" already exists — skip
+[initIndexes] Index "idx_orders_staffId" already exists — skip
+[initIndexes] Index "idx_orders_branchId" already exists — skip
+[initIndexes] Index "idx_orders_status" already exists — skip
+[initIndexes] Index "idx_orders_totalAmount" already exists — skip
+[initIndexes] Index "idx_orders_createdAt" already exists — skip
+[initIndexes] Index "idx_orders_updatedAt" already exists — skip
+[initIndexes] Index "idx_suppliers_name" already exists — skip
+[initIndexes] Index "idx_suppliers_contactPerson" already exists — skip
+[initIndexes] Index "idx_suppliers_phoneBlindIndex" already exists — skip
+[initIndexes] Index "idx_suppliers_status" already exists — skip
+[initIndexes] Index "idx_suppliers_createdAt" already exists — skip
+[initIndexes] Index "idx_suppliers_updatedAt" already exists — skip
+[initIndexes] Index "idx_purchase_orders_poCode" already exists — skip
+[initIndexes] Index "idx_purchase_orders_supplierId" already exists — skip
+[initIndexes] Index "idx_purchase_orders_branchId" already exists — skip
+[initIndexes] Index "idx_purchase_orders_status" already exists — skip
+[initIndexes] Index "idx_purchase_orders_totalCost" already exists — skip
+[initIndexes] Index "idx_purchase_orders_createdBy" already exists — skip
+[initIndexes] Index "idx_purchase_orders_expectedAt" already exists — skip
+[initIndexes] Index "idx_purchase_orders_createdAt" already exists — skip
+[initIndexes] Index "idx_purchase_orders_updatedAt" already exists — skip
+[initIndexes] Index "idx_stock_transfers_transferCode" already exists — skip
+[initIndexes] Index "idx_stock_transfers_fromBranchId" already exists — skip
+[initIndexes] Index "idx_stock_transfers_toBranchId" already exists — skip
+[initIndexes] Index "idx_stock_transfers_status" already exists — skip
+[initIndexes] Index "idx_stock_transfers_requestedBy" already exists — skip
+[initIndexes] Index "idx_stock_transfers_createdAt" already exists — skip
+[initIndexes] Index "idx_stock_takes_branchId" already exists — skip
+[initIndexes] Index "idx_stock_takes_status" already exists — skip
+[initIndexes] Index "idx_stock_takes_performedBy" already exists — skip
+[initIndexes] Index "idx_stock_takes_startedAt" already exists — skip
+[initIndexes] Index "idx_brands_name" already exists — skip
+[initIndexes] Index "idx_brands_slug" already exists — skip
+[initIndexes] Index "idx_brands_status" already exists — skip
+[initIndexes] Index "idx_brands_createdAt" already exists — skip
+[initIndexes] Index "idx_brands_updatedAt" already exists — skip
+[initIndexes] Index "idx_categories_name" already exists — skip
+[initIndexes] Index "idx_categories_slug" already exists — skip
+[initIndexes] Index "idx_categories_parentId" already exists — skip
+[initIndexes] Index "idx_categories_status" already exists — skip
+[initIndexes] Index "idx_categories_createdAt" already exists — skip
+[initIndexes] Index "idx_categories_updatedAt" already exists — skip
+[initIndexes] Index "idx_branches_name" already exists — skip
+[initIndexes] Index "idx_branches_managerId" already exists — skip
+[initIndexes] Index "idx_branches_isWarehouse" already exists — skip
+[initIndexes] Index "idx_branches_status" already exists — skip
+[initIndexes] Index "idx_branches_createdAt" already exists — skip
+[initIndexes] Index "idx_branches_updatedAt" already exists — skip
+[initIndexes] Index "idx_payments_orderId" already exists — skip
+[initIndexes] Index "idx_payments_paymentCode" already exists — skip
+[initIndexes] Index "idx_payments_method" already exists — skip
+[initIndexes] Index "idx_payments_amount" already exists — skip
+[initIndexes] Index "idx_payments_status" already exists — skip
+[initIndexes] Index "idx_payments_transactionReference" already exists — skip
+[initIndexes] Index "idx_payments_processedBy" already exists — skip
+[initIndexes] Index "idx_payments_createdAt" already exists — skip
+[initIndexes] Index "idx_order_returns_returnCode" already exists — skip
+[initIndexes] Index "idx_order_returns_orderId" already exists — skip
+[initIndexes] Index "idx_order_returns_branchId" already exists — skip
+[initIndexes] Index "idx_order_returns_customerId" already exists — skip
+[initIndexes] Index "idx_order_returns_totalRefundAmount" already exists — skip
+[initIndexes] Index "idx_order_returns_status" already exists — skip
+[initIndexes] Index "idx_order_returns_handledBy" already exists — skip
+[initIndexes] Index "idx_order_returns_createdAt" already exists — skip
+[initIndexes] Index "idx_pos_sessions_sessionCode" already exists — skip
+[initIndexes] Index "idx_pos_sessions_branchId" already exists — skip
+[initIndexes] Index "idx_pos_sessions_staffId" already exists — skip
+[initIndexes] Index "idx_pos_sessions_cashDifference" already exists — skip
+[initIndexes] Index "idx_pos_sessions_status" already exists — skip
+[initIndexes] Index "idx_pos_sessions_openedAt" already exists — skip
+[initIndexes] Index "idx_promotions_code" already exists — skip
+[initIndexes] Index "idx_promotions_name" already exists — skip
+[initIndexes] Index "idx_promotions_type" already exists — skip
+[initIndexes] Index "idx_promotions_usageCount" already exists — skip
+[initIndexes] Index "idx_promotions_status" already exists — skip
+[initIndexes] Index "idx_promotions_startAt" already exists — skip
+[initIndexes] Index "idx_promotions_endAt" already exists — skip
+[initIndexes] Index "idx_promotions_createdAt" already exists — skip
+[initIndexes] Index "idx_loyalty_transactions_customerId" already exists — skip
+[initIndexes] Index "idx_loyalty_transactions_orderId" already exists — skip
+[initIndexes] Index "idx_loyalty_transactions_type" already exists — skip
+[initIndexes] Index "idx_loyalty_transactions_points" already exists — skip
+[initIndexes] Index "idx_loyalty_transactions_createdAt" already exists — skip
+[initIndexes] Index "idx_audit_logs_userId" already exists — skip
+[initIndexes] Index "idx_audit_logs_userRole" already exists — skip
+[initIndexes] Index "idx_audit_logs_action" already exists — skip
+[initIndexes] Index "idx_audit_logs_collectionName" already exists — skip
+[initIndexes] Index "idx_audit_logs_documentId" already exists — skip
+[initIndexes] Index "idx_audit_logs_ipAddress" already exists — skip
+[initIndexes] Index "idx_audit_logs_createdAt" already exists — skip
+[initIndexes] Index "idx_notifications_userId" already exists — skip
+[initIndexes] Index "idx_notifications_type" already exists — skip
+[initIndexes] Index "idx_notifications_title" already exists — skip
+[initIndexes] Index "idx_notifications_isRead" already exists — skip
+[initIndexes] Index "idx_notifications_channel" already exists — skip
+[initIndexes] Index "idx_notifications_createdAt" already exists — skip
+[initIndexes] Index "idx_notification_templates_code" already exists — skip
+[initIndexes] Index "idx_notification_templates_channel" already exists — skip
+[initIndexes] Index "idx_notification_templates_status" already exists — skip
+[initIndexes] Index "idx_notification_templates_createdAt" already exists — skip
+[initIndexes] Index "idx_notification_templates_updatedAt" already exists — skip
+[initIndexes] Index "idx_conversations_type" already exists — skip
+[initIndexes] Index "idx_conversations_title" already exists — skip
+[initIndexes] Index "idx_conversations_customerId" already exists — skip
+[initIndexes] Index "idx_conversations_branchId" already exists — skip
+[initIndexes] Index "idx_conversations_lastMessageAt" already exists — skip
+[initIndexes] Index "idx_conversations_status" already exists — skip
+[initIndexes] Index "idx_conversations_createdAt" already exists — skip
+[initIndexes] Index "idx_messages_conversationId" already exists — skip
+[initIndexes] Index "idx_messages_senderId" already exists — skip
+[initIndexes] Index "idx_messages_contentType" already exists — skip
+[initIndexes] Index "idx_messages_createdAt" already exists — skip
+[initIndexes] Index "idx_system_initApp" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_userId" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_tokenHash" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_familyId" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_expiresAt" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_isRevoked" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_revokedReason" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_deviceId" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_ipAddress" already exists — skip
+[initIndexes] Index "idx_refresh_tokens_createdAt" already exists — skip
+[initIndexes] Index "idx_token_rotation_logs_userId" already exists — skip
+[initIndexes] Index "idx_token_rotation_logs_action" already exists — skip
+[initIndexes] Index "idx_token_rotation_logs_familyId" already exists — skip
+[initIndexes] Index "idx_token_rotation_logs_ipAddress" already exists — skip
+[initIndexes] Index "idx_token_rotation_logs_createdAt" already exists — skip
+[initIndexes] Done creating indexes
+[seed] Catalog already up to date — skip
+=== App initialization completed ===
+[partykit-push] attempt 1 failed: fetch failed
+[partykit-push] attempt 2 failed: fetch failed
+[partykit-push] attempt 3 failed: fetch failed
+[partykit-push] attempt 4 failed: fetch failed
+[partykit-push] attempt 5 failed: fetch failed
+[partykit-push] gave up after max retries — clients will use HTTP fallback for public key
+[2m7:11:54 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/shared/error-template.js[22m
+[2m7:11:54 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/server/internal.js[22m
+[2m7:11:54 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.svelte[22m
+[2m7:11:54 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.js[22m
+[2m7:13:26 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/shared/error-template.js[22m
+[2m7:13:26 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/server/internal.js[22m
+[2m7:13:26 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.svelte[22m
+[2m7:13:26 AM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.js[22m
+[36m7:17:10 AM [vite-plugin-svelte] src/lib/components/layout/menu-bar/Main.svelte:35:23 Redundant role 'navigation'
+https://svelte.dev/e/a11y_no_redundant_roles[39m
+[36m7:17:10 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:3 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events[39m
+[36m7:17:10 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:3 `<div>` wit[2m7:31:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:31:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:31:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:31:49 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:32:28 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:35:25 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:35:29 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/partykit/public/index.html[22m
+[2m7:35:29 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m7:35:30 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/src/app.html[22m
+[2m7:35:31 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:44:15 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:44:21 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:45:18 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:46:39 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:57:50 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m7:57:50 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m8:08:27 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m8:13:31 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m8:37:34 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m8:40:11 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m8:54:45 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m9:13:32 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m10:05:03 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-firefox-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m10:05:06 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-firefox-tests/partykit/public/index.html[22m
+[2m10:05:07 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-firefox-tests/playwright-report/index.html[22m
+[2m10:05:07 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-firefox-tests/playwright-report/index.html[22m
+[2m10:05:07 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-firefox-tests/src/app.html[22m
+[2m10:05:14 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-firefox-tests/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m12:51:55 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/shared/error-template.js[22m
+[2m12:51:55 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/server/internal.js[22m
+[2m12:51:55 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.svelte[22m
+[2m12:51:55 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.js[22m
+[2m12:53:23 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.js[22m
+[2m12:53:23 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/root.svelte[22m
+[2m12:53:23 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/shared/error-template.js[22m
+[2m12:53:23 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2m.svelte-kit/generated/server/internal.js[22m
+[2m12:55:28 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m12:56:54 PM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/phase4-multi-branch-inventory/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m12:57:02 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/phase4-multi-branch-inventory/partykit/public/index.html[22m
+[2m12:57:02 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/phase4-multi-branch-inventory/playwright-report/index.html[22m
+[2m12:57:02 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/phase4-multi-branch-inventory/src/app.html[22m
+[2m12:57:07 PM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/phase4-multi-branch-inventory/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+IA role
+https://svelte.dev/e/a11y_no_static_element_interactions[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:3 Self-closing HTML tags for non-void elements are ambiguous — use `<div ...></div>` rather than `<div ... />`
+https://svelte.dev/e/element_invalid_self_closing_tag[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:28 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:59:6 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:70:60 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:82:6 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:123:0 Unused CSS selector ".nav-sidebar__brand"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:133:0 Unused CSS selector ".nav-sidebar__list"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:139:0 Unused CSS selector ".nav-sidebar__item"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:151:0 Unused CSS selector ".nav-sidebar__item:hover"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:155:0 Unused CSS selector ".nav-sidebar__item--active"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:16 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:160:0 Unused CSS selector ".nav-sidebar__icon"
+https://svelte.dev/e/css_unused_selector[39m
+[2m7:17:17 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ new dependencies optimized: [33m@iconify/svelte, uuid, es-toolkit/compat, es-toolkit, es-toolkit/compat/omit, es-toolkit/compat/pick, partysocket[32m[39m
+[2m7:17:17 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ optimized dependencies changed. reloading[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/AppShell.svelte:64:2 Using `<slot>` to render parent content is deprecated. Use `{@render ...}` tags instead
+https://svelte.dev/e/slot_element_deprecated[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/AppShell.svelte:76:0 Unused CSS selector ".app-shell__header"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:30:6 '#' is not a valid href attribute
+https://svelte.dev/e/a11y_invalid_attribute[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:31:6 '#' is not a valid href attribute
+https://svelte.dev/e/a11y_invalid_attribute[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:32:6 '#' is not a valid href attribute
+https://svelte.dev/e/a11y_invalid_attribute[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:33:6 '#' is not a valid href attribute
+https://svelte.dev/e/a11y_invalid_attribute[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:45:3 Elements with the 'button' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:45:3 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:85:0 Unused CSS selector ".footer__links__link"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:90:0 Unused CSS selector ".footer__links__link:hover"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:106:0 Unused CSS selector ".footer__copyright__trigger"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/footer-enhanced/Main.svelte:111:0 Unused CSS selector ".footer__copyright__trigger:hover"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/menu-bar/Main.svelte:35:23 Redundant role 'navigation'
+https://svelte.dev/e/a11y_no_redundant_roles[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:3 Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:3 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:3 Self-closing HTML tags for non-void elements are ambiguous — use `<div ...></div>` rather than `<div ... />`
+https://svelte.dev/e/element_invalid_self_closing_tag[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:50:28 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:59:6 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:70:60 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:82:6 Using `on:click` to listen to the click event is deprecated. Use the event attribute `onclick` instead
+https://svelte.dev/e/event_directive_deprecated[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:123:0 Unused CSS selector ".nav-sidebar__brand"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:133:0 Unused CSS selector ".nav-sidebar__list"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:139:0 Unused CSS selector ".nav-sidebar__item"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:151:0 Unused CSS selector ".nav-sidebar__item:hover"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:155:0 Unused CSS selector ".nav-sidebar__item--active"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:17:19 AM [vite-plugin-svelte] src/lib/components/layout/navigation-bar/Main.svelte:160:0 Unused CSS selector ".nav-sidebar__icon"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:19:42 AM [vite-plugin-svelte] src/lib/components/modal/Main.svelte:516:0 Unused CSS selector ".modal-root .contents"
+https://svelte.dev/e/css_unused_selector[39m
+[36m7:19:45 AM [vite-plugin-svelte] src/lib/components/modal/Main.svelte:516:0 Unused CSS selector ".modal-root .contents"
+https://svelte.dev/e/css_unused_selector[39m
+[2m7:31:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:31:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:31:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:31:49 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:32:28 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mplaywright-report/index.html[22m
+[2m7:35:25 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:35:29 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/partykit/public/index.html[22m
+[2m7:35:29 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m7:35:30 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/src/app.html[22m
+[2m7:35:31 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:44:15 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:44:21 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:45:18 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:46:39 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m7:57:50 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m7:57:50 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m7:57:50 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2m.claude/worktrees/fix-register-tests/playwright-report/index.html[22m
+[2m8:08:27 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m8:13:31 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m8:37:34 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m8:40:11 AM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/nodejs/svelte/kit-3/.claude/worktrees/fix-register-tests/.svelte-kit/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
