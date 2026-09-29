@@ -76,6 +76,27 @@
   - `src/hooks.server.ts` — Fixed top-level await with initPromise pattern
 - **Build**: SvelteKit build successful (warnings only, no errors)
 
+### Task 5: Fix Playwright cross-browser flaky/fail — **HOÀN THÀNH** (2026-09-29)
+- Worktree: `fix-firefox-tests` (branch `worktree-fix-firefox-tests`)
+- Kết quả: **94 passed, 2 skipped, 0 failed** trên cả 3 engine (chromium, firefox, webkit)
+  cho 3 test files: `ui-check.spec.ts`, `ui-check-v2.spec.ts`, `register-input-styling.spec.ts`
+- Root causes & fixes:
+  1. **CPU starvation** — 8 worker chạy headless Firefox + Vite compile + RSA keygen đồng thời
+     → `expect(form).toBeVisible()` timeout. Fix: `workers: 4`, `timeout: 60000`,
+     `expect.timeout: 10000` trong `playwright.ui-check.config.ts`
+  2. **Firefox screenshot clip error** — `page.screenshot({clip})` "Clipped area is either empty
+     or outside the resulting image" khi bounding box ngoài viewport. Fix: `clipAround()` clamp
+     vào viewport bounds + fallback `element.screenshot()` trong `ui-check-v2.spec.ts`
+  3. **Selector drift trong `register-input-styling.spec.ts`** — DOM input đã thêm wrapper
+     `.input-highlight-wrapper` (nằm trong `.input-root`), selector cũ chỉ traverse 1 cấp.
+     Fix: traverse 2 cấp, strength-meter/email-suggestions tra ở page level, grid assertion
+     dùng computed px columns (không phải `1fr`), thêm `expect(form).toBeVisible()` trong
+     beforeEach để chờ hydration
+- Commits: `25a6c981` (fix code), `68e12ab4` (refresh screenshot artifacts)
+- UI cross-browser verify (subagent ui-checker, model sonnet do gateway nvidia-vision 503/404):
+  Button-default và Tooltip-hover render giống hệt nhau trên cả 3 engine, không có
+  design-token violation rõ ràng
+
 ### Các fix đã áp dụng trong session này
 1. **partysocket missing** → `npm install` fix (Phase 2 merge mất node_modules)
 2. **Login "Decryption returned empty"** → `src/routes/api/login/+server.ts` viết lại: detect plain JSON dev login (has username/password) vs encrypted blob; plain JSON path không gọi `decryptWithPrivateKeyHybrid`
@@ -84,6 +105,8 @@
 5. **Playwright webServer timeout** → xóa `webServer` block dùng `echo` command trong `playwright.ui-check.config.ts`
 
 ### Commit history liên quan
+- `25a6c981` (worktree-fix-firefox-tests): fix(ui-check): harden cross-browser Playwright suite
+- `68e12ab4` (worktree-fix-firefox-tests): chore(ui-check): refresh screenshot artifacts
 - `855a617` (worktree): fix(ui-check): remove broken webServer echo command
 - `7c8e485` (master): fix(ui-check): remove broken webServer echo command
 - `008d7cc`: fix(ui): handle plain JSON login for dev environment
