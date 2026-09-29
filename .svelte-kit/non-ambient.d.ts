@@ -29,7 +29,7 @@ declare module "$app/types" {
 	type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 
 	export interface AppTypes {
-		RouteId(): "/(unauthorized)" | "/(authorized)" | "/" | "/(authorized" | "/(authorized/)" | "/(unauthorized)/about" | "/(authorized)/admin" | "/(authorized)/admin/brands" | "/(authorized)/admin/categories" | "/(authorized)/admin/products" | "/(authorized)/admin/variants" | "/api" | "/api/admin" | "/api/admin/brands" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/inventory" | "/api/admin/inventory/branches" | "/api/admin/inventory/lots" | "/api/admin/inventory/lots/create" | "/api/admin/inventory/lots/list" | "/api/admin/inventory/stock" | "/api/admin/inventory/stock/adjust" | "/api/admin/inventory/stock/get" | "/api/admin/inventory/stock/list" | "/api/admin/products" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/roles" | "/api/admin/users" | "/api/admin/users/create" | "/api/admin/users/delete" | "/api/admin/users/detail" | "/api/admin/users/list" | "/api/admin/users/reset-password" | "/api/admin/users/restore" | "/api/admin/users/set-role" | "/api/admin/users/set-status" | "/api/admin/users/update" | "/api/admin/variants" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth" | "/api/auth/refresh" | "/api/dev-emails" | "/api/encryption" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/health" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test" | "/api/verify-email" | "/(unauthorized)/forgot-password" | "/(unauthorized)/login" | "/(authorized)/profile" | "/(unauthorized)/register" | "/(unauthorized)/reset-password" | "/test" | "/test/test1" | "/ui" | "/(unauthorized)/verify-email";
+		RouteId(): "/(unauthorized)" | "/(authorized)" | "/" | "/(authorized" | "/(authorized/)" | "/(unauthorized)/about" | "/(authorized)/admin" | "/(authorized)/admin/brands" | "/(authorized)/admin/categories" | "/(authorized)/admin/products" | "/(authorized)/admin/variants" | "/api" | "/api/admin" | "/api/admin/brands" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/inventory" | "/api/admin/inventory/branches" | "/api/admin/inventory/lots" | "/api/admin/inventory/lots/create" | "/api/admin/inventory/lots/list" | "/api/admin/inventory/stock" | "/api/admin/inventory/stock/adjust" | "/api/admin/inventory/stock/get" | "/api/admin/inventory/stock/list" | "/api/admin/orders" | "/api/admin/orders/cancel" | "/api/admin/orders/create" | "/api/admin/orders/get" | "/api/admin/orders/list" | "/api/admin/orders/update-status" | "/api/admin/pos" | "/api/admin/pos/sessions" | "/api/admin/pos/sessions/close" | "/api/admin/pos/sessions/current" | "/api/admin/pos/sessions/list" | "/api/admin/pos/sessions/open" | "/api/admin/pos/sessions/update-totals" | "/api/admin/products" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/promotions" | "/api/admin/promotions/create" | "/api/admin/promotions/get" | "/api/admin/promotions/list" | "/api/admin/purchase-orders" | "/api/admin/purchase-orders/create" | "/api/admin/purchase-orders/get" | "/api/admin/purchase-orders/list" | "/api/admin/purchase-orders/update-status" | "/api/admin/roles" | "/api/admin/stock-takes" | "/api/admin/stock-takes/complete" | "/api/admin/stock-takes/create" | "/api/admin/stock-takes/get" | "/api/admin/stock-takes/items" | "/api/admin/stock-takes/items/add" | "/api/admin/stock-takes/list" | "/api/admin/stock-takes/start" | "/api/admin/suppliers" | "/api/admin/suppliers/create" | "/api/admin/suppliers/get" | "/api/admin/suppliers/list" | "/api/admin/users" | "/api/admin/users/create" | "/api/admin/users/delete" | "/api/admin/users/detail" | "/api/admin/users/list" | "/api/admin/users/reset-password" | "/api/admin/users/restore" | "/api/admin/users/set-role" | "/api/admin/users/set-status" | "/api/admin/users/update" | "/api/admin/variants" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth" | "/api/auth/refresh" | "/api/customer" | "/api/customer/apply" | "/api/customer/promotions" | "/api/customer/promotions/apply" | "/api/dev-emails" | "/api/encryption" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/health" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test" | "/api/verify-email" | "/(unauthorized)/forgot-password" | "/(unauthorized)/login" | "/(authorized)/profile" | "/(unauthorized)/register" | "/(unauthorized)/reset-password" | "/test" | "/test/test1" | "/ui" | "/(unauthorized)/verify-email";
 		RouteParams(): {
 			
 		};
@@ -68,13 +68,47 @@ declare module "$app/types" {
 			"/api/admin/inventory/stock/adjust": Record<string, never>;
 			"/api/admin/inventory/stock/get": Record<string, never>;
 			"/api/admin/inventory/stock/list": Record<string, never>;
+			"/api/admin/orders": Record<string, never>;
+			"/api/admin/orders/cancel": Record<string, never>;
+			"/api/admin/orders/create": Record<string, never>;
+			"/api/admin/orders/get": Record<string, never>;
+			"/api/admin/orders/list": Record<string, never>;
+			"/api/admin/orders/update-status": Record<string, never>;
+			"/api/admin/pos": Record<string, never>;
+			"/api/admin/pos/sessions": Record<string, never>;
+			"/api/admin/pos/sessions/close": Record<string, never>;
+			"/api/admin/pos/sessions/current": Record<string, never>;
+			"/api/admin/pos/sessions/list": Record<string, never>;
+			"/api/admin/pos/sessions/open": Record<string, never>;
+			"/api/admin/pos/sessions/update-totals": Record<string, never>;
 			"/api/admin/products": Record<string, never>;
 			"/api/admin/products/create": Record<string, never>;
 			"/api/admin/products/delete": Record<string, never>;
 			"/api/admin/products/detail": Record<string, never>;
 			"/api/admin/products/list": Record<string, never>;
 			"/api/admin/products/update": Record<string, never>;
+			"/api/admin/promotions": Record<string, never>;
+			"/api/admin/promotions/create": Record<string, never>;
+			"/api/admin/promotions/get": Record<string, never>;
+			"/api/admin/promotions/list": Record<string, never>;
+			"/api/admin/purchase-orders": Record<string, never>;
+			"/api/admin/purchase-orders/create": Record<string, never>;
+			"/api/admin/purchase-orders/get": Record<string, never>;
+			"/api/admin/purchase-orders/list": Record<string, never>;
+			"/api/admin/purchase-orders/update-status": Record<string, never>;
 			"/api/admin/roles": Record<string, never>;
+			"/api/admin/stock-takes": Record<string, never>;
+			"/api/admin/stock-takes/complete": Record<string, never>;
+			"/api/admin/stock-takes/create": Record<string, never>;
+			"/api/admin/stock-takes/get": Record<string, never>;
+			"/api/admin/stock-takes/items": Record<string, never>;
+			"/api/admin/stock-takes/items/add": Record<string, never>;
+			"/api/admin/stock-takes/list": Record<string, never>;
+			"/api/admin/stock-takes/start": Record<string, never>;
+			"/api/admin/suppliers": Record<string, never>;
+			"/api/admin/suppliers/create": Record<string, never>;
+			"/api/admin/suppliers/get": Record<string, never>;
+			"/api/admin/suppliers/list": Record<string, never>;
 			"/api/admin/users": Record<string, never>;
 			"/api/admin/users/create": Record<string, never>;
 			"/api/admin/users/delete": Record<string, never>;
@@ -93,6 +127,10 @@ declare module "$app/types" {
 			"/api/admin/variants/update": Record<string, never>;
 			"/api/auth": Record<string, never>;
 			"/api/auth/refresh": Record<string, never>;
+			"/api/customer": Record<string, never>;
+			"/api/customer/apply": Record<string, never>;
+			"/api/customer/promotions": Record<string, never>;
+			"/api/customer/promotions/apply": Record<string, never>;
 			"/api/dev-emails": Record<string, never>;
 			"/api/encryption": Record<string, never>;
 			"/api/encryption/public-key": Record<string, never>;
@@ -115,7 +153,7 @@ declare module "$app/types" {
 			"/ui": Record<string, never>;
 			"/(unauthorized)/verify-email": Record<string, never>
 		};
-		Pathname(): "/" | "/about" | "/admin" | "/admin/brands" | "/admin/categories" | "/admin/products" | "/admin/variants" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/inventory/branches" | "/api/admin/inventory/lots/create" | "/api/admin/inventory/lots/list" | "/api/admin/inventory/stock/adjust" | "/api/admin/inventory/stock/get" | "/api/admin/inventory/stock/list" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/roles" | "/api/admin/users/create" | "/api/admin/users/delete" | "/api/admin/users/detail" | "/api/admin/users/list" | "/api/admin/users/reset-password" | "/api/admin/users/restore" | "/api/admin/users/set-role" | "/api/admin/users/set-status" | "/api/admin/users/update" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth/refresh" | "/api/dev-emails" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/health" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test" | "/api/verify-email" | "/forgot-password" | "/login" | "/profile" | "/register" | "/reset-password" | "/test" | "/test/test1" | "/ui" | "/verify-email";
+		Pathname(): "/" | "/about" | "/admin" | "/admin/brands" | "/admin/categories" | "/admin/products" | "/admin/variants" | "/api/admin/brands/create" | "/api/admin/brands/delete" | "/api/admin/brands/detail" | "/api/admin/brands/list" | "/api/admin/brands/update" | "/api/admin/categories/create" | "/api/admin/categories/delete" | "/api/admin/categories/detail" | "/api/admin/categories/list" | "/api/admin/categories/update" | "/api/admin/inventory/branches" | "/api/admin/inventory/lots/create" | "/api/admin/inventory/lots/list" | "/api/admin/inventory/stock/adjust" | "/api/admin/inventory/stock/get" | "/api/admin/inventory/stock/list" | "/api/admin/orders/cancel" | "/api/admin/orders/create" | "/api/admin/orders/get" | "/api/admin/orders/list" | "/api/admin/orders/update-status" | "/api/admin/pos/sessions/close" | "/api/admin/pos/sessions/current" | "/api/admin/pos/sessions/list" | "/api/admin/pos/sessions/open" | "/api/admin/pos/sessions/update-totals" | "/api/admin/products/create" | "/api/admin/products/delete" | "/api/admin/products/detail" | "/api/admin/products/list" | "/api/admin/products/update" | "/api/admin/promotions/create" | "/api/admin/promotions/get" | "/api/admin/promotions/list" | "/api/admin/purchase-orders/create" | "/api/admin/purchase-orders/get" | "/api/admin/purchase-orders/list" | "/api/admin/purchase-orders/update-status" | "/api/admin/roles" | "/api/admin/stock-takes/complete" | "/api/admin/stock-takes/create" | "/api/admin/stock-takes/get" | "/api/admin/stock-takes/items/add" | "/api/admin/stock-takes/list" | "/api/admin/stock-takes/start" | "/api/admin/suppliers/create" | "/api/admin/suppliers/get" | "/api/admin/suppliers/list" | "/api/admin/users/create" | "/api/admin/users/delete" | "/api/admin/users/detail" | "/api/admin/users/list" | "/api/admin/users/reset-password" | "/api/admin/users/restore" | "/api/admin/users/set-role" | "/api/admin/users/set-status" | "/api/admin/users/update" | "/api/admin/variants/create" | "/api/admin/variants/delete" | "/api/admin/variants/detail" | "/api/admin/variants/list" | "/api/admin/variants/update" | "/api/auth/refresh" | "/api/customer/apply" | "/api/customer/promotions/apply" | "/api/dev-emails" | "/api/encryption/public-key" | "/api/forgot-password" | "/api/health" | "/api/login" | "/api/register" | "/api/register/check" | "/api/resend-verification" | "/api/reset-password" | "/api/test" | "/api/verify-email" | "/forgot-password" | "/login" | "/profile" | "/register" | "/reset-password" | "/test" | "/test/test1" | "/ui" | "/verify-email";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/robots.txt" | string & {};
 	}

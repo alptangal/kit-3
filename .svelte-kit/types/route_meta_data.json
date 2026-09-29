@@ -90,6 +90,36 @@
 	"/api/admin/inventory/stock/list": [
 		"src/routes/api/admin/inventory/stock/list/+server.ts"
 	],
+	"/api/admin/orders/cancel": [
+		"src/routes/api/admin/orders/cancel/+server.ts"
+	],
+	"/api/admin/orders/create": [
+		"src/routes/api/admin/orders/create/+server.ts"
+	],
+	"/api/admin/orders/get": [
+		"src/routes/api/admin/orders/get/+server.ts"
+	],
+	"/api/admin/orders/list": [
+		"src/routes/api/admin/orders/list/+server.ts"
+	],
+	"/api/admin/orders/update-status": [
+		"src/routes/api/admin/orders/update-status/+server.ts"
+	],
+	"/api/admin/pos/sessions/close": [
+		"src/routes/api/admin/pos/sessions/close/+server.ts"
+	],
+	"/api/admin/pos/sessions/current": [
+		"src/routes/api/admin/pos/sessions/current/+server.ts"
+	],
+	"/api/admin/pos/sessions/list": [
+		"src/routes/api/admin/pos/sessions/list/+server.ts"
+	],
+	"/api/admin/pos/sessions/open": [
+		"src/routes/api/admin/pos/sessions/open/+server.ts"
+	],
+	"/api/admin/pos/sessions/update-totals": [
+		"src/routes/api/admin/pos/sessions/update-totals/+server.ts"
+	],
 	"/api/admin/products/create": [
 		"src/routes/api/admin/products/create/+server.ts"
 	],
@@ -105,8 +135,56 @@
 	"/api/admin/products/update": [
 		"src/routes/api/admin/products/update/+server.ts"
 	],
+	"/api/admin/promotions/create": [
+		"src/routes/api/admin/promotions/create/+server.ts"
+	],
+	"/api/admin/promotions/get": [
+		"src/routes/api/admin/promotions/get/+server.ts"
+	],
+	"/api/admin/promotions/list": [
+		"src/routes/api/admin/promotions/list/+server.ts"
+	],
+	"/api/admin/purchase-orders/create": [
+		"src/routes/api/admin/purchase-orders/create/+server.ts"
+	],
+	"/api/admin/purchase-orders/get": [
+		"src/routes/api/admin/purchase-orders/get/+server.ts"
+	],
+	"/api/admin/purchase-orders/list": [
+		"src/routes/api/admin/purchase-orders/list/+server.ts"
+	],
+	"/api/admin/purchase-orders/update-status": [
+		"src/routes/api/admin/purchase-orders/update-status/+server.ts"
+	],
 	"/api/admin/roles": [
 		"src/routes/api/admin/roles/+server.ts"
+	],
+	"/api/admin/stock-takes/complete": [
+		"src/routes/api/admin/stock-takes/complete/+server.ts"
+	],
+	"/api/admin/stock-takes/create": [
+		"src/routes/api/admin/stock-takes/create/+server.ts"
+	],
+	"/api/admin/stock-takes/get": [
+		"src/routes/api/admin/stock-takes/get/+server.ts"
+	],
+	"/api/admin/stock-takes/items/add": [
+		"src/routes/api/admin/stock-takes/items/add/+server.ts"
+	],
+	"/api/admin/stock-takes/list": [
+		"src/routes/api/admin/stock-takes/list/+server.ts"
+	],
+	"/api/admin/stock-takes/start": [
+		"src/routes/api/admin/stock-takes/start/+server.ts"
+	],
+	"/api/admin/suppliers/create": [
+		"src/routes/api/admin/suppliers/create/+server.ts"
+	],
+	"/api/admin/suppliers/get": [
+		"src/routes/api/admin/suppliers/get/+server.ts"
+	],
+	"/api/admin/suppliers/list": [
+		"src/routes/api/admin/suppliers/list/+server.ts"
 	],
 	"/api/admin/users/create": [
 		"src/routes/api/admin/users/create/+server.ts"
@@ -152,6 +230,12 @@
 	],
 	"/api/auth/refresh": [
 		"src/routes/api/auth/refresh/+server.ts"
+	],
+	"/api/customer/apply": [
+		"src/routes/api/customer/apply/+server.ts"
+	],
+	"/api/customer/promotions/apply": [
+		"src/routes/api/customer/promotions/apply/+server.ts"
 	],
 	"/api/dev-emails": [
 		"src/routes/api/dev-emails/+server.ts"
