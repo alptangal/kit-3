@@ -198,7 +198,7 @@
     background-color: var(--color-surface-accent);
     padding: 1rem;
     border-radius: 6px;
-    border-left: 3px solid var(--color-info);
+    border-top: 2px solid var(--color-info);
   }
 
   .keyboard-guide ul {
