@@ -211,6 +211,9 @@
 	"/ui": [
 		"src/routes/+layout.server.ts"
 	],
+	"/ui/radiogroup": [
+		"src/routes/+layout.server.ts"
+	],
 	"/(unauthorized)/verify-email": [
 		"src/routes/+layout.server.ts"
 	]
