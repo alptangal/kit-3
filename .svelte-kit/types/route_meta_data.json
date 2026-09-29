@@ -4,6 +4,7 @@
 		"src/routes/+layout.server.ts"
 	],
 	"/(authorized)": [
+		"src/routes/(authorized)/+layout.server.ts",
 		"src/routes/+layout.server.ts"
 	],
 	"/": [
@@ -13,16 +14,32 @@
 	"/(unauthorized)/about": [
 		"src/routes/+layout.server.ts"
 	],
+	"/(authorized)/admin": [
+		"src/routes/(authorized)/admin/+layout.server.ts",
+		"src/routes/(authorized)/+layout.server.ts",
+		"src/routes/+layout.server.ts",
+		"src/routes/(authorized)/admin/+layout.server.ts",
+		"src/routes/(authorized)/+layout.server.ts",
+		"src/routes/+layout.server.ts"
+	],
 	"/(authorized)/admin/brands": [
+		"src/routes/(authorized)/admin/+layout.server.ts",
+		"src/routes/(authorized)/+layout.server.ts",
 		"src/routes/+layout.server.ts"
 	],
 	"/(authorized)/admin/categories": [
+		"src/routes/(authorized)/admin/+layout.server.ts",
+		"src/routes/(authorized)/+layout.server.ts",
 		"src/routes/+layout.server.ts"
 	],
 	"/(authorized)/admin/products": [
+		"src/routes/(authorized)/admin/+layout.server.ts",
+		"src/routes/(authorized)/+layout.server.ts",
 		"src/routes/+layout.server.ts"
 	],
 	"/(authorized)/admin/variants": [
+		"src/routes/(authorized)/admin/+layout.server.ts",
+		"src/routes/(authorized)/+layout.server.ts",
 		"src/routes/+layout.server.ts"
 	],
 	"/api/admin/brands/create": [
@@ -55,6 +72,24 @@
 	"/api/admin/categories/update": [
 		"src/routes/api/admin/categories/update/+server.ts"
 	],
+	"/api/admin/inventory/branches": [
+		"src/routes/api/admin/inventory/branches/+server.ts"
+	],
+	"/api/admin/inventory/lots/create": [
+		"src/routes/api/admin/inventory/lots/create/+server.ts"
+	],
+	"/api/admin/inventory/lots/list": [
+		"src/routes/api/admin/inventory/lots/list/+server.ts"
+	],
+	"/api/admin/inventory/stock/adjust": [
+		"src/routes/api/admin/inventory/stock/adjust/+server.ts"
+	],
+	"/api/admin/inventory/stock/get": [
+		"src/routes/api/admin/inventory/stock/get/+server.ts"
+	],
+	"/api/admin/inventory/stock/list": [
+		"src/routes/api/admin/inventory/stock/list/+server.ts"
+	],
 	"/api/admin/products/create": [
 		"src/routes/api/admin/products/create/+server.ts"
 	],
@@ -69,6 +104,36 @@
 	],
 	"/api/admin/products/update": [
 		"src/routes/api/admin/products/update/+server.ts"
+	],
+	"/api/admin/roles": [
+		"src/routes/api/admin/roles/+server.ts"
+	],
+	"/api/admin/users/create": [
+		"src/routes/api/admin/users/create/+server.ts"
+	],
+	"/api/admin/users/delete": [
+		"src/routes/api/admin/users/delete/+server.ts"
+	],
+	"/api/admin/users/detail": [
+		"src/routes/api/admin/users/detail/+server.ts"
+	],
+	"/api/admin/users/list": [
+		"src/routes/api/admin/users/list/+server.ts"
+	],
+	"/api/admin/users/reset-password": [
+		"src/routes/api/admin/users/reset-password/+server.ts"
+	],
+	"/api/admin/users/restore": [
+		"src/routes/api/admin/users/restore/+server.ts"
+	],
+	"/api/admin/users/set-role": [
+		"src/routes/api/admin/users/set-role/+server.ts"
+	],
+	"/api/admin/users/set-status": [
+		"src/routes/api/admin/users/set-status/+server.ts"
+	],
+	"/api/admin/users/update": [
+		"src/routes/api/admin/users/update/+server.ts"
 	],
 	"/api/admin/variants/create": [
 		"src/routes/api/admin/variants/create/+server.ts"
@@ -125,6 +190,10 @@
 		"src/routes/+layout.server.ts"
 	],
 	"/(unauthorized)/login": [
+		"src/routes/+layout.server.ts"
+	],
+	"/(authorized)/profile": [
+		"src/routes/(authorized)/+layout.server.ts",
 		"src/routes/+layout.server.ts"
 	],
 	"/(unauthorized)/register": [

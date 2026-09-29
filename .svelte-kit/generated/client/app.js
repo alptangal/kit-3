@@ -27,26 +27,31 @@ export const nodes = [
 	() => import('./nodes/15'),
 	() => import('./nodes/16'),
 	() => import('./nodes/17'),
-	() => import('./nodes/18')
+	() => import('./nodes/18'),
+	() => import('./nodes/19'),
+	() => import('./nodes/20'),
+	() => import('./nodes/21')
 ];
 
-export const server_loads = [0];
+export const server_loads = [0,3,4];
 
 export const dictionary = {
-		"/(unauthorized)": [9,[4]],
-		"/(unauthorized)/about": [10,[4]],
-		"/(authorized)/admin/brands": [5,[3]],
-		"/(authorized)/admin/categories": [6,[3]],
-		"/(authorized)/admin/products": [7,[3]],
-		"/(authorized)/admin/variants": [8,[3]],
-		"/(unauthorized)/forgot-password": [11,[4]],
-		"/(unauthorized)/login": [12,[4]],
-		"/(unauthorized)/register": [13,[4]],
-		"/(unauthorized)/reset-password": [14,[4]],
-		"/test": [16],
-		"/test/test1": [17],
-		"/ui": [18],
-		"/(unauthorized)/verify-email": [15,[4]]
+		"/(unauthorized)": [12,[5]],
+		"/(unauthorized)/about": [13,[5]],
+		"/(authorized)/admin": [6,[3,4]],
+		"/(authorized)/admin/brands": [7,[3,4]],
+		"/(authorized)/admin/categories": [8,[3,4]],
+		"/(authorized)/admin/products": [9,[3,4]],
+		"/(authorized)/admin/variants": [10,[3,4]],
+		"/(unauthorized)/forgot-password": [14,[5]],
+		"/(unauthorized)/login": [15,[5]],
+		"/(authorized)/profile": [11,[3]],
+		"/(unauthorized)/register": [16,[5]],
+		"/(unauthorized)/reset-password": [17,[5]],
+		"/test": [19],
+		"/test/test1": [20],
+		"/ui": [21],
+		"/(unauthorized)/verify-email": [18,[5]]
 	};
 
 export const hooks = {

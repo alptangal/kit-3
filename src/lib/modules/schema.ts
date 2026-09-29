@@ -855,6 +855,10 @@ export type InferCollection<CN extends CollectionName> = {
 	[K in RequiredKeys<FieldsOf<CN>>]: InferFieldType<FieldsOf<CN>[K]>;
 } & { [K in OptionalKeys<FieldsOf<CN>>]?: InferFieldType<FieldsOf<CN>[K]> | null };
 export type User = InferCollection<'users'>;
+export type InventoryStock = InferCollection<'inventory_stock'>;
+export type InventoryLot = InferCollection<'inventory_lots'>;
+export type StockMovement = InferCollection<'stock_movements'>;
+export type Branch = InferCollection<'branches'>;
 
 // const collectionSchemasVault = {
 // 	system_secrets: {

@@ -11,7 +11,6 @@ import type {
   Branch
 } from '$modules/schema';
 import { PermissionChecker } from '$modules/rbac/permission-checker';
-import { adminMessages as productAdminMessages } from '../messages/db'; // Reuse product admin messages for simplicity, or define our own
 
 const cbInventoryStock = cbData('inventory_stock');
 const cbInventoryLots = cbData('inventory_lots');
@@ -19,9 +18,9 @@ const cbStockMovements = cbData('stock_movements');
 const cbBranches = cbData('branches');
 
 const inventoryStockKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_stock\``;
-const inventoryLotsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_lots\`;
-const stockMovementsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`stock_movements\`;
-const branchesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`branches\`;
+const inventoryLotsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_lots\``;
+const stockMovementsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`stock_movements\``;
+const branchesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`branches\``;
 
 const adminMessages = {
   notFound: {
@@ -201,7 +200,7 @@ export class InventoryService {
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const selectClause = `META().id AS _id, ${INVENTORY_STOCK_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')}`;
+    const selectClause = 'META().id AS _id, ' + INVENTORY_STOCK_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ');
 
     const [countRes, dataRes] = await Promise.all([
       cbInventoryStock.document.query({
@@ -255,7 +254,7 @@ export class InventoryService {
     }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
-    const selectClause = `META().id AS _id, ${INVENTORY_STOCK_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')}`;
+    const selectClause = 'META().id AS _id, ' + INVENTORY_STOCK_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ');
 
     const res = await cbInventoryStock.document.query({
       statement: `SELECT ${selectClause} FROM ${inventoryStockKeyspace} ${whereClause} LIMIT 1`,
@@ -310,44 +309,13 @@ export class InventoryService {
       return { success: false, messages: adminMessages.insufficientStock };
     }
 
-    // We'll use an update with a CAS (compare and swap) to handle race conditions.
-    // We'll try up to 3 times.
-    let attempts = 0;
-    const maxAttempts = 3;
-    let updateRes: any;
-
-    while (attempts < maxAttempts) {
-      attempts++;
-      // Fetch the latest version (we already have currentStock, but we need to get the _id and maybe the current quantityOnHand again to avoid lost update)
-      // For simplicity, we'll use the _id we have and update by _id, but we need to check the current quantityOnHand matches.
-      // We'll do a conditional update: set quantityOnHand = $new where _id = $id and quantityOnHand = $current
-      const condition = `quantityOnHand = $${args.length + 1}`;
-      const args = [currentStock._id, currentStock.quantityOnHand, newQuantityOnHand];
-
-      updateRes = await cbInventoryStock.document.update(
-        currentStock._id,
-        { quantityOnHand: newQuantityOnHand, updatedAt: new Date() },
-        {
-          // We'll use a custom condition via the query method?
-          // The update method doesn't support conditions directly.
-          // We'll use a query to update with a condition.
-          // Alternatively, we can use the mutateIn or just update and then verify?
-          // Let's use a N1QL update with a condition.
-          // We'll do it via query.
-        }
-      );
-
-      // Actually, let's switch to using a query for the update with condition.
-      break;
-    }
-
-    // We'll implement the update via a N1QL query with a condition on the current quantityOnHand.
-    // This is more atomic and handles race conditions by checking the current value.
+    // Use a N1QL update with a condition on the current quantityOnHand.
+    // This is atomic and handles race conditions by checking the current value.
     const updateArgs: (string | number)[] = [
       currentStock._id,
-      currentStock.quantityOnHand, // current value for condition
-      newQuantityOnHand, // new value
-      new Date()
+      Number(currentStock.quantityOnHand),
+      Number(newQuantityOnHand),
+      new Date().toISOString()
     ];
 
     const updateRes = await cbInventoryStock.document.query({
@@ -367,7 +335,6 @@ export class InventoryService {
     if (updateRes.data?.results?.length === 0) {
       // This means the condition failed (quantityOnHand changed)
       // We could retry, but for simplicity, we'll treat as conflict and ask to retry.
-      // In a real system, we might retry a few times.
       return { success: false, messages: adminMessages.updateFailed };
     }
 
@@ -391,7 +358,7 @@ export class InventoryService {
       note
     );
 
-    return { success: true, updatedStock: sanitizeInventoryStockForAdmin(updatedStockResult.stock) };
+    return { success: true, updatedStock: sanitizeInventoryStockForAdmin({...updatedStockResult.stock as any}) };
   }
 
   /**
@@ -449,13 +416,13 @@ export class InventoryService {
       referenceId: referenceId ?? null,
       performedBy: performedBy ?? null,
       note: note ?? null,
-      createdAt: new Date()
+      createdAt: new Date().toISOString()
     };
 
-    await cbStockMovements.document.insert(
-      `${variantId}_${branchId}_${Date.now()}_${Math.random()}`, // simple unique ID
-      movement
-    );
+    await cbStockMovements.document.create({
+      documentKey: `${variantId}_${branchId}_${Date.now()}_${Math.random()}`,
+      content: movement
+    });
   }
 
   // ========== INVENTORY LOTS ==========
@@ -507,7 +474,7 @@ export class InventoryService {
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const selectClause = `META().id AS _id, ${INVENTORY_LOT_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')}`;
+    const selectClause = 'META().id AS _id, ' + INVENTORY_LOT_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ');
 
     const [countRes, dataRes] = await Promise.all([
       cbInventoryLots.document.query({
@@ -553,7 +520,10 @@ export class InventoryService {
     // Generate a simple ID if not provided
     const id = lot._id ?? `${lot.variantId}_${lot.branchId}_${lot.lotNumber}_${Date.now()}`;
 
-    const res = await cbInventoryLots.document.insert(id, lot);
+    const res = await cbInventoryLots.document.create({
+      documentKey: id,
+      content: lot
+    });
 
     if (!res.ok) {
       return { success: false, messages: adminMessages.queryFailed };
@@ -565,14 +535,14 @@ export class InventoryService {
     }
 
     // Log a stock movement for the received quantity
-    if (lot.quantityOnHand > 0) {
+    if ((lot.quantityOnHand ?? 0) > 0) {
       await this.recordStockMovement(
         actor,
-        lot.variantId,
-        lot.branchId,
+        lot.variantId ?? '',
+        lot.branchId ?? '',
         'in',
-        lot.quantityOnHand,
-        lot.lotNumber, // using lotNumber as lotId for simplicity
+        lot.quantityOnHand ?? 0,
+        lot.lotNumber ?? '', // using lotNumber as lotId for simplicity
         'purchase_order',
         undefined, // referenceId
         actor.userId,
@@ -580,7 +550,7 @@ export class InventoryService {
       );
     }
 
-    return { success: true, createdLot: sanitizeInventoryLotForAdmin(createdLot.lot) };
+    return { success: true, createdLot: sanitizeInventoryLotForAdmin({...createdLot.lot as any}) };
   }
 
   /**
@@ -589,18 +559,18 @@ export class InventoryService {
   private static async getLotById(
     actor: ActorContext,
     lotId: string
-  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { lot: Record<string, unknown> } )> {
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { lot: InventoryLot & { _id: string } } )> {
     const scope = await PermissionChecker.getScope(actor.roleName, 'inventory:read');
     if (!scope) return { success: false, messages: adminMessages.permissionDenied };
 
-    const res = await cbInventoryLots.document.get(lotId);
+    const res = await cbInventoryLots.document.get({ documentKey: lotId });
 
     if (!res.ok) {
       return { success: false, messages: adminMessages.notFound };
     }
 
-    const lot = res.value as InventoryLot;
-    return { success: true, lot: sanitizeInventoryLotForAdmin(lot) };
+    const lot = (res as any).data as InventoryLot;
+    return { success: true, lot: { ...lot, _id: lotId } };
   }
 
   // ========== BRANCHES (for inventory context) ==========
@@ -614,8 +584,9 @@ export class InventoryService {
     const scope = await PermissionChecker.getScope(actor.roleName, 'inventory:read');
     if (!scope) return { success: false, messages: adminMessages.permissionDenied };
 
+    const safeFields = Object.keys(BranchAdminSafeFields).map(f => `\`${f}\``).join(', ');
     const res = await cbBranches.document.query({
-      statement: `SELECT META().id AS _id, ${Object.keys(BranchAdminSafeFields).map(f => `\`${f}\``).join(', ')} FROM ${branchesKeyspace} WHERE status = 'active'`,
+      statement: `SELECT META().id AS _id, ${safeFields} FROM ${branchesKeyspace} WHERE status = 'active'`,
       readonly: true
     });
 
@@ -623,23 +594,10 @@ export class InventoryService {
       return { success: false, messages: adminMessages.queryFailed };
     }
 
-    const branches = (res.data?.results ?? []).map(branch => {
-      // We don't have a sanitize function for branches, but we can create one if needed.
-      // For now, we'll just return the raw branch (but we should remove sensitive fields).
-      // Let's define a safe field list for branches.
-      const BranchAdminSafeFields = {
-        name: true,
-        address: true,
-        managerId: true,
-        isWarehouse: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true
-      } as const;
-
+    const branches = (res.data?.results ?? []).map((branch: any) => {
       const safe = { _id: branch._id } as Record<string, unknown>;
       for (const field in BranchAdminSafeFields) {
-        if (BranchAdminSafeFields[field]) {
+        if (BranchAdminSafeFields[field as keyof typeof BranchAdminSafeFields]) {
           safe[field] = branch[field];
         }
       }
