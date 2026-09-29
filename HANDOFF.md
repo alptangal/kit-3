@@ -11,9 +11,9 @@
 | #27 Multi-branch Inventory System | **in_progress** |
 | #28 Order Management API & UI | pending |
 | #29 Supplier & Purchasing (PO) System | pending |
-| #30 Pricing Engine & Promotions | pending |
-| #31 POS Sessions (Cash Drawer Management) | pending |
-| #32 Stock Takes (Inventory Audit) | pending |
+| #30 Pricing Engine & Promotions | Service complete, UI deferred to Days 6-7 |
+| #31 POS Sessions (Cash Drawer Management) | Service complete, UI deferred to Days 6-7 |
+| #32 Stock Takes (Inventory Audit) | Service complete, UI deferred to Days 6-7 |
 | #40 InventoryService (server db layer) | **đã tạo file** |
 
 ## 3. File đã tạo/sửa trong phiên này

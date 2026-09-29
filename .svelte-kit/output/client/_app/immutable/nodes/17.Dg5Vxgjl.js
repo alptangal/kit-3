@@ -1,1 +1,0 @@
-import"../chunks/Bzak7iHL.js";import"../chunks/CglxFxAJ.js";import{a,f as e}from"../chunks/D-udZLY0.js";var r=e('<div class="me-wcaodb w-ful"><h1>hello test1</h1> <a href="/test">test</a></div>');function i(t){var o=r();a(t,o)}export{i as component};
