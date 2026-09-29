@@ -16,12 +16,18 @@ Roadmap được chia theo phase, mỗi phase là 1 nhánh Git/worktree riêng.
 - Worktree: `phase1-foundation`
 - Commit mẫu: `e1dad61 refactor(email): EmailService interface + dev/smtp transports`, `aba03af feat(auth): reset-password flow with token + dev email outbox`
 
-### Phase 2: Authorization & Role Management — _ĐANG LÀM (verification ongoing)_
+### Phase 2: Authorization & Role Management — _HOÀN THÀNH_
 
 - RBAC nhiều role level, permission checking + grants caching, user admin flows, role assignment
-- Worktree: `continue-phase2-verification`
+- Worktree: `continue-phase2-verification` (đã merge)
 - Commit mẫu: `8557e2a docs: phase-2 auth-completion implementation plan`, `37a785e Add auth E2E test suite, Playwright config and CI workflow`, `08eb4c3 Refactor auth: AuthLayout, forgot-password flow, server i18n`
-- Thứ tự merge: chỉ cần merge `continue-phase2-verification` → master (`phase1-foundation` đã được salvage vào master qua commit `1706d97`, giữ lại để tham khảo, không cần merge)
+- Merge hoàn tất: `6dc0a8d` (fast-forward, 52 files) — `continue-phase2-verification` → master. (`phase1-foundation` đã được salvage vào master qua commit `1706d97` từ trước, giữ lại để tham khảo)
+- **3 bug đã fix trong quá trình verify** (commit `6dc0a8d`, `8225f95`, `008d7cc`):
+  1. `partysocket` missing sau merge (mất `node_modules`) → fix bằng `npm install`
+  2. Login "Decryption returned empty" → `src/routes/api/login/+server.ts` viết lại để detect plain JSON dev login (có username/password) vs encrypted blob; path JSON thường không gọi `decryptWithPrivateKeyHybrid`
+  3. **RBAC N1QL reserved words**: `scope` (trong `detail_roles`) và `level` (trong `name_roles`) là từ khóa dành riêng của N1QL — query trực tiếp theo field này gây lỗi; fix bằng `permission-checker.ts`/`users.ts` dùng `SELECT *` + unwrap thay vì `SELECT scope, level`
+  4. Authorized layout trắng trang (URL 200 nhưng DOM rỗng) → `src/routes/(authorized)/+layout.svelte` thiếu `{@render children()}`
+- **Convention rút ra**: mọi field mới đặt tên trong schema phải tránh N1QL reserved words (`scope`, `level`, và cần rà thêm nếu phát hiện). Ưu tiên đổi tên field (vd `auditScope` thay vì `scope`) hơn là nhớ áp dụng ngoại lệ `SELECT *` + unwrap mỗi lần viết query mới — xem áp dụng ở `stock_takes.auditScope` trong schema Phase 4
 
 ### Cross-cutting: Error Handling & i18n Foundation _(chèn trước Phase 3, áp dụng xuyên suốt)_
 
@@ -30,38 +36,44 @@ Roadmap được chia theo phase, mỗi phase là 1 nhánh Git/worktree riêng.
 - **Error handling client-side**: `<svelte:boundary>`, toast/notification system, error code → message đa ngôn ngữ, tách message hiển thị user khỏi log nội bộ
 - Nên hoàn thành trước khi code Phase 3 phình to — sửa sớm rẻ hơn refactor muộn
 
-### Phase 3: UI/UX Design Foundation _(MỚI — làm trước Core Retail Operations)_
+### Phase 3: UI/UX Design Foundation — _ĐANG LÀM_
 
 - **Mục tiêu**: chốt nền tảng thiết kế trước khi code nghiệp vụ, tránh phải refactor component nhiều lần khi UI thay đổi sau
-- **Design system**: quyết định tái dùng Svelte component library (compound-component pattern) đã có làm nền, hay tách biệt cho dự án này; định nghĩa design token (màu, spacing, typography) dùng chung
+- **Design system**: đã quyết định — tái dùng Svelte component library (compound-component pattern) hiện có làm nền, không xây mới. Đã có `DESIGN.md`: design token đầy đủ (spacing 5 mức, radius 5 mức, typography 13 mức xs→9xl, color system light/dark qua alias, shadow 5 mức), breakpoint 7 mức tới `3xl` (1920px, dùng cho TV)
+- **Component audit đã hoàn thành** (`COMPONENT-AUDIT.md`, 2026-09-27): 8 component (Button, Input, Tooltip, Checkbox, Skeleton, Loading, Toast, Icon) đều compliant với compound-component pattern và mobile-first/a11y cơ bản. Gap chính: nhiều giá trị hardcode (animation duration, transform scale, offset, opacity) chưa dùng design token — cần token migration trước khi nhân rộng sang POS/storefront/TV
+- **Bước tiếp theo đã xác định**: token migration (hardcode → CSS variable), sau đó mới tới TV/kiosk design language riêng và 2 design language POS/storefront (2 mục này DESIGN.md tự đánh dấu "⏳ Pending")
+
+**Component gap list (chốt trước, không để agent tự phát sinh theo từng task)** — hiện có Button, Input, Modal, Checkbox:
+
+| Nhóm             | Component còn thiếu                                                             | Dùng cho                                                          |
+| ---------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Form nâng cao    | Select/Dropdown, Radio group, Textarea, Date picker, File upload, Toggle/Switch | Form nhập liệu (PO, product, checkout)                            |
+| Hiển thị dữ liệu | Table/DataGrid (sort, filter, pagination), Badge/Tag, Avatar, Card              | Danh sách sản phẩm, đơn hàng, tồn kho                             |
+| Điều hướng       | Tabs, Breadcrumb, Pagination, Sidebar (đã có menu-bar/navigation-bar)           | Admin layout                                                      |
+| Phản hồi         | Alert/Banner, Dialog/Confirm (phân biệt với Modal chung), Progress bar          | Xác nhận thao tác, cảnh báo                                       |
+| Bố cục           | Drawer/Sheet (mobile), Accordion, Stepper                                       | Checkout nhiều bước, filter mobile                                |
+| Đặc thù POS      | Numpad ảo, Barcode scanner input, Cash-count grid                               | Thu ngân — không có pattern chuẩn sẵn, cần thiết kế mới hoàn toàn |
+| Đặc thù TV/kiosk | Dashboard card cỡ lớn, ticker, hiển thị ít tương tác                            | Digital signage                                                   |
+
+**Nguyên tắc bắt buộc khi agent tự thiết kế component mới** (nhắc lại, vì dễ bị quên giữa các task khác): cấu trúc compound (`Main.svelte` + `_interface.ts` + `_styles.scss` + `composables/` + `index.ts`); dùng design token có sẵn, không hardcode; có `variant`/`size` system nhất quán với Button/Input; đủ checklist a11y (focus, ARIA, keyboard, touch target 44px, reduced motion); thêm vào `/ui` demo page.
+
+**Thứ tự ưu tiên**: bám theo nhu cầu Phase 4 hiện tại (Pricing/POS Sessions/Stock Takes cần Table, Select, Radio group, Toggle trước), không thiết kế tràn lan toàn bộ danh sách cùng lúc.
+
 - **Wireframe/user flow theo từng role**: Owner, Quản lý chi nhánh, Thu ngân, Nhân viên kho, và khách hàng (storefront) — mỗi role có luồng thao tác khác nhau
 - **Màn hình TV/kiosk**: thiết kế riêng từ đầu (không tái dùng layout PC) — dashboard cửa hàng, digital signage, tối ưu cho không tương tác chuột
 - **Hai design language dùng chung token**: POS (thao tác nhanh, ít bước, ưu tiên tốc độ) và storefront khách hàng (thẩm mỹ, thuyết phục mua hàng) — mục tiêu UX khác nhau
 - **Accessibility (a11y)**: contrast, touch target size cho tablet POS, keyboard navigation cho PC admin — tính từ đầu vì phục vụ đa thiết bị
 - _Lưu ý_: đây là nơi dữ liệu từ Phase 8 (Analytics/Behavior Tracking) sẽ quay lại phục vụ — vòng lặp theo dõi hành vi → phát hiện điểm nghẽn → thiết kế lại chỉ có ý nghĩa khi có nền tảng thiết kế ban đầu để so sánh
 
-**CẬP NHẬT 2026-09-28**: Token migration completed for all layout and core components. Worktree: `token-migration`
+#### Công cụ & quy trình thiết kế (plugin Impeccable, chạy trong Claude Code)
 
-**Files modified (hardcoded values → design tokens)**:
-- `src/lib/components/form/checkbox/Indicator/Main.svelte`: `1.25rem` → `var(--min-height-sm)`, `2px` → `var(--border-width-md)`
-- `src/lib/components/form/checkbox/Indicator/Checked/Main.svelte`: `1.25rem` → `var(--min-height-sm)`
-- `src/lib/components/element/toast/Main.svelte`: added `background: var(--background)`, `color: var(--foreground)`, `box-shadow: var(--box-shadow-md)`
-- `src/lib/components/element/toast/Content/Description/Main.svelte`: verified token usage (`var(--font-size)`, `var(--color)`)
-- `src/lib/components/form/checkbox/Main.svelte`: verified token usage
-
-**New layout components (fully tokenized from design)**:
-- `src/lib/components/layout/menu-bar/Main.svelte` — uses `--padding-md`, `--padding-lg`, `--min-height-lg`, `--gap-md`, `--min-height-md`, `--radius-full`, `--font-size-sm`, `--font-size-xs`, `--padding-xs`, `--padding-sm`, `--foreground`, `--foreground-400`, `--foreground-200`, `--radius-sm`, `--danger-500`, `--color-white`, `--min-height-xs`
-- `src/lib/components/layout/navigation-bar/Main.svelte` — uses `--nav-width`, `--padding-md`, `--gap-sm`, `--padding-sm`, `--gap-md`, `--radius-sm`, `--font-size-xl`, `--font-size-sm`, `--font-size-md`, `--min-height-lg`, `--foreground`, `--foreground-200`, `--background`, `--border`, `--border-width`, `--offset`, `--min-height-lg`, `--font-size-2xl`, `--color-white`; **fixed layout thrash** (hover animation uses `transform: translateX(var(--gap-sm))` instead of `padding-left`)
-- `src/lib/components/layout/footer-enhanced/Main.svelte` — uses `--padding-xl`, `--padding-md`, `--gap-md`, `--font-size-xs`, `--font-size-sm`, `--gap-sm`, `--foreground`, `--foreground-400`, `--background`, `--border`, `--border-width`
-
-**Core components verified using design tokens** (8/8):
-- Button, Input, Tooltip, Checkbox, Skeleton, Loading, Toast, Icon — all using CSS variables from `variables.scss`, `sizes.scss`, `colors.scss`
-
-**Playwright UI Check Tests — HOÀN THÀNH 2026-09-28**:
-- `tests/ui-check.spec.ts`: 33 passed (chromium 11, firefox 11, webkit 11) on port 3007
-- `tests/ui-check-v2.spec.ts`: 28 passed + 2 skipped (webkit clipboard test) across 3 browsers
-- Config: `playwright.ui-check.config.ts` hardcode `baseURL: "https://localhost:3007"` for worktree dev server
-- All tokenized components verified visually across chromium, firefox, webkit
+- **Phạm vi dùng**: chỉ phần frontend — Phase 3, Phase 6 và mục con Frontend của các phase sau. Không dùng cho backend/schema/realtime
+- **Bước 1 — Brief trước khi gọi command**: nêu rõ 4 role + khách hàng, hai design language (POS: tốc độ/ít bước; storefront: thẩm mỹ/thuyết phục), màn hình TV riêng, touch target tablet POS, yêu cầu a11y
+- **Bước 2 — Thử nghiệm trên màn hình auth có sẵn** (`AuthLayout`, login, forgot-password từ Phase 2): chạy `audit` + `critique` trước, sau đó mới `polish`
+- **Bước 3 — Chốt design token** (màu, typography, spacing) từ kết quả bước 2, rồi mới áp sang các màn hình khác
+- **Bước 4 — Thứ tự màn hình**: POS (mở ca, bán hàng) → quản lý (duyệt kiểm kê/đổi trả) → storefront → TV/kiosk
+- **Bước 5 (tuỳ chọn)**: chạy CLI `detect` trong CI cạnh bộ Playwright — cần đọc CLI reference để xác nhận cách dùng
+- **Ràng buộc**: yêu cầu công cụ dùng lại thư viện Svelte 5 compound-component hiện có (không tạo hệ component song song); tránh cài trùng skill (Impeccable vs frontend-design mặc định); a11y vẫn tự kiểm bằng axe/Playwright, không dựa điểm audit của công cụ thiết kế; ràng buộc bán lẻ (touch target, đọc ở khoảng cách xa trên TV, thao tác một tay) phải tự kiểm bằng thiết bị thật
 
 ### Phase 4: Core Retail Data Model & Operations
 
@@ -74,18 +86,37 @@ Roadmap được chia theo phase, mỗi phase là 1 nhánh Git/worktree riêng.
 - Kiểm kê kho 2 cấp (weekly branch / monthly cross-branch) với routing duyệt theo ngưỡng chênh lệch
 - _Mô hình tồn kho_: single source per branch, filter qua `branchId`, chưa cần tenant isolation ở quy mô 2-10 chi nhánh
 
+### Task nền tảng (chèn trước Phase 5): Component Library Priority 1
+
+- **Mục tiêu**: xây trước 4 component dùng chung (Select/Dropdown, Radio group, Toggle/Switch, Table/DataGrid) thành 1 task riêng, không để phát sinh ad-hoc theo từng tính năng — khác với Service/UI theo lát cắt dọc, đây là hạ tầng nhiều tính năng sẽ dùng lại
+- **Điều kiện xong trước khi bắt task Storefront (Phase 5)**: cả 4 component phải đạt Definition of Done component (compound structure, design token, variant/size nhất quán, a11y đầy đủ, demo `/ui`) — xem chi tiết đầy đủ trong Phase 3
+- **Đã xác nhận (2026-09-29)**: Phase 4 (#30/#31/#32) thiếu 8 trang UI cụ thể, cần làm cùng đợt Priority 1:
+  - **#30 Pricing/Promotions**: `/admin/promotions/list` (Table, Select filter, DateRange), `/admin/promotions/create|edit` (Select loại KM, Radio status, DatePicker)
+  - **#31 POS Sessions**: `/admin/pos/sessions/list` (Table, Select filter), `/admin/pos/sessions/open` (Select thiết bị), `/admin/pos/sessions/close` (hiển thị đối soát, không cần component Priority 1 mới)
+  - **#32 Stock Takes**: `/admin/stock-takes/list` (Table, Select filter), `/admin/stock-takes/detail` (Table biến động, Radio duyệt/escalate theo ngưỡng 0.5%)
+- **Priority 2-3** (Textarea/DatePicker/Tabs/Card... và Numpad/Barcode/TV-kiosk component) làm sau, theo đúng thứ tự đã liệt kê ở Phase 3 — không dồn hết vào 1 task
+
 ### Phase 5: Omnichannel E-commerce + Realtime Layer mở rộng
 
-- Storefront khách hàng: giỏ hàng, checkout, tài khoản (tái dùng auth Phase 1-2)
-- Thanh toán: tiền mặt, thẻ qua POS ngân hàng (`bank_pos`), Momo/ZaloPay QR, chuyển khoản (đối soát thủ công), COD cho đơn online
+**Breakdown 8 task (lát cắt dọc), thứ tự sau khi Component Library Priority 1 xong:**
+
+| Task                          | Scope                                    | Có UI?          | Ghi chú                                                                                                                                                                                                                                     |
+| ----------------------------- | ---------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #33 Cart                      | Service + API + Storefront UI            | ✅ Có           | `/storefront/cart`                                                                                                                                                                                                                          |
+| #34 Checkout                  | Service + API + Storefront UI            | ✅ Có           | `/storefront/checkout` multi-step                                                                                                                                                                                                           |
+| #35 Payments                  | Service + webhooks + API **+ UI**        | ✅ Có (đã sửa)  | `/admin/payments/list` + hành động "xác nhận đã nhận chuyển khoản" (pending→completed) — **bắt buộc** vì quyết định nghiệp vụ chuyển khoản đối soát thủ công, không thể xử lý ngoài UI                                                      |
+| #36 Shipments                 | Service + API + UI                       | ✅ Có (đã nâng) | `/admin/shipments/list` xem trạng thái đơn đang giao theo chi nhánh, không cần tạo/sửa vận đơn thủ công ở MVP — chỉ để xử lý khi webhook fail hoặc khách hỏi                                                                                |
+| #37 Realtime                  | PartyKit setup (hạ tầng)                 | ❌ Không        | Đúng — đây là hạ tầng websocket, không phải nghiệp vụ CRUD, không cần UI riêng                                                                                                                                                              |
+| #38 Storefront Foundation     | Layout/shell công khai + product catalog | Shared          | `/storefront`, `/storefront/products`, `/storefront/products/{variantId}`, `/storefront/search`, `/storefront/account` — Option B: đây là hạ tầng/layout chung, #33-34 tự làm trang riêng bên trong, không phải nơi UI của #33-34 "bị hoãn" |
+| #39 Admin Dashboard           | Trang tổng hợp riêng                     | ✅ Có           | Dashboard tổng hợp live view — phải gồm cả dữ liệu từ #30/#31/#32 (Phase 4, sau khi refactor bằng Component Priority 1), không chỉ #33-37                                                                                                   |
+| #40 Unified Order Fulfillment | Service + API + UI                       | ✅ Có           | Hợp nhất đơn POS + online                                                                                                                                                                                                                   |
+
+**Nội dung nghiệp vụ giữ nguyên**:
+
+- Thanh toán: tiền mặt, thẻ qua POS ngân hàng (`bank_pos`), Momo/ZaloPay QR, chuyển khoản (đối soát thủ công qua #35), COD cho đơn online
 - Click-and-collect: trạng thái đơn `awaiting_pickup`, chi phí triển khai gần bằng 0
 - Giao vận: tích hợp bên thứ 3 (GHN/GHTK/Ahamove) qua webhook, không tự vận hành đội giao hàng
-- Đơn hàng hợp nhất: một hệ thống order cho cả POS và online
-- **Realtime qua PartyKit** (mở rộng từ payment notification server hiện có) thành hub chung:
-  - Notification system: đẩy thông báo hệ thống theo room (role/chi nhánh)
-  - Chat nội bộ nhân viên + CSKH ↔ khách hàng
-  - Live admin dashboard: cập nhật tồn kho/đơn hàng real-time, tránh xung đột nhiều người sửa cùng lúc
-  - Cần chốt: room strategy (theo chi nhánh/role) và cơ chế reconnect/offline queue cho POS khi mất mạng tạm thời
+- **Realtime qua PartyKit**: room strategy hybrid đã chốt (`branch:{branchId}` + `role:owner`) — xem "Quyết định kiến trúc/kỹ thuật đã chốt (Phase 4-5)"; cơ chế reconnect/offline queue cho POS khi mất mạng tạm thời vẫn cần thiết kế trong #37
 
 ### Phase 6: Multi-Device Experience Layer
 
@@ -176,20 +207,47 @@ Roadmap được chia theo phase, mỗi phase là 1 nhánh Git/worktree riêng.
 - `products`: thêm `isCombo` + `comboComponents` cho bundle; thêm `nameI18n` (object) song song field gốc searchable
 - `name_roles`: thêm `displayNameI18n` cho bản dịch UI
 - `notification_templates`: thêm field `locale`, document key theo quy ước `<code>_<locale>`
-- `stock_takes`: thêm `scope`, `totalVariancePercentage`, `requiresEscalation`, `approvedBy` để routing duyệt tự động
+- `stock_takes`: thêm `auditScope` (đặt tên tránh reserved word, không dùng `scope`), `totalVariancePercentage`, `requiresEscalation`, `approvedBy` để routing duyệt tự động
 - `pos_sessions`: thêm `discrepancyNote`
 - `payments.method`: chuẩn hoá enum `cash | bank_pos | momo | zalopay | bank_transfer | cod | loyalty_points`
 - Collection mới: `error_logs` (lỗi kỹ thuật server/client, tách khỏi `audit_logs` là log nghiệp vụ)
 
 ---
 
-## Công việc đang dở dang / technical debt
+## Definition of Done (áp dụng từ Phase 4 trở đi, xuyên suốt)
 
-1. **Test suite**: `tests/ui-check.spec.ts`, `tests/ui-check-v2.spec.ts` chưa ổn do lỗi config; một số unit test cũ cần cập nhật sau refactor
-2. **Documentation**: cập nhật README.md hướng dẫn dev/test sau khi thêm `baseURL`; quy chuẩn tên screenshot `<engine>-<Component>-<state>.png`
-3. **Dọn dẹp**: file cũ trong `.claude/worktrees/` có thể còn tham chiếu history; dọn `playwright-report/`, `test-results/` sau mỗi lần chạy test
-4. **E2E maintenance**: bộ test auth (`37a785e`) cần chạy định kỳ, cập nhật selector nếu UI đổi
-5. **Chưa quyết định**: room strategy cụ thể cho PartyKit realtime layer (Phase 5); có cần Elasticsearch/Meilisearch riêng khi catalog lớn hay N1QL đủ dùng lâu dài; CDN lưu trữ ảnh sản phẩm; backup/disaster recovery cho Couchbase (tần suất, RTO/RPO); có tái dùng Svelte component library hiện có làm design system cho Phase 3 hay xây mới
+Mỗi task/tính năng chỉ được coi là hoàn thành khi có đủ 4 phần sau trong cùng 1 task — **không tách UI hay test ra thành task riêng làm sau**:
+
+1. **Service** — business logic, tương tác Couchbase
+2. **API route** — endpoint gọi service, có permission check qua `PermissionChecker`
+3. **UI** — route/trang hoặc component tương ứng, dùng design token + component đã audit ở Phase 3
+4. **Test** — ít nhất 1 unit test cho logic quan trọng (đặc biệt state transition, race condition) hoặc 1 case Playwright cho luồng chính
+
+**Lý do đặt ra**: task #29 (Supplier & Purchasing, Phase 4) hoàn thành đầy đủ Service + 7 API route nhưng không có UI và không có test — chỉ dừng ở type-check/build/curl. Nếu tiếp tục theo thứ tự Service trước, UI sau (làm theo layer thay vì theo tính năng), rủi ro là nhiều service backend chồng lên nhau trước khi có màn hình nào chạy thử, dẫn tới phải sửa lại API khi làm UI thật.
+
+**Cách chia task đúng**: theo lát cắt dọc (1 tính năng = 1 task, đủ 4 phần trên), không theo lát cắt ngang (tất cả service trước, tất cả UI sau, tất cả test cuối cùng).
+
+**Việc còn nợ từ Phase 4**: task #29 (Supplier/Purchasing) cần bổ sung UI (`/admin/suppliers`, `/admin/purchase-orders`) và test trước khi coi Phase 4 hoàn thành.
+
+---
+
+1. Test suite `ui-check.spec.ts`/`ui-check-v2.spec.ts` — Unit tests: **ĐÃ FIX** (97/97 passing, test Phase 2 cũ đã disable). Playwright: root cause `webServer` echo giả đã fix, chạy được trên worktree Phase 3 (61 passed / 33+28 passed tuỳ config port) — nhưng **đang bị block lại** ở thời điểm Phase 5 (cần dev server + `.env` mới chạy), cần gỡ trước khi merge Phase 5, không để "chạy tay khi rảnh"
+2. **Documentation**: README.md đã viết lại đầy đủ (dev/test guide, Playwright setup) — duy trì cập nhật khi thêm feature mới
+3. **Dọn dẹp**: file cũ trong `.claude/worktrees/` có thể còn tham chiếu history; dọn `playwright-report/`, `test-results-ui-check/`, `.svelte-kit/` sau mỗi lần chạy test/build — có thể làm song song, không chặn tiến độ Phase 5
+4. **E2E maintenance**: bộ test auth (`37a785e`) cần chạy định kỳ, cập nhật selector nếu UI đổi; cần CI/CD pipeline chạy E2E tự động trước merge (chưa có)
+5. ~~Token migration (Phase 3)~~ — **ĐÃ XONG**: hardcode → CSS variable cho Button/Input/Tooltip/Checkbox/Skeleton/Loading/Toast/Icon + 3 layout component mới (menu-bar, navigation-bar, footer-enhanced), verify qua Playwright 3 browser engine
+6. **N1QL reserved words**: rà lại toàn bộ schema tìm field trùng từ khóa dành riêng của N1QL (đã biết: `scope`, `level`) trước khi viết query mới — áp dụng ngay cho 4 collection mới của Phase 5 trước khi implement service
+7. **Còn mở**: formal WCAG 2.1 AA audit + screen reader testing thực tế (NVDA/VoiceOver/TalkBack) cho Phase 3; UI/test còn nợ cho task #29 Supplier/Purchasing (xem Definition of Done bên dưới); **cần xác nhận UI thật sự của #30 (Pricing/Promotions), #31 (POS Sessions), #32 (Stock Takes) đang dùng gì cho phần chọn lựa/bảng dữ liệu** — nếu là HTML thô, gộp refactor cùng đợt Component Library Priority 1 (xem task nền tảng trước Phase 5)
+
+### Quyết định kiến trúc/kỹ thuật đã chốt (Phase 4-5)
+
+- **PartyKit room strategy**: hybrid — room chính `branch:{branchId}` cho từng chi nhánh, cộng room phụ `role:owner` mà Owner join cùng lúc mọi chi nhánh để có dashboard tổng. Phân quyền xem loại message nào xử lý ở tầng filter client, không tách room chi tiết hơn ở quy mô 8-10 chi nhánh
+- **Product search**: giữ N1QL (Couchbase FTS/GSI), chưa thêm Elasticsearch/Meilisearch. Chỉ cân nhắc đổi khi catalog vượt ~50-100k SKU hoặc cần fuzzy/typo-tolerance search thật sự
+- **Product images**: dùng **Adobe** (tự xây request/response tới server/hosting Adobe), tích hợp qua abstraction layer `ImageStorageProvider` interface (`src/lib/server/storage/`) — service nghiệp vụ không gọi thẳng Adobe API, để dễ đổi provider sau này nếu cần. Upload luôn qua server route (không gọi trực tiếp từ client) để giữ credential và tận dụng RBAC permission check
+- **Couchbase backup**: scheduled backup daily trên Capella, chấp nhận RPO 24h / RTO vài giờ ở giai đoạn MVP; nâng cấp khi lên 8-10 chi nhánh và downtime 24h trở thành thiệt hại nghiêm trọng
+- **Design system**: đã chốt từ Phase 3 — tái dùng thư viện Svelte compound-component hiện có, không xây mới (8 component đã audit + token migration hoàn thành)
+
+**Phase 5 tiến độ**: schema extensions cho 4 collection mới đã commit (`c7e3f8ed`). Breakdown còn lại (Cart, Checkout, Payment, Shipment, Realtime) áp dụng Definition of Done bên dưới — chia theo lát cắt dọc từng tính năng, không theo layer (service trước/UI sau).
 
 ---
 
