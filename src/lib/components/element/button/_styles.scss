@@ -203,7 +203,7 @@ $themes: 'dark', 'light';
 	// ── Disabled State (chuẩn hoá dark/light) ──
 	&.disabled {
 		--cursor: not-allowed;
-		opacity: 0.5;
+		opacity: var(--disabled-opacity, 0.5);
 		pointer-events: none;
 	}
 	// ── Loading State ──
@@ -258,8 +258,8 @@ $themes: 'dark', 'light';
 	// ── Size-based min-height (sync with Input component) ──
 	&.size-xs { --min-height: 1.875rem; }  // 30px
 	&.size-sm { --min-height: 2.5rem; }    // 40px
-	&.size-md { --min-height: 2.875rem; }  // 46px
-	&.size-lg { --min-height: 2.875rem; }  // 46px
+	&.size-md { --min-height: 2.5rem; }    // 40px (changed from 46px to match sm)
+	&.size-lg { --min-height: 2.5rem; }    // 40px
 	&.size-xl { --min-height: 3.125rem; }  // 50px
 	&.size-2xl { --min-height: var(--font-size); }
 	&.size-3xl { --min-height: var(--font-size); }
@@ -306,6 +306,23 @@ $themes: 'dark', 'light';
 		flex-shrink: 0;
 	}
 
+	// ── Anchor tag button overrides (ensure height is respected) ──
+	// When rendered as <a> tag via navigation, ensure height constraint applies
+	&[href] {
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+		height: var(--min-height, 2.5rem) !important;
+		min-height: var(--min-height, 2.5rem) !important;
+		box-sizing: border-box !important;
+
+		// Allow wrapper to control width via CSS class
+		&.auth-switch-btn {
+			width: 100% !important;
+			flex: 1 !important;
+		}
+	}
+
 	// ── Link Variant Overrides ──
 	&.variant-link {
 		padding-inline: 0;
@@ -329,13 +346,29 @@ $themes: 'dark', 'light';
 	}
 
 	.button-render {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		justify-content: center;
 		gap: inherit;
-		line-height: inherit;
+		line-height: 1;
 		position: relative;
 		z-index: 1;
+		min-height: 100%;
+
+		// Allow button to control button-render width
+		.button-root.auth-switch-btn & {
+			width: 100% !important;
+			flex: 1 !important;
+			flex-grow: 1 !important;
+			flex-basis: 0 !important;
+		}
+	}
+
+	// Direct rule for auth-switch-btn's button-render
+	:global(.auth-switch-btn) :global(.button-render) {
+		width: 100% !important;
+		flex: 1 !important;
+		flex-basis: 0 !important;
 	}
 	// ── Spinner khi loading ──
 	.button-spinner {
@@ -401,4 +434,14 @@ $themes: 'dark', 'light';
 		transform: scale(1);
 		opacity: 0;
 	}
+}
+
+// High specificity override for auth-switch-btn button-render
+.button-root.auth-switch-btn .button-render {
+	width: 100% !important;
+	flex: 1 1 0% !important;
+	flex-grow: 1 !important;
+	flex-basis: 0% !important;
+	margin: 0 !important;
+	padding: 0 !important;
 }

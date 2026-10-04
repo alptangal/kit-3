@@ -98,6 +98,26 @@
 	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ══════════════════════════════════════════════════════
+   MODAL — Underlying-layout scale zoom-out (iOS-style)
+   Khi modal mở, layout NẰM DƯỚI (Container root của
+   +layout.svelte, nút 'root' trong client.browser.layers)
+   co lại (scale 0.96) để modal nổi bật. JS
+   (modal/Main.svelte) toggle class + gán CSS variable
+   --modal-underlying-scale; transition sống ở đây vì class
+   được gắn DYNAMIC lên element ngoài scope <style> component
+   (scoped CSS không reach được).
+   ══════════════════════════════════════════════════════ */
+.modal-underlying-scale {
+	transform: scale(var(--modal-underlying-scale, 1));
+	transform-origin: center center;
+	/* Duration bám token hệ thống --transition-duration (default 300ms) để
+	   đồng bộ nhịp với mọi animation khác + tránh bị inline style
+	   transition-duration của Container root ghi đè (inline luôn win). */
+	transition: transform var(--transition-duration, 300ms) cubic-bezier(0.16, 1, 0.3, 1);
+	will-change: transform;
+}
+
 /* Accessibility: Respect user reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
 	::view-transition-old(root),
@@ -113,5 +133,15 @@
 	::view-transition-group(auth-panel-bg) {
 		animation-duration: 100ms !important;
 		animation-name: none !important;
+	}
+
+	/* Modal underlying scale: không transition (JS đã gán variable ngay).
+	   Container root có INLINE style transition-duration (token hệ thống)
+	   → inline thường win trên class. Dùng transition-duration: 0s !important
+	   (author !important win trên inline non-important) để BẮT BUỘC transition
+	   hoàn tất INSTANT → layout co lại NHẢY, user không thấy motion
+	   (WCAG 2.3.3). Không dùng "transition: none" (shorthand mơ hồ). */
+	.modal-underlying-scale {
+		transition-duration: 0s !important;
 	}
 }

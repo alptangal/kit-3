@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { scale } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import type {
 		CheckboxIndicatorCheckedConfigs,
 		CheckboxIndicatorCheckedProps
@@ -80,7 +80,8 @@
 <svelte:element
 	this={props.as ?? 'div'}
 	bind:this={configs.ref}
-	in:scale={{ duration: 300, start: 0.5, easing: cubicOut }}
+	in:fade={{ duration: 300 }}
+	out:fade={{ duration: 300 }}
 	class={configs.style}
 	{@attach handleEvents(configs.event)}
 >
@@ -110,9 +111,16 @@
 <style lang="scss">
 	@use '$styles/colors.scss';
 	.checkbox-indicator-checked {
-		/* Match the size of checkbox-indicator-root */
-		width: var(--min-height-sm);
-		height: var(--min-height-sm);
+		/* Match the size of checkbox-indicator-root: 20px (1.25rem) */
+		width: 1.25rem;
+		height: 1.25rem;
+		/* Prevent size overflow from SVG */
+		max-width: 1.25rem;
+		max-height: 1.25rem;
+		/* Prevent layout shift and overflow */
+		contain: strict;
+		overflow: hidden;
+		flex-shrink: 0;
 	}
 
 	.check-draw {

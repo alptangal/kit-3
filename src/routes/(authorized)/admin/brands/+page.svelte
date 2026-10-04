@@ -419,7 +419,7 @@
 	</div>
 
 	<!-- Create/Edit Modal -->
-	<Modal display={showCreateModal || showEditModal} onclose={closeModals} size="md">
+	<Modal display={showCreateModal || showEditModal} onClose={closeModals} size="md">
 		<ModalContainer>
 			<ModalHeader>
 				<h2 class="text-lg font-semibold text-foreground">

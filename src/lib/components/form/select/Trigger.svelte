@@ -19,7 +19,7 @@
 	const { valueStore, openStore, toggleOpen, isOpen, placeholder, itemsStore, searchable, searchStore, setSearch } = context;
 
 	let triggerEl: HTMLButtonElement;
-	let searchInputEl: HTMLInputElement;
+	let searchInputEl = $state<HTMLInputElement | null>(null);
 
 	$effect(() => {
 		if ($isOpen && searchable && searchInputEl) {
@@ -49,7 +49,7 @@
 	}
 
 	// Get display value
-	const displayValue = $derived(() => {
+	const displayValue = $derived.by(() => {
 		const val = $valueStore;
 		if (!val) return placeholder;
 
@@ -57,7 +57,7 @@
 			return val.map((v) => $itemsStore.get(v)?.label || v).join(', ');
 		}
 		return $itemsStore.get(val)?.label || val;
-	})();
+	});
 </script>
 
 <button

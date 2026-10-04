@@ -526,7 +526,7 @@
 	</div>
 
 	<!-- Create/Edit Modal -->
-	<Modal display={showCreateModal || showEditModal} onclose={closeModals} size="lg">
+	<Modal display={showCreateModal || showEditModal} onClose={closeModals} size="lg">
 		<ModalContainer>
 			<ModalHeader>
 				<h2 class="text-lg font-semibold text-foreground">

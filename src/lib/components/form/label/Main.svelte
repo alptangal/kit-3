@@ -3,14 +3,20 @@
 	import { client } from '$store/basic.svelte';
 	import { getCheckboxContext } from '../checkbox';
 	import { getTextFieldContext } from '../textField';
+	import { getSelectContext } from '../select/_context';
 	import type { LabelConfigs, LabelProps } from './_interface';
 
 	let { children, ...props }: LabelProps = $props();
 	const textFieldContext = getTextFieldContext();
 	const checkboxContext = getCheckboxContext();
+	const selectContext = getSelectContext();
 
-	// Generate for attribute if not provided and we have a textField context with name
-	const forId = $derived(props.for ?? (textFieldContext?.name ? `field-${textFieldContext.name}` : undefined));
+	// Generate for attribute if not provided and we have a context with name
+	const forId = $derived(
+		props.for ??
+			(textFieldContext?.name ? `field-${textFieldContext.name}` : undefined) ??
+			(selectContext?.name ? `field-${selectContext.name}` : undefined)
+	);
 
 	let configs: LabelConfigs = $state({
 		get style() {
@@ -23,17 +29,15 @@
 		},
 		get color() {
 			if (props.color) return props.color;
-			// Đọc từ computed color của input nếu có (đã set qua prop color)
-			if (textFieldContext?.children?.input?.color) {
-				const inputColor = textFieldContext.children.input.color;
-				if (inputColor !== 'default') return inputColor;
-			}
-			// Kiểm tra validation state của input child — áp dụng cùng logic
-			// với Input.colorDerived để KHÔNG hiện error/success khi:
-			// - Đang validate (isValid == 'pending')
-			// - Chưa validate (chưa blur, chưa có validation.process)
-			// (Tránh regression: label mặc định bị color-error/color-success)
+
+			// Read color from input's explicit prop first (set via color={...})
+			// This handles async validation states like email availability checks
 			const childInput = textFieldContext?.children?.input;
+			if (childInput?.color && childInput.color !== 'default') {
+				return childInput.color;
+			}
+
+			// Fall back to validation state if input doesn't have explicit color
 			if (childInput?.validation) {
 				const validation = childInput.validation;
 				const isValid = validation.isValid;
@@ -46,10 +50,30 @@
 				// Chưa có quá trình validate (chưa blur) → trung tính
 				return 'default';
 			}
-			// Checkbox context fallback
+
+			// Checkbox context (M8 — đổi màu SAU khi validate, không áp khi khởi tạo)
+			// Source isValid trả 'pending' (string) khi required chưa validate →
+			// chỉ nhận BOOLEAN (đã validate) → màu; 'pending'/undefined → trung tính.
 			if (checkboxContext?.required) {
 				if (typeof checkboxContext?.validation?.isValid == 'boolean')
 					return checkboxContext.validation.isValid ? 'success' : 'error';
+				return 'default';
+			}
+
+			// Select context (M8 — MIRROR input: gate LABEL bằng "đã validate")
+			// Source isValid của Select trả presence boolean ngay khi required (để
+			// Form submit chặn đúng), NÊN label KHÔNG đọc isValid trực tiếp mà chỉ
+			// đổi màu khi process đã chạy (process.size > 0) — pending → trung tính.
+			// Kết quả: label required Select chỉ đổi màu error/success SAU khi
+			// blur/change/submit, đúng chuẩn input/checkbox, không áp lúc khởi tạo.
+			if (selectContext?.required) {
+				const validation = selectContext.validation;
+				const isValid = validation?.isValid;
+				const process = validation?.process;
+				if (process && process.size > 0) {
+					if (isValid == 'pending') return 'default';
+					return isValid ? 'success' : 'error';
+				}
 				return 'default';
 			}
 			return 'default';
@@ -59,6 +83,7 @@
 				props.size ??
 				textFieldContext?.size ??
 				checkboxContext?.size ??
+				selectContext?.size ??
 				client.browser?.size ??
 				'md'
 			);
@@ -68,7 +93,10 @@
 
 <svelte:element this={props.as ?? 'label'} bind:this={configs.ref} class={configs.style} for={forId}>
 	{@render children?.()}
-	{#if !props.hiddenRequiredIndicator && (textFieldContext?.required || checkboxContext?.required)}
+	{#if
+		!props.hiddenRequiredIndicator &&
+		(textFieldContext?.required || checkboxContext?.required || selectContext?.required)
+	}
 		<span class="color-[var(--error)]"> * </span>
 	{/if}
 </svelte:element>

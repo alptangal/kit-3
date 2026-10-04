@@ -180,12 +180,22 @@
 		gap: 2rem;
 		padding: 3rem;
 		max-width: 420px;
+
+		@media (max-height: 800px) {
+			gap: 1.5rem;
+			padding: 2rem;
+		}
 	}
 
 	.brand-logo :global(svg) {
 		width: 56px;
 		height: 56px;
 		filter: drop-shadow(0 8px 24px rgba(99, 102, 241, 0.45));
+
+		@media (max-height: 800px) {
+			width: 48px;
+			height: 48px;
+		}
 	}
 
 	.panel-text {
@@ -200,6 +210,10 @@
 		color: #ffffff;
 		letter-spacing: -0.02em;
 		margin: 0;
+
+		@media (max-height: 800px) {
+			font-size: 1.875rem;
+		}
 	}
 
 	.panel-desc {
@@ -207,6 +221,10 @@
 		color: rgba(255, 255, 255, 0.65);
 		line-height: 1.6;
 		margin: 0.5rem 0 0;
+
+		@media (max-height: 800px) {
+			font-size: 0.875rem;
+		}
 	}
 
 	.panel-features {
@@ -223,6 +241,11 @@
 			gap: 0.75rem;
 			color: rgba(255, 255, 255, 0.85);
 			font-size: 0.9rem;
+
+			@media (max-height: 800px) {
+				font-size: 0.8125rem;
+				gap: 0.625rem;
+			}
 		}
 	}
 
@@ -237,5 +260,10 @@
 		font-size: 0.6rem;
 		flex-shrink: 0;
 		box-shadow: 0 2px 8px rgb(99 102 241 / 0.4);
+
+		@media (max-height: 800px) {
+			width: 20px;
+			height: 20px;
+		}
 	}
 </style>

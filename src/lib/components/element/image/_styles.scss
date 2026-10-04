@@ -1,0 +1,124 @@
+// $components/element/image/_styles.scss
+// Atom ảnh — xu hướng hiện đại: shimmer skeleton, fade-in, blur-up crossfade,
+// hover-zoom (PC), lazy load, khoá box bằng aspect-ratio (không CLS).
+// KHÔNG dùng color-mix() / :has() (Vite target es2020 + safari15).
+
+.image-root {
+	--image-fit: cover;
+	--image-pos: center;
+	--image-zoom: 1.05;
+
+	position: relative;
+	display: block;
+	overflow: hidden;
+	width: 100%;
+	max-width: 100%;
+	min-height: 1.25rem;
+	/* Nền = placeholder khi chưa có ảnh/shimmer — token, không hardcode */
+	background: var(--background, rgba(125, 125, 125, 0.15));
+	border-radius: var(--border-radius);
+
+	/* Ảnh chính (foreground layer) */
+	.image {
+		position: relative;
+		z-index: 2;
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: var(--image-fit);
+		object-position: var(--image-pos);
+		/* Fade-in khi load (opacity 0 → 1 qua .is-loaded) */
+		opacity: 0;
+		transition: opacity 0.3s ease;
+	}
+
+	/* Layer cũ trong crossfade/blur-up: mờ + phóng to nhẹ, nằm dưới ảnh mới */
+	.image-old {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		width: 100%;
+		height: 100%;
+		object-fit: var(--image-fit);
+		object-position: var(--image-pos);
+		filter: blur(8px);
+		transform: scale(1.05);
+		opacity: 0.7;
+		pointer-events: none;
+	}
+
+	/* Shimmer skeleton: gradient trượt (transform → 60fps, không tốn repaint) */
+	.image-shimmer {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		background: rgba(125, 125, 125, 0.12);
+
+		&::after {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 150%;
+			height: 100%;
+			background: linear-gradient(
+				90deg,
+				transparent 0%,
+				rgba(125, 125, 125, 0.18) 50%,
+				transparent 100%
+			);
+			transform: translateX(-100%);
+			animation: image-shimmer 1.4s ease-in-out infinite;
+		}
+	}
+
+	/* Error fallback: icon + nền token, không emoji */
+	.image-error {
+		position: absolute;
+		inset: 0;
+		z-index: 3;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 1.5rem;
+		color: var(--foreground);
+		opacity: 0.4;
+	}
+
+	/* Load xong: bump z-index để ảnh mới che shimmer/layer cũ + fade vào */
+	&.is-loaded {
+		.image {
+			opacity: 1;
+		}
+	}
+
+	/* Tắt fade (prop fade=false) */
+	&.image-no-fade {
+		.image {
+			opacity: 1;
+			transition: none;
+		}
+	}
+}
+
+/* Hover-zoom: CHỈ thiết bị có con trỏ (PC) — tránh "sticky hover" trên mobile */
+@media (hover: hover) and (pointer: fine) {
+	.image-root.image-zoomable {
+		.image {
+			transition:
+				opacity 0.3s ease,
+				transform 0.3s ease;
+		}
+		&:hover {
+			.image {
+				transform: scale(var(--image-zoom));
+			}
+		}
+	}
+}
+
+@keyframes image-shimmer {
+	100% {
+		transform: translateX(100%);
+	}
+}

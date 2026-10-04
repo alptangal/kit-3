@@ -15,3 +15,9 @@ import { default as Unchecked } from './checkbox/Indicator/Unchecked/Main.svelte
 export const Checkbox = Object.assign(CheckboxRoot, {
 	Indicator: Object.assign(Indicator, { Checked, Unchecked })
 });
+
+export { default as Select } from './select/Main.svelte';
+export type { SelectProps, SelectConfigs, SelectOption, SelectOptionGroup } from './select/_interface';
+
+export { RadioGroup, RadioItem } from './radiogroup/index';
+export type { RadioGroupProps, RadioGroupConfigs, RadioItemProps, RadioOrientation } from './radiogroup/index';

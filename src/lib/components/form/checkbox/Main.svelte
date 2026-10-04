@@ -12,9 +12,16 @@
 
 	let { children, checked = $bindable(), ...props }: CheckboxProps = $props();
 	const formContext = getFormContext();
+
+	function toggle() {
+		if (configs.disabled) return;
+		checked = !checked;
+	}
 	// Ghi nhớ giá trị checked ban đầu để reset về đúng mốc đầu tiên (hỗ trợ cả formContext.data)
-	// Use local variable for initial value - will be properly captured by configs getters
-	let _initialChecked: boolean | undefined = undefined;
+	// Capture initial value immediately on mount to avoid lazy capture issues
+	let _initialChecked: boolean | undefined = checked;
+	// Track if field was just reset programmatically - suppress validation until user interacts
+	let _justReset = $state(true);
 
 let configs: CheckboxConfigs = $state({
 		get previousValue() {
@@ -76,9 +83,8 @@ let configs: CheckboxConfigs = $state({
 					events: {
 						mousedown: {
 							handler(e, data) {
-								if (configs.disabled) return;
 								if (data?.node instanceof HTMLElement) {
-									checked = !checked;
+									toggle();
 								}
 							},
 							options: {
@@ -97,6 +103,9 @@ let configs: CheckboxConfigs = $state({
 		validation: {
 			_isValid: undefined as undefined | boolean | 'pending',
 			get isValid() {
+				// After programmatic reset, suppress validation until user interacts
+				if (_justReset) return true;
+
 				if (configs.required) {
 					if (this._isValid === undefined) return 'pending';
 					return this._isValid;
@@ -118,6 +127,8 @@ let configs: CheckboxConfigs = $state({
 				}
 				return checked;
 			})();
+			// Set _justReset BEFORE changing checked to prevent $effect from triggering validation
+			_justReset = true;
 			checked = initialValue;
 			_initialChecked = initialValue;
 			configs.validation.messages = undefined;
@@ -189,7 +200,7 @@ let configs: CheckboxConfigs = $state({
 		untrack(() => {
 			configs.previousValue = current;
 		});
-		if (changed) {
+		if (changed && !_justReset) {
 			if (!configs.timeId) configs.timeId = new Map();
 			const name = 'timeout-valition';
 			const timeId = configs.timeId.get(name);
@@ -208,6 +219,9 @@ let configs: CheckboxConfigs = $state({
 					configs.delay ?? client.browser?.delay ?? 300
 				)
 			);
+		} else if (changed && _justReset) {
+			// Just reset - clear the flag so future changes will trigger validation
+			_justReset = false;
 		}
 	});
 
@@ -231,34 +245,21 @@ let configs: CheckboxConfigs = $state({
 	this={props.as ?? 'div'}
 	bind:this={configs.ref}
 	class={configs.style}
+	role="checkbox"
+	aria-checked={checked ? 'true' : 'false'}
+	tabindex={0}
+	aria-label={props['aria-label']}
 	{@attach handleEvents(configs.event)}
+	onkeydown={(e: KeyboardEvent) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			toggle();
+		}
+	}}
 >
 	{@render children?.()}
 </svelte:element>
 
 <style lang="scss">
-	.checkbox-root {
-		@apply flex flex-row-reverse justify-end items-center;
-		&.disabled {
-			position: relative;
-			--cursor: not-allowed;
-			--opacity: var(--disabled-opacity);
-			&::before {
-				content: '';
-				position: absolute;
-				top: 0px;
-				left: 0px;
-				width: 100%;
-				height: 100%;
-				z-index: 1;
-			}
-		}
-		&.has-value {
-		}
-		--cursor: pointer;
-		--opacity: 1;
-		cursor: var(--cursor);
-		opacity: var(--opacity);
-		gap: var(--gap);
-	}
+	@use '_styles.scss';
 </style>

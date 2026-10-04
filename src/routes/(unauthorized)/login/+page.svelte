@@ -115,6 +115,19 @@ $effect(() => {
 		}
 	});
 
+	// Caps Lock warning (P2 UX) — hiển thị khi user gõ password trong lúc Caps Lock bật.
+	// Gắn listener keydown/focusout lên một wrapper `display:contents` quanh password
+	// field (event keydown/focusout BUBBLE từ input → wrapper, không cần component
+	// forward event). getModifierState('CapsLock') được hỗ trợ Safari 13+ (an toàn
+	// cho target es2020/safari15).
+	let capsLockOn = $state(false);
+	function handleCapsKeydown(e: KeyboardEvent) {
+		capsLockOn = typeof e.getModifierState === 'function' ? e.getModifierState('CapsLock') : false;
+	}
+	function handleCapsFocusout() {
+		capsLockOn = false;
+	}
+
 	// Validation
 	function validateForm(): string | undefined {
 		const raw = configs.username.value?.trim() ?? '';
@@ -159,6 +172,8 @@ $effect(() => {
 		}
 
 		if (!encryptionKeys || loading) return;
+
+		loading = true;
 
 		const requestBody: LoginRequestBody = {
 			username: configs.username.value.trim(),
@@ -284,6 +299,18 @@ $effect(() => {
 		<TextField name="username" required>
 			<Label>{pageContents.username[lang] ?? 'Username / Email'}</Label>
 			<div class="auth-input-wrapper">
+				<Input
+					type="email"
+					bind:value={configs.username.value}
+					placeholder={{ vi: 'Nhập tên đăng nhập hoặc email', en: 'Enter username or email' }}
+					autocomplete="username"
+					class="auth-input"
+					emailSuggest={true}
+				/>
+				<!-- Icon đứng SAU <Input> trong DOM: để AuthLayout dùng
+				     general-sibling `~` (không cần `:has()`, Safari 15-safe)
+				     cho icon đổi màu theo validation state. position:absolute
+				     → vị trí hiển thị không đổi. -->
 				<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
 					<path
 						fill-rule="evenodd"
@@ -291,39 +318,46 @@ $effect(() => {
 						clip-rule="evenodd"
 					/>
 				</svg>
-				<Input
-					type="text"
-					bind:value={configs.username.value}
-					placeholder={{ vi: 'Nhập tên đăng nhập hoặc email', en: 'Enter username or email' }}
-					autocomplete="username"
-					class="auth-input"
-					emailSuggest={true}
-				/>
 			</div>
 			<FieldMessages />
 		</TextField>
 
-		<TextField name="password" required>
-			<Label>{pageContents.password[lang] ?? 'Password'}</Label>
-			<div class="auth-input-wrapper">
-				<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-					<path
-						fill-rule="evenodd"
-						d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 002-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
-						clip-rule="evenodd"
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="caps-scope" onkeydown={handleCapsKeydown} onfocusout={handleCapsFocusout}>
+			<TextField name="password" required>
+				<Label>{pageContents.password[lang] ?? 'Password'}</Label>
+				<div class="auth-input-wrapper">
+					<Input
+						type="password"
+						bind:value={configs.password.value}
+						placeholder={{ vi: 'Nhập mật khẩu', en: 'Enter your password' }}
+						autocomplete="current-password"
+						class="auth-input"
+						actionButtons={{ showPassword: { display: true } }}
 					/>
-				</svg>
-				<Input
-					type="password"
-					bind:value={configs.password.value}
-					placeholder={{ vi: 'Nhập mật khẩu', en: 'Enter your password' }}
-					autocomplete="current-password"
-					class="auth-input"
-					actionButtons={{ showPassword: { display: true } }}
-				/>
-			</div>
-			<FieldMessages />
-		</TextField>
+					<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<path
+							fill-rule="evenodd"
+							d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 002-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+				</div>
+				{#if capsLockOn}
+					<div class="caps-hint" role="alert">
+						<svg class="caps-hint-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+							<path
+								fill-rule="evenodd"
+								d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z"
+								clip-rule="evenodd"
+							/>
+						</svg>
+						<span>{lang === 'vi' ? 'Caps Lock đang bật' : 'Caps Lock is on'}</span>
+					</div>
+				{/if}
+				<FieldMessages />
+			</TextField>
+		</div>
 
 		<!-- Hàng Remember me + Forgot password -->
 		<div class="login-options">
@@ -344,7 +378,12 @@ $effect(() => {
 				{loading}
 				disabled={status.disabled}
 			>
-				{pageContents.login[lang] ?? 'Sign in'}
+				{#if loading}
+					<span class="spinner"></span>
+					<span>{lang === 'vi' ? 'Đang đăng nhập...' : 'Signing in...'}</span>
+				{:else}
+					<span>{pageContents.login[lang] ?? 'Sign in'}</span>
+				{/if}
 			</Button>
 
 			<Button
@@ -352,7 +391,7 @@ $effect(() => {
 				color="error"
 				type="reset"
 				variant="ghost"
-				onClick={handleReset}
+				size="md"
 			>
 				{pageContents.reset[lang] ?? 'Reset'}
 			</Button>
@@ -367,8 +406,8 @@ $effect(() => {
 
 		<!-- Link sang trang đăng ký -->
 		<div class="auth-switch-link">
-			<Button variant="link" color="primary" class="auth-switch-btn" to="/register">
-				<span>{pageContents.register[lang] ?? 'Create account'}</span>
+			<Button variant="ghost" color="primary" class="auth-switch-btn" to="/register" >
+				{pageContents.register[lang] ?? 'Create account'}
 				<svg class="link-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 					<path
 						fill-rule="evenodd"
@@ -383,20 +422,95 @@ $effect(() => {
 
 <style lang="scss">
 	/* Login Specific Styles (Layout & Common tokens provided by AuthLayout) */
+	/* Wrapper để bắt keydown/focusout cho Caps Lock hint. display:contents →
+	   không phá flex layout của .form-root (TextField vẫn là con trực tiếp). */
+	.caps-scope {
+		display: contents;
+	}
+
+	.caps-hint {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.7875rem;
+		line-height: 1.4;
+		color: #b45309;
+		background: rgb(245 158 11 / 0.1);
+		border: 1px solid rgb(245 158 11 / 0.28);
+		border-radius: 0.5rem;
+		padding: 0.375rem 0.625rem;
+		margin-top: 0.125rem;
+
+		.caps-hint-icon {
+			flex-shrink: 0;
+			width: 0.9rem;
+			height: 0.9rem;
+		}
+
+		@media (prefers-color-scheme: dark) {
+			color: #fbbf24;
+			background: rgb(245 158 11 / 0.12);
+			border-color: rgb(245 158 11 / 0.3);
+		}
+	}
+
 	.login-options {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
+
+		:global(.checkbox-root) {
+			white-space: nowrap;
+		}
+
+		/* Mobile: stack vertically */
+		@media (max-width: 480px) {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.75rem;
+
+			:global(.checkbox-root) {
+				white-space: normal;
+			}
+		}
 	}
 
-	:global(.login-forgot-link) {
-		font-size: 0.8125rem !important;
-		color: var(--foreground-400, #71717a) !important;
-		transition: color 0.15s !important;
 
-		&:hover {
-			color: var(--primary) !important;
+	/* Loading spinner animation */
+	.spinner {
+		display: inline-block;
+		width: 1rem;
+		height: 1rem;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: #ffffff;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+		margin-right: 0.5rem;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	:global(.auth-btn-submit) {
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+		gap: 0.5rem !important;
+
+		.spinner {
+			margin-right: 0;
+		}
+	}
+
+	:global(.auth-switch-btn) {
+		.link-arrow {
+			width: 1.25rem;
+			height: 1.25rem;
+			flex-shrink: 0;
 		}
 	}
 </style>

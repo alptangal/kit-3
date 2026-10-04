@@ -1,6 +1,8 @@
 import type { BasicConfigs, BasicProps, Size } from '$components/interface';
 import type { CheckboxConfigs } from '../checkbox/_interface';
 import type { TextFieldConfigs } from '../textField/_interface';
+import type { SelectConfigs } from '../select/_interface';
+import type { RadioGroupConfigs } from '../radiogroup/_interface';
 
 export interface FormProps extends BasicProps {
 	method?: 'post' | 'get' | 'dialog';
@@ -27,7 +29,7 @@ export interface FormConfigs extends Omit<BasicConfigs, 'childrens' | 'status'> 
 	onResponse?: () => void | Promise<void>;
 	onInvalid?: () => void | Promise<void>;
 	size?: Size;
-	childrens?: Set<TextFieldConfigs | CheckboxConfigs>;
+	childrens?: Set<TextFieldConfigs | CheckboxConfigs | SelectConfigs | RadioGroupConfigs>;
 	validation: {
 		isValid?: boolean;
 	};

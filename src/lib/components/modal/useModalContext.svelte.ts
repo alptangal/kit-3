@@ -66,6 +66,18 @@ export function getLayerIndex(node: HTMLElement | undefined): number {
 	if (!node) return -1;
 	return sortedModalLayers().findIndex(([el]) => el === node);
 }
+/**
+ * Element của layout NẰM DƯỚI modal (nút 'root' trong `client.browser.layers`
+ * — Container root của +layout.svelte). Modal được portal ra EM của element
+ * này, nên transform nó = hiệu ứng scale cho cả layout phía sau.
+ * (KHÔNG dùng `.layer` — class đó được gắn lên từng modal-root.)
+ */
+export function getModalRootElement(): HTMLElement | undefined {
+	const layers = client.browser?.layers;
+	if (!layers) return undefined;
+	for (const [el, v] of layers.entries()) if (v === 'root') return el;
+	return undefined;
+}
 export function getTotalLayers(): number {
 	return sortedModalLayers().length + 1;
 }
@@ -107,6 +119,52 @@ export function generateModalId(prefix = 'modal'): string {
 }
 
 // ---------------------------------------------------------------------------
+// Body scroll-lock (module scope, NON-reactive)
+// Ghi chú: counter + style cũ của body KHÔNG được lưu trên client.browser
+// (reactive $state). Đọc/viết cùng 1 giá trị reactive trong $effect gây
+// "effect reads and writes the same state" → vòng lặp vô hạn
+// (effect_update_depth_exceeded, page treo). Biến module thuần: chỉ cần đếm
+// số modal đang mở để biết khi nào khóa/giải phóng scroll body.
+// ---------------------------------------------------------------------------
+let scrollLockCount = 0;
+let savedOverflow = '';
+let savedPaddingRight = '';
+export function incrementModalScrollLock(): number {
+	scrollLockCount += 1;
+	return scrollLockCount;
+}
+export function decrementModalScrollLock(): number {
+	scrollLockCount = Math.max(0, scrollLockCount - 1);
+	return scrollLockCount;
+}
+
+// ---------------------------------------------------------------------------
+// Underlying-content scale counter (module scope, NON-reactive) — đếm số modal
+// đang mở để áp/bỏ hiệu ứng "co nhỏ layout phía dưới" lên nút root (`.layer`).
+// Cùng module scope với scroll lock: KHÔNG lưu trên client.browser (reactive
+// $state) để tránh "effect reads and writes the same state".
+// ---------------------------------------------------------------------------
+let underlyingScaleCount = 0;
+export function incrementUnderlyingScale(): number {
+	underlyingScaleCount += 1;
+	return underlyingScaleCount;
+}
+export function decrementUnderlyingScale(): number {
+	underlyingScaleCount = Math.max(0, underlyingScaleCount - 1);
+	return underlyingScaleCount;
+}
+export function saveBodyScrollStyles() {
+	if (typeof document === 'undefined') return;
+	savedOverflow = document.body.style.overflow;
+	savedPaddingRight = document.body.style.paddingRight;
+}
+export function restoreBodyScrollStyles() {
+	if (typeof document === 'undefined') return;
+	document.body.style.overflow = savedOverflow;
+	document.body.style.paddingRight = savedPaddingRight;
+}
+
+// ---------------------------------------------------------------------------
 // Transition helper (requirement #7) – fly / slide / fade variants
 // ---------------------------------------------------------------------------
 export type ModalTransition = 'fly' | 'slide' | 'fade' | 'none';
@@ -117,11 +175,23 @@ export interface TransitionParams {
 	delay?: number;
 	opacity?: number;
 }
+
+/**
+ * WCAG 2.3.3 — người dùng bật `prefers-reduced-motion: reduce` thì không nên
+ * nhận animation fly/slide/fade. SSR-safe (typeof window).
+ */
+export function prefersReducedMotion(): boolean {
+	if (typeof window === 'undefined' || !window.matchMedia) return false;
+	return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export function resolveTransition(
 	variant: ModalTransition | undefined,
 	placement: string | undefined,
 	browserTransition: typeof client.browser.transition | undefined
 ): { name: ModalTransition; params: TransitionParams } {
+	// Reduced-motion: tắt mọi chuyển động (mở/đóng modal không "bay").
+	if (prefersReducedMotion()) return { name: 'none', params: {} };
 	const v: ModalTransition = variant ?? 'fly';
 	if (v === 'none') return { name: 'none', params: {} };
 	if (v === 'fade') {

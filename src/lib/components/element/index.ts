@@ -28,9 +28,13 @@ export const Toast = Object.assign(ToastRoot, {
 export { default as ToastWrapper } from './toast/Wrapper/Main.svelte';
 
 export { default as Button } from './button/Main.svelte';
+export { default as Tag } from './tag/Main.svelte';
+export type { TagProps, TagConfigs, TagVariant } from './tag/_interface';
 
 export { default as MessageComponent } from './messageComponent/MessageComponent.svelte';
 export { default as Icon } from './icon/Main.svelte';
+export { default as Image } from './image/Main.svelte';
+export type { ImageProps, ImageConfigs, ImageRatio, ImageObjectFit, ImageLoadState } from './image/_interface';
 
 export { Loading };
 export { default as Skeleton } from './skeleton/Main.svelte';

@@ -4,12 +4,12 @@ import type { TranslateContent } from '$interfaces/basic';
 import type { Snippet, SvelteComponent } from 'svelte';
 import type { FullAutoFill } from 'svelte/elements';
 
-type InputTypes = 'text' | 'password' | 'number' | 'currency' | 'phone' | 'email';
+type InputTypes = 'text' | 'password' | 'number' | 'currency' | 'phone' | 'email' | 'file';
 type InputVariants = 'primary' | 'secondary';
-export type ValidationCompact = (output?: string | boolean) => boolean | Promise<boolean>;
+export type ValidationCompact = (output?: string | boolean | File[]) => boolean | Promise<boolean>;
 export type ValidationFull = {
 	id?: string | number;
-	isValid: (output?: string | boolean) => boolean | Promise<boolean>;
+	isValid: (output?: string | boolean | File[]) => boolean | Promise<boolean>;
 	message?: {
 		valid?: TranslateContent;
 		invalid?: TranslateContent;
@@ -103,6 +103,21 @@ export interface InputProps extends BasicProps {
 	}>;
 	/** Bật/tắt gợi ý phone auto-complete (mặc định bật khi type='phone') */
 	phoneSuggest?: boolean;
+	// ── type='file' ──
+	/**
+	 * Danh sách tệp đã chọn (type='file' only). Bindable — DUY NHẤT source-of-truth
+	 * cho file input; `value` (string) không dùng cho file. Form KHÔNG serialize
+	 * file (configs không có key `value`) — page upload qua FormData + bind:files.
+	 */
+	files?: File[];
+	/** HTML accept attribute (mime/extensions, vd "image/*,.csv,.json") */
+	accept?: string;
+	/** Cho phép chọn nhiều tệp (mặc định false = single-select, chọn mới thay thế) */
+	multiple?: boolean;
+	/** Giới hạn số tệp (multiple) — vượt quá sẽ bị cắt khi chọn */
+	maxFiles?: number;
+	/** Giới hạn kích thước mỗi tệp (bytes) — tệp vượt quá bị loại khi chọn */
+	maxSize?: number;
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;
@@ -182,13 +197,23 @@ export interface InputConfigs extends BasicConfigs {
 		process?: Map<keyof EventListener | 'required', boolean | 'pending'>;
 		isValid?: boolean | 'pending';
 		messages?: Map<
-			string | ((output?: string) => boolean | Promise<boolean>),
+			string | ((output?: string | boolean | File[]) => boolean | Promise<boolean>),
 			{ content?: TranslateContent; kind: 'valid' | 'invalid' }
 		>;
 	};
 	name?: string;
 	highlight?: string;
 	caseSensitive?: boolean;
+	// ── type='file' (configs KHÔNG có key `value` → Form serialize bỏ qua field) ──
+	/**
+	 * Danh sách tệp (type='file'). Bind qua props.files —
+	 * LUÔN gán array MỚI khi đổi (kỷ luật $bindable, không mutation tại chỗ).
+	 */
+	files?: File[];
+	accept?: string;
+	multiple?: boolean;
+	maxFiles?: number;
+	maxSize?: number;
 	focus: () => void;
 	loading?: boolean;
 	reset: () => void;

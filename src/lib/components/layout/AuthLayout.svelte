@@ -151,13 +151,15 @@
 	.auth-panel-right {
 		flex: 1 1 55%;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		padding: 2rem 1.5rem;
+		justify-content: flex-start;
+		padding: 2.5rem 1.5rem;
 		background: var(--background, #09090b);
 		position: relative;
 		overflow-y: auto;
 		overflow-x: hidden;
+		height: 100dvh;
 		max-height: 100dvh;
 
 		&::before {
@@ -168,6 +170,21 @@
 				radial-gradient(circle at 20% 80%, rgb(99 102 241 / 0.06) 0%, transparent 50%),
 				radial-gradient(circle at 80% 20%, rgb(139 92 246 / 0.05) 0%, transparent 50%);
 			pointer-events: none;
+		}
+
+		/* Mobile optimization */
+		@media (max-width: 768px) {
+			padding: 1.5rem 1rem;
+		}
+
+		@media (max-width: 480px) {
+			padding: 1rem 0.875rem;
+		}
+
+		/* Landscape mobile optimization */
+		@media (max-height: 600px) and (orientation: landscape) {
+			justify-content: center;
+			padding-block: 0.75rem;
 		}
 	}
 
@@ -180,6 +197,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;
+		margin-block: auto;
 		padding: 1rem 0;
 
 		/* Entrance animation using @starting-style (works with View Transitions) */
@@ -195,6 +213,17 @@
 		&--lg {
 			max-width: 480px;
 		}
+
+		/* Mobile optimization */
+		@media (max-width: 480px) {
+			gap: 1rem;
+			padding: 0.75rem 0;
+		}
+
+		/* Landscape mobile optimization */
+		@media (max-height: 600px) and (orientation: landscape) {
+			gap: 0.875rem;
+		}
 	}
 
 	/* ══ Card Header ══ */
@@ -205,19 +234,10 @@
 		gap: 0.35rem;
 		margin-bottom: 0.25rem;
 		text-align: center;
+		flex-shrink: 0;
 
 		/* View transition for entire header group - prevents flickering */
 		view-transition-name: auth-header;
-	}
-
-	/* ══ Card Header ══ */
-	.auth-header {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.35rem;
-		margin-bottom: 0.25rem;
-		text-align: center;
 	}
 
 	.auth-logo-sm svg {
@@ -230,15 +250,32 @@
 	.auth-title {
 		font-size: 1.75rem;
 		font-weight: 700;
-		letter-spacing: -0.02em;
-		color: var(--foreground, #f4f4f5);
+		letter-spacing: -0.025em;
+		color: var(--foreground, #0f172a);
 		margin: 0;
+
+		@media (max-width: 480px) {
+			font-size: 1.35rem;
+		}
 	}
 
 	.auth-subtitle {
-		font-size: 0.85rem;
-		color: var(--foreground-400, #71717a);
+		font-size: 0.875rem;
+		color: var(--foreground-400, #64748b);
 		margin: 0;
+
+		@media (max-width: 480px) {
+			font-size: 0.8125rem;
+		}
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.auth-title {
+			color: #f8fafc;
+		}
+		.auth-subtitle {
+			color: #94a3b8;
+		}
 	}
 
 	/* ══ Alert Banners ══ */
@@ -250,6 +287,9 @@
 		padding: 0.75rem 1rem;
 		font-size: 0.875rem;
 		line-height: 1.5;
+		margin-bottom: 0.5rem;
+		word-wrap: break-word;
+		overflow-wrap: break-word;
 
 		.alert-icon {
 			flex-shrink: 0;
@@ -260,14 +300,21 @@
 
 		&--success {
 			background: rgb(34 197 94 / 0.1);
-			color: #4ade80;
-			border: 1px solid rgb(34 197 94 / 0.2);
+			color: #16a34a;
+			border: 1px solid rgb(34 197 94 / 0.25);
 		}
 		&--error {
 			background: rgb(239 68 68 / 0.08);
-			color: #f87171;
-			border: 1px solid rgb(239 68 68 / 0.2);
+			color: #dc2626;
+			border: 1px solid rgb(239 68 68 / 0.25);
 			animation: shake 0.4s ease-in-out;
+		}
+
+		/* Mobile: better text handling */
+		@media (max-width: 480px) {
+			padding: 0.625rem 0.875rem;
+			font-size: 0.8125rem;
+			gap: 0.5rem;
 		}
 	}
 
@@ -277,7 +324,21 @@
 		40%, 80% { transform: translateX(5px); }
 	}
 
-	/* ══ Shared Global Form Elements inside AuthLayout ══ */
+	/* ══ Layout Structure ══ */
+	:global(.form-root) {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		width: 100%;
+	}
+
+	:global(.textField-root) {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		width: 100%;
+	}
+
 	:global(.auth-input-wrapper) {
 		position: relative;
 		width: 100%;
@@ -287,34 +348,55 @@
 			left: 0.875rem;
 			top: 50%;
 			transform: translateY(-50%);
-			width: 1rem;
-			height: 1rem;
-			color: var(--foreground-400, #71717a);
+			width: 1.125rem;
+			height: 1.125rem;
+			color: #94a3b8;
 			pointer-events: none;
 			z-index: 2;
+			transition: color 0.2s;
+		}
+
+		/* Sync icon color with input validation state.
+		   DÙNG general-sibling combinator `~` (KHÔNG phải `:has()`): icon
+		   `.auth-input-icon` là sibling ĐỨNG SAU `.input-root` trong DOM
+		   (markup đã sắp icon sau <Input> — icon position:absolute nên thứ
+		   tự DOM không đổi vị trí hiển thị). `~` được hỗ trợ mọi browser
+		   (kể cả Safari 15, target es2020) → đồng bộ màu icon theo
+		   validation state mà không cần `:has()` (Safari 15 chưa support). */
+		:global(.input-root.color-error) ~ :global(.auth-input-icon) {
+			color: #dc2626 !important;
+		}
+
+		:global(.input-root.color-success) ~ :global(.auth-input-icon) {
+			color: #16a34a !important;
 		}
 	}
 
 	:global(.auth-input) {
-		/* Padding cho icon trái — áp dụng lên highlight-wrapper (flex item), KHÔNG phải flex container */
 		:global(.input-highlight-wrapper) {
 			padding-left: 2.5rem !important;
 		}
-		transition: border-color 0.2s, box-shadow 0.2s !important;
 	}
 
 	:global(.auth-actions) {
 		display: flex;
-		gap: 0.625rem;
-		margin-top: 0.25rem;
+		gap: 0.75rem;
+		margin-top: 0.5rem;
+		align-items: center !important;
 
 		:global(.auth-btn-submit) {
 			flex: 1 !important;
-			font-weight: 600 !important;
-			letter-spacing: 0.01em;
+			height: 2.5rem !important;
+			min-height: 2.5rem !important;
 		}
+
 		:global(.auth-btn-reset) {
-			font-weight: 500 !important;
+			height: 2.5rem !important;
+			min-height: 2.5rem !important;
+			padding: 0.5rem 1rem !important;
+			line-height: 1 !important;
+			display: flex !important;
+			align-items: center !important;
 		}
 	}
 
@@ -322,41 +404,45 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		font-size: 0.75rem;
-		color: var(--foreground-400, #52525b);
-		margin-top: 0.25rem;
+		margin-top: 0.5rem;
 
 		&::before,
 		&::after {
 			content: '';
 			flex: 1;
 			height: 1px;
-			background: var(--border, rgb(255 255 255 / 0.08));
+			background: var(--border, rgba(148, 163, 184, 0.2));
 		}
 	}
 
 	:global(.auth-switch-link) {
 		display: flex;
-		justify-content: center;
-		margin-top: -0.25rem;
+		margin-top: 0.5rem;
+		width: 100%;
 
 		:global(.auth-switch-btn) {
-			display: inline-flex !important;
+			display: flex !important;
 			align-items: center !important;
+			justify-content: center !important;
 			gap: 0.35rem !important;
-			font-weight: 500 !important;
-			font-size: 0.875rem !important;
-			transition: gap 0.2s !important;
+			height: 2.5rem !important;
+			min-height: 2.5rem !important;
+			max-height: 2.5rem !important;
+			line-height: 1 !important;
+			padding-inline: 1rem !important;
+			width: 100% !important;
+			flex: 1 !important;
 
-			&:hover :global(.link-arrow) {
-				transform: translateX(3px);
+			// Use :deep() to penetrate scoped component styles
+			:deep(.button-render) {
+				width: 100% !important;
+				flex: 1 !important;
+				flex-grow: 1 !important;
+				flex-basis: 0 !important;
 			}
 		}
-
-		:global(.link-arrow) {
-			width: 1rem;
-			height: 1rem;
-			transition: transform 0.2s;
-		}
 	}
+
+	
+
 </style>

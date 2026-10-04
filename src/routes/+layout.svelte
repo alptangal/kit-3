@@ -47,10 +47,18 @@ import ToastWrapper from '$components/element/toast/Wrapper/Main.svelte';
 	function handleResize() {
 		if (configs.timeoutId) clearTimeout(configs.timeoutId);
 		configs.timeoutId = setTimeout(() => {
-			profile.browser.dimensions = {
-				width: window.innerWidth,
-				height: window.innerHeight
-			};
+			// Use visualViewport for accurate dimensions, fallback to window.innerWidth/Height
+			if (window.visualViewport) {
+				profile.browser.dimensions = {
+					width: window.visualViewport.width,
+					height: window.visualViewport.height
+				};
+			} else {
+				profile.browser.dimensions = {
+					width: window.innerWidth,
+					height: window.innerHeight
+				};
+			}
 		}, profile.delay);
 	}
 	function handleClick(e: MouseEvent) {
@@ -67,28 +75,33 @@ import ToastWrapper from '$components/element/toast/Wrapper/Main.svelte';
 			if (window.visualViewport) {
 				window.visualViewport.addEventListener('resize', updateResizeWindow);
 				window.visualViewport.addEventListener('scroll', updateResizeWindow);
+				// Use visualViewport for initial dimensions to be consistent with resize handler
+				profile.browser.dimensions = {
+					width: window.visualViewport.width,
+					height: window.visualViewport.height
+				};
 			} else {
 				window.addEventListener('resize', handleResize);
+				profile.browser.dimensions = {
+					width: window.innerWidth,
+					height: window.innerHeight
+				};
 			}
-			profile.browser.dimensions = {
-				width: window.innerWidth,
-				height: window.innerHeight
-			};
 
 			if (data.userAgent) profile.browser.userAgent = data.userAgent;
 			document.body.addEventListener('click', handleClick);
 			if (!profile.screen.height || !profile.screen.width) {
 				profile.screen = {
-					width: window.innerWidth,
-					height: window.innerHeight
+					width: window.visualViewport?.width ?? window.innerWidth,
+					height: window.visualViewport?.height ?? window.innerHeight
 				};
 			}
 
 			client.browser = {
 				userAgent: data.userAgent,
 				originalResolution: {
-					width: window.innerWidth,
-					height: window.innerHeight
+					width: window.visualViewport?.width ?? window.innerWidth,
+					height: window.visualViewport?.height ?? window.innerHeight
 				},
 				get isMobile() {
 					if (!this.userAgent) return undefined;
@@ -112,8 +125,8 @@ import ToastWrapper from '$components/element/toast/Wrapper/Main.svelte';
 							return 'ios';
 					}
 				},
-				width: window.innerWidth,
-				height: window.innerHeight,
+				width: window.visualViewport?.width ?? window.innerWidth,
+				height: window.visualViewport?.height ?? window.innerHeight,
 				get theme() {
 					if (localStorage.getItem('theme')) return localStorage.getItem('theme') as Theme;
 					return 'system';

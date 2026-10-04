@@ -108,7 +108,11 @@
 		/>
 	{/if}
 	<span class="select-item__label">
-		{@render children?.() || label}
+		{#if children}
+			{@render children()}
+		{:else}
+			{label}
+		{/if}
 	</span>
 </div>
 

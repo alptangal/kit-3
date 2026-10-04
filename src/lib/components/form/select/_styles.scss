@@ -1,0 +1,1131 @@
+// $components/form/select/_styles.scss
+// Nền tảng design: đồng nhất với Button / Input / Checkbox.
+// - Size  → @use '$styles/sizes.scss' (.size-* cung cấp --min-height/--font-size/--border-radius/--padding/--gap/--border-width)
+// - Màu   → token :root (--foreground, --color-sky-500, --success, --error, --disabled-opacity, ...)
+// - Dark/light → prefers-color-scheme, focus ring + tint giống input-root
+@use '$styles/sizes.scss';
+
+.select-root {
+	--cursor: pointer;
+	--border-color: transparent;
+	--background: transparent;
+	--color: var(--foreground);
+	--placeholder-color: var(--color-gray-400);
+
+	position: relative;
+	display: inline-flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+
+	&.disabled {
+		--cursor: not-allowed;
+		opacity: var(--disabled-opacity, 0.5);
+		/* Touch (mobile): giữ pointer-events:none — không có concept cursor,
+		   và chặn hẳn tương tác chạm (đồng bộ button disabled). */
+		pointer-events: none;
+		/* PC: bật lại pointer-events để TRIGGER hiển thị được cursor
+		   not-allowed (pointer-events:none làm mọi cursor biến mất —
+		   nguyên nhân state disabled không "nói" được rằng nó bị khóa).
+		   An toàn: trigger là native <button disabled> (vẫn chặn click/focus)
+		   và .select-trigger không có :hover state. */
+		@media (hover: hover) and (pointer: fine) {
+			pointer-events: auto;
+		}
+	}
+}
+
+/* ═══════════ TRIGGER (bề mặt chính — giống input-root) ═══════════ */
+.select-trigger {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--gap-sm, 0.375rem);
+	width: 100%;
+	min-width: 0;
+	min-height: var(--min-height, 2.5rem);
+	height: var(--min-height, 2.5rem);
+	padding-inline: calc(var(--padding, 1rem) / 2);
+	padding-block: 0.375rem;
+	border: var(--border-width, 1px) solid var(--border-color);
+	border-radius: var(--border-radius, var(--border-radius-md));
+	background: var(--background);
+	color: var(--color);
+	font-size: var(--font-size, var(--font-size-md));
+	line-height: var(--line-height, var(--line-height-md));
+	text-align: left;
+	cursor: var(--cursor);
+	transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+/* ── variant-secondary (mặc định): nền trung tính giống input variant-secondary ──
+   Main.svelte luôn emit class variant-*, nên không cần selector :not() fallback
+   (selector :not() nâng specificity lên (0,4,0) và đè mất --border-color của
+   state focus/color-* có specificity (0,3,0)). */
+.select-root.variant-secondary .select-trigger {
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(63, 63, 70, 0.4);
+		--border-color: rgba(63, 63, 70, 0.6);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(226, 232, 240, 0.5);
+		--border-color: rgba(226, 232, 240, 0.85);
+	}
+}
+
+/* Hover — dùng class .hover trên root (Main.svelte theo dõi mouseenter/leave) */
+.select-root.hover:not(.disabled) .select-trigger {
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(63, 63, 70, 0.6);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(226, 232, 240, 0.75);
+	}
+}
+
+/* Focus ring (đồng bộ với input-root.focus) — đặt SAU hover để focus thắng */
+.select-root.focus:not(.disabled) .select-trigger {
+	--border-color: var(--color-sky-500);
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(63, 63, 70, 0.8);
+		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(226, 232, 240, 0.95);
+		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+	}
+}
+
+/* ── variant-primary: nền sáng hơn một chút + viền sky ── */
+.select-root.variant-primary .select-trigger {
+	--border-color: var(--color-sky-500);
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(39, 39, 42, 0.5);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(248, 250, 252, 0.6);
+	}
+}
+.select-root.variant-primary.hover:not(.disabled) .select-trigger {
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(39, 39, 42, 0.7);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(248, 250, 252, 0.85);
+	}
+}
+
+/* ── variant-ghost: trong suốt, chỉ hiện nền khi hover ── */
+.select-root.variant-ghost .select-trigger {
+	--background: transparent;
+	--border-color: transparent;
+}
+.select-root.variant-ghost.hover:not(.disabled) .select-trigger {
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(63, 63, 70, 0.4);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(226, 232, 240, 0.5);
+	}
+}
+
+/* ── State màu: success / error (đồng bộ với input-root.color-*) ── */
+.select-root.color-success .select-trigger {
+	--color: var(--success);
+	--border-color: var(--success);
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(34, 197, 94, 0.15);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(34, 197, 94, 0.12);
+	}
+}
+.select-root.color-success.focus .select-trigger {
+	--border-color: var(--success-500);
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(34, 197, 94, 0.2);
+		box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(34, 197, 94, 0.15);
+		box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+	}
+}
+
+.select-root.color-error .select-trigger,
+.select-root.error .select-trigger {
+	--color: var(--error);
+	--border-color: var(--error);
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(239, 68, 68, 0.15);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(239, 68, 68, 0.12);
+	}
+}
+.select-root.color-error.focus .select-trigger,
+.select-root.error.focus .select-trigger {
+	--border-color: var(--error-500);
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(239, 68, 68, 0.2);
+		box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(239, 68, 68, 0.15);
+		box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+	}
+}
+
+/* ── Nội dung trigger ── */
+.select-trigger__value {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ── (M2) Rich option trong trigger: avatar + label (single-selected) ── */
+.select-trigger__selected {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375rem;
+	max-width: 100%;
+	min-width: 0;
+}
+.select-trigger__avatar {
+	flex-shrink: 0;
+}
+.select-trigger__avatar .select-option__image {
+	width: 1.375rem;
+	height: 1.375rem; /* nhỏ hơn option (1.75rem) — bám chiều cao trigger */
+}
+.select-trigger__selected-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.select-placeholder {
+	color: var(--placeholder-color);
+}
+
+/* ── (9) Chip overflow (multiple) — container chip trong trigger ── */
+.select-chips {
+	display: flex;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: 0.25rem;
+	min-height: var(--tag-h, 1.5rem);
+	/* override ellipsis text cho mode chip (text chạy trong chip) */
+	overflow: hidden;
+	text-overflow: clip;
+	white-space: nowrap;
+}
+/* Root có chip: trigger height auto (min giữ --min-height) */
+.select-root.has-chips .select-trigger {
+	height: auto;
+	min-height: var(--min-height, 2.5rem);
+}
+
+.select-trigger__icon {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--color);
+	opacity: 0.7;
+	transition: transform 0.15s ease;
+	.select-root.open & {
+		transform: rotate(180deg);
+	}
+}
+
+/* ── Spinner (loading) — đồng bộ kích thước với button-spinner ── */
+.select-spinner {
+	flex-shrink: 0;
+	width: 1em;
+	height: 1em;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	opacity: 0.6;
+	animation: select-spin 0.7s linear infinite;
+}
+
+/* ── Nút clear (ghost) — base màu ERROR: hành động "xóa" nhận diện
+   ngay không cần hover, đồng bộ delete/remove = error ── */
+.select-clear-button {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	margin-inline-end: -0.25rem;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: var(--border-radius-xs, 0.25rem);
+	color: var(--error);
+	opacity: 0.65;
+	cursor: pointer;
+	transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+	&:hover:not(.disabled) {
+		opacity: 1;
+		color: var(--error);
+		@media (prefers-color-scheme: dark) {
+			background: rgba(51, 65, 85, 0.85);
+		}
+		@media (prefers-color-scheme: light) {
+			background: rgba(241, 245, 249, 0.95);
+		}
+	}
+}
+
+@keyframes select-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ═══════════ DROPDOWN (nền surface — đồng bộ popup gợi ý của Input) ═══════════ */
+.select-dropdown {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+	z-index: 50;
+	padding: 0.375rem;
+	border: 1px solid rgba(125, 125, 125, 0.2);
+	border-radius: 0.75rem;
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	overflow: hidden;
+	/* Flex column: list (flex:1) KHÔNG vượt panel — khi có search box / fullscreen
+	   header, list tự co lại bằng (maxHeight − chiều các khối còn lại) thay vì
+	   tràn ra và bị overflow:hidden cắt đáy (footer load-more/pagination nằm đáy
+	   list sẽ bị clip nếu list cao bằng panel). */
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	user-select: none;
+	animation: select-dropdown-appear 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+
+	@media (prefers-color-scheme: light) {
+		--dropdown-bg: rgba(255, 255, 255, 0.98);
+		--dropdown-border: rgba(226, 232, 240, 0.95);
+		border-color: var(--dropdown-border);
+		box-shadow:
+			0 12px 28px -4px rgba(0, 0, 0, 0.1),
+			0 4px 12px -2px rgba(0, 0, 0, 0.05);
+	}
+	@media (prefers-color-scheme: dark) {
+		--dropdown-bg: rgba(24, 32, 47, 0.98);
+		--dropdown-border: rgba(51, 65, 85, 0.95);
+		border-color: var(--dropdown-border);
+		box-shadow:
+			0 14px 30px -4px rgba(0, 0, 0, 0.45),
+			0 4px 12px -2px rgba(0, 0, 0, 0.2);
+	}
+	background: var(--dropdown-bg);
+}
+
+@keyframes select-dropdown-appear {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* ── (12) Auto-flip: panel mở LÊN (trên trigger) ── */
+.select-dropdown--up {
+	top: auto;
+	bottom: calc(100% + 4px);
+}
+
+/* ── (12b) Panel mở NGANG (left/right trigger) — M1 ──
+   --dd-top/--dd-width do JS (computeAnchorMetrics) set trên .select-root:
+   - --dd-top   : top panel so với ROOT (top trigger, đã clamp viewport).
+                  Cancel top:100% (theo root — có thể có Label phía trên trigger).
+   - --dd-width : width panel = width trigger (px). Base dùng left:0;right:0
+                  (full-width) nên mở ngang PHẢI cố định width.
+   Fallback (frame đầu trước khi rAF set): 100% = full-width, 100% = đáy root. */
+.select-dropdown--left,
+.select-dropdown--right {
+	left: auto;
+	right: auto;
+	top: calc(var(--dd-top, 100%));
+	width: var(--dd-width, 100%);
+	/* Animation trượt vào theo trục X (panel nằm BÊN CẠNH, không phải dưới/trên) */
+	animation-name: select-dropdown-appear-x;
+}
+.select-dropdown--left {
+	right: calc(100% + 4px);
+	--dd-x: -4px; /* trượt từ bên trái xa hơn → về phía trigger */
+}
+.select-dropdown--right {
+	left: calc(100% + 4px);
+	--dd-x: 4px; /* trượt từ bên phải xa hơn → về phía trigger */
+}
+@keyframes select-dropdown-appear-x {
+	from {
+		opacity: 0;
+		transform: translateX(var(--dd-x, 0));
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+/* ── (10) Fullscreen: panel là <Modal size="full"> (reuse Modal) ──
+   Modal root/container tự quản lý fixed 100dvh, z=10000/10001, focus trap,
+   ESC/backdrop, nút close (Button) + body scroll lock.
+   .select-fullscreen-body: cột flex chiếm hết chiều cao container để
+   option list scroll nội bộ (search + controls row cố định trên đầu). */
+.select-fullscreen-body {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+
+	.select-option-list {
+		flex: 1 1 auto;
+		max-height: none;
+		min-height: 0;
+	}
+}
+
+/* Highlight segment khớp query search (label/description option) —
+   màu primary + đậm, không nền (thống nhất theo quyết định UI). */
+.select-option__highlight {
+	color: var(--primary);
+	font-weight: 600;
+	background: transparent;
+}
+
+/* ── (11) Backdrop: mờ + blur vùng nền (dim nhẹ hơn modal để hợp dropdown) ──
+   z=40 (dưới panel 50, che page). Fullscreen + backdrop → 9490 (ngay dưới panel 9500). */
+.select-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	background: var(--select-backdrop-dim, rgba(0, 0, 0, 0.45));
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+	animation: select-backdrop-in 0.15s ease;
+	cursor: default;
+}
+/* Trigger phải nổi TRÊN backdrop để user vẫn theo dõi được option đã chọn
+   khi nền bị dim + blur (40 backdrop < 45 trigger < 50 dropdown). */
+.select-root.backdrop .select-trigger {
+	z-index: 45;
+}
+@keyframes select-backdrop-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/* ── Ô tìm kiếm trong dropdown — icon leading nằm TRONG khung (giống Input) ── */
+.select-search-wrapper {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	margin-bottom: 0.25rem;
+	padding-inline: 0.625rem;
+	background: transparent;
+	border: 1px solid rgba(125, 125, 125, 0.2);
+	border-radius: 0.5rem;
+	transition: border-color 0.12s ease, box-shadow 0.12s ease;
+	&:focus-within {
+		border-color: var(--color-sky-500);
+		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+	}
+}
+.select-search-icon {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1em;
+	height: 1em;
+	color: var(--color-gray-400);
+}
+.select-search-input {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+	padding: 0.5rem 0;
+	background: transparent;
+	border: none;
+	color: var(--foreground);
+	font-size: 0.875rem;
+	line-height: 1.5;
+	&::placeholder {
+		color: var(--color-gray-400);
+		opacity: 0.85;
+	}
+	&:focus {
+		outline: none;
+	}
+}
+
+/* ── Danh sách option ── */
+/* ── Sort control (chọn trường sort + đổi chiều) ── */
+.select-sort-bar {
+	/* Fit-content: gọn vừa nội dung (M3) — khi nằm trong .select-controls
+	   thì margin/padding-inline không cần (wrapper đã có); standalone (không
+	   có wrapper) thì giữ padding-inline để bám cạnh như cũ */
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: 0.75rem;
+	color: var(--color-gray-600);
+	.select-controls & {
+		margin: 0;
+		margin-inline-start: auto; // pin về CẠNH PHẢI row: sort-by luôn cố định bên phải
+		padding: 0;
+	}
+}
+.select-sort-bar__label {
+	flex-shrink: 0;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: var(--color-gray-500);
+}
+.select-sort-bar__select {
+	/* Không flex:1 — width bám nội dung option (M3) */
+	padding: 0.375rem 0.5rem;
+	background: var(--background);
+	border: 1px solid rgba(125, 125, 125, 0.2);
+	border-radius: 0.375rem;
+	font-size: 0.75rem;
+	color: var(--foreground);
+	cursor: pointer;
+	transition: border-color 0.12s ease;
+	&:hover {
+		border-color: rgba(125, 125, 125, 0.35);
+	}
+	&:focus {
+		outline: none;
+		border-color: var(--color-sky-500);
+	}
+}
+/* Nút chiều (asc/desc) — base có viền + elevation nhẹ (không flat, M6) */
+.select-sort-bar__direction {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.75rem;
+	height: 1.75rem;
+	padding: 0;
+	background: transparent;
+	border: 1px solid rgba(125, 125, 125, 0.25);
+	border-radius: 0.375rem;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+	color: var(--color-gray-600);
+	cursor: pointer;
+	transition: all 0.12s ease;
+	&:hover {
+		background: rgba(125, 125, 125, 0.05);
+		border-color: rgba(125, 125, 125, 0.35);
+		color: var(--foreground);
+	}
+	&:active {
+		background: rgba(125, 125, 125, 0.1);
+	}
+	&:focus {
+		outline: none;
+		border-color: var(--color-sky-500);
+		box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+	}
+}
+
+/* ── Controls row: select-all + sort-bar cùng 1 hàng (M4) ──
+   space-between giữa 2 cụm; mỗi cụm width FIT (không full-width);
+   elevation nhẹ (box-shadow) thay vì flat (M6); viewport hẹp → wrap xuống.
+   (Chỉ 1 cụm: space-between tự đặt cụm đó về đầu — không cần :has()). */
+.select-controls {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.375rem;
+	margin-bottom: 0.5rem;
+	padding: 0.375rem 0.5rem;
+	background: var(--dropdown-bg, transparent);
+	border: 1px solid rgba(125, 125, 125, 0.15);
+	border-radius: 0.5rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* ── Danh sách option ── */
+.select-option-list {
+	max-height: var(--max-height, 300px);
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	/* Padding đầu/cuối: tránh nội dung option (bg hover/selected) bị cắt
+	   khi scroll tới vị trí đầu/cuối thanh cuộn */
+	padding-block: 0.25rem;
+	padding-inline: 0.125rem;
+}
+
+/* ── Nhóm (optgroup) ── */
+.select-optgroup {
+	padding: 0.5rem 0.625rem 0.375rem;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--color-gray-400);
+	opacity: 0.8;
+}
+
+/* ── Option (dòng) — đồng bộ email/phone-suggestion-item của Input ── */
+.select-option {
+	/* border-box: giữ chiều cao row ổn định khi list có padding-inline */
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	width: 100%;
+	padding: 0.5rem 0.625rem;
+	border-radius: 0.5rem;
+	background: transparent;
+	color: inherit;
+	font-size: 0.875rem;
+	text-align: left;
+	cursor: pointer;
+	user-select: none;
+	transition: background-color 0.12s ease;
+
+	&:hover:not(.disabled),
+	&.highlighted {
+		@media (prefers-color-scheme: light) {
+			background: rgba(241, 245, 249, 0.95);
+		}
+		@media (prefers-color-scheme: dark) {
+			background: rgba(51, 65, 85, 0.85);
+		}
+	}
+
+	&.selected {
+		color: var(--color-sky-500);
+		font-weight: 600;
+		@media (prefers-color-scheme: light) {
+			background: rgba(224, 242, 254, 0.9);
+		}
+		@media (prefers-color-scheme: dark) {
+			background: rgba(30, 58, 85, 0.9);
+		}
+		&:hover:not(.disabled),
+		&.highlighted {
+			@media (prefers-color-scheme: light) {
+				background: rgba(219, 234, 254, 0.95);
+			}
+			@media (prefers-color-scheme: dark) {
+				background: rgba(37, 70, 100, 0.95);
+			}
+		}
+	}
+
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+		cursor: not-allowed;
+		/* Touch (mobile): giữ pointer-events:none — không có cursor, chặn chạm. */
+		pointer-events: none;
+		/* PC: bật lại pointer-events để con trỏ hiện not-allowed khi rê lên
+		   option bị khóa. An toàn (không chọn được):
+		   - selectOption() return ngay khi opt.disabled (JS guard)
+		   - highlightOption() bỏ qua option disabled (không highlight)
+           - :hover state đã là :hover:not(.disabled) → không highlight
+		   - nội dung option (edit/delete) guard riêng theo option.disabled */
+		@media (hover: hover) and (pointer: fine) {
+			pointer-events: auto;
+		}
+	}
+}
+
+/* ── Indicator check (không viền) — animation vẽ check đồng bộ Checkbox.Indicator ── */
+.select-option__checkbox {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.25rem;
+	height: 1.25rem;
+	contain: content;
+	color: var(--color-sky-500);
+}
+.select-check-draw {
+	width: 100%;
+	height: 100%;
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	animation: select-draw-check 0.35s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+@keyframes select-draw-check {
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+/* ── Avatar (ảnh option) + mô tả phụ ── */
+.select-option__media {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+}
+.select-option__image {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: var(--radius-full, 9999px);
+	object-fit: cover;
+	display: block;
+	background: var(--color-gray-100, #f1f5f9);
+}
+.select-option__text {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.125rem;
+}
+.select-option__label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.select-option__description {
+	font-size: 0.8125rem;
+	color: var(--color-gray-500, #64748b);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ── Create option (hàng cuối khi cho phép tạo mới) ── */
+.select-option.create-option {
+	color: var(--color-sky-500);
+	font-weight: 600;
+}
+.create-option__label {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+}
+.create-option__label svg {
+	flex-shrink: 0;
+}
+
+/* ── Trạng thái rỗng ── */
+.select-no-options {
+	padding: 1rem 0.75rem;
+	text-align: center;
+	color: var(--color-gray-400);
+	font-size: 0.875rem;
+}
+
+/* ═══════════ SELECT-ALL ROW (multiple) — indicator check/dash ═══════════
+   Trong .select-controls (M4/M5): width FIT (không 100% như option thường),
+   gọn thành "cụm" — elevation từ wrapper .select-controls (M6). */
+.select-all-row {
+	font-weight: 600;
+	/* M5: width FIT — không thừa kế width:100% của .select-option */
+	width: fit-content;
+	display: inline-flex;
+	/* M4: trong .select-controls (row space-between với sort-bar), highlight
+	   riêng nhẹ hơn option thường để phân biệt "hành động" */
+	&.highlighted {
+		@media (prefers-color-scheme: light) {
+			background: rgba(241, 245, 249, 0.75);
+		}
+		@media (prefers-color-scheme: dark) {
+			background: rgba(51, 65, 85, 0.6);
+		}
+	}
+}
+.select-all__indicator {
+	color: var(--color-sky-500);
+}
+
+/* ═══════════ SEARCH SPINNER + CLEAR (trailing trong ô search) ═══════════ */
+.select-search-spinner {
+	flex-shrink: 0;
+	width: 0.875rem;
+	height: 0.875rem;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	border-radius: 50%;
+	color: var(--color-gray-400);
+	opacity: 0.8;
+	animation: select-spin 0.7s linear infinite;
+}
+
+/* Nút X trong ô search — cùng ngôn ngữ với .select-clear-button (nhỏ hơn),
+   base error cho nhận diện hành động "xóa" */
+.select-search-clear {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.375rem;
+	height: 1.375rem;
+	margin-inline-end: -0.25rem;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: var(--border-radius-xs, 0.25rem);
+	color: var(--error);
+	opacity: 0.65;
+	cursor: pointer;
+	transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+	&:hover {
+		opacity: 1;
+		color: var(--error);
+		@media (prefers-color-scheme: dark) {
+			background: rgba(51, 65, 85, 0.85);
+		}
+		@media (prefers-color-scheme: light) {
+			background: rgba(241, 245, 249, 0.95);
+		}
+	}
+}
+
+/* ═══════════ OPTION ACTIONS (edit pencil / delete trash — hover) ═══════════ */
+.select-option__actions {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+	/* Chỉ hiện khi hover option (desktop); touch: luôn hiện mờ */
+	@media (hover: none) {
+		opacity: 0.5;
+	}
+}
+.select-option:hover:not(.disabled) .select-option__actions,
+.select-option.highlighted .select-option__actions {
+	opacity: 1;
+}
+.select-option__action {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.375rem;
+	height: 1.375rem;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: var(--border-radius-xs, 0.25rem);
+	color: var(--color-gray-400);
+	font-size: 0.75rem;
+	cursor: pointer;
+	transition: background-color 0.12s ease, color 0.12s ease;
+}
+.select-option__action--edit:hover {
+	color: var(--color-sky-500);
+	@media (prefers-color-scheme: dark) {
+		background: rgba(51, 65, 85, 0.85);
+	}
+	@media (prefers-color-scheme: light) {
+		background: rgba(224, 242, 254, 0.9);
+	}
+}
+/* Nút delete: base đã là ERROR (đồng bộ clear/remove/xóa = màu error),
+   hover chỉ tăng nền — giữ được trạng thái nhận diện khi actions show/hide */
+.select-option__action--delete {
+	color: var(--error);
+}
+.select-option__action--delete:hover {
+	color: var(--error);
+	@media (prefers-color-scheme: dark) {
+		background: rgba(127, 29, 29, 0.5);
+	}
+	@media (prefers-color-scheme: light) {
+		background: rgba(254, 226, 226, 0.9);
+	}
+}
+/* Nút Cancel/Save chỉ hiện khi option ĐANG edit — không dùng cơ chế hover
+   (opacity:0 -> hover) của action thường; luôn opacity:1 để user thấy ngay.
+   Dùng .select-option.editing (0,3,0) để THẮNG media-mobile .select-option__actions
+   (opacity:0.5) — đặc biệt quan trọng: khi edit, 2 nút này là phần tử thao tác
+   duy nhất trong row (label đã thành input) nên phải hiện rõ. */
+.select-option.editing .select-option__actions--editing {
+	opacity: 1;
+}
+/* Cancel (X): neutral — "đổ về" flow thường, không mang sắc thái lỗi */
+.select-option__action--cancel {
+	color: var(--color-gray-400);
+}
+.select-option__action--cancel:hover {
+	color: var(--foreground);
+	@media (prefers-color-scheme: dark) {
+		background: rgba(51, 65, 85, 0.85);
+	}
+	@media (prefers-color-scheme: light) {
+		background: rgba(226, 232, 240, 0.9);
+	}
+}
+/* Save (✓): SUCCESS — đồng bộ hành vi "xác nhận/lưu" = màu success */
+.select-option__action--save {
+	color: var(--success);
+}
+.select-option__action--save:hover {
+	color: var(--success);
+	@media (prefers-color-scheme: dark) {
+		background: rgba(19, 78, 74, 0.5);
+	}
+	@media (prefers-color-scheme: light) {
+		background: rgba(209, 250, 229, 0.9);
+	}
+}
+
+/* ── Edit option inline (nút pencil → input + nút Cancel/Save) ── */
+.select-option.editing {
+	gap: 0.375rem;
+	/* Đang edit: nền riêng để "đóng khung" khu vực đang sửa, phân biệt option thường */
+	@media (prefers-color-scheme: light) {
+		background: rgba(224, 242, 254, 0.35);
+	}
+	@media (prefers-color-scheme: dark) {
+		background: rgba(30, 58, 85, 0.45);
+	}
+}
+.select-option__edit-input {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+	padding: 0.125rem 0.375rem;
+	background: transparent;
+	border: 1px solid var(--color-sky-500);
+	border-radius: var(--border-radius-xs, 0.375rem);
+	color: var(--foreground);
+	font-size: 0.875rem;
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+	&:focus {
+		outline: none;
+	}
+}
+
+/* ═══════════ LOAD-MORE (button / scroll hint / pagination) ═══════════ */
+/* Nút load-more (mode 'button') */
+/* sticky bottom: giữ button ở đáy panel — user không cần scroll tới cuối
+   để thao tác; nền opaque (--dropdown-bg) che option scroll qua phía sau. */
+.select-load-more {
+	position: sticky;
+	bottom: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.375rem;
+	width: 100%;
+	margin-top: 0.25rem;
+	padding: 0.5rem;
+	background: var(--dropdown-bg, transparent);
+	border: 1px dashed rgba(125, 125, 125, 0.35);
+	border-radius: 0.5rem;
+	color: var(--color-sky-500);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+	&:hover {
+		@media (prefers-color-scheme: light) {
+			background: rgba(224, 242, 254, 0.6);
+		}
+		@media (prefers-color-scheme: dark) {
+			background: rgba(30, 58, 85, 0.5);
+		}
+	}
+}
+.select-load-more__count {
+	color: var(--color-gray-400);
+	font-weight: 400;
+}
+
+/* Hint load-more (mode 'scroll') — dòng nhắc + spinner khi remote.
+   Nền là GRADIENT MÀI ĐỦ OPAQUE tại vị trí hint: che phủ option chưa nạp
+   (chưa chọn được) đang scroll phía dưới — tránh hiện tượng "nhìn thấy
+   option bên dưới nhưng không chọn được". Khác với button load-more
+   (nền opaque --dropdown-bg liền khối vì nó là nút bấm): hint là vùng
+   đệm, nên mài từ trong suốt → nền dropdown, mềm về phía option list. */
+.select-load-more-hint {
+	position: sticky;
+	bottom: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.375rem;
+	padding: 0.75rem 0.5rem 0.5rem;
+	color: var(--color-gray-400);
+	font-size: 0.75rem;
+	pointer-events: none;
+	/* Không dùng color-mix() — iOS Safari 15.0 không hỗ trợ. */
+	@media (prefers-color-scheme: light) {
+		background: linear-gradient(
+			to top,
+			var(--dropdown-bg, #fff) 18%,
+			rgba(255, 255, 255, 0.45) 62%,
+			transparent 100%
+		);
+	}
+	@media (prefers-color-scheme: dark) {
+		background: linear-gradient(
+			to top,
+			var(--dropdown-bg, #14202f) 18%,
+			rgba(24, 32, 47, 0.5) 62%,
+			transparent 100%
+		);
+	}
+}
+
+/* Phân trang (mode 'pagination') — sticky đáy như load-more button */
+.select-pagination {
+	position: sticky;
+	bottom: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	margin-top: 0.25rem;
+	padding: 0.375rem 0;
+	background: var(--dropdown-bg, transparent);
+	border-top: 1px solid rgba(125, 125, 125, 0.15);
+}
+.select-pagination__btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.625rem;
+	height: 1.625rem;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: var(--border-radius-xs, 0.375rem);
+	color: var(--color-sky-500);
+	font-size: 0.875rem;
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+	&:hover:not(:disabled) {
+		@media (prefers-color-scheme: light) {
+			background: rgba(224, 242, 254, 0.8);
+		}
+		@media (prefers-color-scheme: dark) {
+			background: rgba(30, 58, 85, 0.7);
+		}
+	}
+	&:disabled {
+		opacity: var(--disabled-opacity, 0.4);
+		cursor: not-allowed;
+	}
+}
+.select-pagination__info {
+	color: var(--color-gray-400);
+	font-size: 0.75rem;
+	min-width: 2.5rem;
+	text-align: center;
+}
+
+/* ── Loading indicator (khi load thêm option) ── */
+.select-loading-indicator {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 1rem;
+	color: var(--color-gray-400);
+	font-size: 0.875rem;
+}
+
+/* ═══════════ TOUCH TARGETS (mobile) — đồng bộ thiết bị PC/mobile ═══════════
+   Mobile (hover: none + pointer: coarse): phóng các mục con < 44px (chuẩn
+   Apple HIG — target chạm tối thiểu) để không chạm hụt, và nâng font input
+   ≥ 16px để iOS Safari KHÔNG tự auto-zoom khi focus.
+   PC (hover: hover / pointer: fine) giữ nguyên target gọn 22–24px như cũ. */
+@media (hover: none) and (pointer: coarse) {
+	/* Trigger chính: ≥ 44px (chuẩn HIG) */
+	.select-trigger {
+		min-height: 2.75rem;
+		height: auto;
+	}
+	/* Option row: cao ≥ 44px (target chọn chính) */
+	.select-option {
+		padding: 0.625rem 0.75rem;
+	}
+	/* Nút edit/delete option: chạm lớn hơn + LUÔN hiện (không hover để hiện) */
+	.select-option__actions {
+		opacity: 1;
+	}
+	.select-option__action {
+		width: 1.75rem;
+		height: 1.75rem;
+	}
+	/* Nút clear trong trigger */
+	.select-clear-button {
+		width: 1.75rem;
+		height: 1.75rem;
+	}
+	/* Nút X trong ô search */
+	.select-search-clear {
+		width: 1.75rem;
+		height: 1.75rem;
+	}
+	/* Nút phân trang (l/k) */
+	.select-pagination__btn {
+		width: 1.75rem;
+		height: 1.75rem;
+	}
+	/* Nút load-more (mode 'button') */
+	.select-load-more {
+		min-height: 2.75rem;
+	}
+	/* Input: font ≥ 16px → iOS Safari không auto-zoom khi focus */
+	.select-search-input,
+	.select-option__edit-input {
+		font-size: 1rem;
+	}
+	/* Native <select> sort-bar: focusable → font ≥ 16px tránh auto-zoom (iOS 15+) */
+	.select-sort-bar__select {
+		font-size: 1rem;
+		min-height: 2.5rem;
+	}
+	/* Nút đổi chiều sort (target chạm ≥ 44px) */
+	.select-sort-bar__direction {
+		width: 1.75rem;
+		height: 1.75rem;
+	}
+}
+
+/* ── RTL ── */
+[dir='rtl'] .select-trigger {
+	text-align: right;
+}
+[dir='rtl'] .select-clear-button,
+[dir='rtl'] .select-search-clear {
+	margin-inline-end: 0;
+	margin-inline-start: -0.25rem;
+}

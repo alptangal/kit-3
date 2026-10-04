@@ -12,7 +12,10 @@
 			return props.size ?? tooltipCtx?.contentMeta?.size ?? tooltipCtx?.size ?? 'md';
 		},
 		get color() {
-			return props.color ?? 'default';
+			// Mặc định 'info' (→ var(--primary)) để mũi tên ĐỒNG MÀU với nền
+			// tooltip-content (nền = --primary). Dùng 'default' (→ var(--default))
+			// sẽ lệch: trắng trên nền light, xanh đậm trên dark.
+			return props.color ?? 'info';
 		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = [

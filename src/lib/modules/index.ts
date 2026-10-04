@@ -72,15 +72,17 @@ export function updateResizeWindow() {
 	client.timeId.set(
 		WINDOW_RESIZE,
 		setTimeout(() => {
+			if (!visualViewport) return;
+
 			if (
 				!visualViewportLastSize ||
-				(visualViewport && visualViewport.height != visualViewportLastSize.height) ||
-				(visualViewport && visualViewport.width == visualViewportLastSize.width)
+				visualViewport.height !== visualViewportLastSize.height ||
+				visualViewport.width !== visualViewportLastSize.width
 			) {
 				if (!startAt) startAt = performance.now();
 				visualViewportLastSize = {
-					height: visualViewport?.height ?? 0,
-					width: visualViewport?.width ?? 0
+					height: visualViewport.height,
+					width: visualViewport.width
 				};
 			} else {
 				if (!profile.browser.safariBrowser) {
@@ -92,24 +94,20 @@ export function updateResizeWindow() {
 				}
 			}
 			if (profile.browser.dimensions) {
-				profile.browser.dimensions.width = window.visualViewport?.width ?? 0;
-				profile.browser.dimensions.height = window.visualViewport?.height ?? 0;
+				profile.browser.dimensions.width = visualViewport.width;
+				profile.browser.dimensions.height = visualViewport.height;
 			} else {
 				profile.browser.dimensions = {
-					width: window.visualViewport?.width ?? 0,
-					height: window.visualViewport?.height ?? 0
+					width: visualViewport.width,
+					height: visualViewport.height
 				};
 			}
 			client.updateMetaBrowser({
-				width: window.visualViewport?.width ?? 0,
-				height: window.visualViewport?.height ?? 0
+				width: visualViewport.width,
+				height: visualViewport.height
 			});
 		}, delay)
 	);
-
-	// if (profile.visualKeyboard.isShow && !profile.visualKeyboard.height) {
-	// 	profile.visualKeyboard.height = window.innerHeight - (profile.browser.dimensions.height ?? 0);
-	// }
 }
 export function detectBrowserType(userAgent: string, maxTouchPoints = 0): Browser['type'] {
 	const ua = userAgent.toLowerCase();

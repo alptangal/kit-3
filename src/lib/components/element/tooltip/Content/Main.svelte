@@ -221,26 +221,13 @@
 
 <style lang="scss">
 	@use '$styles/sizes.scss';
-	:global(html[data-theme='dark']),
-	:global(html[data-theme='system']) {
-		@media (prefers-color-scheme: dark) {
-			.tooltip-content {
-				--background: var(--color-gray-900);
-				--color: white;
-			}
-		}
-	}
-	:global(html[data-theme='light']),
-	:global(html[data-theme='system']) {
-		@media (prefers-color-scheme: light) {
-			.tooltip-content {
-				--background: var(--color-gray-200);
-				--color: black;
-			}
-		}
-	}
-
 	.tooltip-content {
+		/* Bề mặt tooltip — dùng DESIGN TOKEN (không hardcode gray/black/white) để
+		   đồng bộ theme light/dark + đổi màu theo brand (themeable) như các
+		   component khác. Nền = --primary (bề mặt nổi), chữ = --primary-foreground.
+		   Mũi tên (Arrow) đồng màu qua color='info' (→ var(--primary)). */
+		--background: var(--primary);
+		--color: var(--primary-foreground);
 		overflow: auto;
 		pointer-events: none;
 		background: var(--background);
@@ -248,9 +235,21 @@
 		width: fit-content;
 		height: fit-content;
 		padding-inline: var(--padding);
+		padding-block: 0.25em;
 		border-radius: var(--border-radius);
+		/* Elevation nhẹ — đồng bộ popup/tooltip trong hệ thống (không flat).
+		   Dùng literal (không --box-shadow-md vì token phụ thuộc --shadow-color,
+		   undefined trong theme hiện tại → resolve thành 'none'). */
+		box-shadow:
+			0 4px 12px rgba(0, 0, 0, 0.18),
+			0 2px 4px rgba(0, 0, 0, 0.1);
 		position: fixed;
+		/* Content append vào body (position:fixed) → cần z-index cao hơn dropdown select
+		 (z=50) VÀ modal fullscreen của Select (root 10000 / container 10001) để tooltip
+		 edit/delete option trong fullscreen panel vẫn nổi trên modal. */
+		z-index: 10500;
 		font-size: var(--font-size);
-		transition: all ease-in-out 0.3s;
+		line-height: 1.4;
+		transition: opacity ease-in-out 0.2s, box-shadow ease-in-out 0.2s;
 	}
 </style>

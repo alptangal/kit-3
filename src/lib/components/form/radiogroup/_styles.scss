@@ -1,0 +1,52 @@
+// ─────────────────────────────────────────────────────────────────────
+// RadioGroup root (.radiogroup-root) — styles
+//
+// `.radiogroup-root` (markup trong Main.svelte) set `--radio-size` +
+// `--color` + size tokens, kế thừa xuống `.radio-item` (markup trong
+// RadioItem.svelte, import riêng `_item-styles.scss`).
+// `--color` là custom-property (inherited) → error/success trên root
+// tự lan xuống items, KHÔNG cần `:has()` (build target es2020 + safari15).
+// ─────────────────────────────────────────────────────────────────────
+@use '$styles/sizes.scss';
+@use '$styles/colors.scss';
+
+.radiogroup-root {
+	// ── Size cascade (size-* từ sizes.scss) ──
+	// --radio-size: đường kính vòng tròn radio; item min-height/padding dùng
+	// --min-height/--padding (size tokens) — KHÔNG hardcode px.
+	--radio-size: calc(var(--font-size) + 0.5rem);
+
+	display: flex;
+	flex-direction: column;
+	gap: var(--gap);
+	--color: var(--default);
+	font-size: var(--font-size);
+
+	// ── Orientation ──
+	&.horizontal {
+		flex-direction: row;
+		flex-wrap: wrap;
+		gap: calc(var(--gap) * 2);
+	}
+
+	// ── Color (validation: error/success inherit --color xuống items) ──
+	&.color-error {
+		--color: var(--danger);
+	}
+	&.color-success {
+		--color: var(--success);
+	}
+
+	// ── Disabled (group-level: overlay block click + opacity) ──
+	&.disabled {
+		position: relative;
+		opacity: var(--disabled-opacity);
+		cursor: not-allowed;
+		&::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			z-index: 1;
+		}
+	}
+}

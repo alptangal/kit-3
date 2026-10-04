@@ -28,13 +28,50 @@
 	import { getTextFieldContext } from '../textField';
 	import type { FullAutoFill } from 'svelte/elements';
 
-	let { value = $bindable(), disabled = $bindable(), ...props }: InputProps = $props();
+	let {
+		value = $bindable(),
+		disabled = $bindable(),
+		files = $bindable([] as File[]),
+		...props
+	}: InputProps = $props();
 	// Ghi nhớ giá trị ban đầu khi component được tạo ra, dùng để reset về đúng mốc ban đầu
 	let _initialValue: string | undefined = value;
+	// Mốc ban đầu của files (type='file') — so cho status.changed + reset().
+	// Chụp length: files có thể undefined về lý thuyết → luôn array.
+	let _initialFiles: File[] = (files ?? []).slice();
+	// type='file': vừa reset → files effect bỏ qua trigger validation 1 lần
+	// (hoist lên vì configs.reset() tham chiếu; default true để ignore mount lần đầu)
+	let _filesJustReset = $state(true);
+
+	// Form/TextField context đọc ngay đầu phase init (getFormContext()/getTextFieldContext()
+	// = getContext(), không reactive) — hoist lên đầu để các derived phía dưới
+	// (inputId, sizeDerived…) dùng được mà không dính "used before its declaration".
+	const formContext = getFormContext();
+	const textFieldContext = getTextFieldContext();
 
 	// Generate unique ID for label association if not provided
 	const inputId = $derived(props.id ?? (textFieldContext?.name ? `field-${textFieldContext.name}` : undefined));
 	const typeDerived = $derived(props.type ?? 'text');
+
+	// inputmode mặc định theo data type để mobile hiện đúng bàn phím
+	// (email → keyboard @, phone → số +, number → dấu thập phân).
+	// Prop `inputmode` của user luôn ưu tiên hơn default.
+	const inputModeDerived = $derived.by(() => {
+		if (props.inputmode) return props.inputmode;
+		switch (typeDerived) {
+			case 'email':
+				return 'email';
+			case 'phone':
+				return 'tel';
+			case 'number':
+				return 'decimal';
+			default:
+				return undefined;
+		}
+	});
+
+	// Track if field was just reset programmatically - suppress validation until user interacts
+	let _justReset = $state(true);
 	const sizeDerived = $derived(props.size ?? textFieldContext?.size ?? formContext?.size ?? client.browser?.size ?? 'md');
 	const roundedDerived = $derived(props.rounded ?? sizeDerived);
 
@@ -48,6 +85,8 @@
 			`rounded-${roundedDerived}`,
 			props.loading ? 'loading' : undefined,
 			`color-${colorDerived}`,
+			// type='file': dropzone + previews → height auto (không cố định min-height text)
+			typeDerived == 'file' ? 'input-file-mode' : undefined,
 			configs.status.hover || textFieldContext?.status.hover ? 'hover' : undefined
 		];
 		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
@@ -95,13 +134,18 @@
 		// Check both external loading prop and internal validation loading state
 		if (props.loading || configs?.loading) return 'default';
 
-		if (props.validation || requiredDerived || typeDerived == 'email') {
-			const isValid = configs?.validation?.isValid;
-			if (isValid == 'pending') return 'default';
-			// Trường rỗng chưa từng validate (chưa blur nên chưa có process) → màu trung tính,
-			// tránh hiển thị error đỏ ngay khi mount (regression: color-error mặc định)
-			if (!isValid && !configs?.validation?.process && !value) return 'default';
-			return isValid ? 'success' : 'error';
+		if (props.validation || requiredDerived || typeDerived == 'email' || typeDerived == 'file') {
+			const validation = configs?.validation;
+			const isValid = validation?.isValid;
+			const process = validation?.process;
+
+			// Chỉ có validation process khi đã blur/trigger
+			if (process && process.size > 0) {
+				if (isValid == 'pending') return 'default';
+				return isValid ? 'success' : 'error';
+			}
+			// Chưa validate → trung tính
+			return 'default';
 		}
 		return 'default';
 	});
@@ -109,6 +153,8 @@
 	const requiredDerived = $derived(props.required ?? textFieldContext?.required);
 
 	let _disabled: undefined | boolean = $state(undefined);
+	// type='file': ref dropzone (div role=button) — focus()/DnD dùng
+	let dropzoneEl: HTMLDivElement | undefined;
 	// Visual number keyboard cleanup — gán ở showVisualNumberKb(), gọi ở window mousedown (không cần reactive)
 	let visualNumberKbCleaner: (() => void) | undefined;
 	const disabledDerived = $derived.by(() => {
@@ -491,12 +537,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	let configs: InputConfigs = $state({
 		status: {
 			get changed() {
-				// So sánh giá trị hiện tại vs mốc ban đầu (closure _initialValue,
-				// chuẩn hóa undefined thành ''): false → pristine, true → dirty.
-				// Button submit disabled-logic và Form.status.changed đọc getter này
-				// qua formContext.childrens — Input đăng ký vào childrens nhưng trước
-				// đây không có changed → form chỉ chứa Input bị coi là pristine vĩnh viễn
-				// (submit disabled dù đã nhập dữ liệu).
+				if (configs.type == 'file') {
+					// File: "đã đổi" = số lượng tệp khác mốc ban đầu (reset giữ files ban đầu)
+					return (files?.length ?? 0) !== _initialFiles.length;
+				}
 				return (_initialValue ?? '') !== (configs.value ?? '');
 			}
 		},
@@ -519,8 +563,20 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		get name() { return nameDerived; },
 		get highlight() { return highlightDerived; },
 		get caseSensitive() { return caseSensitiveDerived; },
+		// type='file': giới hạn số tệp / kích thước (bytes) — props là source of truth.
+		// getter này chính là điều để cap/filter trong handleFileSelect +
+		// default validators (maxFiles/maxFileSize) hoạt động.
+		get maxFiles() { return props.maxFiles; },
+		get maxSize() { return props.maxSize; },
 		validation: {
+			_cachedIsValid: undefined as boolean | 'pending' | undefined,
 			get isValid() {
+				// Return cached value if set explicitly
+				if (this._cachedIsValid !== undefined) return this._cachedIsValid;
+
+				// After programmatic reset, suppress validation until user interacts
+				if (_justReset) return true;
+
 				// No validation needed for optional fields without custom validation and not email type
 				if (!props.validation && !configs.required && configs.type !== 'email') return true;
 
@@ -534,12 +590,18 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 
 				// No validation process yet (e.g., no blur yet) - for required fields, check value presence
 				if (configs.required) {
+					if (configs.type === 'file') {
+						return (files?.length ?? 0) > 0;
+					}
 					const val = configs.value ?? '';
 					return val.trim().length > 0;
 				}
 
 				// Optional field with no validation process yet - consider valid
 				return true;
+			},
+			set isValid(v: boolean | 'pending' | undefined) {
+				this._cachedIsValid = v;
 			}
 		},
 		get event() {
@@ -941,7 +1003,13 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 								},
 								mousedown(e) {
 									const ev = e as MouseEvent;
-									ev.preventDefault();
+									// Mobile: input readonly + visual keyboard → preventDefault để
+									// KHÔNG focus native (caret do visual keyboard quản lý).
+									// PC: input text thường → PHẢI cho native focus. Nếu
+									// preventDefault ở đây thì click không focus được ô → không
+									// gõ được số (bug). caret PC do native xử lý, không cần
+									// currentCursor (PC branch của keydown chỉ lọc phím số).
+									if (client.browser?.isMobile) ev.preventDefault();
 									let index: number | undefined;
 									if (!value || !configs.input.number.ref) {
 										index = 1;
@@ -983,7 +1051,15 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					return events;
 				}
 			},
-			currency: {}
+			currency: {},
+			// type='file': chỉ cần ref (input[type=file] hidden) + style. event/giao diện
+			// xử lý bởi render branch riêng (dropzone), không dùng input-editor text.
+			file: {
+				get style() {
+					const defaultStyles: (string | undefined)[] = ['input-file-editor'];
+					return styleSynced({ defaultStyles });
+				}
+			}
 		},
 		maskValue: {
 			get style() {
@@ -1187,6 +1263,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			}
 		},
 		focus() {
+			// Clear just-reset flag when user focuses the field
+			_justReset = false;
+			// type='file' → focus dropzone (không có text input để focus)
+			if (configs.type === 'file') {
+				if (dropzoneEl && document.activeElement !== dropzoneEl) dropzoneEl.focus();
+				configs.status.focus = true;
+				return;
+			}
 			if (client.browser?.isMobile) {
 				if (!client.browser.visualInput) client.createInputVisual();
 				if (client.browser.visualInput) {
@@ -1206,22 +1290,18 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			// Khôi phục về đúng giá trị ban đầu (khi mount), không xóa trắng
 			value = _initialValue;
 			if (configs.type == 'password') configs.input.password.value = _initialValue;
+			if (configs.type == 'file') {
+				// GẮN ARRAY MỚI (kỷ luật $bindable) — không mutation tại chỗ
+				files = _initialFiles.slice();
+				_filesJustReset = true; // bỏ qua 1 lần trigger validation của files effect
+			}
 			configs.validation.process = undefined;
 			configs.validation.messages = undefined;
-			if (configs.timeId) {
-				for (const id of configs.timeId.values()) clearTimeout(id);
-				configs.timeId.clear();
-			}
-			configs.loading = false;
-			configs.status.focus = false;
-			configs.input.status.focus = false;
-			if (configs.ref) {
-				configs.ref.classList.remove('validation-loading');
-			}
+			configs.validation.isValid = undefined; // Clear cached validation
+			_justReset = true; // Suppress validation until user interacts
+			//    R54T
 		}
 	});
-	const formContext = getFormContext();
-	const textFieldContext = getTextFieldContext();
 
 	function onFocus() {
 		// if (!configs.status.focus) configs.status.focus = true;
@@ -1235,7 +1315,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		handles: (ValidationCompact | ValidationFull)[],
 		operator: 'and' | 'or'
 	) {
-		if (!props.validation && !configs.required && configs.type !== 'email') return;
+		if (!props.validation && !configs.required && configs.type !== 'email' && configs.type !== 'file') return;
 		if (!configs.validation.messages) configs.validation.messages = new SvelteMap();
 		if (!configs.timeId) configs.timeId = new Map();
 		const name = `timeout-validation-${eventName}`;
@@ -1266,12 +1346,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 							if (!configs.validation.messages) configs.validation.messages = new SvelteMap();
 							let result;
 							let isValid;
+							// type='file' → validators nhận File[]; các type khác nhận string value
+							const input = configs.type === 'file' ? untrack(() => files ?? []) : untrack(() => value);
 							if (typeof validateHandler == 'function') {
 								isValid = validateHandler;
-								result = await isValid(untrack(() => value));
+								result = await isValid(input);
 							} else {
 								isValid = validateHandler.isValid;
-								result = await isValid(untrack(() => value));
+								result = await isValid(input);
 								const content = result
 									? validateHandler.message?.valid
 									: validateHandler.message?.invalid;
@@ -1364,12 +1446,15 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			},
 			mousedown: {
 				async handler(e: MouseEvent) {
+					// type='file': dropzone tự xử lý tương tác (click/Enter/Space → dialog) —
+					// không dùng text-input mousedown (select-all/focus text ref).
+					if (configs.type === 'file') return;
 					configs.status.mousePos = { clientX: e.clientX, clientY: e.clientY };
-					
+
 					const target = e.target as HTMLElement;
 					const type = configs.type as 'text' | 'email' | 'password' | 'number' | 'phone';
 					const ref = configs.input[type]?.ref as HTMLElement | undefined;
-					
+
 					if (target !== ref) {
 						e.preventDefault();
 					}
@@ -1441,6 +1526,20 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			}
 		} else if (configs.type === 'email' && defaultValidation.isEmail) {
 			validators.push(defaultValidation.isEmail(configs.name));
+		} else if (configs.type === 'phone' && defaultValidation.isPhone) {
+			validators.push(defaultValidation.isPhone(configs.name));
+		} else if (configs.type === 'file') {
+			// File: required → hasFile (≥1 tệp). maxFiles/maxSize chỉ khi có prop.
+			// Non-required + không có max* → mảng rỗng (không validate, giống text bare).
+			if (configs.required) {
+				validators.push(defaultValidation.hasFile?.(configs.name) ?? defaultValidation.required(configs.name));
+			}
+			if (configs.maxFiles != null && defaultValidation.maxFiles) {
+				validators.push(defaultValidation.maxFiles(configs.maxFiles, configs.name));
+			}
+			if (configs.maxSize != null && defaultValidation.maxFileSize) {
+				validators.push(defaultValidation.maxFileSize(configs.maxSize, configs.name));
+			}
 		}
 		return validators;
 	}
@@ -1449,7 +1548,12 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		if (!configs.ref) return;
 		const focus = configs.status.focus;
 		if (focus !== undefined && focus !== prevFocus) {
-			configs.ref.dispatchEvent(new Event(focus ? 'focus' : 'blur'));
+			// type='file' → KHÔNG dispatch focus/blur: validation file chạy theo
+			// `change` (files effect). Blur synthetic khi mở file dialog (focus rời
+			// root) sẽ validate với files cũ (race) và nạp message không đúng nhịp.
+			if (configs.type !== 'file') {
+				configs.ref.dispatchEvent(new Event(focus ? 'focus' : 'blur'));
+			}
 		}
 		prevFocus = focus;
 		if ((!focus || value?.length) && configs.status.selectAll) {
@@ -1479,8 +1583,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			textFieldContext.status.focus = configs.status.focus ?? configs.input.status.focus;
 			textFieldContext.loading = configs.loading;
 		}
-		// Sync configs.value with bound value prop for validation getter
-		if (configs.value !== value) {
+		// Sync configs.value with bound value prop for validation getter.
+		// SKIP khi type='file': configs KHÔNG được phép có key `value` — Form serialize
+		// check `'value' in children` (form/Main.svelte) và sẽ bỏ qua field nếu thiếu.
+		// File upload do page làm qua FormData + bind:files.
+		if (configs.type !== 'file' && configs.value !== value) {
 			configs.value = value;
 		}
 	});
@@ -1525,6 +1632,199 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		}
 	});
 
+	// ── type='file': validation pipeline (trigger khi files đổi — không có "blur" cho file) ──
+	// Mirror pattern value/previousValue: đọc `files` (reactive dep), so với previousFiles (untrack),
+	// changed → debounce (processingValidation, timeId key 'change').
+	// Handles: user (props.validation.change) + defaultValidators (required/max*) — merge song hành
+	// với blur path trong event getter. Non-required bare (không validator) → bỏ qua (giữ neutral).
+	let previousFiles: File[] | undefined;
+	$effect(() => {
+		if (configs.type !== 'file') return;
+		const current = files;
+		const changed = untrack(() => previousFiles) !== current;
+		untrack(() => {
+			previousFiles = current;
+		});
+		if (_filesJustReset) {
+			// Vừa reset programmatic → bỏ qua trigger này (nếu có), bật cờ cho các lần sau.
+			// Kiểm tra TRƯỚC early-return: kể cả lần reset không đổi files (không re-run)
+			// thì lần files đổi THẬT kế tiếp cũng không bị nuốt bởi cờ stale.
+			_filesJustReset = false;
+			return;
+		}
+		if (!changed) return;
+		const userChange = props.validation?.change;
+		let userHandles: (ValidationCompact | ValidationFull)[] = [];
+		let operator: 'and' | 'or' = props.validation?.operator ?? 'and';
+		if (Array.isArray(userChange)) {
+			userHandles = userChange;
+		} else if (userChange && typeof userChange === 'object' && Array.isArray(userChange.handles)) {
+			userHandles = userChange.handles;
+			operator = userChange.operator ?? operator;
+		}
+		const defaultValidators = getDefaultValidators();
+		const finalHandles = defaultValidators.length > 0 ? [...userHandles, ...defaultValidators] : userHandles;
+		if (finalHandles.length === 0) return;
+		void processingValidation('change', finalHandles, operator);
+	});
+
+	// ── type='file': build filePreviews + ObjectURL lifecycle ──
+	// Ảnh → URL.createObjectURL (revoke trong effect cleanup + onDestroy).
+	// Text/CSV/JSON → đọc slice(0, 512KB).text() (file lớn hơn → chỉ name+size).
+	type FilePreview = { file: File; kind: 'image' | 'csv' | 'json' | 'text' | 'other'; url?: string; preview?: string };
+	let filePreviews: FilePreview[] = $state([]);
+	const MAX_TEXT_PREVIEW = 512 * 1024; // 512KB — tránh OOM file lớn
+	function detectKind(file: File): FilePreview['kind'] {
+		const name = file.name.toLowerCase();
+		const mime = file.type;
+		if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp)$/.test(name)) return 'image';
+		if (mime === 'text/csv' || /\.csv$/.test(name)) return 'csv';
+		if (mime === 'application/json' || /\.json$/.test(name)) return 'json';
+		if (/\.(txt|md|log|yaml|yml)$/.test(name) || mime.startsWith('text/')) return 'text';
+		return 'other';
+	}
+	$effect(() => {
+		if (configs.type !== 'file') return;
+		const list = files ?? [];
+		let cancelled = false;
+		const built: FilePreview[] = [];
+		(async () => {
+			for (const file of list) {
+				const kind = detectKind(file);
+				const item: FilePreview = { file, kind };
+				try {
+					if (kind === 'image') {
+						item.url = URL.createObjectURL(file);
+					} else if ((kind === 'csv' || kind === 'json' || kind === 'text') && file.size <= MAX_TEXT_PREVIEW) {
+						const raw = await file.slice(0, MAX_TEXT_PREVIEW).text();
+						if (cancelled) return; // cleanup sẽ revoke built (kể cả item chưa push)
+						if (kind === 'json') {
+							try {
+								item.preview = JSON.stringify(JSON.parse(raw), null, 2).slice(0, 2000);
+							} catch {
+								item.preview = raw.slice(0, 2000);
+							}
+						} else if (kind === 'csv') {
+							item.preview = raw.split(/\r?\n/).slice(0, 5).join('\n');
+						} else {
+							item.preview = raw.slice(0, 2000);
+						}
+					}
+				} catch (e) {
+					// Preview fail → giữ name+size (không preview content)
+				}
+				if (cancelled) return;
+				built.push(item);
+			}
+			if (!cancelled) filePreviews = built;
+		})();
+		return () => {
+			// Effect chạy lại / unmount → revoke objectURL của danh sách cũ
+			cancelled = true;
+			for (const item of built) {
+				if (item.url) URL.revokeObjectURL(item.url);
+			}
+		};
+	});
+
+	// ── type='file': handlers (chọn/xóa/DnD) ──
+	// Đối chiếu accept (mime/* hoặc .ext hoặc mime chính xác)
+	function matchesAccept(file: File): boolean {
+		const accept = props.accept;
+		if (!accept) return true;
+		const tokens = accept.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+		for (const token of tokens) {
+			if (token.endsWith('/*')) {
+				if (file.type.toLowerCase().startsWith(token.slice(0, -1))) return true;
+			} else if (token.startsWith('.')) {
+				if (file.name.toLowerCase().endsWith(token)) return true;
+			} else if (file.type.toLowerCase() === token) {
+				return true;
+			}
+		}
+		return false;
+	}
+	// Chọn tệp từ dialog/DnD: filter accept+maxSize, cap maxFiles; single→thay thế, multiple→append.
+	function handleFileSelect(list: FileList | null, e?: Event) {
+		if (configs.disabled || !list) return;
+		_filesJustReset = false;
+		const validFiles = Array.from(list).filter((f) => {
+			if (!matchesAccept(f)) return false;
+			if (configs.maxSize != null && f.size > configs.maxSize) return false;
+			return true;
+		});
+		let next: File[];
+		if (props.multiple) {
+			const current = files ?? [];
+			if (configs.maxFiles != null) {
+				const room = Math.max(0, configs.maxFiles - current.length);
+				next = [...current, ...validFiles.slice(0, room)];
+			} else {
+				next = [...current, ...validFiles];
+			}
+		} else {
+			// single → chọn mới THAY THẾ (không giữ file cũ)
+			next = validFiles.slice(0, 1);
+		}
+		files = next; // gán array MỚI (kỷ luật $bindable)
+		if (e?.target instanceof HTMLInputElement) e.target.value = ''; // cho phép chọn lại file cùng tên
+	}
+	function removeFile(f: File) {
+		if (configs.disabled) return;
+		_filesJustReset = false;
+		files = (files ?? []).filter((x) => x !== f);
+	}
+	function openFilePicker() {
+		if (configs.disabled) return;
+		_filesJustReset = false;
+		configs.input.file?.ref?.click();
+	}
+	function handleDropzoneKeydown(e: KeyboardEvent) {
+		if (configs.disabled) return;
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			openFilePicker();
+		}
+	}
+	// DnD (HTML5) — EventListener không có dragover/drop/dragleave → dùng inline handler
+	let fileDragover = $state(false);
+	function handleDragOver(e: DragEvent) {
+		if (configs.disabled) return;
+		e.preventDefault();
+		e.stopPropagation();
+		fileDragover = true;
+	}
+	function handleDragLeave() {
+		fileDragover = false;
+	}
+	function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		fileDragover = false;
+		if (configs.disabled) return;
+		handleFileSelect(e.dataTransfer?.files ?? null);
+	}
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		const kb = bytes / 1024;
+		if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+		const mb = kb / 1024;
+		if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+		const gb = mb / 1024;
+		return `${gb < 10 ? gb.toFixed(1) : Math.round(gb)} GB`;
+	}
+	// Hint accept/kích thước/số lượng cho dropzone (text phụ)
+	const fileHint = $derived.by(() => {
+		const parts: string[] = [];
+		if (props.accept) parts.push(props.accept);
+		if (configs.maxSize != null) parts.push(`≤ ${formatBytes(configs.maxSize)}`);
+		if (props.multiple && configs.maxFiles != null) parts.push(`tối đa ${configs.maxFiles} tệp`);
+		return parts.join(' · ');
+	});
+	const fileAriaLabel = $derived(
+		`Chọn tệp.${fileHint ? ` Yêu cầu: ${fileHint}.` : ''}${files?.length ? ` Đã chọn ${files.length} tệp.` : ''}`
+	);
+
 	onMount(() => {
 		if (textFieldContext) {
 			if (!textFieldContext.children) textFieldContext.children = {};
@@ -1539,6 +1839,13 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	onDestroy(() => {
 		value = undefined;
 		if (configs.type == 'password') configs.input.password.value = undefined;
+		// type='file': revoke mọi objectURL còn lại (effect cleanup đã revoke phần lớn,
+		// đây là phòng thủ nếu preview build chưa kịp chạy cleanup)
+		if (configs.type == 'file') {
+			for (const item of filePreviews) {
+				if (item.url) URL.revokeObjectURL(item.url);
+			}
+		}
 		[...(configs.timeId?.values() ?? [])].forEach((time) => {
 			clearTimeout(time);
 		});
@@ -1563,7 +1870,109 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			}
 		})}
 	{/if}
-	{#if configs.type == 'number'}
+	{#if configs.type == 'file'}
+		<!-- type='file': hidden native input (source) + dropzone (click/DnD) + previews.
+		     input ẩn bằng clip (KHÔNG display:none — mất khả năng .click() trên 1 số browser). -->
+		<input
+			type="file"
+			accept={props.accept}
+			multiple={props.multiple ? true : undefined}
+			name={props.name}
+			id={inputId}
+			tabindex="-1"
+			aria-hidden="true"
+			style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
+			bind:this={configs.input.file.ref}
+			onchange={(e) => handleFileSelect(e.target.files, e)}
+		/>
+		<div
+			bind:this={dropzoneEl}
+			class="input-file-dropzone"
+			class:input-file-dragover={fileDragover}
+			role="button"
+			tabindex={configs.disabled ? -1 : 0}
+			aria-label={fileAriaLabel}
+			aria-disabled={configs.disabled ? 'true' : undefined}
+			aria-invalid={configs.validation.isValid === false ? 'true' : undefined}
+			onclick={() => openFilePicker()}
+			onkeydown={handleDropzoneKeydown}
+			ondragover={handleDragOver}
+			ondragleave={handleDragLeave}
+			ondrop={handleDrop}
+			onfocus={() => (configs.status.focus = true)}
+			onblur={() => (configs.status.focus = false)}
+		>
+			<svg class="input-file-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<path
+					d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"
+					stroke="currentColor"
+					stroke-width="1.75"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+				<path
+					d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"
+					stroke="currentColor"
+					stroke-width="1.75"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+			<span class="input-file-cta">{fileDragover ? 'Thả tệp vào đây' : 'Kéo thả tệp vào đây hoặc bấm để chọn'}</span>
+			{#if fileHint}
+				<span class="input-file-hint">{fileHint}</span>
+			{/if}
+		</div>
+		{#if filePreviews.length}
+			<ul class="input-file-previews">
+				{#each filePreviews as p (p.file.name + '-' + p.file.size)}
+					<li class="input-file-card" aria-label={`${p.file.name}, ${formatBytes(p.file.size)}`}>
+						{#if p.kind == 'image' && p.url}
+							<img class="input-file-thumb" src={p.url} alt={p.file.name} />
+						{:else if p.kind == 'csv' || p.kind == 'json' || p.kind == 'text'}
+							<pre class="input-file-preview-text">{p.preview ?? ''}</pre>
+						{:else}
+							<span class="input-file-glyph" aria-hidden="true">
+								<svg viewBox="0 0 24 24" fill="none">
+									<path
+										d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"
+										stroke="currentColor"
+										stroke-width="1.75"
+										stroke-linejoin="round"
+									/>
+									<path d="M14 3v5h5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+								</svg>
+							</span>
+						{/if}
+						<div class="input-file-meta">
+							<span class="input-file-name" title={p.file.name}>{p.file.name}</span>
+							<span class="input-file-size">{formatBytes(p.file.size)}</span>
+						</div>
+						{#if !configs.disabled}
+							<button
+								type="button"
+								class="input-file-remove"
+								aria-label={`Xóa ${p.file.name}`}
+								onclick={(e) => {
+									e.stopPropagation();
+									removeFile(p.file);
+								}}
+							>
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<path
+										d="M6 6l12 12M18 6L6 18"
+										stroke="currentColor"
+										stroke-width="1.75"
+										stroke-linecap="round"
+									/>
+								</svg>
+							</button>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	{:else if configs.type == 'number'}
 		<div class={configs.input.number.style}>
 			<input
 				type="text"
@@ -1608,7 +2017,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				</div>
 			{/if}
 			<input
-				type={configs.type == 'password' ? (configs.input.password.showPassword ? 'text' : 'password') : (configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text')}
+				type={configs.type == 'password' ? (configs.input.password.showPassword ? 'text' : 'password') : (configs.type == 'email' ? 'email' : configs.type == 'phone' ? 'tel' : 'text')}
 				bind:value
 				bind:this={configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].ref}
 				class={[
@@ -1619,7 +2028,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				]}
 				placeholder={placeholderDerived}
 				autocomplete={props.autocomplete ?? 'off' as FullAutoFill}
-				inputmode={props.inputmode}
+				inputmode={inputModeDerived}
 				name={nameDerived}
 					id={inputId}
 				onkeydown={(e) => {
@@ -1635,22 +2044,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	{/if}
 
 	<div class="input-group-actions">
-		{#if !value && client.browser?.clipboard?.size && configs.actionButtons.paste.display}
-			<Button
-				icon={configs.actionButtons.copy.status.copied
-					? iconify['check-rounded']
-					: iconify['content-paste-rounded']}
-				class="input-paste p-1!"
-				size="xs"
-				aspect-square
-				color="success"
-				events={configs.actionButtons.paste.event}
-				disabled={configs.actionButtons.paste.status.pasted}
-			/>
-		{:else if value}
+		{#if value}
+			<!-- Clear button - FIRST priority when value exists -->
 			{#if configs.actionButtons.clear.display}
 				{#if configs.loading}
-					<!-- Loading indicator during validation/realtime check -->
 					<div class="input-loading-indicator p-1!" aria-live="polite" aria-label="Validating...">
 						<svg class="spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
@@ -1686,6 +2083,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					/>
 				{/if}
 			{/if}
+
+			<!-- Copy button when value exists -->
 			{#if configs.actionButtons.copy.display}
 				<Button
 					icon={configs.actionButtons.copy.status.copied
@@ -1705,15 +2104,31 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 							)}
 				/>
 			{/if}
+		{:else if !value && client.browser?.clipboard?.size && configs.actionButtons.paste.display}
+			<!-- Paste button when no value and clipboard available -->
+			<Button
+				icon={configs.actionButtons.copy.status.copied
+					? iconify['check-rounded']
+					: iconify['content-paste-rounded']}
+				class="input-paste p-1!"
+				size="xs"
+				aspect-square
+				color="success"
+				events={configs.actionButtons.paste.event}
+				disabled={configs.actionButtons.paste.status.pasted}
+			/>
 		{/if}
+
+		<!-- Password show/hide - LAST -->
 		{#if configs.type == 'password'}
 			<Button
 				icon={configs.input.password.showPassword
 					? iconify['password-2-off-rounded']
 					: iconify['password-2-rounded']}
-				class="p-1!"
+				class="p-1! opacity-70 hover:opacity-100 transition-opacity"
 				events={configs.actionButtons.showPassword.event}
 				size="xs"
+				variant="ghost"
 				aspect-square
 			/>
 		{/if}

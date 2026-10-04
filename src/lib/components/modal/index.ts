@@ -29,4 +29,11 @@ export const Modal = Object.assign(Root, {
 	Container: Object.assign(Container, { Header, Body, Footer })
 });
 
-export type { ModalProps, ModalContainerProps, ModalHeaderProps, ModalBodyProps, ModalFooterProps } from './_interface';
+export type {
+	ModalProps,
+	ModalContainerProps,
+	ModalHeaderProps,
+	ModalBodyProps,
+	ModalFooterProps,
+	ModalCloseReason
+} from './_interface';

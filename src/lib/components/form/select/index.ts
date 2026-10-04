@@ -1,11 +1,12 @@
 // src/lib/components/form/select/index.ts
 
-import Root from './Root.svelte';
-import Trigger from './Trigger.svelte';
-import Content from './Content.svelte';
-import Item from './Item.svelte';
-import Group from './Group.svelte';
-import Separator from './Separator.svelte';
+import Main from './Main.svelte';
 
-export { Root, Trigger, Content, Item, Group, Separator };
-export default { Root, Trigger, Content, Item, Group, Separator };
+export type { SelectProps, SelectConfigs, SelectOption, SelectOptionGroup } from './_interface';
+
+export { Main as Select };
+export default Main;
+
+// Re-export context (đặt ở _context.ts — file leaf, không import Main.svelte —
+// để <Label> gọi getSelectContext mà không kích hoạt circular import với Main.svelte)
+export { setSelectContext, getSelectContext } from './_context';

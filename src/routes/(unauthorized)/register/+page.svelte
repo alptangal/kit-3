@@ -40,6 +40,18 @@
 	// Honeypot — hidden from real users, bots fill it
 	let honeypot = $state('');
 
+	// Caps Lock warning (P2 UX) — hiển thị khi user gõ password trong lúc Caps
+	// Lock bật. Gắn keydown/focusout lên wrapper `display:contents` quanh password
+	// field (event BUBBLE từ input → wrapper). getModifierState('CapsLock')
+	// Safari 13+ → an toàn cho target es2020/safari15.
+	let capsLockOn = $state(false);
+	function handleCapsKeydown(e: KeyboardEvent) {
+		capsLockOn = typeof e.getModifierState === 'function' ? e.getModifierState('CapsLock') : false;
+	}
+	function handleCapsFocusout() {
+		capsLockOn = false;
+	}
+
 	/** Cặp khoá RSA tạm thời cho phiên đăng ký */
 	let encryptionKeys = $state<
 		| undefined
@@ -890,6 +902,8 @@
 		</TextField>
 
 		<!-- Password field -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="caps-scope" onkeydown={handleCapsKeydown} onfocusout={handleCapsFocusout}>
 		<TextField name="password" required>
 			<Label>{pageContents.textFields.password[lang] ?? 'Password'}</Label>
 			<Input
@@ -910,6 +924,18 @@
 					</svg>
 				{/snippet}
 			</Input>
+			{#if capsLockOn}
+				<div class="caps-hint" role="alert">
+					<svg class="caps-hint-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<path
+							fill-rule="evenodd"
+							d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+					<span>{lang === 'vi' ? 'Caps Lock đang bật' : 'Caps Lock is on'}</span>
+				</div>
+			{/if}
 
 			<!-- Modern Password Strength Indicator — Single Progress Bar -->
 			{#if formData.password}
@@ -929,6 +955,7 @@
 			<Description class="form-hint">{pageContents.hints.passwordHint[lang]}</Description>
 			<FieldMessages />
 		</TextField>
+		</div>
 
 		<!-- Confirm Password field -->
 		<TextField name="confirmPassword" required>
@@ -968,22 +995,24 @@
 		<!-- Terms & Conditions Checkbox -->
 		<div class="terms-row">
 			<Checkbox bind:checked={agreeTerms} disabled={loading}>
-				<span class="terms-text">
-					{pageContents.terms.agreeLabel[lang] ?? 'I agree to the'}
-					<button
-						type="button"
-						class="terms-link-btn"
-						disabled={loading}
-						onclick={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							if (loading) return;
-							showTermsModal = true;
-						}}
-					>
-						{pageContents.terms.linkText[lang] ?? 'Terms of Service'}
-					</button>
-				</span>
+				<Label class="terms-label">
+					<span class="terms-text">
+						{pageContents.terms.agreeLabel[lang] ?? 'I agree to the'}
+						<button
+							type="button"
+							class="terms-link-btn"
+							disabled={loading}
+							onclick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								if (loading) return;
+								showTermsModal = true;
+							}}
+						>
+							{pageContents.terms.linkText[lang] ?? 'Terms of Service'}
+						</button>
+					</span>
+				</Label>
 			</Checkbox>
 		</div>
 
@@ -995,6 +1024,7 @@
 				type="submit"
 				{loading}
 				disabled={status.disabled}
+				size="sm"
 			>
 				{pageContents.buttons.confirm[lang] ?? 'Create account'}
 			</Button>
@@ -1005,6 +1035,7 @@
 				type="reset"
 				variant="ghost"
 				disabled={loading}
+				size="sm"
 			>
 				{pageContents.buttons.reset[lang] ?? 'Reset'}
 			</Button>
@@ -1019,7 +1050,7 @@
 
 		<!-- Switch to Login -->
 		<div class="auth-switch-link">
-			<Button variant="link" color="primary" class="auth-switch-btn" to="/login">
+			<Button variant="ghost" color="primary" class="auth-switch-btn" to="/login">
 				<span>{pageContents.signIn[lang] ?? 'Sign in now'}</span>
 				<svg class="link-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 					<path
@@ -1080,6 +1111,38 @@
 	/* ═══════════════════════════════════════════════
 	   REGISTER SPECIFIC STYLES
 	   ═══════════════════════════════════════════════ */
+
+	/* Wrapper để bắt keydown/focusout cho Caps Lock hint. display:contents →
+	   không phá flex layout của .form-root (TextField vẫn là con trực tiếp). */
+	.caps-scope {
+		display: contents;
+	}
+
+	.caps-hint {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.7875rem;
+		line-height: 1.4;
+		color: #b45309;
+		background: rgb(245 158 11 / 0.1);
+		border: 1px solid rgb(245 158 11 / 0.28);
+		border-radius: 0.5rem;
+		padding: 0.375rem 0.625rem;
+		margin-top: 0.125rem;
+
+		.caps-hint-icon {
+			flex-shrink: 0;
+			width: 0.9rem;
+			height: 0.9rem;
+		}
+
+		@media (prefers-color-scheme: dark) {
+			color: #fbbf24;
+			background: rgb(245 158 11 / 0.12);
+			border-color: rgb(245 158 11 / 0.3);
+		}
+	}
 
 	/* Visually hidden pattern for Honeypot */
 	.visually-hidden {
@@ -1199,6 +1262,8 @@
 
 	/* ══ Terms row ══ */
 	.terms-row {
+		display: flex;
+		align-items: center;
 		margin-top: 0.5rem;
 		margin-bottom: 0.5rem;
 	}
@@ -1206,6 +1271,11 @@
 	.terms-text {
 		font-size: 0.8125rem;
 		color: var(--foreground-400, #a1a1aa);
+	}
+
+	.terms-label {
+		/* Ensure label uses proper size-sm line-height */
+		line-height: var(--line-height-sm);
 	}
 
 	.terms-link-btn {
@@ -1301,5 +1371,13 @@
 		width: 1.25rem;
 		height: 1.25rem;
 		color: var(--foreground-400);
+	}
+
+	:global(.auth-switch-btn) {
+		.link-arrow {
+			width: 1.25rem;
+			height: 1.25rem;
+			flex-shrink: 0;
+		}
 	}
 </style>

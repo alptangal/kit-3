@@ -2,19 +2,15 @@
   import { setContext } from 'svelte';
   import { writable } from 'svelte/store';
   import type { Writable } from 'svelte/store';
+  import { styleSynced } from '$modules';
+  import { client } from '$store/basic.svelte';
+  import { getFormContext } from '../form';
+  import type { ToggleProps } from './_interface';
 
   interface ToggleContext {
     isChecked: Writable<boolean>;
     isDisabled: Writable<boolean>;
     isLoading: Writable<boolean>;
-  }
-
-  interface Props {
-    checked?: boolean;
-    disabled?: boolean;
-    loading?: boolean;
-    onchange?: (checked: boolean) => void;
-    children?: any;
   }
 
   let {
@@ -23,7 +19,11 @@
     loading = false,
     onchange,
     children,
-  }: Props = $props();
+    ...props
+  }: ToggleProps = $props();
+
+  // Item 3: cascading size — đồng bộ Input/Checkbox/Select (formContext → browser → 'md')
+  const formContext = getFormContext();
 
   const isChecked = writable(false);
   const isDisabled = writable(false);
@@ -37,7 +37,29 @@
 
   setContext('toggle', context);
 
-  // Sync prop changes to stores
+  // Item 3: size cascading
+  const sizeDerived = $derived(props.size ?? formContext?.size ?? client.browser?.size ?? 'md');
+  // Prop Toggle-specific: color (mặc định 'default' khi chưa set)
+  const color = $derived(props.color ?? 'default');
+
+  // Item 2: styleSynced thay logic class riêng (đồng bộ Checkbox/Input/Select)
+  const styleDerived = $derived(
+    styleSynced(
+      {
+        defaultStyles: [
+          'toggle-root',
+          `size-${sizeDerived}`,
+          `color-${color}`,
+          $isDisabled ? 'disabled' : undefined,
+          $isLoading ? 'loading' : undefined
+        ],
+        propStyles: props.class
+      },
+      props.overwriteDefaultStyles
+    )
+  );
+
+  // Sync prop changes to stores (giữ nguyên logic state — không đổi)
   $effect.pre(() => {
     isChecked.set(checked);
     isDisabled.set(disabled);
@@ -53,7 +75,7 @@
   }
 </script>
 
-<div class="toggle-root" class:disabled={$isDisabled} class:loading={$isLoading}>
+<div class={styleDerived}>
   <button
     type="button"
     role="switch"
@@ -76,86 +98,6 @@
   {/if}
 </div>
 
-<style>
-  .toggle-root {
-    display: inline-flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .toggle-button {
-    position: relative;
-    width: 56px;
-    height: 32px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    border-radius: 16px;
-    transition: all 200ms ease;
-    flex-shrink: 0;
-  }
-
-  .toggle-button:disabled {
-    cursor: not-allowed;
-    opacity: var(--toggle-disabled-opacity, 0.5);
-  }
-
-  .toggle-button:not(:disabled):hover {
-    background-color: var(--color-surface-hover, rgba(0, 0, 0, 0.04));
-  }
-
-  .toggle-button:focus-visible {
-    outline: 2px solid var(--color-primary, #3b82f6);
-    outline-offset: 2px;
-  }
-
-  .toggle-track {
-    position: absolute;
-    inset: 0;
-    background-color: var(--toggle-track-bg-off, #cbd5e1);
-    border-radius: 16px;
-    transition: background-color 200ms ease;
-  }
-
-  .toggle-button.checked .toggle-track {
-    background-color: var(--toggle-track-bg-on, #3b82f6);
-  }
-
-  .toggle-thumb {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 28px;
-    height: 28px;
-    background-color: white;
-    border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: transform 200ms ease;
-  }
-
-  .toggle-button.checked .toggle-thumb {
-    transform: translateX(24px);
-  }
-
-  .toggle-button:active:not(:disabled) .toggle-thumb {
-    width: 32px;
-  }
-
-  .toggle-button.checked:active:not(:disabled) .toggle-thumb {
-    transform: translateX(20px);
-  }
-
-  .toggle-root.disabled {
-    opacity: 0.6;
-    pointer-events: none;
-  }
-
-  .toggle-root.loading {
-    opacity: 0.7;
-  }
-
-  .toggle-content {
-    flex: 1;
-  }
+<style lang="scss">
+  @use '_styles.scss';
 </style>

@@ -10,14 +10,16 @@ import { writable } from 'svelte/store';
 
 describe('Select Component — Unit Tests', () => {
 	// Mock context setup
-	let valueStore: any;
-	let openStore: any;
-	let searchStore: any;
-	let highlightedStore: any;
-	let itemsStore: any;
+	let valueStore: ReturnType<typeof writable<string>>;
+	let multiValueStore: ReturnType<typeof writable<string[]>>;
+	let openStore: ReturnType<typeof writable<boolean>>;
+	let searchStore: ReturnType<typeof writable<string>>;
+	let highlightedStore: ReturnType<typeof writable<string | null>>;
+	let itemsStore: ReturnType<typeof writable<Map<string, { label: string; disabled: boolean }>>>;
 
 	beforeEach(() => {
 		valueStore = writable('');
+		multiValueStore = writable<string[]>([]);
 		openStore = writable(false);
 		searchStore = writable('');
 		highlightedStore = writable(null);
@@ -37,7 +39,6 @@ describe('Select Component — Unit Tests', () => {
 	describe('Single Select', () => {
 		it('should select an item and close dropdown', (ctx) => {
 			let selectedValue = '';
-			let isOpen = false;
 
 			// Simulate selection
 			valueStore.subscribe((v) => {
@@ -99,13 +100,11 @@ describe('Select Component — Unit Tests', () => {
 
 	describe('Multi Select', () => {
 		it('should add item to selection array', (ctx) => {
-			valueStore = writable<string[]>([]);
-
 			// Select first item
-			valueStore.update((arr) => [...arr, 'apple']);
+			multiValueStore.update((arr: string[]) => [...arr, 'apple']);
 
 			let current: string[] = [];
-			valueStore.subscribe((v) => {
+			multiValueStore.subscribe((v: string[]) => {
 				current = v;
 			});
 
@@ -114,14 +113,12 @@ describe('Select Component — Unit Tests', () => {
 		});
 
 		it('should select multiple items', (ctx) => {
-			valueStore = writable<string[]>([]);
-
 			// Select multiple
-			valueStore.update((arr) => [...arr, 'apple']);
-			valueStore.update((arr) => [...arr, 'banana']);
+			multiValueStore.update((arr: string[]) => [...arr, 'apple']);
+			multiValueStore.update((arr: string[]) => [...arr, 'banana']);
 
 			let current: string[] = [];
-			valueStore.subscribe((v) => {
+			multiValueStore.subscribe((v: string[]) => {
 				current = v;
 			});
 
@@ -131,13 +128,13 @@ describe('Select Component — Unit Tests', () => {
 		});
 
 		it('should remove item from selection', (ctx) => {
-			valueStore = writable<string[]>(['apple', 'banana', 'cherry']);
+			multiValueStore.set(['apple', 'banana', 'cherry']);
 
 			// Deselect banana
-			valueStore.update((arr) => arr.filter((x) => x !== 'banana'));
+			multiValueStore.update((arr: string[]) => arr.filter((x: string) => x !== 'banana'));
 
 			let current: string[] = [];
-			valueStore.subscribe((v) => {
+			multiValueStore.subscribe((v: string[]) => {
 				current = v;
 			});
 
@@ -147,15 +144,15 @@ describe('Select Component — Unit Tests', () => {
 		});
 
 		it('should toggle item selection', (ctx) => {
-			valueStore = writable<string[]>(['apple']);
+			multiValueStore.set(['apple']);
 
 			// Toggle: apple already selected, so remove it
-			valueStore.update((arr) => {
-				return arr.includes('apple') ? arr.filter((x) => x !== 'apple') : [...arr, 'apple'];
+			multiValueStore.update((arr: string[]) => {
+				return arr.includes('apple') ? arr.filter((x: string) => x !== 'apple') : [...arr, 'apple'];
 			});
 
 			let current: string[] = [];
-			valueStore.subscribe((v) => {
+			multiValueStore.subscribe((v: string[]) => {
 				current = v;
 			});
 
@@ -169,7 +166,7 @@ describe('Select Component — Unit Tests', () => {
 			// openStore NOT set to false
 
 			let isOpen = false;
-			openStore.subscribe((v) => {
+			openStore.subscribe((v: boolean) => {
 				isOpen = v;
 			});
 
@@ -181,8 +178,8 @@ describe('Select Component — Unit Tests', () => {
 		it('should set highlighted item on arrow down', (ctx) => {
 			highlightedStore.set('apple');
 
-			let current = '';
-			highlightedStore.subscribe((v) => {
+			let current: string | null = '';
+			highlightedStore.subscribe((v: string | null) => {
 				current = v;
 			});
 
@@ -192,8 +189,8 @@ describe('Select Component — Unit Tests', () => {
 		it('should set highlighted item on arrow up', (ctx) => {
 			highlightedStore.set('cherry');
 
-			let current = '';
-			highlightedStore.subscribe((v) => {
+			let current: string | null = '';
+			highlightedStore.subscribe((v: string | null) => {
 				current = v;
 			});
 
@@ -204,8 +201,8 @@ describe('Select Component — Unit Tests', () => {
 			highlightedStore.set('banana');
 			highlightedStore.set(null);
 
-			let current = null;
-			highlightedStore.subscribe((v) => {
+			let current: string | null = null;
+			highlightedStore.subscribe((v: string | null) => {
 				current = v;
 			});
 
@@ -218,7 +215,7 @@ describe('Select Component — Unit Tests', () => {
 			openStore.set(false);
 
 			let isOpen = false;
-			openStore.subscribe((v) => {
+			openStore.subscribe((v: boolean) => {
 				isOpen = v;
 			});
 
@@ -231,7 +228,7 @@ describe('Select Component — Unit Tests', () => {
 			searchStore.set('app');
 
 			let current = '';
-			searchStore.subscribe((v) => {
+			searchStore.subscribe((v: string) => {
 				current = v;
 			});
 
@@ -240,8 +237,8 @@ describe('Select Component — Unit Tests', () => {
 
 		it('should filter items by search query', (ctx) => {
 			const query = 'app';
-			const items = ['apple', 'banana', 'cherry'];
-			const filtered = items.filter((item) => item.toLowerCase().includes(query.toLowerCase()));
+			const items: string[] = ['apple', 'banana', 'cherry'];
+			const filtered = items.filter((item: string) => item.toLowerCase().includes(query.toLowerCase()));
 
 			expect(filtered).toContain('apple');
 			expect(filtered).not.toContain('banana');
@@ -253,7 +250,7 @@ describe('Select Component — Unit Tests', () => {
 			searchStore.set('');
 
 			let current = '';
-			searchStore.subscribe((v) => {
+			searchStore.subscribe((v: string) => {
 				current = v;
 			});
 
@@ -264,19 +261,21 @@ describe('Select Component — Unit Tests', () => {
 	describe('Disabled Items', () => {
 		it('should not select disabled items on click', (ctx) => {
 			let selectedValue = '';
-			valueStore.subscribe((v) => {
+			valueStore.subscribe((v: string) => {
 				selectedValue = v;
 			});
 
 			// Try to select disabled item (should be ignored)
-			let items: any;
-			itemsStore.subscribe((v) => {
-				items = v;
-			});
+			const itemsMap = new Map([
+				['apple', { label: 'Apple', disabled: false }],
+				['banana', { label: 'Banana', disabled: false }],
+				['cherry', { label: 'Cherry', disabled: false }],
+				['disabled-item', { label: 'Disabled', disabled: true }]
+			]);
 
-			const disabledItem = items.get('disabled-item');
+			const disabledItem = itemsMap.get('disabled-item');
 
-			if (!disabledItem.disabled) {
+			if (disabledItem && !disabledItem.disabled) {
 				valueStore.set('disabled-item');
 			}
 
@@ -284,21 +283,23 @@ describe('Select Component — Unit Tests', () => {
 		});
 
 		it('should not highlight disabled items', (ctx) => {
-			const disabledItem = 'disabled-item';
-			let items: any;
-			itemsStore.subscribe((v) => {
-				items = v;
-			});
+			const itemsMap = new Map([
+				['apple', { label: 'Apple', disabled: false }],
+				['banana', { label: 'Banana', disabled: false }],
+				['cherry', { label: 'Cherry', disabled: false }],
+				['disabled-item', { label: 'Disabled', disabled: true }]
+			]);
 
-			const item = items.get(disabledItem);
+			const disabledItem = 'disabled-item';
+			const item = itemsMap.get(disabledItem);
 
 			// Should not set as highlighted if disabled
-			if (!item.disabled) {
+			if (item && !item.disabled) {
 				highlightedStore.set(disabledItem);
 			}
 
-			let current = null;
-			highlightedStore.subscribe((v) => {
+			let current: string | null = null;
+			highlightedStore.subscribe((v: string | null) => {
 				current = v;
 			});
 
@@ -311,10 +312,10 @@ describe('Select Component — Unit Tests', () => {
 			openStore.set(false);
 			expect(openStore).toBeDefined();
 
-			openStore.update((v) => !v);
+			openStore.update((v: boolean) => !v);
 
 			let isOpen = false;
-			openStore.subscribe((v) => {
+			openStore.subscribe((v: boolean) => {
 				isOpen = v;
 			});
 
@@ -325,7 +326,7 @@ describe('Select Component — Unit Tests', () => {
 			openStore.set(true);
 
 			let isOpen = false;
-			openStore.subscribe((v) => {
+			openStore.subscribe((v: boolean) => {
 				isOpen = v;
 			});
 
@@ -337,7 +338,7 @@ describe('Select Component — Unit Tests', () => {
 			openStore.set(false);
 
 			let isOpen = false;
-			openStore.subscribe((v) => {
+			openStore.subscribe((v: boolean) => {
 				isOpen = v;
 			});
 

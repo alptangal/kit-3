@@ -12,7 +12,7 @@ declare global {
 	var __initPromise: Promise<void> | undefined;
 }
 
-if (!globalThis.__appInitialized) {
+if (!globalThis.__appInitialized || !systemVault?.privateKey) {
 	globalThis.__appInitialized = true;
 	globalThis.__initPromise = (async () => {
 		await initApp();
@@ -22,6 +22,12 @@ if (!globalThis.__appInitialized) {
 
 // Ensure initialization completes before handling requests
 async function ensureInitialized(): Promise<void> {
+	if (!systemVault?.privateKey) {
+		globalThis.__initPromise = (async () => {
+			await initApp();
+			await initSystemVault();
+		})();
+	}
 	if (globalThis.__initPromise) {
 		await globalThis.__initPromise;
 	}

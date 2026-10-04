@@ -38,11 +38,89 @@ export const number_keys_allowed = [
 	'%',
 	...text_keys_allowed
 ];
+// Email chỉ gồm chữ thường/số + dấu @ . _ + - (KHÔNG space).
+// Phím điều hướng/copy-paste (arrow, enter, tab, escape…) luôn cho phép.
+export const email_keys_allowed = [
+	'a',
+	'b',
+	'c',
+	'd',
+	'e',
+	'f',
+	'g',
+	'h',
+	'i',
+	'j',
+	'k',
+	'l',
+	'm',
+	'n',
+	'o',
+	'p',
+	'q',
+	'r',
+	's',
+	't',
+	'u',
+	'v',
+	'w',
+	'x',
+	'y',
+	'z',
+	'0',
+	'1',
+	'2',
+	'3',
+	'4',
+	'5',
+	'6',
+	'7',
+	'8',
+	'9',
+	'@',
+	'.',
+	'_',
+	'+',
+	'-',
+	'enter',
+	'tab',
+	'escape',
+	...text_keys_allowed
+];
+// Phone gồm số + dấu + - ( ) # * và space (format "090 123 4567").
+export const phone_keys_allowed = [
+	'0',
+	'1',
+	'2',
+	'3',
+	'4',
+	'5',
+	'6',
+	'7',
+	'8',
+	'9',
+	'+',
+	'-',
+	'(',
+	')',
+	'#',
+	'*',
+	' ',
+	'enter',
+	'tab',
+	'escape',
+	...text_keys_allowed
+];
 export const defaultValidation: {
 	required: (fieldName?: string) => ValidationCompact | ValidationFull;
 	minNumber?: (minValue: number, fieldName?: string) => ValidationCompact | ValidationFull;
 	maxNumber?: (maxValue: number, fieldName?: string) => ValidationCompact | ValidationFull;
 	isEmail?: (fieldName?: string) => ValidationCompact | ValidationFull;
+	isPhone?: (fieldName?: string) => ValidationCompact | ValidationFull;
+	// type='file' — validators nhận File[] (passed qua untrack(() => files))
+	hasFile?: (fieldName?: string) => ValidationCompact | ValidationFull;
+	maxFileSize?: (maxBytes: number, fieldName?: string) => ValidationCompact | ValidationFull;
+	maxFiles?: (maxCount: number, fieldName?: string) => ValidationCompact | ValidationFull;
 } = {
 	required: (fieldName) => {
 		return {
@@ -110,6 +188,85 @@ export const defaultValidation: {
 				}
 			}
 		};
+	},
+	// Loose phone regex: cho phép số, +, space, dấu ( ) - # * ; độ dài 7–15 ký tự
+	// (kiểm tra số quốc tế chỉ cần 10–15 chữ số, nhưng giữ loose để không chặn
+	// số nội địa có dấu phân cách). Tuỳ chọn — dùng khi cần validate phone.
+	isPhone(fieldName) {
+		return {
+			isValid(input) {
+				const phoneRegex = /^\+?[0-9\s().\-#*]{7,15}$/;
+				if (input && phoneRegex.test(input.trim())) return true;
+				return false;
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'} must be a valid phone number`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'} is a valid phone number`
+				}
+			}
+		};
+	},
+	// type='file' — input là File[] (từ untrack(() => files))
+	hasFile(fieldName) {
+		return {
+			isValid(files) {
+				const list = files as File[] | undefined;
+				if (list?.length) return true;
+				return false;
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'} requires at least one file`,
+					vi: `${fieldName ?? 'Trường này'} yêu cầu ít nhất một tệp`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'} is valid`,
+					vi: `${fieldName ?? 'Trường này'} hợp lệ`
+				}
+			}
+		};
+	},
+	maxFileSize(maxBytes, fieldName) {
+		const mb = (maxBytes / (1024 * 1024)).toFixed(maxBytes % (1024 * 1024) === 0 ? 0 : 1);
+		return {
+			isValid(files) {
+				const list = files as File[] | undefined;
+				if (!list?.length) return false;
+				return list.every((f) => f.size <= maxBytes);
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'}: each file must be at most ${mb}MB`,
+					vi: `${fieldName ?? 'Trường này'}: mỗi tệp tối đa ${mb}MB`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'}: file size is valid`,
+					vi: `${fieldName ?? 'Trường này'}: kích thước tệp hợp lệ`
+				}
+			}
+		};
+	},
+	maxFiles(maxCount, fieldName) {
+		return {
+			isValid(files) {
+				const list = files as File[] | undefined;
+				if (!list?.length) return false;
+				return list.length <= maxCount;
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'}: maximum ${maxCount} files`,
+					vi: `${fieldName ?? 'Trường này'}: tối đa ${maxCount} tệp`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'}: file count is valid`,
+					vi: `${fieldName ?? 'Trường này'}: số lượng tệp hợp lệ`
+				}
+			}
+		};
 	}
 };
 export function createDefaultInputEvents(
@@ -129,7 +286,7 @@ export function createDefaultInputEvents(
 						configs.status.selectAll = true;
 						if (target instanceof HTMLInputElement && value?.length) {
 							try {
-								if (['text', 'search', 'url', 'tel', 'password'].includes(target.type)) {
+								if (['text', 'search', 'url', 'tel', 'email', 'password'].includes(target.type)) {
 									target.setSelectionRange(0, value.length);
 								} else {
 									target.select();
@@ -157,6 +314,21 @@ export function createDefaultInputEvents(
 				},
 				keydown(e) {
 					const event = e as KeyboardEvent;
+					// Filter theo data type: email/phone chỉ nhận ký tự đúng.
+					// Chỉ chặn ký tự in được (key.length === 1) — phím điều hướng/chức năng
+					// (arrow, shift, enter, tab, escape, IME 'Process'…) luôn cho qua.
+					// Skip khi đang giữ ctrl/meta/alt để cho phép copy-paste/select-all.
+					const k = event.key.toLowerCase();
+					if (k.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+						if (configs.type === 'email' && !email_keys_allowed.includes(k)) {
+							event.preventDefault();
+							return;
+						}
+						if (configs.type === 'phone' && !phone_keys_allowed.includes(k)) {
+							event.preventDefault();
+							return;
+						}
+					}
 					if (event.key.toLowerCase() == 'enter' && textFieldContext?.onEnter) {
 						textFieldContext.onEnter();
 						if (!formContext?.validation.isValid) {

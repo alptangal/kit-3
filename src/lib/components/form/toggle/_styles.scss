@@ -1,0 +1,94 @@
+//$lib/components/form/toggle/_styles.scss
+// Tách style từ Toggle.svelte để đồng bộ pattern Checkbox/Input (SCSS file).
+// Giữ nguyên UI chuẩn toggle: 56×32px + transition animation (slide switch).
+.toggle-root {
+	display: inline-flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.toggle-button {
+	position: relative;
+	width: 56px;
+	height: 32px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	border-radius: 16px;
+	transition: all 200ms ease;
+	flex-shrink: 0;
+}
+
+.toggle-button:disabled {
+	cursor: not-allowed;
+	// Item 5: token disabled đồng bộ Button/Checkbox/Input (thay --toggle-disabled-opacity)
+	opacity: var(--disabled-opacity, 0.5);
+}
+
+// Item 6: hover chỉ áp dụng trên PC (chuẩn @media hover/pointer fine)
+@media (hover: hover) and (pointer: fine) {
+	.toggle-button:not(:disabled):hover {
+		background-color: var(--color-surface-hover, rgba(0, 0, 0, 0.04));
+	}
+}
+
+// Item 4: focus ring chuẩn indigo-500 + guard disabled + :focus-visible
+.toggle-button:focus-visible:not(:disabled) {
+	outline: 2px solid var(--color-indigo-500);
+	outline-offset: 2px;
+}
+
+.toggle-track {
+	position: absolute;
+	inset: 0;
+	background-color: var(--toggle-track-bg-off, #cbd5e1);
+	border-radius: 16px;
+	transition: background-color 200ms ease;
+}
+
+.toggle-button.checked .toggle-track {
+	background-color: var(--toggle-track-bg-on, #3b82f6);
+}
+
+.toggle-thumb {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 28px;
+	height: 28px;
+	background-color: white;
+	border-radius: 50%;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	transition: transform 200ms ease;
+}
+
+.toggle-button.checked .toggle-thumb {
+	transform: translateX(24px);
+}
+
+// Item 6: active (press) chỉ áp dụng trên PC (chuẩn @media hover/pointer fine)
+@media (hover: hover) and (pointer: fine) {
+	.toggle-button:active:not(:disabled) .toggle-thumb {
+		width: 32px;
+	}
+
+	.toggle-button.checked:active:not(:disabled) .toggle-thumb {
+		transform: translateX(20px);
+	}
+}
+
+// Item 5: token disabled đồng bộ (thay 0.6 hardcode → token), giữ pointer-events (disabled-state)
+.toggle-root.disabled {
+	opacity: var(--disabled-opacity, 0.5);
+	pointer-events: none;
+}
+
+// Item 7: chuẩn Button — opacity 0.7 + spinner (TODO: thêm spinner nếu cần)
+.toggle-root.loading {
+	opacity: 0.7;
+}
+
+.toggle-content {
+	flex: 1;
+}

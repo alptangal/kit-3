@@ -4,6 +4,7 @@ import { client } from '$store/basic.svelte';
 import type { TranslateContent } from '$interfaces/basic';
 import { getTextFieldContext } from '../textField';
 import { getCheckboxContext } from '../checkbox';
+import { getRadioContext } from '../radiogroup/_context';
 
 export interface MessageEntry {
 	content?: TranslateContent;
@@ -15,6 +16,7 @@ export type MessagesMap = Map<string | ((output?: string | boolean) => boolean |
 export function useMessageDisplay(optionsGetter: () => { showValid?: boolean; persistent?: boolean; autoHide?: boolean }) {
 	const textFieldContext = getTextFieldContext();
 	const checkboxContext = getCheckboxContext();
+	const radioContext = getRadioContext();
 
 	// Make options reactive using $derived.by to capture prop reactivity and avoid state_referenced_locally warnings
 	const showValid = $derived.by(() => optionsGetter().showValid ?? false);
@@ -23,7 +25,8 @@ export function useMessageDisplay(optionsGetter: () => { showValid?: boolean; pe
 
 	const rawMessages = $derived<MessagesMap | undefined>(
 		(textFieldContext?.children?.input?.validation.messages as MessagesMap | undefined) ??
-			(checkboxContext?.validation.messages as MessagesMap | undefined)
+			(checkboxContext?.validation.messages as MessagesMap | undefined) ??
+			(radioContext?.validation.messages as MessagesMap | undefined)
 	);
 
 	const allWithContent = $derived.by(() => {

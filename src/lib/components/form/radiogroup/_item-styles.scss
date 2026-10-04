@@ -1,0 +1,114 @@
+// ─────────────────────────────────────────────────────────────────────
+// RadioItem — styles (markup nằm trong RadioItem.svelte)
+//
+// `.radio-item` + nội dung (input native, circle, text) scoped theo hash
+// của RadioItem. Đọc lại `--radio-size` / `--color` / size tokens do
+// `.radiogroup-root` (Main.svelte) đặt kế thừa xuống. KHÔNG `:has()`.
+// ─────────────────────────────────────────────────────────────────────
+@use '$styles/sizes.scss';
+@use '$styles/colors.scss';
+
+.radio-item {
+	display: flex;
+	align-items: center;
+	gap: var(--gap);
+	min-height: var(--min-height);
+	padding: var(--padding);
+	border-radius: var(--border-radius);
+	user-select: none;
+	cursor: pointer;
+
+	// ── PC-only guard: hover chỉ khi thiết bị có chuột ──
+	@media (hover: hover) and (pointer: fine) {
+		&:hover:not(.disabled-item) {
+			background-color: rgba(125, 125, 125, 0.12);
+		}
+	}
+
+	// ── Disabled (item-level; group-disabled do overlay .disabled phía trên) ──
+	&.disabled-item {
+		cursor: not-allowed;
+		opacity: var(--disabled-opacity);
+	}
+
+	// ── Native input: visually-hidden, VẪN chiếm box (absolute, opacity 0) ──
+	// Giữ click area + a11y native. Focus ring đặt trên chính input
+	// (control → outline indigo-500 + offset 2px; :focus-visible chỉ kích
+	// hoạt khi focus đến từ keyboard).
+	> .radio-input {
+		position: absolute;
+		width: var(--radio-size);
+		height: var(--radio-size);
+		margin: 0;
+		opacity: 0;
+		cursor: inherit;
+
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 2px;
+		}
+	}
+
+	// ── Indicator (decorative) — driven bởi general sibling của native input ──
+	> .radio-circle {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: var(--radio-size);
+		height: var(--radio-size);
+		border: var(--border-width-md, 2px) solid var(--color);
+		border-radius: 50%;
+		transition:
+			border-color 150ms ease,
+			background-color 150ms ease;
+	}
+
+	> .radio-input:checked ~ .radio-circle {
+		border-color: var(--color-indigo-500);
+		background-color: var(--color-indigo-500);
+	}
+
+	// Dot: scale-in 150ms (transform → mượt, không reflow)
+	> .radio-circle::after {
+		content: '';
+		position: absolute;
+		width: calc(var(--radio-size) / 3);
+		height: calc(var(--radio-size) / 3);
+		background-color: #fff;
+		border-radius: 50%;
+		transform: scale(0);
+		transition: transform 150ms ease;
+	}
+
+	> .radio-input:checked ~ .radio-circle::after {
+		transform: scale(1);
+	}
+
+	// ── Text: label + description (cột nếu có description) ──
+	// DOM thật: .radio-item > .radio-text > (.radio-label, .radio-description)
+	> .radio-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 0;
+	}
+
+	> .radio-text > .radio-label {
+		font-weight: 500;
+		line-height: var(--line-height, 1.5);
+	}
+
+	> .radio-text > .radio-description {
+		font-size: 0.875em;
+		opacity: 0.7;
+		line-height: 1.3;
+	}
+
+	// ── Selected: label đậm + màu chủ đạo ──
+	&.selected > .radio-text > .radio-label {
+		color: var(--color-indigo-500);
+		font-weight: 600;
+	}
+}

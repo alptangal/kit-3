@@ -2,33 +2,26 @@
 	import { styleSynced } from '$modules';
 	import type { Snippet } from 'svelte';
 	import type { PageProps } from './$types';
-	import { NavigationMenu } from '$components/navigation';
-	import { SearchMain } from '$components/search/Main';
-	import { page } from '$app/state';
-	import { onNavigate } from '$app/navigation';
 
 	let { data, children }: { data: PageProps; children: Snippet } = $props();
 	let configs = $state({
 		ref: undefined as undefined | HTMLElement,
 		get style() {
-			const defaultStyles: string[] = [];
+			const defaultStyles: string[] = ['unauthorized-layout', 'min-h-dvh', 'w-full'];
 			return styleSynced({ defaultStyles });
 		}
 	});
 </script>
 
 <div bind:this={configs.ref} class={configs.style}>
-	<NavigationMenu>
-		<NavigationMenu.left>left</NavigationMenu.left>
-		<NavigationMenu.center>
-			<SearchMain class="w-full">
-				<SearchMain.Control />
-			</SearchMain>
-		</NavigationMenu.center>
-		<NavigationMenu.right>right</NavigationMenu.right>
-	</NavigationMenu>
 	{@render children()}
 </div>
 
 <style lang="scss">
+	.unauthorized-layout {
+		min-height: 100dvh;
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+	}
 </style>

@@ -171,10 +171,6 @@
 			<TextField name="email" required>
 				<Label>{pageContents.email[lang] ?? 'Email'}</Label>
 				<div class="auth-input-wrapper">
-					<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-						<path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
-						<path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
-					</svg>
 					<Input
 						type="email"
 						inputmode="email"
@@ -186,6 +182,10 @@
 						class="auth-input"
 						actionButtons={{ showPassword: { display: false } }}
 					/>
+					<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+						<path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+					</svg>
 				</div>
 				<Description class="form-hint">{lang === 'vi' ? 'Nhập email đã đăng ký để nhận liên kết đặt lại' : 'Enter your registered email to receive reset link'}</Description>
 				<FieldMessages />
@@ -242,7 +242,7 @@
 
 		<!-- Switch to Login -->
 		<div class="auth-switch-link">
-			<Button variant="link" color="primary" class="auth-switch-btn" to="/login">
+			<Button variant="ghost" color="primary" class="auth-switch-btn" to="/login" size="sm">
 				<span>{pageContents.backToLogin[lang] ?? "Back to login"}</span>
 				<svg class="link-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 					<path
@@ -328,6 +328,14 @@
 	@media (prefers-color-scheme: dark) {
 		:global(.confirm-match) {
 			--background: var(--success-800) !important;
+		}
+	}
+
+	:global(.auth-switch-btn) {
+		.link-arrow {
+			width: 1.25rem;
+			height: 1.25rem;
+			flex-shrink: 0;
 		}
 	}
 

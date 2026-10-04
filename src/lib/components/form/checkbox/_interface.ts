@@ -31,6 +31,7 @@ export interface CheckboxProps extends BasicProps {
 	required?: boolean;
 	delay?: TimeUnits;
 	name?: string;
+	'aria-label'?: string;
 }
 export interface CheckboxConfigs extends Omit<BasicConfigs, 'status' | 'value'> {
 	status: {
@@ -47,6 +48,7 @@ export interface CheckboxConfigs extends Omit<BasicConfigs, 'status' | 'value'> 
 	duration: number;
 	required?: boolean;
 	delay?: number;
+	disabled?: boolean;
 	validation: {
 		process?: Map<keyof EventListener | 'required', boolean | 'pending'>;
 		isValid?: boolean | 'pending';

@@ -79,6 +79,8 @@ export interface MetaBrowser {
 		number: KeyboardNumberConfigs;
 	};
 	layers?: Map<HTMLElement, number | 'root'>;
+	// Body scroll-lock counter hiện nằm ở module scope (modal/useModalContext.svelte.ts,
+	// non-reactive) — không còn trên client.browser để tránh reactivity loop.
 	toasts?: {
 		ref?: HTMLElement;
 		children: Map<

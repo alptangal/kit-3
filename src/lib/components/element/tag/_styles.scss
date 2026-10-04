@@ -1,0 +1,173 @@
+// $components/element/tag/_styles.scss
+// Nền tảng design: đồng nhất với Button (bảng color/variant) + sizes.scss.
+// Tag là atom presentational nhỏ — dùng riêng cặp --tag-h/--tag-pad/--tag-font
+// theo size (không reuse --min-height của Button vì tag thấp hơn button).
+$colors: 'default', 'secondary', 'success', 'info', 'warning', 'error', 'primary';
+$colorRefs: (
+	'default': 'gray',
+	'secondary': 'cyan',
+	'success': 'green',
+	'info': 'sky',
+	'warning': 'amber',
+	'error': 'red',
+	'primary': 'indigo'
+);
+
+.tag-root {
+	--border-color: transparent;
+	--color: var(--foreground);
+	--background: transparent;
+
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	height: var(--tag-h);
+	max-width: 100%;
+	padding-inline: var(--tag-pad);
+	border: 1px solid var(--border-color);
+	border-radius: calc(var(--tag-h) / 2);
+	background: var(--background);
+	color: var(--color);
+	font-size: var(--tag-font, 0.75rem);
+	font-weight: 500;
+	line-height: 1;
+	white-space: nowrap;
+	user-select: none;
+	transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+		pointer-events: none;
+	}
+
+	/* ── Size map (chip gọn trong trigger select) ── */
+	&.size-xs { --tag-h: 1.25rem;  --tag-pad: 0.5rem;   --tag-font: 0.6875rem; }
+	&.size-sm { --tag-h: 1.5rem;   --tag-pad: 0.625rem; --tag-font: 0.75rem; }
+	&.size-md { --tag-h: 1.75rem;  --tag-pad: 0.75rem;  --tag-font: 0.8125rem; }
+	&.size-lg { --tag-h: 2rem;     --tag-pad: 0.75rem;  --tag-font: 0.875rem; }
+	&.size-xl,
+	&.size-2xl,
+	&.size-3xl,
+	&.size-4xl,
+	&.size-5xl,
+	&.size-6xl,
+	&.size-7xl,
+	&.size-8xl,
+	&.size-9xl { --tag-h: 2.5rem;  --tag-pad: 0.875rem; --tag-font: 0.9375rem; }
+
+	/* ── Variant × Color (mượn bảng ánh xạ Button) ── */
+	@each $variant in 'soft', 'solid', 'outline', 'ghost' {
+		&.variant-#{$variant} {
+			@each $color, $ref in $colorRefs {
+				@if $variant == 'soft' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--color: var(--foreground);
+							@media (prefers-color-scheme: dark) {
+								--background: rgba(82, 82, 91, 0.35);
+							}
+							@media (prefers-color-scheme: light) {
+								--background: rgba(226, 232, 240, 0.7);
+							}
+						} @else {
+							--color: var(--color-#{$ref}-500);
+							@media (prefers-color-scheme: dark) {
+								--background: var(--color-#{$ref}-950);
+							}
+							@media (prefers-color-scheme: light) {
+								--background: var(--color-#{$ref}-200);
+							}
+						}
+					}
+				} @else if $variant == 'solid' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--background: var(--color-gray-600);
+							--color: var(--color-gray-400);
+						} @else {
+							--background: var(--color-#{$ref}-600);
+							--color: var(--color-#{$ref}-400);
+						}
+					}
+				} @else if $variant == 'outline' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--color: var(--foreground);
+							--border-color: var(--foreground);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+							--border-color: var(--color-#{$ref}-500);
+						}
+					}
+				} @else if $variant == 'ghost' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--color: var(--foreground);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+						}
+						--border-color: transparent;
+						@media (hover: hover) and (pointer: fine) {
+							&:hover {
+								@if $color == 'default' {
+									@media (prefers-color-scheme: dark) {
+										--background: rgba(82, 82, 91, 0.25);
+									}
+									@media (prefers-color-scheme: light) {
+										--background: rgba(226, 232, 240, 0.5);
+									}
+								} @else {
+									@media (prefers-color-scheme: dark) {
+										--background: var(--color-#{$ref}-950);
+									}
+									@media (prefers-color-scheme: light) {
+										--background: var(--color-#{$ref}-200);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	.tag-text {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* Nút × (trailing) — ghost, hover đổi màu error (ngôn ngữ .select-clear-button) */
+	.tag-remove {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: calc(var(--tag-h) - 0.5rem);
+		height: calc(var(--tag-h) - 0.5rem);
+		padding: 0;
+		background: transparent;
+		border: none;
+		border-radius: 50%;
+		color: var(--error);  /* base ERROR: nhận diện hành động xóa, đồng bộ .select-clear-button */
+		font-size: 0.625em;
+		opacity: 0.7;
+		cursor: pointer;
+		transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+		&:hover {
+			opacity: 1;
+			color: var(--error);
+			@media (prefers-color-scheme: dark) {
+				background: rgba(51, 65, 85, 0.85);
+			}
+			@media (prefers-color-scheme: light) {
+				background: rgba(241, 245, 249, 0.95);
+			}
+		}
+		svg {
+			display: block;
+		}
+	}
+}

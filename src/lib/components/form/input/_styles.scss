@@ -63,116 +63,164 @@
 	}
 	&.variant-secondary {
 		@media (prefers-color-scheme: dark) {
-			--background: var(--color-gray-700);
+			--background: rgba(63, 63, 70, 0.4);
 		}
 		@media (prefers-color-scheme: light) {
-			--background: var(--color-gray-200);
+			--background: rgba(226, 232, 240, 0.5);
 		}
 		&.focus,
 		&:hover:not(.disabled),
 		&.hover:not(.disabled) {
 			@media (prefers-color-scheme: dark) {
-				--background: var(--color-gray-600);
+				--background: rgba(63, 63, 70, 0.6);
 			}
 			@media (prefers-color-scheme: light) {
-				--background: var(--color-gray-300);
+				--background: rgba(226, 232, 240, 0.75);
 			}
 		}
 		&.focus {
 			--border-color: var(--color-sky-500);
+			@media (prefers-color-scheme: dark) {
+				--background: rgba(63, 63, 70, 0.8);
+				box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+			}
+			@media (prefers-color-scheme: light) {
+				--background: rgba(226, 232, 240, 0.95);
+				box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+			}
 		}
 		&.color-success {
 			--color: var(--success);
-			--background: var(--success-100);
+			--background: rgba(34, 197, 94, 0.08);
 			--border-color: var(--success);
 			&.focus,
 			&:hover:not(.disabled),
 			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
-					--background: var(--success-600);
+					--background: rgba(34, 197, 94, 0.15);
 				}
 				@media (prefers-color-scheme: light) {
-					--background: var(--success-300);
+					--background: rgba(34, 197, 94, 0.12);
 				}
 			}
 			&.focus {
 				--border-color: var(--success-500);
+				@media (prefers-color-scheme: dark) {
+					--background: rgba(34, 197, 94, 0.2);
+					box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: rgba(34, 197, 94, 0.15);
+					box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+				}
 			}
 		}
 		&.color-error {
 			--color: var(--error);
-			--background: var(--error-100);
+			--background: rgba(239, 68, 68, 0.08);
 			--border-color: var(--error);
 			&.focus,
 			&:hover:not(.disabled),
 			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
-					--background: var(--error-600);
+					--background: rgba(239, 68, 68, 0.15);
 				}
 				@media (prefers-color-scheme: light) {
-					--background: var(--error-300);
+					--background: rgba(239, 68, 68, 0.12);
 				}
 			}
 			&.focus {
 				--border-color: var(--error-500);
+				@media (prefers-color-scheme: dark) {
+					--background: rgba(239, 68, 68, 0.2);
+					box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: rgba(239, 68, 68, 0.15);
+					box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+				}
 			}
 		}
 	}
 	&.variant-primary {
 		@media (prefers-color-scheme: dark) {
-			--background: var(--color-gray-900);
+			--background: rgba(39, 39, 42, 0.5);
 		}
 		@media (prefers-color-scheme: light) {
-			--background: var(--color-gray-100);
+			--background: rgba(248, 250, 252, 0.6);
 		}
 
 		&.focus,
 		&:hover:not(.disabled),
 		&.hover:not(.disabled) {
 			@media (prefers-color-scheme: dark) {
-				--background: var(--color-gray-800);
+				--background: rgba(39, 39, 42, 0.7);
 			}
 			@media (prefers-color-scheme: light) {
-				--background: var(--color-gray-200);
+				--background: rgba(248, 250, 252, 0.85);
 			}
 		}
 		&.focus {
 			--border-color: var(--color-sky-500);
+			@media (prefers-color-scheme: dark) {
+				--background: rgba(39, 39, 42, 0.9);
+				box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+			}
+			@media (prefers-color-scheme: light) {
+				--background: rgba(248, 250, 252, 0.95);
+				box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+			}
 		}
 		&.color-success {
 			--color: var(--success);
-			--background: var(--success-100);
+			--background: rgba(34, 197, 94, 0.08);
 			--border-color: var(--success);
 			&.focus,
 			&:hover:not(.disabled),
 			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
-					--background: var(--success-800);
+					--background: rgba(34, 197, 94, 0.15);
 				}
 				@media (prefers-color-scheme: light) {
-					--background: var(--success-200);
+					--background: rgba(34, 197, 94, 0.12);
 				}
 			}
 			&.focus {
 				--border-color: var(--success-500);
+				@media (prefers-color-scheme: dark) {
+					--background: rgba(34, 197, 94, 0.2);
+					box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: rgba(34, 197, 94, 0.15);
+					box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+				}
 			}
 		}
 		&.color-error {
 			--color: var(--error);
-			--background: var(--error-100);
+			--background: rgba(239, 68, 68, 0.08);
 			--border-color: var(--error);
 			&.focus,
 			&:hover:not(.disabled),
 			&.hover:not(.disabled) {
 				@media (prefers-color-scheme: dark) {
-					--background: var(--error-800);
+					--background: rgba(239, 68, 68, 0.15);
 				}
 				@media (prefers-color-scheme: light) {
-					--background: var(--error-200);
+					--background: rgba(239, 68, 68, 0.12);
 				}
 			}
 			&.focus {
 				--border-color: var(--error-500);
+				@media (prefers-color-scheme: dark) {
+					--background: rgba(239, 68, 68, 0.2);
+					box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: rgba(239, 68, 68, 0.15);
+					box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+				}
 			}
 		}
 	}
@@ -180,6 +228,13 @@
 	&.disabled {
 		--cursor: not-allowed;
 		--position: relative;
+		@media (prefers-color-scheme: dark) {
+			--background: rgba(63, 63, 70, 0.3);
+		}
+		@media (prefers-color-scheme: light) {
+			--background: rgba(226, 232, 240, 0.3);
+		}
+		opacity: var(--disabled-opacity, 0.5); // L2: đồng bộ disabled-opacity với Button/Checkbox (token, thay 0.6 hardcode)
 		&::before {
 			content: '';
 			position: absolute;
@@ -218,6 +273,7 @@
 	position: var(--position, relative);
 	color: var(--color);
 	padding-left: var(--border-radius);
+	transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 	.input-placeholder {
 		color: var(--placeholder-color);
 		flex: 1;
@@ -309,6 +365,24 @@
 		/* Add padding to create equal spacing from top/bottom of input root */
 		padding-block: calc(var(--padding, 1rem) / 4);
 	}
+
+	/* ══ Mobile / coarse pointer (đa thiết bị) ══
+	   - font-size ≥ 16px (1rem) cho input focusable → chặn iOS auto-zoom khi focus.
+	   - Nút action (clear/copy/paste) min touch target 44px để chạm thoải mái. */
+	@media (hover: none) and (pointer: coarse) {
+		&.size-xs,
+		&.size-sm {
+			font-size: 1rem;
+		}
+		.input-group-actions {
+			/* Nút action trong group — rộng/chão tối thiểu để chạm */
+			:global(.button-root) {
+				min-width: 2.75rem;
+				min-height: 2.75rem;
+			}
+		}
+	}
+
 	.input-max-length {
 		width: fit-content;
 		display: flex;
@@ -514,6 +588,205 @@
 					background: rgba(51, 65, 85, 0.85);
 				}
 			}
+		}
+	}
+
+	/* ──────────────── type='file' ────────────────
+	   Root đóng vai bao bọc dropzone + previews.
+	   color-error / color-success / disabled (từ variant phía trên) vẫn apply
+	   lên root → border-color + bg + opacity tự inherit. */
+	&.input-file-mode {
+		height: auto;
+		min-height: 0;
+		padding-block: 0.5rem;
+		display: block; // không flex row như text input
+	}
+	.input-file-editor {
+		position: relative;
+		width: 100%;
+	}
+	.input-file-dropzone {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: calc(var(--gap-sm, 0.5rem) / 2);
+		min-height: 4.5rem;
+		padding: 0.875rem 1rem;
+		border: 1.5px dashed var(--border-color, var(--color-sky-500));
+		border-radius: calc(var(--border-radius, 0.5rem) - 2px);
+		background: transparent;
+		cursor: inherit;
+		transition: border-color 0.15s ease, background-color 0.15s ease;
+		color: var(--color);
+
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 2px;
+		}
+		&:hover {
+			@media (prefers-color-scheme: dark) {
+				border-color: var(--color-sky-400);
+				background: rgba(99, 102, 241, 0.06);
+			}
+			@media (prefers-color-scheme: light) {
+				border-color: var(--color-sky-400);
+				background: rgba(99, 102, 241, 0.05);
+			}
+		}
+		&.input-file-dragover {
+			border-style: solid;
+			@media (prefers-color-scheme: dark) {
+				border-color: var(--color-sky-400);
+				background: rgba(99, 102, 241, 0.12);
+			}
+			@media (prefers-color-scheme: light) {
+				border-color: var(--color-sky-500);
+				background: rgba(99, 102, 241, 0.1);
+			}
+		}
+	}
+	.input-file-icon {
+		width: 2rem;
+		height: 2rem;
+		color: var(--color-sky-500);
+		flex-shrink: 0;
+	}
+	.input-file-cta {
+		font-size: calc(var(--font-size) * 0.9);
+		font-weight: 500;
+		color: var(--color);
+	}
+	.input-file-hint {
+		font-size: calc(var(--font-size) * 0.75);
+		opacity: 0.7;
+		color: var(--placeholder-color, var(--color-gray-400));
+	}
+	.input-file-previews {
+		list-style: none;
+		margin: 0;
+		padding: 0.5rem 0 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+		gap: 0.5rem;
+	}
+	.input-file-card {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		padding: 0.5rem;
+		border: 1px solid var(--border-color, var(--color-gray-300));
+		border-radius: calc(var(--border-radius, 0.5rem) - 2px);
+		background: var(--background, rgba(148, 163, 184, 0.08));
+		@media (prefers-color-scheme: dark) {
+			--border-color-file: rgba(100, 116, 139, 0.4);
+		}
+		@media (prefers-color-scheme: light) {
+			--border-color-file: rgba(203, 213, 225, 0.8);
+		}
+		border-color: var(--border-color-file);
+	}
+	.input-file-thumb {
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		object-fit: cover;
+		border-radius: calc(var(--border-radius, 0.5rem) - 4px);
+		background: rgba(148, 163, 184, 0.15);
+	}
+	.input-file-preview-text {
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		margin: 0;
+		padding: 0.375rem;
+		overflow: hidden;
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: 0.7rem;
+		line-height: 1.4;
+		white-space: pre-wrap;
+		word-break: break-word;
+		border-radius: calc(var(--border-radius, 0.5rem) - 4px);
+		@media (prefers-color-scheme: dark) {
+			background: rgba(30, 41, 59, 0.6);
+			color: var(--color-gray-300);
+		}
+		@media (prefers-color-scheme: light) {
+			background: rgba(241, 245, 249, 0.7);
+			color: var(--color-gray-600);
+		}
+	}
+	.input-file-glyph {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		border-radius: calc(var(--border-radius, 0.5rem) - 4px);
+		@media (prefers-color-scheme: dark) {
+			background: rgba(30, 41, 59, 0.6);
+			color: var(--color-gray-400);
+		}
+		@media (prefers-color-scheme: light) {
+			background: rgba(241, 245, 249, 0.7);
+			color: var(--color-gray-500);
+		}
+		svg {
+			width: 2rem;
+			height: 2rem;
+		}
+	}
+	.input-file-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 0;
+	}
+	.input-file-name {
+		font-size: calc(var(--font-size) * 0.8);
+		font-weight: 500;
+		color: var(--color);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.input-file-size {
+		font-size: calc(var(--font-size) * 0.7);
+		opacity: 0.7;
+		color: var(--color);
+	}
+	.input-file-remove {
+		position: absolute;
+		top: 0.25rem;
+		right: 0.25rem;
+		width: 1.5rem;
+		height: 1.5rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: none;
+		border-radius: 50%;
+		cursor: pointer;
+		color: var(--color-gray-500);
+		transition: background-color 0.15s ease, color 0.15s ease;
+		svg {
+			width: 0.875rem;
+			height: 0.875rem;
+		}
+		&:hover {
+			@media (prefers-color-scheme: dark) {
+				background: rgba(30, 41, 59, 0.8);
+				color: var(--color-gray-200);
+			}
+			@media (prefers-color-scheme: light) {
+				background: rgba(255, 255, 255, 0.95);
+				color: var(--color-gray-700);
+			}
+		}
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 1px;
 		}
 	}
 }
