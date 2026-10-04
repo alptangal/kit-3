@@ -53,3 +53,14 @@ export type {
 
 export { Loading };
 export { default as Skeleton } from './skeleton/Main.svelte';
+
+export { ContextMenu, getContextMenuContext } from './context-menu/index.ts';
+export type {
+	ContextMenuSide,
+	ContextMenuConfigs,
+	ContextMenuRootProps,
+	ContextMenuContentProps,
+	ContextMenuItemProps,
+	ContextMenuLabelProps,
+	ContextMenuSeparatorProps
+} from './context-menu/_interface';
