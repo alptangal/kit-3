@@ -19,3 +19,6 @@ export type {
   SidebarState,
   SidebarCollapsible
 } from './sidebar'
+
+export { default as TeamSwitcher } from './team-switcher/TeamSwitcher.svelte'
+export type { TeamSwitcherProps, TeamSwitcherTeam } from './team-switcher/_interface'

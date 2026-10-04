@@ -39,5 +39,17 @@ export type { ImageProps, ImageConfigs, ImageRatio, ImageObjectFit, ImageLoadSta
 export { default as Separator } from './separator/Main.svelte';
 export type { SeparatorProps, SeparatorConfigs, SeparatorOrientation } from './separator/_interface';
 
+export { DropdownMenu, getDropdownMenuContext } from './dropdown-menu/index.ts';
+export type {
+	DropdownMenuAlign,
+	DropdownMenuConfigs,
+	DropdownMenuRootProps,
+	DropdownMenuTriggerProps,
+	DropdownMenuContentProps,
+	DropdownMenuItemProps,
+	DropdownMenuLabelProps,
+	DropdownMenuSeparatorProps
+} from './dropdown-menu/_interface';
+
 export { Loading };
 export { default as Skeleton } from './skeleton/Main.svelte';

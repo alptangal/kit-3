@@ -1,8 +1,15 @@
 <!-- src/routes/ui/sidebar/+page.svelte -->
 <script lang="ts">
-	import { Breadcrumb } from '$components/navigation';
+	import { Breadcrumb, Sidebar, TeamSwitcher } from '$components/navigation';
 	import { Separator } from '$components/element';
-	import { Sidebar } from '$components/navigation';
+	import type { TeamSwitcherTeam } from '$components/navigation';
+
+	const teams: TeamSwitcherTeam[] = [
+		{ id: 'acme', name: 'Acme Inc', abbr: 'AC', group: 'Công ty' },
+		{ id: 'nxt', name: 'Nebula Corp', abbr: 'NB', group: 'Công ty' },
+		{ id: 'mine', name: 'Của tôi', abbr: 'ME', group: 'Cá nhân' }
+	];
+	let team = $state('acme');
 
 	// Demo Sidebar (shadcn sidebar-07): Provider (state + context) + Sidebar (aside)
 	// + Inset (main). collapsible="icon" → trigger collapse rail. Mobile (<=768px)
@@ -26,6 +33,10 @@
 			</Sidebar.Header>
 
 			<Sidebar.Content>
+				<div class="switcher" data-test="sb-switcher">
+					<TeamSwitcher {teams} bind:value={team} aria-label="Chọn team" />
+				</div>
+
 				<Sidebar.Group>
 					<Sidebar.GroupLabel>Chính</Sidebar.GroupLabel>
 					<Sidebar.Menu>
@@ -183,6 +194,18 @@
 	.brand-actions {
 		display: flex;
 		align-items: center;
+	}
+
+	/* Team switcher (trên menu) */
+	.switcher {
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		margin-bottom: 0.5rem;
+
+		:global(.dropdown-menu-trigger) {
+			width: 100%;
+			font-weight: 600;
+		}
 	}
 
 	/* Footer user */
