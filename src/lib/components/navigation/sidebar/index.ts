@@ -16,6 +16,7 @@ import SidebarMenuItem from './SidebarMenuItem.svelte';
 import SidebarMenuButton from './SidebarMenuButton.svelte';
 import SidebarMenuBadge from './SidebarMenuBadge.svelte';
 import SidebarTrigger from './SidebarTrigger.svelte';
+import SidebarRail from './SidebarRail.svelte';
 
 export const Sidebar = Object.assign(SidebarRoot, {
 	Provider: SidebarProvider,
@@ -29,10 +30,11 @@ export const Sidebar = Object.assign(SidebarRoot, {
 	MenuItem: SidebarMenuItem,
 	MenuButton: SidebarMenuButton,
 	MenuBadge: SidebarMenuBadge,
-	Trigger: SidebarTrigger
+	Trigger: SidebarTrigger,
+	Rail: SidebarRail
 });
 
-export { SidebarProvider, SidebarMenuButton, SidebarTrigger };
+export { SidebarProvider, SidebarMenuButton, SidebarTrigger, SidebarRail };
 
 export { getSidebarContext, setSidebarContext } from './_context';
 export type {
@@ -48,5 +50,6 @@ export type {
 	SidebarMenuItemProps,
 	SidebarMenuButtonProps,
 	SidebarMenuBadgeProps,
-	SidebarTriggerProps
+	SidebarTriggerProps,
+	SidebarRailProps
 } from './_interface';

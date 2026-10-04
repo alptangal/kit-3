@@ -34,6 +34,16 @@
 		--sb-width: var(--sidebar-collapsed-width);
 	}
 
+	/* PEEK (SidebarRail, icon mode): hover aside KHI sidebar ẩn → mở rộng tạm về
+	   full width. Gắn `:hover` TRÊN ASIDE (không trên rail bằng JS) vì rail là
+	   absolute right:0 → trượt theo aside khi expand, chuột đứng yên bị "rời rail"
+	   → flicker enter/leave. Aside chỉ MỞ RỘNG khi hover nên chuột đứng yên luôn
+	   còn trong box → không flicker. (offcanvas/mobile: aside off-screen khi ẩn →
+	   không hover được, peek không áp dụng.) */
+	&.sidebar-collapsed:hover {
+		--sb-width: var(--sidebar-width);
+	}
+
 	/* mobile offcanvas */
 	&.sidebar-mobile {
 		position: fixed;
@@ -67,6 +77,7 @@
 		transform: translateX(0);
 		box-shadow: 0 24px 48px -12px rgb(0 0 0 / 0.25);
 	}
+
 }
 
 /* ── icon rail: ẩn/align element SLOT con (hash scoped khác → :global) ── */
@@ -85,6 +96,26 @@
 	:global(.sidebar-menu-button) {
 		justify-content: center;
 		padding-inline: 0;
+	}
+}
+
+/* PEEK: khi sidebar ẩn (collapsed) nhưng đang hover aside (:hover) → tạm hiện
+   label + trở lại layout đầy đủ (tương đương không collapsed). */
+.sidebar-aside.sidebar-collapsed:hover {
+	:global(.sidebar-header),
+	:global(.sidebar-footer) {
+		justify-content: flex-start;
+	}
+
+	:global(.sidebar-group-label),
+	:global(.sidebar-menu-button .label),
+	:global(.sidebar-menu-button .trailing) {
+		display: block;
+	}
+
+	:global(.sidebar-menu-button) {
+		justify-content: flex-start;
+		padding-inline: 0.75rem;
 	}
 }
 

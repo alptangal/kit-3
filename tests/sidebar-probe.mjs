@@ -100,6 +100,10 @@ ok('SB4 disabled item has .disabled + not-allowed', disabled.found && disabled.p
 const widthBefore = await page.evaluate(() => document.querySelector('.sidebar-aside').getBoundingClientRect().width);
 const triggerBtn = await page.$('.sidebar-trigger');
 await triggerBtn.click();
+// Sau click, chuột "nằm" trên trigger (trong sidebar) → CSS :hover peek giữ
+// sidebar mở 240px (đúng design: hover sidebar collapsed → peek). Di chuột
+// ra vùng content để peek rơi, về đúng width collapsed 72px trước khi assert.
+await page.mouse.move(600, 400);
 await sleep(450); // chờ transition 300ms
 const afterToggle = await page.evaluate(() => {
 	const aside = document.querySelector('.sidebar-aside');
@@ -169,6 +173,72 @@ const sep = await page.evaluate(() => {
 });
 // Demo separator nằm ở trang /ui/separator; ở đây kiểm tra trong sidebar demo
 ok('SB9 Separator renders in sidebar (decorative)', sep.count >= 1, JSON.stringify(sep));
+
+// SB11 — SidebarRail: sidebar MỞ → rail ẩn (visibility hidden + pointer-events none)
+const rail1 = await page.evaluate(() => {
+	const rail = document.querySelector('[data-sb-rail]');
+	if (!rail) return { found: false };
+	const cs = getComputedStyle(rail);
+	return { found: true, visibility: cs.visibility, pointerEvents: cs.pointerEvents, tag: rail.tagName, tabindex: rail.getAttribute('tabindex') };
+});
+ok('SB11 rail present, hidden when sidebar open (visibility hidden)', rail1.found && rail1.tag === 'BUTTON' && rail1.visibility === 'hidden', JSON.stringify(rail1));
+
+// SB12 — collapse bằng trigger → rail hiện
+await triggerBtn.click();
+await sleep(450);
+const rail2 = await page.evaluate(() => {
+	const rail = document.querySelector('[data-sb-rail]');
+	if (!rail) return { found: false };
+	const cs = getComputedStyle(rail);
+	const aside = document.querySelector('.sidebar-aside');
+	return { found: true, visibility: cs.visibility, pointerEvents: cs.pointerEvents, asideWidth: aside.getBoundingClientRect().width };
+});
+ok('SB12 collapsed → rail visible (visibility visible)', rail2.found && rail2.visibility === 'visible', JSON.stringify(rail2));
+
+// SB13 — hover rail (→ hover aside) → peek: aside mở rộng tạm + labels hiện lại.
+// Peek giờ là CSS :hover trên .sidebar-aside (không qua class .sidebar-peek).
+await page.evaluate(() => {
+	const rail = document.querySelector('[data-sb-rail]');
+	const r = rail.getBoundingClientRect();
+	// điểm giữa rail (nửa lòi ra ngoài content) — nằm trong box aside (mở rộng)
+	return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+}).then(async (pt) => {
+	await page.mouse.move(pt.x, pt.y);
+});
+await sleep(450); // transition 300ms
+const peek = await page.evaluate(() => {
+	const aside = document.querySelector('.sidebar-aside');
+	const label = document.querySelector('.sidebar-menu-button .label');
+	return {
+		width: aside.getBoundingClientRect().width,
+		collapsed: aside.classList.contains('sidebar-collapsed'),
+		labelDisplay: label ? getComputedStyle(label).display : 'n/a'
+	};
+});
+ok('SB13 hover rail → peek: aside mở rộng (~240px) + labels hiện', peek.collapsed && peek.width > 200 && peek.labelDisplay !== 'none', JSON.stringify(peek));
+
+// SB14 — chuột rời aside → thu về rail (72px, labels ẩn)
+await page.mouse.move(600, 400);
+await sleep(450);
+const unpeek = await page.evaluate(() => {
+	const aside = document.querySelector('.sidebar-aside');
+	const label = document.querySelector('.sidebar-menu-button .label');
+	return {
+		width: aside.getBoundingClientRect().width,
+		labelDisplay: label ? getComputedStyle(label).display : 'n/a'
+	};
+});
+ok('SB14 chuột rời rail → thu về collapsed (72px, labels ẩn)', unpeek.width < 100 && unpeek.labelDisplay === 'none', JSON.stringify(unpeek));
+
+// SB15 — click rail → expand (không còn collapsed)
+const railEl = await page.$('[data-sb-rail]');
+await railEl.click({ force: true });
+await sleep(450);
+const railToggled = await page.evaluate(() => {
+	const aside = document.querySelector('.sidebar-aside');
+	return { width: aside.getBoundingClientRect().width, collapsed: aside.classList.contains('sidebar-collapsed') };
+});
+ok('SB15 click rail → sidebar mở (240px, không collapsed)', !railToggled.collapsed && railToggled.width > 200, JSON.stringify(railToggled));
 
 // SB10 — footer user
 const footer = await page.evaluate(() => {

@@ -22,8 +22,11 @@ await page.waitForSelector('.sidebar-aside', { timeout: 20000 });
 await sleep(500);
 await page.screenshot({ path: `${OUT}/01-sidebar-open.png`, fullPage: false });
 
-// 02: collapsed (bấm trigger)
+// 02: collapsed (bấm trigger) — sau click, chuột vẫn nằm trên trigger (trong
+// sidebar) → CSS :hover peek giữ sidebar mở 240px. Di chuột ra vùng content để
+// peek rơi về đúng collapsed 72px trước khi chụp.
 await page.click('.sidebar-trigger');
+await page.mouse.move(600, 400);
 await sleep(450);
 await page.screenshot({ path: `${OUT}/02-sidebar-collapsed.png`, fullPage: false });
 
@@ -49,6 +52,17 @@ await page.goto('https://localhost:3000/ui/separator', { waitUntil: 'domcontentl
 await page.waitForSelector('.separator-root', { timeout: 20000 });
 await sleep(300);
 await page.screenshot({ path: `${OUT}/06-separator.png`, fullPage: true });
+
+// 07: rail peek (desktop: collapsed + hover quai → sidebar mở rộng tạm)
+await page.goto('https://localhost:3000/ui/sidebar', { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('.sidebar-aside', { timeout: 20000 });
+await sleep(300);
+await page.click('.sidebar-trigger'); // collapse
+await sleep(450);
+// Quai 16px dán mép phải aside (72px), lòi ra 8px → hover giữa (x=72)
+await page.mouse.move(72, 400);
+await sleep(450); // transition peek 300ms
+await page.screenshot({ path: `${OUT}/07-rail-peek.png`, fullPage: false });
 
 await browser.close();
 console.log('Screenshots →', OUT);

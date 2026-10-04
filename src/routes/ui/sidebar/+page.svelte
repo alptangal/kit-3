@@ -120,6 +120,9 @@
 					</div>
 				</div>
 			</Sidebar.Footer>
+
+			<!-- Quai: hiện khi sidebar ẩn (collapsed/offcanvas), hover → peek mở rộng tạm -->
+			<Sidebar.Rail />
 		</Sidebar>
 
 		<Sidebar.Inset>
@@ -133,7 +136,9 @@
 				<p class="inset-desc">
 					Provider giữ <code>open / collapsed / isMobile</code> + Symbol context.
 					Trigger (góc header) collapse rail về icon (collapsible="icon").
-					Độ rộng 240px ↔ 72px. Mobile (≤768px) tự offcanvas + overlay.
+					Độ rộng 240px ↔ 72px. <code>Sidebar.Rail</code> (quai mép phải) hiện
+					khi sidebar ẩn: hover → peek mở rộng tạm, tap → toggle.
+					Mobile (≤768px) tự offcanvas + overlay.
 				</p>
 
 				<section class="demo-block">
@@ -145,7 +150,8 @@
 						<li><code>Sidebar.Header / Content / Footer</code></li>
 						<li><code>Sidebar.Group / GroupLabel / Menu / MenuItem</code></li>
 						<li><code>Sidebar.MenuButton</code> — href→<code>&lt;a&gt;</code>, active→aria-current</li>
-						<li><code>Sidebar.MenuBadge / Trigger</code></li>
+						<li><code>Sidebar.MenuBadge / Trigger / Rail</code></li>
+						<li><code>Sidebar.Rail</code> — quai cạnh mép: sidebar ẩn → hiện; hover → peek</li>
 					</ul>
 				</section>
 
@@ -248,6 +254,82 @@
 			white-space: nowrap;
 			overflow: hidden;
 			text-overflow: ellipsis;
+		}
+	}
+
+	/* COLLAPSED (icon rail 72px): component Sidebar chỉ ẩn label menu; nội dung
+	   PAGE nạp vào slot (brand / TeamSwitcher / footer user) phải tự ẩn text,
+	   giữ lại icon/avatar và căn giữa — tránh chữ tràn ra ngoài rail.
+	   (Mô hình shadcn: user bọc text trong `.text` để CSS sidebar ẩn khi collapse.)
+	   PEEK (hover aside) → hiện lại. */
+	:global(.sidebar-aside.sidebar-collapsed) {
+		.brand {
+			flex: none;
+
+			.brand-name {
+				display: none;
+			}
+		}
+
+		.switcher {
+			:global(.ts-name),
+			:global(.ts-chevron) {
+				display: none;
+			}
+
+			:global(.dropdown-menu-trigger) {
+				width: auto;
+				justify-content: center;
+				margin-inline: auto;
+			}
+		}
+
+		.footer-user {
+			width: auto;
+			margin-inline: auto;
+			justify-content: center;
+		}
+
+		.footer-meta {
+			display: none;
+		}
+	}
+
+	/* PEEK: hover khi collapsed → trở lại layout đầy đủ (đồng bộ với rule
+	   .sidebar-collapsed:hover của _styles.scss cho label menu). */
+	:global(.sidebar-aside.sidebar-collapsed:hover) {
+		.brand {
+			flex: 1;
+
+			.brand-name {
+				display: block;
+			}
+		}
+
+		.switcher {
+			:global(.ts-name) {
+				display: block;
+			}
+
+			:global(.ts-chevron) {
+				display: inline-flex;
+			}
+
+			:global(.dropdown-menu-trigger) {
+				width: 100%;
+				justify-content: flex-start;
+				margin-inline: 0;
+			}
+		}
+
+		.footer-user {
+			width: 100%;
+			margin-inline: 0;
+			justify-content: flex-start;
+		}
+
+		.footer-meta {
+			display: flex;
 		}
 	}
 

@@ -11,13 +11,14 @@ export const NavigationMenu = Object.assign(NavigationMainRoot, {
 export { default as Breadcrumb } from './breadcrumb/Main.svelte'
 export type { BreadcrumbProps, BreadcrumbConfigs, BreadcrumbItem } from './breadcrumb/_interface'
 
-export { Sidebar, getSidebarContext, setSidebarContext } from './sidebar'
+export { Sidebar, SidebarRail, getSidebarContext, setSidebarContext } from './sidebar'
 export type {
   SidebarProps,
   SidebarProviderProps,
   SidebarConfigs,
   SidebarState,
-  SidebarCollapsible
+  SidebarCollapsible,
+  SidebarRailProps
 } from './sidebar'
 
 export { default as TeamSwitcher } from './team-switcher/TeamSwitcher.svelte'

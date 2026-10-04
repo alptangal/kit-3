@@ -27,10 +27,16 @@ export interface SidebarConfigs extends BasicConfigs {
 	setCollapsed: (v: boolean) => void;
 	toggle: () => void;
 	toggleMobile: () => void;
+	/** rail click: mobile → mở; desktop icon → toggle collapse; offcanvas → toggle */
+	railToggle: () => void;
 	/** true nếu đang ở chế độ offcanvas (mobile hoặc desktop offcanvas open) */
 	readonly isOffcanvasActive: boolean;
-	/** class root động (desktop vs mobile vs icon vs offcanvas) */
+	/** true nếu sidebar đang ẨN trên desktop (rail hiển thị — hover peek là CSS :hover) */
+	readonly peekActive: boolean;
+	/** class root động (desktop vs mobile vs icon vs offcanvas vs peek) */
 	readonly sidebarClass: string;
+	/** class rail (visible khi sidebar ẩn, desktop) */
+	readonly railClass: string;
 }
 
 export interface SidebarProviderProps extends BasicProps {
@@ -83,4 +89,10 @@ export interface SidebarMenuBadgeProps extends BasicProps {
 }
 
 export interface SidebarTriggerProps extends BasicProps {
+}
+
+export interface SidebarRailProps extends BasicProps {
+	/** aria-label (mặc định "Toggle sidebar") */
+	'aria-label'?: string;
+	onclick?: (e: MouseEvent) => void;
 }

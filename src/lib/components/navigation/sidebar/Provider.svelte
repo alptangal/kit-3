@@ -18,6 +18,19 @@
 	let open = $state(false);
 	let collapsed = $state(false);
 	let isMobile = $state(false);
+	// peekActive = sidebar ĐANG ẨN trên DESKTOP → rail hiển thị (railClass):
+	// offcanvas closed / icon collapsed. (Hiệu ứng "peek" mở rộng tạm giờ là CSS
+	// :hover trên .sidebar-aside, không qua state — xem _styles.scss.)
+	// Mobile: rail không thấy (child của aside offcanvas, ra ngoài viewport khi đóng)
+	// → false, railClass sẽ ẩn rail.
+	// Function cục bộ (KHÔNG phải getter trong object configs — getter gọi
+	// SIBLING getter bằng tên trần → TS "Cannot find name" + ReferenceError).
+	function peekActive() {
+		if (isMobile) return false;
+		if (collapsibleResolved === 'offcanvas') return !open;
+		if (collapsibleResolved === 'icon') return collapsed;
+		return false;
+	}
 
 	$effect(() => {
 		const mq = window.matchMedia('(max-width: 768px)');
@@ -61,16 +74,34 @@
 		toggleMobile() {
 			open = !open;
 		},
+		railToggle() {
+			// mobile: rail như trigger (mở overlay). Desktop: collapse/expand.
+			if (isMobile) open = !open;
+			else collapsed = !collapsed;
+		},
 		get isOffcanvasActive() {
 			return isMobile || (collapsibleResolved === 'offcanvas' && open);
+		},
+		get peekActive() {
+			// true khi sidebar đang ẨN trên desktop (offcanvas closed / icon
+			// collapsed) → rail hiển thị. Hover "peek" giờ là CSS :hover trên aside
+			// (không qua state này). Mobile/none → false (rail ẩn).
+			return peekActive();
 		},
 		get sidebarClass() {
 			const base = 'sidebar-aside';
 			if (isMobile) return `${base} sidebar-mobile ${open ? 'sidebar-open' : ''}`;
-			if (collapsibleResolved === 'offcanvas')
-				return `${base} ${open ? 'sidebar-offcanvas-open' : 'sidebar-offcanvas'}`;
+			if (collapsibleResolved === 'offcanvas') {
+				const cls = open ? 'sidebar-offcanvas-open' : 'sidebar-offcanvas';
+				return `${base} ${cls}`;
+			}
 			if (collapsibleResolved === 'icon' && collapsed) return `${base} sidebar-collapsed`;
 			return base;
+		},
+		get railClass() {
+			const cls = ['sidebar-rail'];
+			if (!isMobile && !peekActive()) cls.push('sidebar-rail-hidden');
+			return cls.join(' ');
 		}
 	});
 
