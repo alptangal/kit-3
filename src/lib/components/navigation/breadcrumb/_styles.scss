@@ -1,0 +1,75 @@
+// src/lib/components/navigation/breadcrumb/_styles.scss
+// Breadcrumb — nav hạng. Token: --foreground, --muted, --border, --primary.
+
+.breadcrumb-root {
+	--breadcrumb-font: 0.875rem;
+	display: block;
+	font-size: var(--breadcrumb-font);
+	color: var(--muted, var(--foreground));
+
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+		pointer-events: none;
+	}
+}
+
+.breadcrumb-list {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.breadcrumb-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	min-width: 0;
+
+	&--current {
+		.breadcrumb-label {
+			color: var(--foreground, currentcolor);
+			font-weight: 500;
+		}
+	}
+}
+
+.breadcrumb-sep {
+	width: 0.875rem;
+	height: 0.875rem;
+	flex-shrink: 0;
+	color: var(--muted, var(--foreground));
+	opacity: 0.6;
+}
+
+.breadcrumb-link {
+	color: var(--muted, var(--foreground));
+	text-decoration: none;
+	line-height: 1.4;
+	padding: 0.125rem 0;
+	border-radius: var(--border-radius-sm, 0.25rem);
+	transition: color var(--transition-duration, 300ms) cubic-bezier(0.16, 1, 0.3, 1);
+
+	@media (hover: hover) and (pointer: fine) {
+		&:hover {
+			color: var(--foreground, currentcolor);
+			text-decoration: underline;
+		}
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--color-indigo-500, var(--focus, hsl(212 100% 46%)));
+		outline-offset: 2px;
+		border-radius: var(--border-radius-sm, 0.25rem);
+	}
+}
+
+.breadcrumb-label {
+	color: var(--foreground, currentcolor);
+	font-weight: 500;
+	line-height: 1.4;
+	padding: 0.125rem 0;
+}

@@ -7,3 +7,15 @@ export const NavigationMenu = Object.assign(NavigationMainRoot, {
   center: NavigationMainCenter,
   right:NavigationMainRight
 })
+
+export { default as Breadcrumb } from './breadcrumb/Main.svelte'
+export type { BreadcrumbProps, BreadcrumbConfigs, BreadcrumbItem } from './breadcrumb/_interface'
+
+export { Sidebar, getSidebarContext, setSidebarContext } from './sidebar'
+export type {
+  SidebarProps,
+  SidebarProviderProps,
+  SidebarConfigs,
+  SidebarState,
+  SidebarCollapsible
+} from './sidebar'

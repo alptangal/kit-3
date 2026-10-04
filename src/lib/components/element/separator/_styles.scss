@@ -1,0 +1,27 @@
+// src/lib/components/element/separator/_styles.scss
+// Separator — horizontal (vạch ngang, chia block dọc) / vertical (vạch đứng, chia hàng ngang).
+// Chạy qua token: --border, --disabled-opacity. Không hardcode màu.
+
+.separator-root {
+	flex-shrink: 0;
+	background: var(--border, hsl(0 0% 88%));
+	transition: background var(--transition-duration, 300ms) cubic-bezier(0.16, 1, 0.3, 1);
+
+	@media (prefers-color-scheme: dark) {
+		background: var(--border, hsl(0 0% 24%));
+	}
+
+	&.horizontal {
+		height: var(--separator-thickness, 1px);
+		width: 100%;
+	}
+
+	&.vertical {
+		width: var(--separator-thickness, 1px);
+		height: 100%;
+	}
+
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+	}
+}

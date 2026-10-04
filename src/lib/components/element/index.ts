@@ -36,5 +36,8 @@ export { default as Icon } from './icon/Main.svelte';
 export { default as Image } from './image/Main.svelte';
 export type { ImageProps, ImageConfigs, ImageRatio, ImageObjectFit, ImageLoadState } from './image/_interface';
 
+export { default as Separator } from './separator/Main.svelte';
+export type { SeparatorProps, SeparatorConfigs, SeparatorOrientation } from './separator/_interface';
+
 export { Loading };
 export { default as Skeleton } from './skeleton/Main.svelte';
