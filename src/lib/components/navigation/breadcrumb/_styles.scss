@@ -43,6 +43,28 @@
 	flex-shrink: 0;
 	color: var(--muted, var(--foreground));
 	opacity: 0.6;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+
+	svg {
+		width: 100%;
+		height: 100%;
+	}
+}
+
+/* Separator là string (vd '→', '/') — font inline, center */
+.breadcrumb-sep--text {
+	line-height: 1;
+	font-size: var(--breadcrumb-font);
+}
+
+/* Icon trước label của item (iconify) */
+.breadcrumb-item-icon {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	color: var(--muted, var(--foreground));
 }
 
 .breadcrumb-link {
@@ -72,4 +94,31 @@
 	font-weight: 500;
 	line-height: 1.4;
 	padding: 0.125rem 0;
+}
+
+/* Nút "…" (ellipsis) — là DropdownMenu.Trigger (component riêng, root button mang
+   hash của nó) → ghi đè kích thước xuống cỡ breadcrumb bằng :global()
+   (scoped CSS breadcrumb không reach button đó). */
+:global(.breadcrumb-ellipsis-trigger) {
+	min-height: 0;
+	padding: 0.125rem 0.375rem;
+	margin: 0;
+	gap: 0;
+	font-size: var(--breadcrumb-font);
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--muted, var(--foreground));
+	background: transparent;
+	border: 0;
+	border-radius: var(--border-radius-sm, 0.25rem);
+	transition: color var(--transition-duration, 300ms) cubic-bezier(0.16, 1, 0.3, 1),
+		background-color var(--transition-duration, 300ms) cubic-bezier(0.16, 1, 0.3, 1);
+
+	@media (hover: hover) and (pointer: fine) {
+		&:not(.disabled):hover,
+		&.open {
+			color: var(--foreground, currentcolor);
+			background-color: var(--content2, hsl(240 4.8% 96%));
+		}
+	}
 }

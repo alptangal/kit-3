@@ -1,7 +1,7 @@
 <!-- src/routes/ui/breadcrumb/+page.svelte -->
 <script lang="ts">
 	import { Breadcrumb } from '$components/navigation';
-	import { Separator } from '$components/element';
+	import { Icon, Separator } from '$components/element';
 </script>
 
 <div class="page" data-test="breadcrumb-demo">
@@ -12,14 +12,15 @@
 		<p class="demo-hint">
 			Trang này là <code>/ui/breadcrumb</code> → breadcrumb sinh: Trang chủ › UI › Breadcrumb.
 			Item cuối (<strong>Breadcrumb</strong>) là <code>aria-current="page"</code>, không link.
+			<em>Fix P2:</em> separator giờ render TRƯỚC cả item current.
 		</p>
 		<Breadcrumb />
 	</section>
 
 	<Separator />
 
-	<section class="demo">
-		<h2>Custom items (i18n label + external link)</h2>
+	<section class="demo" data-test="bc-custom">
+		<h2>Custom items (i18n + external link)</h2>
 		<Breadcrumb
 			items={[
 				{ label: { en: 'Home', vi: 'Trang chủ' }, href: '/' },
@@ -35,14 +36,72 @@
 
 	<Separator />
 
-	<section class="demo">
-		<h2>Độ sâu 4 hạng</h2>
+	<section class="demo" data-test="bc-icon">
+		<h2>Icon + description (Tooltip)</h2>
 		<Breadcrumb
 			items={[
-				{ label: { en: 'Home', vi: 'Trang chủ' }, href: '/' },
-				{ label: 'Cấu hình', href: '/config' },
-				{ label: 'Bảo mật', href: '/config/security' },
-				{ label: 'Mật khẩu' }
+				{ label: 'Trang chủ', href: '/', icon: 'lucide:home' },
+				{
+					label: 'Dự án',
+					href: '/projects',
+					icon: 'lucide:briefcase',
+					description: 'Quản lý danh mục dự án'
+				},
+				{ label: 'Nhiệm vụ', href: '/projects/tasks', icon: 'lucide:check-square' },
+				{ label: 'TASK-42', icon: 'lucide:flag', description: 'Mô tả hiện trong Tooltip khi hover' }
+			]}
+		/>
+		<p class="demo-hint">
+			Mỗi item có <code>icon</code> (iconify) + <code>description</code> — description hiện
+			Tooltip khi hover. Hover item "Dự án" hoặc "TASK-42" để thấy.
+		</p>
+	</section>
+
+	<Separator />
+
+	<section class="demo" data-test="bc-separator">
+		<h2>Tùy biến separator (string + Snippet)</h2>
+		<p class="demo-hint">Global separator là chuỗi <code>/</code>:</p>
+		<Breadcrumb
+			separator="/"
+			items={[
+				{ label: 'Trang chủ', href: '/' },
+				{ label: 'Hồ sơ', href: '/profile' },
+				{ label: 'Thiết lập' }
+			]}
+		/>
+		<p class="demo-hint">Separator per-item (item 2 dùng chevron icon, ghi đè global):</p>
+		{#snippet chevronSep()}
+			<Icon icon="lucide:chevron-right" class="bc-cust-sep" />
+		{/snippet}
+		<Breadcrumb
+			separator="→"
+			items={[
+				{ label: 'Trang chủ', href: '/' },
+				{ label: 'Hồ sơ', href: '/profile', separator: chevronSep },
+				{ label: 'Thiết lập' }
+			]}
+		/>
+	</section>
+
+	<Separator />
+
+	<section class="demo" data-test="bc-ellipsis">
+		<h2>Ellipsis (maxItems) — thu gọn hạng giữa</h2>
+		<p class="demo-hint">
+			7 hạng nhưng <code>maxItems={3}</code> → giữ hạng đầu + hạng cuối, gộp 4 hạng giữa
+			thành nút <code>…</code>. Bấm <code>…</code> để mở menu chọn hạng trung gian.
+		</p>
+		<Breadcrumb
+			maxItems={3}
+			items={[
+				{ label: 'Trang chủ', href: '/', icon: 'lucide:home' },
+				{ label: 'Khu vực', href: '/region' },
+				{ label: 'Tổ chức', href: '/region/org' },
+				{ label: 'Nhóm', href: '/region/org/team' },
+				{ label: 'Dự án', href: '/region/org/team/project' },
+				{ label: 'Lượt chạy', href: '/region/org/team/project/run' },
+				{ label: 'build-1287' }
 			]}
 		/>
 	</section>
@@ -83,6 +142,13 @@
 		color: var(--muted, var(--foreground));
 		line-height: 1.5;
 		margin: 0;
+	}
+
+	/* Icon trong separator per-item — render trong component Icon (hash riêng) → :global */
+	:global(.bc-cust-sep) {
+		display: inline-flex;
+		width: 0.875rem;
+		height: 0.875rem;
 	}
 
 	code {
