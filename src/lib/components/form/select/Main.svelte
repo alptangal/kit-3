@@ -1,6 +1,6 @@
 <script lang="ts">
 	//$components/form/select/Main.svelte
-	import { styleSynced, measureTextWidth } from '$modules';
+	import { styleSynced, measureTextWidth, matchSegments, queryMatchesText } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { Icon, Tag, Tooltip } from '$components/element';
 	import { Modal } from '$components/modal';
@@ -211,88 +211,9 @@
 	// (Create-option dedup bên dưới dùng foldSearch = NFD+lowercase GIỮ dấu — so khớp exact.)
 	const foldSearch = (s: string): string => s.normalize('NFD').toLowerCase();
 
-	// Token = { base (chữ gốc, lowercase), marks (chuỗi dấu combining), orig (index gốc) }.
-	// Mỗi ký tự original giải NFD thành base + các dấu combining; orig giữ index gốc để
-	// slice text đúng vị trí khi highlight (1 token ≙ 1 ký tự original).
-	const tokenize = (text: string): { base: string; marks: string; orig: number }[] => {
-		const tokens: { base: string; marks: string; orig: number }[] = [];
-		for (let i = 0; i < text.length; i++) {
-			const nfd = text[i].normalize('NFD');
-			let marks = '';
-			for (let k = 1; k < nfd.length; k++) {
-				const code = nfd.codePointAt(k)!;
-				if (code >= 0x0300 && code <= 0x036f) marks += nfd[k]; // chỉ lấy dấu combining
-			}
-			tokens.push({ base: nfd[0].toLowerCase(), marks, orig: i });
-		}
-		return tokens;
-	};
-
-	// Hai token khớp không (NHẠY DẤU). Query token KHÔNG dấu (marks='') → wildcard dấu
-	// (khớp mọi biến thể dấu của cùng chữ gốc). Query token CÓ dấu → bắt buộc đúng dấu đó.
-	const tokensMatch = (q: { base: string; marks: string }, t: { base: string; marks: string }): boolean => {
-		if (q.base !== t.base) return false;
-		if (q.marks === '') return true;
-		return q.marks === t.marks;
-	};
-
-	// Tìm mọi vị trí khớp (query) trong text (dãy token). Trả về [start, end) theo index
-	// ORIGINAL của text (để slice). Loại bỏ trùng lặp overlap (giữ match bắt đầu sớm nhất).
-	const findMatches = (
-		textTokens: { base: string; marks: string; orig: number }[],
-		queryTokens: { base: string; marks: string; orig: number }[]
-	): [number, number][] => {
-		const m = queryTokens.length;
-		if (m === 0) return [];
-		const raw: [number, number][] = [];
-		for (let i = 0; i + m <= textTokens.length; i++) {
-			let ok = true;
-			for (let k = 0; k < m; k++) {
-				if (!tokensMatch(queryTokens[k], textTokens[i + k])) {
-					ok = false;
-					break;
-				}
-			}
-			if (ok) raw.push([textTokens[i].orig, textTokens[i + m - 1].orig + 1]);
-		}
-		const merged: [number, number][] = [];
-		let lastEnd = -1;
-		for (const [s, e] of raw) {
-			if (s >= lastEnd) {
-				merged.push([s, e]);
-				lastEnd = e;
-			}
-		}
-		return merged;
-	};
-
-	// queryMatchesText: text (label/description) có chứa query (nhạy dấu) không?
-	const queryMatchesText = (text: string, query: string): boolean => {
-		const q = query.trim();
-		if (!text || !q) return false;
-		return findMatches(tokenize(text), tokenize(q)).length > 0;
-	};
-
-	/**
-	 * Chia text thành các đoạn { text, isMatch } theo query (nhạy dấu + case-insensitive).
-	 * Query rỗng → 1 đoạn duy nhất (isMatch=false).
-	 * Dùng để highlight label/description option theo ô search (in-primary, không nền).
-	 */
-	const matchSegments = (text: string, query: string): { text: string; isMatch: boolean }[] => {
-		const q = query.trim();
-		if (!text || !q) return [{ text, isMatch: false }];
-		const matches = findMatches(tokenize(text), tokenize(q));
-		if (matches.length === 0) return [{ text, isMatch: false }];
-		const segments: { text: string; isMatch: boolean }[] = [];
-		let cursor = 0;
-		for (const [start, end] of matches) {
-			if (start > cursor) segments.push({ text: text.slice(cursor, start), isMatch: false });
-			segments.push({ text: text.slice(start, end), isMatch: true });
-			cursor = end;
-		}
-		if (cursor < text.length) segments.push({ text: text.slice(cursor), isMatch: false });
-		return segments;
-	};
+	// queryMatchesText / matchSegments: import từ $modules/highlight (engine NFD-token
+	// nhạy dấu, dùng chung với Sidebar P3 — token matcher + segment chop theo index original).
+	// foldSearch bên dưới (dedup create-option) vẫn giữ cục bộ: NFD+lowercase GIỮ dấu.
 
 	// Filtered options: local filter (query) HOẶC toàn bộ khi remote search đang chạy
 	// (kết quả remote sẽ merge vào allOptions khi loadOptions resolve)

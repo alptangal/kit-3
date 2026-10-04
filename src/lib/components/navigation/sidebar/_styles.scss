@@ -11,6 +11,10 @@
 	--sidebar-width: 240px;
 	--sidebar-collapsed-width: 72px;
 	--sb-width: var(--sidebar-width);
+	/* P3: duration animation "streaming label" (mở rộng từ icon rail) */
+	--sb-label-reveal-duration: 500ms;
+	/* P3: duration mở rộng chiều cao/width item rail (square → full) */
+	--sb-rail-settle-duration: 200ms;
 	position: sticky;
 	top: 0;
 	height: 100dvh;
@@ -89,13 +93,20 @@
 
 	:global(.sidebar-group-label),
 	:global(.sidebar-menu-button .label),
-	:global(.sidebar-menu-button .trailing) {
+	:global(.sidebar-menu-button .trailing),
+	:global(.sidebar-menu-group__label),
+	:global(.sidebar-menu-group__badge) {
 		display: none;
 	}
 
-	:global(.sidebar-menu-button) {
+	:global(.sidebar-menu-button),
+	:global(.sidebar-menu-group__trigger) {
 		justify-content: center;
 		padding-inline: 0;
+		/* P3: item SQUARE (nền 72px rail − padding header/content 24px = 48px
+		   → 48×48) cho cân đối, đúng nguyên tắc "rail chỉ có icon". */
+		aspect-ratio: 1 / 1;
+		min-height: 0;
 	}
 }
 
@@ -109,13 +120,85 @@
 
 	:global(.sidebar-group-label),
 	:global(.sidebar-menu-button .label),
-	:global(.sidebar-menu-button .trailing) {
+	:global(.sidebar-menu-button .trailing),
+	:global(.sidebar-menu-group__label),
+	:global(.sidebar-menu-group__badge) {
 		display: block;
 	}
 
-	:global(.sidebar-menu-button) {
+	:global(.sidebar-menu-button),
+	:global(.sidebar-menu-group__trigger) {
 		justify-content: flex-start;
 		padding-inline: 0.75rem;
+		/* P3: peek (hover) → quay lại layout full (không còn square). */
+		aspect-ratio: auto;
+		min-height: 2.25rem;
+	}
+}
+
+/* P3: LOGO ẨN khi collapsed (prop hideLogoWhenCollapsed, desktop) — demo CSS
+   ẩn `.brand` (TOÀN BỘ, display:none) để header chỉ còn trigger → trigger căn
+   CHUẨN tâm rail (x = 36px), cùng trục với icon menu (square 48×48, icon tâm
+   item = tâm rail). Nếu chỉ ẩn icon+name (brand còn box rỗng), flex gap của
+   header lệch trigger khỏi tâm → menu không thẳng hàng trục Y. */
+.sidebar-aside.sidebar-collapsed.sidebar-logo-hidden {
+	:global(.brand) {
+		display: none;
+	}
+
+	:global(.sidebar-header) {
+		justify-content: center;
+	}
+}
+
+/* PEEK khi logo ẨN: hover → brand hiện lại (layout full). */
+.sidebar-aside.sidebar-collapsed.sidebar-logo-hidden:hover {
+	:global(.brand) {
+		display: flex;
+	}
+
+	:global(.sidebar-header) {
+		justify-content: flex-start;
+	}
+}
+
+/* ── P3: STREAMING LABEL — animation "streaming text" (giống chat AI) khi label
+   menu hiện về sau khi user expand từ icon rail. Class .sidebar-label-anim do
+   Sidebar.svelte set 1 lần (~500ms) khi collapsed → false (desktop). Label
+   "trôi" vào từ TRÁI (clip-path inset co dần) + nhòe nhẹ → rõ (opacity),
+   duration = --sb-label-reveal-duration (500ms, ease-out). Chạy MỘT LẦN
+   (animation-fill-mode: forwards; class tự gỡ khi hết flag). */
+.sidebar-aside.sidebar-label-anim {
+	:global(.sidebar-menu-button .label),
+	:global(.sidebar-menu-group__label) {
+		animation: sb-label-stream var(--sb-label-reveal-duration, 500ms) ease-out both;
+	}
+
+	/* Badge/group-label stream chậm hơn chút (cascade "typing" theo hàng). */
+	:global(.sidebar-group-label) {
+		animation: sb-label-stream calc(var(--sb-label-reveal-duration, 500ms) * 0.8) ease-out both;
+	}
+}
+
+@keyframes sb-label-stream {
+	from {
+		clip-path: inset(0 100% 0 0);
+		opacity: 0.35;
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+		opacity: 1;
+	}
+}
+
+/* Tôn trọng prefers-reduced-motion: bỏ animation streaming (label hiện ngay). */
+@media (prefers-reduced-motion: reduce) {
+	.sidebar-aside.sidebar-label-anim {
+		:global(.sidebar-menu-button .label),
+		:global(.sidebar-menu-group__label),
+		:global(.sidebar-group-label) {
+			animation: none;
+		}
 	}
 }
 

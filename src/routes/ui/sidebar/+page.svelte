@@ -11,13 +11,26 @@
 	];
 	let team = $state('acme');
 
-	// Demo Sidebar (shadcn sidebar-07): Provider (state + context) + Sidebar (aside)
-	// + Inset (main). collapsible="icon" → trigger collapse rail. Mobile (<=768px)
-	// tự chuyển offcanvas (Provider đọc matchMedia).
+	// P3: tùy chọn rail (điều khiển props của Sidebar.Provider, reactive).
+	//  - hideLogo: ẩn LOGO (brand) khi thu gọn → menu Y-align chuẩn (default true).
+	//  - animMode: animation "streaming label" khi expand (on/off/auto; auto = PC
+	//    bật + mobile tắt + tôn trọng prefers-reduced-motion).
+	let hideLogo = $state(true);
+	let animMode = $state<'on' | 'off' | 'auto'>('auto');
+
+	// Demo Sidebar (shadcn sidebar-07 + P2 hoàn thiện):
+	//  - collapsible="icon" → trigger collapse rail (240 ↔ 72px, hover peek)
+	//  - P2: handle resize width (desktop, kéo chuột / phím mũi tên, persist
+	//    localStorage 'sidebar-width', clamp 200–480)
+	//  - P2: Sidebar.Search (ô tìm kiếm đầu Content) → filter item theo
+	//    `match`, group tự mở (auto-expand), group/con không khớp tự ẩn
+	//  - P2: MenuButton icon (iconify) + description (Tooltip khi hover)
+	//  - P2: MenuGroup đệ quy — "Báo cáo" → "Kênh bán" (2 cấp, lồng snippet)
+	//  - Mobile (<=768px) tự chuyển offcanvas (Provider đọc matchMedia)
 </script>
 
 <div class="page" data-test="sidebar-demo">
-	<Sidebar.Provider collapsible="icon">
+	<Sidebar.Provider collapsible="icon" hideLogoWhenCollapsed={hideLogo} animation={animMode}>
 		<Sidebar>
 			<Sidebar.Header>
 				<div class="brand" data-test="sb-brand">
@@ -37,75 +50,76 @@
 					<TeamSwitcher {teams} bind:value={team} aria-label="Chọn team" />
 				</div>
 
-				<Sidebar.Group>
+				<!-- P2: ô tìm kiếm menu (Input sẵn có, filter theo `match`) -->
+				<div class="sb-search">
+					<Sidebar.Search placeholder={{ en: 'Search menu…', vi: 'Tìm kiếm menu…' }} />
+				</div>
+
+				<Sidebar.Group id="main">
 					<Sidebar.GroupLabel>Chính</Sidebar.GroupLabel>
 					<Sidebar.Menu>
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton href="/ui/sidebar" active>
-								{#snippet leading()}
-									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-										<rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
-										<rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
-										<rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
-										<rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
-									</svg>
-								{/snippet}
-								Đashboard
-							</Sidebar.MenuButton>
+						<Sidebar.MenuItem match="dashboard overview home">
+							<Sidebar.MenuButton
+								label="Đashboard"
+								href="/ui/sidebar"
+								active
+								icon="lucide:layout-dashboard"
+								description={{ en: 'Overview of your store', vi: 'Tổng quan cửa hàng' }}
+							/>
 						</Sidebar.MenuItem>
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton href="/ui/select">
-								{#snippet leading()}
-									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-										<path d="M6 2v2m12-2v2M9 6h6M7 12h10M7 16h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-									</svg>
-								{/snippet}
-								Đơn hàng
+						<Sidebar.MenuItem match="orders order đơn hàng cart">
+							<Sidebar.MenuButton label="Đơn hàng" href="/ui/select" icon="lucide:shopping-cart"
+								description={{ en: 'Manage incoming orders', vi: 'Quản lý đơn hàng vào' }}>
 								{#snippet badge()}
 									<Sidebar.MenuBadge>12</Sidebar.MenuBadge>
 								{/snippet}
 							</Sidebar.MenuButton>
 						</Sidebar.MenuItem>
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton href="/ui/table">
-								{#snippet leading()}
-									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-										<circle cx="9" cy="9" r="5" stroke="currentColor" stroke-width="1.5" />
-										<path d="m16 16 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-									</svg>
-								{/snippet}
-								Sản phẩm
-							</Sidebar.MenuButton>
+						<Sidebar.MenuItem match="products inventory sản phẩm kho">
+							<Sidebar.MenuButton label="Sản phẩm" href="/ui/table" icon="lucide:package"
+								description={{ en: 'Products & inventory', vi: 'Sản phẩm và kho' }} />
 						</Sidebar.MenuItem>
+
+						<!-- P2: MenuGroup đệ quy — <li> con trực tiếp của <ul>
+						     (Sidebar.Menu), cùng cấp MenuItem. Submenu tự render
+						     <ul> riêng. Lồng MenuGroup "Kênh bán" (cấp 2). -->
+						<Sidebar.MenuGroup
+							id="reports"
+							label="Báo cáo"
+							icon="lucide:bar-chart-3"
+						>
+							<Sidebar.MenuItem match="sales doanh thu revenue">
+								<Sidebar.MenuButton label="Doanh thu" href="/ui/table" icon="lucide:line-chart" />
+							</Sidebar.MenuItem>
+							<Sidebar.MenuItem match="inventory kho tồn kho">
+								<Sidebar.MenuButton label="Tồn kho" href="/ui/table" icon="lucide:boxes" />
+							</Sidebar.MenuItem>
+							<Sidebar.MenuGroup id="channels" label="Kênh bán" icon="lucide:globe">
+								<Sidebar.MenuItem match="website website online">
+									<Sidebar.MenuButton label="Website" href="/ui/table" />
+								</Sidebar.MenuItem>
+								<Sidebar.MenuItem match="shopee marketplace sàn">
+									<Sidebar.MenuButton label="Shopee" href="/ui/table" />
+								</Sidebar.MenuItem>
+								<Sidebar.MenuItem match="tiktok tiktok">
+									<Sidebar.MenuButton label="TikTok" href="/ui/table" />
+								</Sidebar.MenuItem>
+							</Sidebar.MenuGroup>
+						</Sidebar.MenuGroup>
 					</Sidebar.Menu>
 				</Sidebar.Group>
 
 				<Separator decorative />
 
-				<Sidebar.Group>
+				<Sidebar.Group id="settings">
 					<Sidebar.GroupLabel>Cấu hình</Sidebar.GroupLabel>
 					<Sidebar.Menu>
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton href="/ui/input">
-								{#snippet leading()}
-									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-										<circle cx="9" cy="8" r="3.5" stroke="currentColor" stroke-width="1.5" />
-										<path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-									</svg>
-								{/snippet}
-								Người dùng
-							</Sidebar.MenuButton>
+						<Sidebar.MenuItem match="users users người dùng account">
+							<Sidebar.MenuButton label="Người dùng" href="/ui/input" icon="lucide:users"
+								description={{ en: 'Manage user accounts', vi: 'Quản lý tài khoản người dùng' }} />
 						</Sidebar.MenuItem>
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton disabled>
-								{#snippet leading()}
-									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-										<circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5" />
-										<path d="M8 12h8" stroke="currentColor" stroke-width="1.5" />
-									</svg>
-								{/snippet}
-								Ngừng hoạt động
-							</Sidebar.MenuButton>
+						<Sidebar.MenuItem match="disabled suspended ngừng hoạt động">
+							<Sidebar.MenuButton label="Ngừng hoạt động" disabled icon="lucide:circle-minus" />
 						</Sidebar.MenuItem>
 					</Sidebar.Menu>
 				</Sidebar.Group>
@@ -132,26 +146,76 @@
 			</div>
 			<Separator decorative />
 			<div class="inset-body">
-				<h1 class="inset-title">Sidebar · shadcn sidebar-07</h1>
+				<h1 class="inset-title">Sidebar · shadcn sidebar-07 + P2</h1>
 				<p class="inset-desc">
-					Provider giữ <code>open / collapsed / isMobile</code> + Symbol context.
-					Trigger (góc header) collapse rail về icon (collapsible="icon").
+					Provider giữ <code>open / collapsed / isMobile / width / searchQuery</code>
+					+ Symbol context. Trigger (góc header) collapse rail về icon (collapsible="icon").
 					Độ rộng 240px ↔ 72px. <code>Sidebar.Rail</code> (quai mép phải) hiện
 					khi sidebar ẩn: hover → peek mở rộng tạm, tap → toggle.
 					Mobile (≤768px) tự offcanvas + overlay.
 				</p>
+				<p class="inset-desc">
+					<b>P2</b>: kéo handle mép phải đổi độ rộng (clamp 200–480, persist
+					<code>localStorage['sidebar-width']</code>, phím ← → ±16px khi focus).
+					Ô tìm kiếm filter item theo <code>match</code>, group tự mở/khép.
+					MenuGroup đệ quy ("Báo cáo" → "Kênh bán", lồng không giới hạn cấp).
+					MenuItem có <code>icon</code> (iconify) + <code>description</code>
+					(Tooltip khi hover, chỉ desktop + sidebar mở).
+				</p>
+
+				<!-- P3: điều khiển rail (ẩn logo + animation streaming label) -->
+				<section class="demo-block" data-test="sb-p3-controls">
+					<h2>Rail (thu gọn) — P3</h2>
+					<p class="inset-desc">
+						Bấm trigger góc header để thu gọn về icon rail (72px), rồi chỉnh:
+					</p>
+					<div class="p3-row">
+						<label class="p3-toggle">
+							<input
+								type="checkbox"
+								checked={hideLogo}
+								onchange={(e) => (hideLogo = e.currentTarget.checked)}
+								data-test="sb-hide-logo"
+							/>
+							<span>Ẩn LOGO khi thu gọn</span>
+							<small>Off → giữ logo; On → menu item căn thẳng trục Y</small>
+						</label>
+					</div>
+					<div class="p3-row">
+						<span class="p3-label">Animation label (khi mở rộng)</span>
+						<div class="p3-seg" role="group" data-test="sb-anim-seg">
+							{#each (['auto', 'on', 'off'] as const) as mode (mode)}
+								<button
+									type="button"
+									class:p3-on={animMode === mode}
+									aria-pressed={animMode === mode}
+									onclick={() => (animMode = mode)}
+									data-test="sb-anim-{mode}"
+								>
+									{mode}
+								</button>
+							{/each}
+						</div>
+						<small class="p3-hint">
+							auto = PC bật + mobile tắt + tôn trọng reduced-motion
+						</small>
+					</div>
+				</section>
 
 				<section class="demo-block">
 					<h2>Thành phần</h2>
 					<ul class="part-list">
-						<li><code>Sidebar.Provider</code> — state + context (matchMedia 768px)</li>
+						<li><code>Sidebar.Provider</code> — state + context (matchMedia 768px, width resize)</li>
 						<li><code>Sidebar</code> — <code>&lt;aside&gt;</code> sticky 100dvh</li>
 						<li><code>Sidebar.Inset</code> — main content (flex:1)</li>
 						<li><code>Sidebar.Header / Content / Footer</code></li>
 						<li><code>Sidebar.Group / GroupLabel / Menu / MenuItem</code></li>
-						<li><code>Sidebar.MenuButton</code> — href→<code>&lt;a&gt;</code>, active→aria-current</li>
+						<li><code>Sidebar.MenuButton</code> — href→<code>&lt;a&gt;</code>, active→aria-current, icon + description</li>
+						<li><code>Sidebar.MenuGroup</code> — nút cha + submenu đệ quy (lồng không giới hạn)</li>
 						<li><code>Sidebar.MenuBadge / Trigger / Rail</code></li>
 						<li><code>Sidebar.Rail</code> — quai cạnh mép: sidebar ẩn → hiện; hover → peek</li>
+						<li><code>Sidebar.Search</code> — tìm kiếm menu (Input, filter + auto-expand)</li>
+						<li><code>Sidebar.ResizeHandle</code> — kéo width (pointer capture, persist localStorage)</li>
 					</ul>
 				</section>
 
@@ -214,6 +278,13 @@
 		}
 	}
 
+	/* P2: ô tìm kiếm — padding bám hệ thống (đồng bộ switcher/group) */
+	.sb-search {
+		width: 100%;
+		padding: 0 0.75rem;
+		margin-bottom: 0.5rem;
+	}
+
 	/* Footer user */
 	.footer-user {
 		display: flex;
@@ -258,10 +329,11 @@
 	}
 
 	/* COLLAPSED (icon rail 72px): component Sidebar chỉ ẩn label menu; nội dung
-	   PAGE nạp vào slot (brand / TeamSwitcher / footer user) phải tự ẩn text,
-	   giữ lại icon/avatar và căn giữa — tránh chữ tràn ra ngoài rail.
+	   PAGE nạp vào slot (brand / TeamSwitcher / search / footer user) phải tự ẩn
+	   text, giữ lại icon/avatar và căn giữa — tránh chữ tràn ra ngoài rail.
 	   (Mô hình shadcn: user bọc text trong `.text` để CSS sidebar ẩn khi collapse.)
-	   PEEK (hover aside) → hiện lại. */
+	   PEEK (hover aside) → hiện lại. Search: rail hẹp (72px) không đủ chỗ →
+	   ẩn cả ô, hiện lại khi peek. */
 	:global(.sidebar-aside.sidebar-collapsed) {
 		.brand {
 			flex: none;
@@ -272,16 +344,34 @@
 		}
 
 		.switcher {
+			/* P3: bỏ padding ngang (0.75rem) khi rail → trigger 48px cùng cột
+			   với menu button (cũng 48px) → hover-background + avatar nhất quán. */
+			padding-inline: 0;
+
 			:global(.ts-name),
 			:global(.ts-chevron) {
 				display: none;
 			}
 
-			:global(.dropdown-menu-trigger) {
-				width: auto;
-				justify-content: center;
-				margin-inline: auto;
+			/* P3: CĂN CHUẨN tâm rail. Root cause: .team-switcher/.dropdown-menu-trigger
+			   là inline-flex (inline-level) → `margin-inline: auto` VÔ HIỆU, avatar
+			   dính lề trái → lệch khỏi tâm rail (x=36). Ép width 100% (block) +
+			   justify-content center → avatar 1.5rem căn đúng tâm 72px rail, thẳng
+			   trục Y với icon menu. */
+			:global(.team-switcher) {
+				display: block;
+				width: 100%;
 			}
+
+			:global(.dropdown-menu-trigger) {
+				width: 100%;
+				justify-content: center;
+			}
+		}
+
+		/* Rail 72px: ô search không đủ chỗ → ẩn hẳn (peek sẽ hiện lại) */
+		.sb-search {
+			display: none;
 		}
 
 		.footer-user {
@@ -354,6 +444,13 @@
 		font-size: 0.875rem;
 		line-height: 1.6;
 		margin: 0 0 1.5rem;
+
+		code {
+			font-size: 0.8125rem;
+			background: var(--content2, hsl(240 4.76% 95.88%));
+			padding: 0.125rem 0.375rem;
+			border-radius: var(--border-radius-sm, 0.25rem);
+		}
 	}
 
 	.demo-block {
@@ -364,6 +461,76 @@
 			font-weight: 600;
 			color: var(--foreground);
 			margin: 0 0 0.75rem;
+		}
+	}
+
+	/* P3: panel điều khiển rail (ẩn logo + animation mode) */
+	.p3-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+
+		.p3-label {
+			font-size: 0.875rem;
+			color: var(--foreground);
+			min-width: 11rem;
+		}
+
+		.p3-hint {
+			font-size: 0.75rem;
+			color: var(--muted, var(--foreground));
+		}
+	}
+
+	.p3-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--foreground);
+		cursor: pointer;
+
+		input[type='checkbox'] {
+			width: 1rem;
+			height: 1rem;
+			accent-color: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
+			cursor: pointer;
+		}
+
+		small {
+			color: var(--muted, var(--foreground));
+		}
+	}
+
+	/* Segmented control (auto/on/off) — style bám design system (content2 + primary) */
+	.p3-seg {
+		display: inline-flex;
+		border: 1px solid var(--border, hsl(0 0% 88%));
+		border-radius: var(--border-radius-sm, 0.375rem);
+		overflow: hidden;
+
+		@media (prefers-color-scheme: dark) {
+			border-color: var(--border, hsl(0 0% 24%));
+		}
+
+		button {
+			padding: 0.25rem 0.75rem;
+			font-size: 0.8125rem;
+			color: var(--foreground);
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			transition: background-color var(--transition-duration, 150ms) ease;
+
+			&:not(:first-child) {
+				border-left: 1px solid var(--border, hsl(0 0% 88%));
+			}
+
+			&.p3-on {
+				background: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
+				color: var(--background, #fff);
+			}
 		}
 	}
 
@@ -386,13 +553,6 @@
 			padding: 0.125rem 0.375rem;
 			border-radius: var(--border-radius-sm, 0.25rem);
 		}
-	}
-
-	code {
-		font-size: 0.8125rem;
-		background: var(--content2, hsl(240 4.76% 95.88%));
-		padding: 0.125rem 0.375rem;
-		border-radius: var(--border-radius-sm, 0.25rem);
 	}
 
 	@media (prefers-color-scheme: dark) {

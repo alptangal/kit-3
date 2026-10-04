@@ -2,6 +2,9 @@ import type { DistanceUnits, TimeUnits } from '$components/interface';
 import type { Browser } from '$interfaces/basic';
 import type { ServerResponse } from '$interfaces/basic';
 import { client, profile } from '$store/basic.svelte';
+import { matchSegments, queryMatchesText, type TextSegment } from './highlight';
+
+export { matchSegments, queryMatchesText, type TextSegment };
 
 export async function copyToClipboard(content: string) {
 	try {
