@@ -54,6 +54,11 @@ export type {
 export { Loading };
 export { default as Skeleton } from './skeleton/Main.svelte';
 
+export { default as Spinner } from './spinner/Main.svelte';
+export type { SpinnerProps, SpinnerConfigs, SpinnerPattern, SpinnerSize } from './spinner/_interface';
+export { default as Progress } from './progress/Main.svelte';
+export type { ProgressProps, ProgressConfigs, ProgressSize } from './progress/_interface';
+
 export { ContextMenu, getContextMenuContext } from './context-menu/index.ts';
 export type {
 	ContextMenuSide,

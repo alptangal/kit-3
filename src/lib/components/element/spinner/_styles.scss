@@ -1,0 +1,152 @@
+// $components/element/spinner/_styles.scss
+// Spinner — state display (4 pattern, thuần CSS keyframes, KHÔNG canvas).
+// ĐO LƯỜNG NẶN TRÊN VARS: --spinner-size (theo size-*) + --spinner-duration (inline từ duration).
+// Màu: --color do class color-* (hệ token semantic, colors.scss) set trên root → mọi phần tử dùng currentColor.
+// Safari 15: KHÔNG dùng color-mix() → track opacity dùng opacity trên ring (giữ shape ring).
+
+.spinner-root {
+	--spinner-size: 24px; // fallback md
+	--spinner-duration: 900ms;
+	position: relative;
+	display: inline-block;
+	width: var(--spinner-size);
+	height: var(--spinner-size);
+	color: var(--color);
+	flex-shrink: 0;
+	vertical-align: middle;
+
+	/* ── Size map (đồ họa, riêng token — KHÔNG dùng size-* chung của hệ) ── */
+	&.size-xs { --spinner-size: 14px; }
+	&.size-sm { --spinner-size: 18px; }
+	&.size-md { --spinner-size: 24px; }
+	&.size-lg { --spinner-size: 32px; }
+
+	/* ── Circle: track 2px (color 25% opacity, static) + arc 90° (currentColor) rotate ── */
+	.spinner-ring {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border: 2px solid currentColor;
+		border-radius: 50%;
+		opacity: 0.25;
+	}
+	.spinner-arc {
+		display: block;
+		position: absolute;
+		inset: 0;
+		border: 2px solid transparent;
+		border-top-color: currentColor;
+		border-right-color: currentColor;
+		border-radius: 50%;
+		animation: spinner-rotate var(--spinner-duration) linear infinite;
+	}
+
+	/* ── Dots: 3 chấm (30% size), pulse opacity/scale, stagger = duration/6 ── */
+	.spinner-dot {
+		position: absolute;
+		top: 50%;
+		width: calc(var(--spinner-size) * 0.3);
+		height: calc(var(--spinner-size) * 0.3);
+		margin-top: calc(var(--spinner-size) * -0.15);
+		border-radius: 50%;
+		background: currentColor;
+		animation: spinner-pulse var(--spinner-duration) ease-in-out infinite;
+		&:nth-child(1) { left: 0; animation-delay: calc(var(--spinner-duration) / 6); }
+		&:nth-child(2) {
+			left: 50%;
+			margin-left: calc(var(--spinner-size) * -0.15);
+			animation-delay: calc(var(--spinner-duration) / 6 * 2);
+		}
+		&:nth-child(3) { right: 0; animation-delay: calc(var(--spinner-duration) / 6 * 3); }
+	}
+
+	/* ── Bars: 3 thanh đứng (width 2px), scaleY 0.4→1→0.4, stagger ── */
+	--spinner-bar-gap: calc(var(--spinner-size) * 0.18);
+	.spinner-bar {
+		position: absolute;
+		top: 0;
+		left: 50%;
+		width: 2px;
+		margin-left: -1px;
+		height: 100%;
+		background: currentColor;
+		transform: scaleY(0.4);
+		animation: spinner-bar-grow var(--spinner-duration) ease-in-out infinite;
+		&:nth-child(1) {
+			margin-left: calc(-1px - var(--spinner-bar-gap));
+			animation-delay: calc(var(--spinner-duration) / 6);
+		}
+		&:nth-child(3) {
+			margin-left: var(--spinner-bar-gap);
+			animation-delay: calc(var(--spinner-duration) / 6 * 2);
+		}
+	}
+
+	/* ── Square: 1 vuông (border 2px, radius 2px), rotate + opacity 1→0.5 ── */
+	.spinner-square {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border: 2px solid currentColor;
+		border-radius: 2px;
+		animation:
+			spinner-rotate var(--spinner-duration) linear infinite,
+			spinner-fade var(--spinner-duration) ease-in-out infinite;
+	}
+
+	/* ── SR-only label (khi có label → role="status") ── */
+	.spinner-sr {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+		border: 0;
+	}
+}
+
+@keyframes spinner-rotate {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+@keyframes spinner-pulse {
+	0%, 100% { opacity: 0.25; transform: scale(0.7); }
+	50% { opacity: 1; transform: scale(1); }
+}
+@keyframes spinner-bar-grow {
+	0%, 100% { transform: scaleY(0.4); }
+	50% { transform: scaleY(1); }
+}
+@keyframes spinner-fade {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.5; }
+}
+
+/* ── Reduced motion: tắt animation, giữ trạng thái tĩnh ── */
+@media (prefers-reduced-motion: reduce) {
+	.spinner-root {
+		.spinner-ring {
+			opacity: 0.4;
+		}
+		.spinner-arc {
+			animation: none;
+			opacity: 0.7;
+		}
+		.spinner-dot {
+			animation: none;
+			opacity: 0.7;
+			transform: scale(1);
+		}
+		.spinner-bar {
+			animation: none;
+			transform: scaleY(1);
+		}
+		.spinner-square {
+			animation: none;
+			opacity: 0.7;
+		}
+	}
+}
