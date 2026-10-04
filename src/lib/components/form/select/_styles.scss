@@ -688,11 +688,12 @@
 	}
 }
 
-/* ── Avatar (ảnh option) + mô tả phụ ── */
+/* ── Avatar (ảnh option) + icon (iconify) + mô tả phụ ── */
 .select-option__media {
 	flex-shrink: 0;
 	display: inline-flex;
 	align-items: center;
+	gap: 0.375rem;
 }
 .select-option__image {
 	width: 1.75rem;
@@ -701,6 +702,22 @@
 	object-fit: cover;
 	display: block;
 	background: var(--color-gray-100, #f1f5f9);
+}
+/* Icon (iconify) — root của <Icon> mang hash của Icon.svelte → :global().
+   svg của @iconify/svelte render với inline `width/height: 1em` (không override
+   được bằng CSS) → điều khiển KÍCH THƯỚC qua font-size trên root Icon.
+   Cụ thể hơn `.icon` (0,1,0) → thắng cascade không phụ thuộc thứ tự file. */
+.select-option__media :global(.select-option__icon) {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	color: var(--color-gray-500, #64748b);
+	font-size: 1.25rem; /* svg 1em = 20px — cân với avatar 1.75rem */
+}
+
+/* Trigger (single selected): icon-chọn nhỏ hơn, bám chiều cao trigger. */
+.select-trigger__avatar :global(.select-trigger__rich-icon) {
+	font-size: 1rem; /* svg 1em = 16px */
 }
 .select-option__text {
 	flex: 1;

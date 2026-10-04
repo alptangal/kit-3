@@ -173,6 +173,16 @@
 	];
 	let richValue = $state('');
 
+	// ── Demo: Icon options (iconify + description) ──
+	const iconOptions: SelectOption[] = [
+		{ value: 'web', label: 'Web App', icon: 'lucide:monitor', description: 'Frontend SvelteKit' },
+		{ value: 'api', label: 'API Service', icon: 'lucide:server', description: 'REST + WebSocket' },
+		{ value: 'mobile', label: 'Mobile', icon: 'lucide:smartphone', description: 'React Native' },
+		{ value: 'data', label: 'Data Pipeline', icon: 'lucide:database', description: 'ETL + streaming' },
+		{ value: 'legacy', label: 'Legacy', icon: 'lucide:archive', description: 'Đã ngừng bảo trì', disabled: true }
+	];
+	let iconValue = $state('');
+
 	// ── Demo: Required + Label sync (đồng bộ asterisk/màu/for-id) ──
 	let requiredValue = $state('');
 
@@ -589,6 +599,21 @@
 		<Select bind:value={richValue} options={avatarOptions} searchable clearable />
 		<p style="margin-top: 1rem; font-size: 0.875rem; color: #666;">
 			Selected: <code>{richValue || '(none)'}</code>
+		</p>
+	</section>
+
+	<!-- Icon Options (iconify + description) -->
+	<section style="margin-bottom: 3rem;" data-test="select-icon-options">
+		<h2>Icon Options (iconify + description)</h2>
+		<p style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">
+			Mỗi option có <code>icon</code> (iconify) bên trái + <code>description</code> phụ dưới label.
+			Chọn option → trigger hiện icon kèm label.
+		</p>
+		<div style="width: 16rem;">
+			<Select bind:value={iconValue} options={iconOptions} searchable clearable />
+		</div>
+		<p style="margin-top: 1rem; font-size: 0.875rem; color: #666;">
+			Selected: <code>{iconValue || '(none)'}</code>
 		</p>
 	</section>
 

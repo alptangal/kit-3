@@ -2,7 +2,7 @@
 	//$components/form/select/Main.svelte
 	import { styleSynced, measureTextWidth } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
-	import { Tag, Tooltip } from '$components/element';
+	import { Icon, Tag, Tooltip } from '$components/element';
 	import { Modal } from '$components/modal';
 	import { client } from '$store/basic.svelte';
 	import { onDestroy, onMount, untrack, type SvelteComponent } from 'svelte';
@@ -1547,17 +1547,26 @@
 					/>
 				{/each}
 			{:else if displayValueDerived}
-				<!-- (M2) Rich option: circle avatar + label trong trigger (single
-				     có option.image) — reuse .select-option__media/__image -->
-				{#if selectedSingleOptionDerived?.image}
+				<!-- (M2) Rich option: icon (iconify) / circle avatar + label trong
+				     trigger (single có option.icon/image) — reuse
+				     .select-option__media/__icon/__image -->
+				{#if selectedSingleOptionDerived?.icon || selectedSingleOptionDerived?.image}
 					<span class="select-trigger__selected">
 						<span class="select-option__media select-trigger__avatar" aria-hidden="true">
-							<img
-								class="select-option__image"
-								src={selectedSingleOptionDerived.image}
-								alt=""
-								loading="lazy"
-							/>
+							{#if selectedSingleOptionDerived.icon}
+								<Icon
+									icon={selectedSingleOptionDerived.icon}
+									class="select-option__icon select-trigger__rich-icon"
+								/>
+							{/if}
+							{#if selectedSingleOptionDerived.image}
+								<img
+									class="select-option__image"
+									src={selectedSingleOptionDerived.image}
+									alt=""
+									loading="lazy"
+								/>
+							{/if}
 						</span>
 						<span class="select-trigger__selected-label">{displayValueDerived}</span>
 					</span>
@@ -1875,9 +1884,17 @@
 									{/if}
 								</span>
 							{/if}
-							{#if opt.image}
+							{#if opt.icon || opt.image}
+								<!-- (M) Rich option: icon (iconify) và/or image (circle avatar)
+								     bên trái label. Icon component mang hash riêng → CSS
+								     đặt trong _styles.scss qua :global(). -->
 								<span class="select-option__media" aria-hidden="true">
-									<img class="select-option__image" src={opt.image} alt="" loading="lazy" />
+									{#if opt.icon}
+										<Icon icon={opt.icon} class="select-option__icon" />
+									{/if}
+									{#if opt.image}
+										<img class="select-option__image" src={opt.image} alt="" loading="lazy" />
+									{/if}
 								</span>
 							{/if}
 							<span class="select-option__text">

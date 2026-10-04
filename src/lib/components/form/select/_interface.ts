@@ -17,6 +17,8 @@ export interface SelectOption {
 	label: string;
 	disabled?: boolean;
 	group?: string;
+	/** Icon (iconify) — render bên trái option (ưu tiên hơn image nếu cả hai có). */
+	icon?: string;
 	/** Ảnh đại diện (URL/asset) — render dạng circle avatar bên trái option. */
 	image?: string;
 	/** Dòng mô tả phụ bên dưới label. */
