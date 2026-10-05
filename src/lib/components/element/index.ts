@@ -139,3 +139,12 @@ export type {
 	CardFooterProps,
 	CardActionProps
 } from './card/_interface';
+export { Avatar, getAvatarContext, setAvatarContext } from './avatar/index.ts';
+export type {
+	AvatarLoadState,
+	AvatarShape,
+	AvatarProps,
+	AvatarConfigs,
+	AvatarImageProps,
+	AvatarFallbackProps
+} from './avatar/_interface';

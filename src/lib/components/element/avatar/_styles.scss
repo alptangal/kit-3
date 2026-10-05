@@ -1,0 +1,12 @@
+// $components/element/avatar/_styles.scss
+// Map size → px (Size→px trực tiếp vì --avatar-size là "đường kính", không thuộc
+// bộ token size-* chung của hệ (font/min-height)). px là tham số design cố định
+// của spec (xs 24 / sm 32 / md 40 / lg 48 / xl 64), không phải màu/đo UI tự do.
+@function avatar-size-px($size) {
+	@if $size == 'xs' { @return 24px; }
+	@else if $size == 'sm' { @return 32px; }
+	@else if $size == 'md' { @return 40px; }
+	@else if $size == 'lg' { @return 48px; }
+	@else if $size == 'xl' { @return 64px; }
+	@else { @return 40px; } // 2xl+ clamp về md
+}
