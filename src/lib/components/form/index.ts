@@ -27,3 +27,6 @@ export type { TextareaProps, TextareaConfigs } from './textarea';
 
 export { Slider, setSliderContext, getSliderContext } from './slider';
 export type { SliderProps, SliderConfigs } from './slider';
+
+export { InputOtp, setInputOtpContext, getInputOtpContext } from './input-otp';
+export type { InputOtpProps, InputOtpConfigs, OtpType } from './input-otp';
