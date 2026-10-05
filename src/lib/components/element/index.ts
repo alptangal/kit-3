@@ -160,3 +160,10 @@ export type {
 	ChartScale,
 	ChartPoint
 } from './chart/index.ts';
+export { DatePicker, getDatePickerContext, setDatePickerContext } from './date-picker/index.ts';
+export type {
+	DatePickerConfigs,
+	DatePickerRootProps,
+	DatePickerTriggerProps,
+	DatePickerContentProps
+} from './date-picker/_interface';
