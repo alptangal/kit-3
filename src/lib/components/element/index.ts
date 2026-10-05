@@ -61,6 +61,16 @@ export type { ProgressProps, ProgressConfigs, ProgressSize } from './progress/_i
 
 export { Badge } from './badge';
 export type { BadgeConfigs, BadgeProps, BadgeVariant } from './badge';
+export { Accordion, getAccordionContext, getAccordionItemContext } from './accordion/index.ts';
+export type {
+	AccordionConfigs,
+	AccordionContentProps,
+	AccordionHeaderProps,
+	AccordionItemProps,
+	AccordionRootProps,
+	AccordionTriggerProps,
+	AccordionType
+} from './accordion/_interface';
 export { Tabs, getTabsContext } from './tabs/index.ts';
 export type {
 	TabsActivation,
