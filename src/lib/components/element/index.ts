@@ -150,3 +150,13 @@ export type {
 } from './avatar/_interface';
 export { Pagination } from './pagination/index.ts';
 export type { PaginationProps, PaginationConfigs, PaginationEntry } from './pagination/_interface';
+export { Chart } from './chart/index.ts';
+export type {
+	ChartType,
+	ChartDatum,
+	ChartSeries,
+	ChartProps,
+	ChartConfigs,
+	ChartScale,
+	ChartPoint
+} from './chart/index.ts';
