@@ -112,3 +112,18 @@ export type {
 	ContextMenuLabelProps,
 	ContextMenuSeparatorProps
 } from './context-menu/_interface';
+
+export { AlertDialog, getAlertDialogContext } from './alert-dialog/index.ts';
+export type {
+	AlertDialogActionColor,
+	AlertDialogActionProps,
+	AlertDialogCancelProps,
+	AlertDialogConfigs,
+	AlertDialogContentProps,
+	AlertDialogDescriptionProps,
+	AlertDialogFooterProps,
+	AlertDialogHeaderProps,
+	AlertDialogRootProps,
+	AlertDialogTitleProps,
+	AlertDialogTriggerProps
+} from './alert-dialog/_interface';
