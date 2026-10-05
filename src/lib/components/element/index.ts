@@ -63,6 +63,13 @@ export { Badge } from './badge';
 export type { BadgeConfigs, BadgeProps, BadgeVariant } from './badge';
 export { Kbd } from './kbd';
 export type { KbdConfigs, KbdComboConfigs, KbdComboProps, KbdProps, KbdVariant } from './kbd';
+export { HoverCard, getHoverCardContext } from './hover-card/index.ts';
+export type {
+	HoverCardConfigs,
+	HoverCardRootProps,
+	HoverCardTriggerProps,
+	HoverCardContentProps
+} from './hover-card/_interface';
 
 export { ContextMenu, getContextMenuContext } from './context-menu/index.ts';
 export type {
