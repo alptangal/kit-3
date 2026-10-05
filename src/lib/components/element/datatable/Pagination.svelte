@@ -81,7 +81,6 @@
 		gap: 0.5rem;
 		font-size: 0.8125rem;
 		color: var(--muted, #71717a);
-		cursor: pointer;
 	}
 
 	.datatable-pagesize-select {
@@ -93,7 +92,7 @@
 		background: var(--content1, #fff);
 		border: 1px solid var(--content3, hsl(240 5.88% 90%));
 		border-radius: var(--border-radius-sm, 0.375rem);
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		@include dt.focus-ring;
 	}
 
@@ -115,12 +114,12 @@
 		background: transparent;
 		border: 1px solid var(--content3, hsl(240 5.88% 90%));
 		border-radius: var(--border-radius-sm, 0.375rem);
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		transition: background-color 150ms ease, opacity 150ms ease;
 
 		&:disabled {
 			opacity: var(--disabled-opacity, 0.5);
-			cursor: not-allowed;
+			cursor: var(--cursor-disabled);
 		}
 
 		@media (hover: hover) and (pointer: fine) {

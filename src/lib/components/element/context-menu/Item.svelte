@@ -73,7 +73,7 @@
 		background: transparent;
 		border: 0;
 		border-radius: var(--border-radius-sm, 0.25rem);
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		text-align: left;
 		transition: background-color var(--transition-duration, 150ms) ease;
 
@@ -122,7 +122,7 @@
 
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
-			cursor: not-allowed;
+			cursor: var(--cursor-disabled);
 			pointer-events: none;
 		}
 	}

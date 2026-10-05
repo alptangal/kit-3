@@ -49,7 +49,7 @@
 		border: 0;
 		border-radius: var(--border-radius-md, 0.5rem) 0 0 var(--border-radius-md, 0.5rem);
 		background: transparent;
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		z-index: 1001;
 		transition:
 			background-color var(--transition-duration, 300ms) ease,

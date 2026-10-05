@@ -203,7 +203,7 @@
 		font-weight: 500;
 		color: var(--content2-foreground, var(--foreground));
 		text-decoration: none;
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		background: transparent;
 		border: 0;
 		text-align: left;

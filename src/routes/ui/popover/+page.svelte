@@ -108,6 +108,25 @@
 		</div>
 	</section>
 
+	<section class="demo" data-test="pv-disabled">
+		<h2>Disabled (trigger bị vô hiệu)</h2>
+		<p class="demo-hint">
+			Trigger disabled → click không mở (guard JS) + cursor not-allowed (CSS `.disabled`).
+		</p>
+		<div class="row">
+			<Popover>
+				<Popover.Trigger disabled>
+					<button class="demo-btn" data-test="pv-disabled-trigger-btn">
+						Thiết lập (bị khóa)
+					</button>
+				</Popover.Trigger>
+				<Popover.Content aria-label="Disabled content">
+					<span>Không thể mở khi trigger disabled.</span>
+				</Popover.Content>
+			</Popover>
+		</div>
+	</section>
+
 	<section class="demo" data-test="pv-controlled">
 		<h2>Controlled (bind:open)</h2>
 		<p class="demo-hint">Nút ngoài mở/đóng bằng state — panel không tự quản lý open.</p>

@@ -58,6 +58,7 @@
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
 			pointer-events: none;
+			cursor: var(--cursor-disabled, not-allowed);
 		}
 	}
 </style>

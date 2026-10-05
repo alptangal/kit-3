@@ -27,6 +27,8 @@ export interface TabsConfigs extends BasicConfigs {
 	triggerRefs: {
 		keys(): IterableIterator<string>;
 		get(v: string): HTMLElement | undefined;
+		set(v: string, ref: HTMLElement): void;
+		delete(v: string): void;
 	};
 	/** ref tablist (List set) — Indicator ResizeObserver */
 	listEl: HTMLDivElement | undefined;

@@ -67,6 +67,7 @@ $colorRefs: (
 
 	&.disabled {
 		opacity: var(--disabled-opacity, 0.5);
+		cursor: var(--cursor-disabled, not-allowed);
 	}
 
 	/* Không có description → 1 hàng: icon + content căn giữa dọc (class JS, không :has()). */

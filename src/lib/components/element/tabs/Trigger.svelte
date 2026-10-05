@@ -112,7 +112,7 @@
 		background: transparent;
 		border: 0;
 		border-radius: var(--border-radius-full, 999px);
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		user-select: none;
 		white-space: nowrap;
 		touch-action: manipulation;
@@ -151,7 +151,7 @@
 
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
-			cursor: not-allowed;
+			cursor: var(--cursor-disabled);
 			pointer-events: none;
 		}
 

@@ -16,7 +16,11 @@
 	let configs: TooltipConfigs = $state({
 		status: {},
 		get style() {
-			const defaultStyles: (string | undefined)[] = ['tooltip-root', `size-${this.size}`];
+			const defaultStyles: (string | undefined)[] = [
+				'tooltip-root',
+				`size-${this.size}`,
+				disabled ? 'disabled' : undefined
+			];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
 		get size() {
@@ -223,6 +227,11 @@
 		min-width: 0;
 		max-width: 100%;
 		display: contents;
+		/* Disabled: tooltip tắt events (không hiện) — root (display:contents, cursor
+		   inherit) tuyên not-allowed; control con do user render giữ hành vi riêng. */
+		&.disabled {
+			cursor: var(--cursor-disabled, not-allowed);
+		}
 		:global(.tooltip-info) {
 			position: absolute;
 			bottom: 100%;

@@ -44,6 +44,7 @@
 
 	&.disabled {
 		opacity: var(--disabled-opacity, 0.5);
+		cursor: var(--cursor-disabled, not-allowed);
 	}
 
 	/* ── Variant ── */

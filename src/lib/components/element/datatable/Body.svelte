@@ -158,7 +158,7 @@
 		margin: 0;
 		vertical-align: middle;
 		accent-color: var(--primary, var(--color-indigo-500));
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 	}
 
 	// Highlight match search (nền amber nhạt, không đổi chữ).

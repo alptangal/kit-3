@@ -21,7 +21,7 @@
 	// isOpen gọi từ $derived → track value (Root) → aria-expanded reactive.
 	const open = $derived(value ? ctx?.isOpen(value) ?? false : false);
 	// disabled merge: props.disabled (component) + BasicProps.disabled
-	const isDisabled = $derived(disabled || props.disabled === true);
+	const isDisabled = $derived(disabled);
 
 	const styleDerived = $derived.by(() =>
 		styleSynced(
@@ -87,7 +87,7 @@
 		text-align: start;
 		background: transparent;
 		border: 0;
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		user-select: none;
 		touch-action: manipulation;
 
@@ -106,7 +106,7 @@
 
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
-			cursor: not-allowed;
+			cursor: var(--cursor-disabled);
 			pointer-events: none;
 		}
 

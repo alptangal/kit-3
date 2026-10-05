@@ -42,6 +42,15 @@
 	function triggerDefault() {
 		lastToast = toast.default('Thông báo chung', 'Tin nhắn không phân loại màu.');
 	}
+	// Disabled: toast ở state "vô hiệu" (cursor not-allowed qua --cursor khi .disabled).
+	// duration infinite để giữ cho probe đọc cursor.
+	function triggerDisabled() {
+		lastToast = toast.info('Toast disabled', 'State disabled — cursor not-allowed, giữ để probe.', {
+			indicator: iconify['info-i-rounded'],
+			duration: 'infinite',
+			disabled: true
+		});
+	}
 	// Nhiều toast CÙNG LÚC. Fire ở 3 position KHÁC nhau (bottom/top/right) để 3 toast
 	// đều thấy rõ, khác màu + icon — minh họa "nhiều toast đồng thời". (Compact-notch
 	// stack cùng position — toast mới to nhất che toast cũ, ló mép — đã verify bằng
@@ -105,6 +114,7 @@
 			<button class="demo-btn" data-test="toast-btn-warning" onclick={triggerWarning}>Warning</button>
 			<button class="demo-btn" data-test="toast-btn-info" onclick={triggerInfo}>Info</button>
 			<button class="demo-btn" data-test="toast-btn-default" onclick={triggerDefault}>Default</button>
+			<button class="demo-btn" data-test="toast-btn-disabled" onclick={triggerDisabled}>Disabled</button>
 			<button class="demo-btn" data-test="toast-btn-stack" onclick={triggerStack}>Nhiều cùng lúc</button>
 			<button class="demo-btn" data-test="toast-btn-remove" onclick={removeLast}>Xóa (last)</button>
 		</div>

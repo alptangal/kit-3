@@ -101,7 +101,7 @@
 		background: var(--background, #fff);
 		border: 1px solid var(--border, hsl(240 5.9% 90%));
 		border-radius: var(--border-radius-md, 0.375rem);
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		user-select: none;
 		touch-action: manipulation;
 		transition: border-color var(--transition-duration, 150ms) ease,
@@ -140,7 +140,7 @@
 
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
-			cursor: not-allowed;
+			cursor: var(--cursor-disabled);
 			pointer-events: none;
 		}
 

@@ -86,6 +86,25 @@
 
 	<Separator />
 
+	<section class="demo" data-test="bc-disabled">
+		<h2>Disabled (whole nav)</h2>
+		<p class="demo-hint">
+			Root <code>disabled</code> → khóa toàn nav: opacity giảm,
+			<code>cursor: var(--cursor-disabled)</code> (probe P0),
+			<code>pointer-events: none</code> giữ nguyên.
+		</p>
+		<Breadcrumb
+			disabled
+			items={[
+				{ label: 'Trang chủ', href: '/' },
+				{ label: 'UI', href: '/ui' },
+				{ label: 'Breadcrumb' }
+			]}
+		/>
+	</section>
+
+	<Separator />
+
 	<section class="demo" data-test="bc-ellipsis">
 		<h2>Ellipsis (maxItems) — thu gọn hạng giữa</h2>
 		<p class="demo-hint">

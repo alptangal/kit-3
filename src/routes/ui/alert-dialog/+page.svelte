@@ -11,6 +11,9 @@
 
 	// (b) — controlled bằng code (bind:open).
 	let controlledOpen = $state(false);
+
+	// (d) — disabled: trigger bị vô hiệu + action/cancel disabled khi mở.
+	let adDisabledOpen = $state(false);
 </script>
 
 <div class="page" data-test="alertdialog-demo">
@@ -75,6 +78,42 @@
 				Đóng (đóng)
 			</button>
 			<span class="state" data-test="ad-controlled-state">state: {controlledOpen ? 'mở' : 'đóng'}</span>
+		</div>
+	</section>
+
+	<!-- (d) DISABLED: trigger không click + action/cancel disabled -->
+	<section class="demo" data-test="ad-disabled">
+		<h2>Disabled (trigger / action / cancel)</h2>
+		<div class="row">
+			<AlertDialog>
+				<AlertDialog.Trigger disabled>
+					<button class="demo-btn" data-test="ad-disabled-trigger-btn">Xóa (bị khóa)</button>
+				</AlertDialog.Trigger>
+				<AlertDialog.Content>
+					<AlertDialog.Header variant="danger">
+						<AlertDialog.Title>Không mở được</AlertDialog.Title>
+					</AlertDialog.Header>
+				</AlertDialog.Content>
+			</AlertDialog>
+
+			<AlertDialog bind:open={adDisabledOpen} title="Xóa (disabled buttons)" description="Cả hai nút action/cancel đều bị vô hiệu.">
+				<AlertDialog.Content>
+					<AlertDialog.Header variant="danger">
+						<AlertDialog.Title>Nút bị khóa</AlertDialog.Title>
+					</AlertDialog.Header>
+					<AlertDialog.Footer>
+						<AlertDialog.Cancel disabled data-test="ad-disabled-cancel">Hủy</AlertDialog.Cancel>
+						<AlertDialog.Action disabled data-test="ad-disabled-action">Xóa</AlertDialog.Action>
+					</AlertDialog.Footer>
+				</AlertDialog.Content>
+			</AlertDialog>
+
+			<button class="demo-btn" data-test="ad-disabled-open" onclick={() => (adDisabledOpen = true)}>
+				Mở dialog (nút disabled)
+			</button>
+			<button class="demo-btn" data-test="ad-disabled-close" onclick={() => (adDisabledOpen = false)}>
+				Đóng
+			</button>
 		</div>
 	</section>
 

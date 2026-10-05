@@ -481,7 +481,7 @@
 		background: transparent;
 		border: 0;
 		border-radius: 50%;
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		@media (hover: hover) and (pointer: fine) {
 			&:hover {
 				background: var(--content2, hsl(240 4.76% 95.88%));

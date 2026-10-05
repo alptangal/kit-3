@@ -158,7 +158,7 @@
 		font-size: 0.875rem;
 		color: var(--content2-foreground, var(--foreground));
 		text-decoration: none;
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		background: transparent;
 		border: 0;
 		transition: background-color var(--transition-duration, 150ms) ease;
@@ -218,6 +218,7 @@
 
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
+			cursor: var(--cursor-disabled);
 			pointer-events: none;
 		}
 	}

@@ -9,6 +9,7 @@
 
 	&.disabled {
 		opacity: var(--disabled-opacity, 0.5);
+		cursor: var(--cursor-disabled);
 		pointer-events: none;
 	}
 }

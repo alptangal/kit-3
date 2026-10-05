@@ -40,7 +40,7 @@
 		border-radius: var(--border-radius-sm, 0.375rem);
 		background: transparent;
 		color: var(--muted, var(--foreground));
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		transition: background-color var(--transition-duration, 150ms) ease;
 
 		&:hover {

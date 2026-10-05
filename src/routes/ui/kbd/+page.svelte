@@ -53,6 +53,18 @@
 		</div>
 	</section>
 
+	<section class="demo" data-test="kb-disabled">
+		<h2>Disabled</h2>
+		<p class="demo-hint">opacity token --disabled-opacity + cursor not-allowed</p>
+		<div class="row">
+			<Kbd data-test="kb-disabled-key" disabled>K</Kbd>
+			<Kbd.Combo aria-label="Command K (disabled)">
+				<Kbd single disabled>⌘</Kbd>
+				<Kbd single disabled>K</Kbd>
+			</Kbd.Combo>
+		</div>
+	</section>
+
 	<section class="demo" data-test="kb-inline">
 		<h2>Inline trong câu</h2>
 		<p class="demo-hint">kbd nằm inline trong đoạn văn</p>

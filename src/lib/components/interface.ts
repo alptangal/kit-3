@@ -173,6 +173,7 @@ export interface BasicProps {
 	onLoad?: (data: MetaChildren) => void;
 	onDestroy?: (data: MetaChildren) => void;
 	name?: string;
+	'data-test'?: string;
 }
 export interface MetaChildren {
 	status?: {

@@ -132,7 +132,7 @@
 		border: 0;
 		color: inherit;
 		font: inherit;
-		cursor: pointer;
+		cursor: var(--cursor-interactive);
 		user-select: none;
 
 		&.align-left {
