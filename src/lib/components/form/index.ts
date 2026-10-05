@@ -30,3 +30,6 @@ export type { SliderProps, SliderConfigs } from './slider';
 
 export { InputOtp, setInputOtpContext, getInputOtpContext } from './input-otp';
 export type { InputOtpProps, InputOtpConfigs, OtpType } from './input-otp';
+
+export { Toggle, setToggleContext, getToggleContext } from './toggle';
+export type { ToggleProps, ToggleConfigs } from './toggle';

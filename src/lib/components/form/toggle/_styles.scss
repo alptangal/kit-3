@@ -1,94 +1,172 @@
-//$lib/components/form/toggle/_styles.scss
-// Tách style từ Toggle.svelte để đồng bộ pattern Checkbox/Input (SCSS file).
-// Giữ nguyên UI chuẩn toggle: 56×32px + transition animation (slide switch).
+// src/lib/components/form/toggle/_styles.scss
+// FORM FIELD — mọi đo lường NẰM TRÊN token size-* (KHÔNG hardcode 56×32px / #3b82f6):
+//   .toggle-root.size-* (sizes.scss global) set --min-height/--gap/--padding →
+//   track height ≈ --min-height, width ≈ 1.75×, thumb ≈ 87.5%, on-translate ≈
+//   width - thumb - 2×gap-inset (mọi size-* tự co giãn qua calc + var).
+// On-state màu SEMANTIC qua `--color` (colors.scss global set theo .color-*):
+//   .toggle-root.color-success .toggle-track.on { background: var(--color) }
+//   (analog cho error/warning/primary/secondary/info). color-default/on mặc định
+//   (khi chưa validation hoặc neutral) → var(--primary, var(--color-indigo-500))
+//   (vì .color-default set --color: var(--default) = near-black, sai màu switch).
+// Off-track → var(--content2) (token auto đảo light/dark — precedent slider).
+// Thumb → var(--background). KHÔNG :has() (es2020 + safari15) — state = class
+// JS gán (has-value/loading/disabled). Focus ring: native button :focus-visible
+// = indigo-500 offset 2px (CONTRACT §6).
+@use '$styles/sizes.scss';
+@use '$styles/colors.scss';
+
 .toggle-root {
+	// ── Geometric tokens (derive 100% từ --min-height — mỗi size-* tự co giãn) ──
+	--toggle-inset: calc(var(--min-height, 2.5rem) * 0.08333); // ≈ 1/12 track height
+	--toggle-track-height: var(--min-height, 2.5rem);
+	--toggle-track-width: calc(var(--toggle-track-height) * 1.75);
+	--toggle-thumb: calc(var(--toggle-track-height) - var(--toggle-track-height) * 0.125);
+	--toggle-thumb-stretch: 0.15; // % giãn width khi active (press)
+	// On-state color MẶC ĐỊNH (neutral / .color-default): primary (contract) —
+	// .color-* semantic ghi đè xuống --toggle-on-color bằng var(--color).
+	--toggle-on-color: var(--primary, var(--color-indigo-500));
+	--toggle-off-color: var(--content2, #e4e4e7);
+	// Thumb: token background (light #fff / dark nền tối — tự đảo theme)
+	--toggle-thumb-color: var(--background, #fff);
+	--toggle-duration: var(--duration, 300ms);
+	--toggle-ease: cubic-bezier(0.65, 0, 0.35, 1);
+
 	display: inline-flex;
 	align-items: center;
-	gap: 1rem;
-}
+	gap: var(--gap, 0.5rem);
+	cursor: var(--cursor-interactive, pointer);
+	// label text inherits --font-size từ size-* (sizes.scss)
+	font-size: var(--font-size, 1rem);
+	user-select: none;
 
-.toggle-button {
-	position: relative;
-	width: 56px;
-	height: 32px;
-	padding: 0;
-	background: transparent;
-	border: none;
-	cursor: pointer;
-	border-radius: 16px;
-	transition: all 200ms ease;
-	flex-shrink: 0;
-}
-
-.toggle-button:disabled {
-	cursor: not-allowed;
-	// Item 5: token disabled đồng bộ Button/Checkbox/Input (thay --toggle-disabled-opacity)
-	opacity: var(--disabled-opacity, 0.5);
-}
-
-// Item 6: hover chỉ áp dụng trên PC (chuẩn @media hover/pointer fine)
-@media (hover: hover) and (pointer: fine) {
-	.toggle-button:not(:disabled):hover {
-		background-color: var(--color-surface-hover, rgba(0, 0, 0, 0.04));
+	// ── Semantic on-color (colors.scss set --color theo .color-* — analog:
+	//    .toggle-root.color-success .toggle-track.on { background: var(--color) }) ──
+	&.color-primary {
+		--toggle-on-color: var(--color, var(--primary, var(--color-indigo-500)));
 	}
-}
+	&.color-info {
+		--toggle-on-color: var(--color, var(--primary, var(--color-indigo-500)));
+	}
+	&.color-success {
+		--toggle-on-color: var(--color, var(--success));
+	}
+	&.color-warning {
+		--toggle-on-color: var(--color, var(--warning));
+	}
+	&.color-error {
+		--toggle-on-color: var(--color, var(--danger));
+	}
+	&.color-secondary {
+		--toggle-on-color: var(--color, var(--secondary));
+	}
+	// .color-default (khi neutral/chưa đổi): --toggle-on-color giữ primary fallback.
 
-// Item 4: focus ring chuẩn indigo-500 + guard disabled + :focus-visible
-.toggle-button:focus-visible:not(:disabled) {
-	outline: 2px solid var(--color-indigo-500);
-	outline-offset: 2px;
-}
-
-.toggle-track {
-	position: absolute;
-	inset: 0;
-	background-color: var(--toggle-track-bg-off, #cbd5e1);
-	border-radius: 16px;
-	transition: background-color 200ms ease;
-}
-
-.toggle-button.checked .toggle-track {
-	background-color: var(--toggle-track-bg-on, #3b82f6);
-}
-
-.toggle-thumb {
-	position: absolute;
-	top: 2px;
-	left: 2px;
-	width: 28px;
-	height: 28px;
-	background-color: white;
-	border-radius: 50%;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-	transition: transform 200ms ease;
-}
-
-.toggle-button.checked .toggle-thumb {
-	transform: translateX(24px);
-}
-
-// Item 6: active (press) chỉ áp dụng trên PC (chuẩn @media hover/pointer fine)
-@media (hover: hover) and (pointer: fine) {
-	.toggle-button:active:not(:disabled) .toggle-thumb {
-		width: 32px;
+	// ── Native switch button (a11y: role=switch + aria-checked, Space/Enter native) ──
+	.toggle-switch {
+		--cursor: pointer;
+		position: relative;
+		flex: none;
+		width: var(--toggle-track-width);
+		height: var(--toggle-track-height);
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		cursor: var(--cursor, pointer);
+		// focus ring chuẩn CONTRACT §6 (native button :focus-visible)
+		&:focus-visible:not(:disabled) {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 2px;
+		}
 	}
 
-	.toggle-button.checked:active:not(:disabled) .toggle-thumb {
-		transform: translateX(20px);
+	.toggle-track {
+		position: absolute;
+		inset: 0;
+		background: var(--toggle-off-color);
+		border-radius: 9999999px;
+		transition: background-color var(--toggle-duration) var(--toggle-ease);
+
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
 	}
-}
 
-// Item 5: token disabled đồng bộ (thay 0.6 hardcode → token), giữ pointer-events (disabled-state)
-.toggle-root.disabled {
-	opacity: var(--disabled-opacity, 0.5);
-	pointer-events: none;
-}
+	.toggle-thumb {
+		position: absolute;
+		top: 50%;
+		left: var(--toggle-inset);
+		width: var(--toggle-thumb);
+		height: var(--toggle-thumb);
+		transform: translateY(-50%);
+		background: var(--toggle-thumb-color);
+		border-radius: 9999999px;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+		transition:
+			transform var(--toggle-duration) var(--toggle-ease),
+			width var(--toggle-duration) var(--toggle-ease);
 
-// Item 7: chuẩn Button — opacity 0.7 + spinner (TODO: thêm spinner nếu cần)
-.toggle-root.loading {
-	opacity: 0.7;
-}
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
+	}
 
-.toggle-content {
-	flex: 1;
+	// On-state: track màu semantic + thumb trượt phải
+	// (translate = width - thumb - 2×inset, all calc + var → không hardcode 24px)
+	.toggle-switch.has-value {
+		.toggle-track {
+			background: var(--toggle-on-color);
+		}
+		.toggle-thumb {
+			transform: translate(
+				calc(var(--toggle-track-width) - var(--toggle-thumb) - var(--toggle-inset) * 2),
+				-50%
+			);
+		}
+	}
+
+	// Micro-interaction (PC-only — mirror checkbox/button): press → thumb giãn nhẹ
+	// (width +15% off-state / +10% on-state), translate tự bù vì calc theo width.
+	@media (hover: hover) and (pointer: fine) {
+		.toggle-switch:not(:disabled):active .toggle-thumb {
+			width: calc(var(--toggle-thumb) * (1 + var(--toggle-thumb-stretch)));
+		}
+		.toggle-switch.has-value:not(:disabled):active .toggle-thumb {
+			width: calc(var(--toggle-thumb) * (1 + var(--toggle-thumb-stretch) * 0.6667));
+			transform: translate(
+				calc(
+					var(--toggle-track-width) -
+						var(--toggle-thumb) * (1 + var(--toggle-thumb-stretch) * 0.6667) -
+						var(--toggle-inset) * 2
+				),
+				-50%
+			);
+		}
+	}
+
+	// Hover (PC-only): track off-state nhả nhẹ sang default-100 (token)
+	@media (hover: hover) and (pointer: fine) {
+		.toggle-switch:not(:disabled):hover:not(.has-value) .toggle-track {
+			background: var(--default-100, var(--content2, #e4e4e7));
+		}
+	}
+
+	// ── Disabled (token opacity + not-allowed + pointer-events block) ──
+	&.disabled {
+		--cursor: not-allowed;
+		opacity: var(--disabled-opacity, 0.5);
+		pointer-events: none;
+	}
+
+	// ── Loading (opacity giảm — block qua button disabled attr) ──
+	&.loading {
+		opacity: 0.7;
+	}
+
+	// ── Label (click → toggle; EM của switch, không natively associated) ──
+	.toggle-label {
+		cursor: var(--cursor-interactive, pointer);
+		font-size: var(--font-size, 1rem);
+		line-height: var(--line-height, 1.5);
+	}
 }

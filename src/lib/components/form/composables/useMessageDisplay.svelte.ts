@@ -8,6 +8,7 @@ import { getRadioContext } from '../radiogroup/_context';
 import { getTextareaContext } from '../textarea/_context';
 import { getSliderContext } from '../slider/_context';
 import { getInputOtpContext } from '../input-otp/_context';
+import { getToggleContext } from '../toggle/_context';
 
 export interface MessageEntry {
 	content?: TranslateContent;
@@ -23,6 +24,7 @@ export function useMessageDisplay(optionsGetter: () => { showValid?: boolean; pe
 	const textareaContext = getTextareaContext();
 	const sliderContext = getSliderContext();
 	const inputOtpContext = getInputOtpContext();
+	const toggleContext = getToggleContext();
 
 	// Make options reactive using $derived.by to capture prop reactivity and avoid state_referenced_locally warnings
 	const showValid = $derived.by(() => optionsGetter().showValid ?? false);
@@ -35,7 +37,8 @@ export function useMessageDisplay(optionsGetter: () => { showValid?: boolean; pe
 			(radioContext?.validation.messages as MessagesMap | undefined) ??
 			(textareaContext?.validation.messages as MessagesMap | undefined) ??
 			(sliderContext?.validation.messages as MessagesMap | undefined) ??
-			(inputOtpContext?.validation.messages as MessagesMap | undefined)
+			(inputOtpContext?.validation.messages as MessagesMap | undefined) ??
+			(toggleContext?.validation.messages as MessagesMap | undefined)
 	);
 
 	const allWithContent = $derived.by(() => {
