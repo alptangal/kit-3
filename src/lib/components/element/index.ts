@@ -70,6 +70,15 @@ export type {
 	HoverCardTriggerProps,
 	HoverCardContentProps
 } from './hover-card/_interface';
+export { Popover, getPopoverContext } from './popover/index.ts';
+export type {
+	PopoverPosition,
+	PopoverTriggerMode,
+	PopoverConfigs,
+	PopoverRootProps,
+	PopoverTriggerProps,
+	PopoverContentProps
+} from './popover/_interface';
 
 export { ContextMenu, getContextMenuContext } from './context-menu/index.ts';
 export type {
