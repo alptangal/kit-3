@@ -21,3 +21,6 @@ export type { SelectProps, SelectConfigs, SelectOption, SelectOptionGroup } from
 
 export { RadioGroup, RadioItem } from './radiogroup/index';
 export type { RadioGroupProps, RadioGroupConfigs, RadioItemProps, RadioOrientation } from './radiogroup/index';
+
+export { Textarea, setTextareaContext, getTextareaContext } from './textarea';
+export type { TextareaProps, TextareaConfigs } from './textarea';

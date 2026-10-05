@@ -1,0 +1,126 @@
+// src/lib/components/form/textarea/_styles.scss
+// FORM FIELD — mirror input: mọi đo lường chạy qua token size-*;
+// validation color semantic (color-success/error); focus = field glow (sky + indigo shadow).
+@use '$styles/sizes.scss';
+
+.textarea-root {
+	--cursor: text;
+	--border-color: transparent;
+	--color: var(--default);
+	--background: rgba(148, 163, 184, 0.12);
+	--transition-duration: var(--duration, 300ms);
+
+	@media (prefers-color-scheme: dark) {
+		--background: rgba(63, 63, 70, 0.4);
+	}
+	@media (prefers-color-scheme: light) {
+		--background: rgba(226, 232, 240, 0.5);
+	}
+
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+
+	// ── Bảng đồng bộ Button↔Input (min-height thực tế — textarea đa dòng) ──
+	&.size-xs { --min-height: calc(var(--min-height-xs) + var(--line-height, 1.25rem)); }
+	&.size-sm { --min-height: calc(var(--min-height-sm) + var(--line-height, 1.5rem)); }
+	&.size-md,
+	&.size-lg { --min-height: calc(2.875rem + var(--line-height, 1.75rem)); }
+	&.size-xl { --min-height: calc(3.125rem + var(--line-height, 1.875rem)); }
+	&.size-2xl,
+	&.size-3xl,
+	&.size-4xl,
+	&.size-5xl,
+	&.size-6xl,
+	&.size-7xl,
+	&.size-8xl,
+	&.size-9xl { --min-height: calc(var(--font-size) * 3); }
+
+	> textarea {
+		display: block;
+		width: 100%;
+		min-height: var(--min-height);
+		padding: var(--padding, 0.5rem 0.75rem);
+		border: 1px solid var(--border-color);
+		border-radius: var(--border-radius, 0.5rem);
+		background: var(--background);
+		color: var(--foreground);
+		font-family: inherit;
+		font-size: var(--font-size);
+		line-height: var(--line-height);
+		resize: vertical;
+		cursor: var(--cursor);
+		box-sizing: border-box;
+		transition:
+			border-color var(--transition-duration) ease,
+			background-color var(--transition-duration) ease,
+			box-shadow var(--transition-duration) ease;
+
+		&::placeholder {
+			opacity: 0.5;
+		}
+
+		&:focus {
+			outline: none;
+		}
+
+		&:disabled {
+			opacity: var(--disabled-opacity, 0.5);
+			cursor: not-allowed;
+		}
+
+		&[readonly] {
+			--cursor: default;
+			cursor: var(--cursor);
+		}
+
+		// Validation border: `--border-color` set trên .textarea-root (mảng state
+		// .color-success/.color-error bên dưới) — inherit xuống textarea tự động.
+	}
+
+	// ── Validation state (màu + tint nền, mirror input .color-*) ──
+	&.color-success {
+		--color: var(--success);
+		--background: rgba(34, 197, 94, 0.08);
+		--border-color: var(--success);
+	}
+	&.color-error {
+		--color: var(--error);
+		--background: rgba(239, 68, 68, 0.08);
+		--border-color: var(--error);
+	}
+
+	// ── Focus (field glow — mirror input .focus: border sky + indigo shadow) ──
+	&.focus > textarea {
+		border-color: var(--color-sky-500);
+		@media (prefers-color-scheme: dark) {
+			box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+		}
+		@media (prefers-color-scheme: light) {
+			box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+		}
+	}
+	&.focus.color-success > textarea {
+		border-color: var(--success);
+		@media (prefers-color-scheme: dark) {
+			box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+		}
+		@media (prefers-color-scheme: light) {
+			box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+		}
+	}
+	&.focus.color-error > textarea {
+		border-color: var(--error);
+		@media (prefers-color-scheme: dark) {
+			box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+		}
+		@media (prefers-color-scheme: light) {
+			box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+		}
+	}
+
+	// ── Disabled (native :disabled đã chặn input — opacity + cursor token) ──
+	&.disabled {
+		--cursor: not-allowed;
+	}
+}
