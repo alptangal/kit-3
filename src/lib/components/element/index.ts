@@ -61,6 +61,18 @@ export type { ProgressProps, ProgressConfigs, ProgressSize } from './progress/_i
 
 export { Badge } from './badge';
 export type { BadgeConfigs, BadgeProps, BadgeVariant } from './badge';
+export { Tabs, getTabsContext } from './tabs/index.ts';
+export type {
+	TabsActivation,
+	TabsConfigs,
+	TabsContentProps,
+	TabsIndicatorProps,
+	TabsListProps,
+	TabsOrientation,
+	TabsRootProps,
+	TabsTriggerProps,
+	TabsType
+} from './tabs/_interface';
 export { Kbd } from './kbd';
 export type { KbdConfigs, KbdComboConfigs, KbdComboProps, KbdProps, KbdVariant } from './kbd';
 export { HoverCard, getHoverCardContext } from './hover-card/index.ts';

@@ -1,0 +1,53 @@
+// src/lib/components/element/tabs/_styles.scss
+// Tabs — layout root + tablist (shared qua :global vì List là sub-component riêng,
+// markup không mang scope hash của Root). type 'default' = pill container
+// (--content2, active: background + shadow sm); type 'underline' = border-bottom
+// --border + indicator line. vertical = flex row (list column, content bên phải).
+// Token: --content2/--background/--border/--primary/--box-shadow-sm — không hardcode.
+
+.tabs-root {
+	display: block;
+
+	// ── vertical: list (column) trái, content bên phải ──
+	&.vertical {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 1.5rem;
+	}
+}
+
+:global(.tabs-list) {
+	position: relative;
+	display: flex;
+	flex-direction: row;
+	gap: 0.125rem;
+
+	// ── type 'default': pill container (nền content2, rounded full) ──
+	&.type-default {
+		padding: 0.25rem;
+		background-color: var(--content2);
+		border-radius: var(--border-radius-full, 999px);
+	}
+
+	// ── type 'underline': list có border-bottom, trigger plain ──
+	&.type-underline {
+		border-bottom: 1px solid var(--border);
+	}
+
+	// vertical: list column (under cả 2 type)
+	&.vertical {
+		flex-direction: column;
+		gap: 0.375rem;
+
+		&.type-default {
+			padding: 0.375rem;
+			border-radius: var(--border-radius-lg, 0.75rem);
+		}
+
+		&.type-underline {
+			border-bottom: 0;
+			border-right: 1px solid var(--border);
+		}
+	}
+}
