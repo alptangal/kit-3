@@ -1,0 +1,168 @@
+// $components/element/badge/_styles.scss
+// Badge — pill/chip nhỏ: token size-* (font/padding/radius) + bảng variant × color
+// (copy cấu trúc @each + $colorRefs từ tag/_styles.scss — mặt hàng surface).
+// Chạy qua token: --color, --background, --border-color, --disabled-opacity.
+@use '$styles/sizes.scss';
+
+$colors: 'default', 'secondary', 'success', 'info', 'warning', 'error', 'primary';
+$colorRefs: (
+	'default': 'gray',
+	'secondary': 'cyan',
+	'success': 'green',
+	'info': 'sky',
+	'warning': 'amber',
+	'error': 'red',
+	'primary': 'indigo'
+);
+
+.badge-root {
+	--border-color: transparent;
+	--color: var(--foreground);
+	--background: transparent;
+	/* Chấm dot: size theo em (thang font-size hiện tại), bám biến --color */
+	--dot-size: 0.625em;
+	--dot-gap: 0.375em;
+
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375em;
+	max-width: 100%;
+	min-height: calc(var(--font-size, 0.875rem) * var(--line-height, 1.5));
+	padding-inline: var(--padding, 0.5rem);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius, calc(var(--radius, 0.5rem) * 0.5));
+	background: var(--background);
+	color: var(--color);
+	font-size: var(--font-size, 0.875rem);
+	font-weight: 500;
+	line-height: var(--line-height, 1.5);
+	white-space: nowrap;
+	user-select: none;
+	vertical-align: middle;
+	transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+	/* Element gốc button — bỏ default chrome, giữ focus ring control độc lập */
+	&:where(button) {
+		appearance: none;
+		font: inherit;
+		cursor: var(--cursor-interactive, pointer);
+	}
+
+	&:where(a) {
+		text-decoration: none;
+		cursor: var(--cursor-interactive, pointer);
+	}
+
+	&:where(a):focus-visible,
+	&:where(button):focus-visible {
+		outline: 2px solid var(--color-indigo-500);
+		outline-offset: 2px;
+	}
+
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+		pointer-events: none;
+	}
+
+	/* ── Chấm dot (trailing leading) ── */
+	.badge-dot {
+		flex-shrink: 0;
+		width: var(--dot-size);
+		height: var(--dot-size);
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	/* Icon (iconify): svg inline 1em → điều khiển bằng font-size em (mẫu Select) */
+	.badge-icon {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		font-size: 1.125em;
+		line-height: 1;
+	}
+
+	.badge-text {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* ── Variant × Color (bảng ánh xạ copy từ tag) ── */
+	@each $variant in 'soft', 'solid', 'outline', 'ghost' {
+		&.variant-#{$variant} {
+			@each $color, $ref in $colorRefs {
+				@if $variant == 'soft' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--color: var(--foreground);
+							@media (prefers-color-scheme: dark) {
+								--background: rgba(82, 82, 91, 0.35);
+							}
+							@media (prefers-color-scheme: light) {
+								--background: rgba(226, 232, 240, 0.7);
+							}
+						} @else {
+							--color: var(--color-#{$ref}-500);
+							@media (prefers-color-scheme: dark) {
+								--background: var(--color-#{$ref}-950);
+							}
+							@media (prefers-color-scheme: light) {
+								--background: var(--color-#{$ref}-200);
+							}
+						}
+					}
+				} @else if $variant == 'solid' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--background: var(--color-gray-600);
+							--color: var(--color-gray-400);
+						} @else {
+							--background: var(--color-#{$ref}-600);
+							--color: var(--color-#{$ref}-400);
+						}
+					}
+				} @else if $variant == 'outline' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--color: var(--foreground);
+							--border-color: var(--foreground);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+							--border-color: var(--color-#{$ref}-500);
+						}
+					}
+				} @else if $variant == 'ghost' {
+					&.color-#{$color} {
+						@if $color == 'default' {
+							--color: var(--foreground);
+						} @else {
+							--color: var(--color-#{$ref}-500);
+						}
+						--border-color: transparent;
+						@media (hover: hover) and (pointer: fine) {
+							&:hover {
+								@if $color == 'default' {
+									@media (prefers-color-scheme: dark) {
+										--background: rgba(82, 82, 91, 0.25);
+									}
+									@media (prefers-color-scheme: light) {
+										--background: rgba(226, 232, 240, 0.5);
+									}
+								} @else {
+									@media (prefers-color-scheme: dark) {
+										--background: var(--color-#{$ref}-950);
+									}
+									@media (prefers-color-scheme: light) {
+										--background: var(--color-#{$ref}-200);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

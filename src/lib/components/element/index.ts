@@ -59,6 +59,9 @@ export type { SpinnerProps, SpinnerConfigs, SpinnerPattern, SpinnerSize } from '
 export { default as Progress } from './progress/Main.svelte';
 export type { ProgressProps, ProgressConfigs, ProgressSize } from './progress/_interface';
 
+export { Badge } from './badge';
+export type { BadgeConfigs, BadgeProps, BadgeVariant } from './badge';
+
 export { ContextMenu, getContextMenuContext } from './context-menu/index.ts';
 export type {
 	ContextMenuSide,
