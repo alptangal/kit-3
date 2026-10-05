@@ -61,6 +61,8 @@ export type { ProgressProps, ProgressConfigs, ProgressSize } from './progress/_i
 
 export { Badge } from './badge';
 export type { BadgeConfigs, BadgeProps, BadgeVariant } from './badge';
+export { Kbd } from './kbd';
+export type { KbdConfigs, KbdComboConfigs, KbdComboProps, KbdProps, KbdVariant } from './kbd';
 
 export { ContextMenu, getContextMenuContext } from './context-menu/index.ts';
 export type {
