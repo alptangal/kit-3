@@ -78,6 +78,19 @@ let configs: NameConfigs = $state({
 - Motion chuẩn: 300ms, `cubic-bezier(0.65,0,0.35,1)` (dropdown panel: `cubic-bezier(0.16,1,0.3,1)` ~150-200ms); tap `scale(0.97)` (touch).
 - Variant map (surface components): copy cấu trúc `@each` từ `element/tag/_styles.scss` (`$colorRefs` semantic→palette `--color-{ref}-NNN`).
 
+## 5b. Nguyên tắc UX/UI (bắt buộc mọi component)
+
+Ba nguyên tắc chung, không phụ thuộc loại component — **probe/screenshot phải đủ để xác nhận**:
+
+1. **Disabled → `cursor: not-allowed` (PC/desktop).** Khi component (hoặc phần tử) ở state `disabled`, phần tử đó PHẢI hiện `cursor: not-allowed` để tăng trực quan trên môi trường con trỏ. Dùng token `var(--cursor-disabled)` (= `not-allowed`), guard `@media (hover: hover) and (pointer: fine)` (touch không có con trỏ). Kèm `opacity: var(--disabled-opacity)` nếu state chưa mờ.
+2. **Size phủ đủ `2xs` → `full` (nếu có thể).** Mọi component có `size` prop/tokens NÊN hỗ trợ bậc từ `2xs` nhỏ nhất đến `full` (max-width 100%) — tức token + class `size-{tier}` + `[data-size='{tier}']` phải tồn tại cho từng bậc, và component phải DÙNG token (không hardcode px) để mọi bậc render đúng. Token 2xs: `--font-size-2xs: 0.625rem`, `--min-height-2xs: 1.5rem`, `--padding-2xs: calc(var(--spacing) * 1)`, `--gap-2xs`, `--border-width-2xs`, `--border-radius-2xs`, `--min-width-2xs`, `--container-2xs` (đã có trong `variables.scss`/`sizes.scss`/`theme.scss`). Bậc không hợp lý (ví dụ 9xl cho badge) thì được phép loại, nhưng bậc `2xs`/`xs` cho form field, button, badge là bắt buộc.
+3. **Cursor theo hành vi (PC/desktop):**
+   - Component (hoặc phần tử) **chứa action** (click → có tác dụng) → `cursor: pointer` (= `var(--cursor-interactive)`). Áp cho trigger, item menu, button, tab, row clickable…
+   - Component **chấp nhận edit** (text/otp/contenteditable/textarea…) → `cursor: text` trên vùng nhập.
+   - Nguyên tắc này là KHÔNG có giá trị khi `disabled` (nguyên tắc 1 thắng). Guard `@media (hover: hover) and (pointer: fine)`.
+
+> Cả 3 áp trên môi trường PC/desktop (con trỏ). Touch/mobile không cần con trỏ nhưng vẫn giữ `disabled` + a11y đúng. Probe nên control-click/mouse hover + đọc `getComputedStyle(el).cursor` để xác nhận (không chỉ nhìn screenshot).
+
 ## 6. A11y / keyboard
 
 - Composite container: `role` đúng WAI-ARIA (tablist/tab, radiogroup, menu, group...) + roving focus mẫu `form/radiogroup` (Arrow/Home/End, `e.preventDefault()`).

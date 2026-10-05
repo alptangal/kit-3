@@ -10,9 +10,9 @@
 
 ---
 
-## 0. DNA chung — 6 nguyên tắc bất biến
+## 0. DNA chung — 7 nguyên tắc bất biến
 
-Đây là 6 nguyên tắc "không được vi phạm" của mọi component trong hệ thống.
+Đây là 7 nguyên tắc "không được vi phạm" của mọi component trong hệ thống.
 
 | # | Nguyên tắc | Giải thích |
 |---|-----------|-----------|
@@ -22,6 +22,7 @@
 | 4 | **Cascading size** | Giá trị size luôn resolve theo thứ tự: `props.size ?? formContext?.size ?? client.browser?.size ?? 'md'`. Component mới phải copy nguyên chữ cái đúng thứ tự này. |
 | 5 | **Chạy qua design token** | Mọi màu / đo / rounded / shadow đều tham chiếu design token (`--primary`, `--success`, `size-*`, `rounded-*`, `--min-height`…), **không hardcode px / màu trần**. |
 | 6 | **Semantic validation-color** | valid → `color-success`, invalid → `color-error`, trung lập → `color-default`. Màu validation **tự động** khi `required && status.changed` (đổi giá trị so với mốc ban đầu). |
+| 7 | **UX/UI feedback** | Cursor phản ánh hành vi + state (PC/desktop): action → `pointer`, edit → `text`, disabled → `not-allowed` (xem §3.6). Size phủ đủ `2xs`→`full` (xem §1.2). |
 
 ### 0.1. Ví dụ "style resolution" chuẩn (copied from `checkbox/Main.svelte`)
 
@@ -90,6 +91,7 @@ padding / gap / min-height / rounded):
 
 | Size | `--font-size` | min-height (token) | Ghi chú |
 |------|--------------|--------------------|---------|
+| `2xs` | 10px (`0.625rem`) | `--min-height-2xs = 1.5rem` (24px) | bậc nhỏ nhất (mới) |
 | `xs` | 12px (`0.75rem`) | `--min-height-xs = 1.875rem` (30px) | |
 | `sm` | 14px (`0.875rem`) | `--min-height-sm = 2.125rem` (34px) | |
 | `md` | 16px (`1rem`) | `--min-height-md = 2.5rem` (40px) | **default** |
@@ -217,6 +219,20 @@ Mọi component giao tiếp (button / input / checkbox / …) **phủ đủ 5 st
 - `opacity: var(--disabled-opacity)` (0.5) + `cursor: not-allowed`.
 - Overlay `::before` với `z-index` cao chặn tương tác (Button/Input) — Checkbox dùng `z-index: 1`.
 - **Events trả `undefined` / `[]` khi disabled** (xem `configs.event` getter: `if (this.disabled) return [];`).
+- **PC/desktop: LUÔN có `cursor: not-allowed`** (token `var(--cursor-disabled)`) khi disabled — tăng trực quan cho người dùng có con trỏ. Guard `@media (hover:hover) and (pointer:fine)` (touch không có con trỏ).
+
+### 3.6. cursor theo hành vi (PC/desktop)
+
+Trên môi trường con trỏ (guard `@media (hover:hover) and (pointer:fine)`), cursor phản ánh hành vi của phần tử:
+
+| Hành vi | `cursor` | Token | Ví dụ phần tử |
+|---------|----------|-------|----------------|
+| Chứa action (click → có tác dụng) | `pointer` | `var(--cursor-interactive)` | button, trigger, menu item, tab, row clickable, dropzone file |
+| Chấp nhận edit (nhập nội dung) | `text` | — (giá trị cố định) | input text, textarea, contenteditable, otp cell đang active |
+| Disabled (mọi loại) | `not-allowed` | `var(--cursor-disabled)` | mọi control ở state `.disabled` (thắng cả 2 trường hợp trên) |
+
+- Nguyên tắc: **mọi component mới phải tự hỏi "phần tử này có action không? có edit không?"** và gán cursor cho đúng. Element chỉ xem (label, description, icon trang trí) giữ `cursor: default` (không set).
+- Disabled luôn thắng (3.3) — không để phần tử disabled hiện `pointer`/`text`.
 
 ### 3.4. error (validation invalid)
 
@@ -368,6 +384,8 @@ Khi viết component mới, chạy lại checklist này:
 - [ ] **12.** Motion: duration 300ms, tap `scale(0.97)`, `touch-action: manipulation`.
 - [ ] **13.** A11y: `role`/`aria` đúng, `:focus-visible` ring, icon-only có `aria-label`, native control khi được.
 - [ ] **14.** Đặt cạnh Button/Input → đúng **Bảng đồng bộ min-height** (mục 2.1); icon-only → `aspect-square`.
+- [ ] **15.** Size phủ đủ bậc `2xs`→`full` (đủ token + dùng token, không hardcode px — mục 1.2).
+- [ ] **16.** Cursor (PC): phần tử có action → `pointer` (`var(--cursor-interactive)`), vùng edit → `text`, disabled → `not-allowed` (`var(--cursor-disabled)`) — mục 3.6.
 
 ---
 

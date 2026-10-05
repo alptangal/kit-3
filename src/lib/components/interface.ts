@@ -140,6 +140,7 @@ export interface StatusEvents {
 
 export type SizeScreen = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null;
 export type Size =
+	| '2xs'
 	| 'xs'
 	| 'sm'
 	| 'md'
