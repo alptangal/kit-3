@@ -3,6 +3,7 @@ import type { CheckboxConfigs } from '../checkbox/_interface';
 import type { TextFieldConfigs } from '../textField/_interface';
 import type { SelectConfigs } from '../select/_interface';
 import type { RadioGroupConfigs } from '../radiogroup/_interface';
+import type { SliderConfigs } from '../slider/_interface';
 
 export interface FormProps extends BasicProps {
 	method?: 'post' | 'get' | 'dialog';
@@ -29,7 +30,13 @@ export interface FormConfigs extends Omit<BasicConfigs, 'childrens' | 'status'> 
 	onResponse?: () => void | Promise<void>;
 	onInvalid?: () => void | Promise<void>;
 	size?: Size;
-	childrens?: Set<TextFieldConfigs | CheckboxConfigs | SelectConfigs | RadioGroupConfigs>;
+	childrens?: Set<
+		| TextFieldConfigs
+		| CheckboxConfigs
+		| SelectConfigs
+		| RadioGroupConfigs
+		| SliderConfigs
+	>;
 	validation: {
 		isValid?: boolean;
 	};

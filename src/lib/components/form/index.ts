@@ -24,3 +24,6 @@ export type { RadioGroupProps, RadioGroupConfigs, RadioItemProps, RadioOrientati
 
 export { Textarea, setTextareaContext, getTextareaContext } from './textarea';
 export type { TextareaProps, TextareaConfigs } from './textarea';
+
+export { Slider, setSliderContext, getSliderContext } from './slider';
+export type { SliderProps, SliderConfigs } from './slider';

@@ -1,0 +1,212 @@
+// src/lib/components/form/slider/_styles.scss
+// FORM FIELD — mirror mẫu textarea/toggle: mọi đo lường chạy qua token size-*;
+// validation color semantic (color-success/error); focus ring = indigo-500.
+//
+// Architecture (KHÔNG :has() — es2020 + safari15):
+//   .slider-root (relative, box = native input)
+//   ├── .slider-visual (absolute inset:0, pointer-events:none — thuần visual)
+//   │   ├── .slider-track (nền --content2) + .slider-fill (--slider-fill = value %)
+//   │   ├── .slider-ticks (optional — markers dọc track)
+//   │   └── .slider-thumb (circle --primary, position = calc(var(--slider-fill) - 50%))
+//   └── input[type=range] (absolute inset:0, opacity:0, TRANSPARENT — vẫn nhận
+//       pointer/keyboard/focus; focus ring indigo-500 vẽ TRÊN input (focus target))
+//
+// `--slider-fill` set inline TRÊN .slider-root (template style reactive theo value)
+// → inherited xuống fill + thumb (cùng line với input mapping min→max) — KHÔNG
+// cần $effect sync, KHÔNG cần :has().
+@use '$styles/sizes.scss';
+@use '$styles/colors.scss';
+
+.slider-root {
+	// ── Tokens (size cascade: size-* class global set --font-size) ──
+	--slider-track-height: 0.75rem;
+	--slider-thumb-size: calc(var(--font-size, 1rem) + 0.125rem);
+	--slider-tick-height: calc(var(--slider-track-height) + 0.375rem);
+	--slider-thumb-color: var(--primary);
+	// --content2 auto đảo theme (light: xám sáng / dark: xám tối) → track hợp cả 2 scheme
+	--slider-track-color: var(--content2);
+	--slider-duration: var(--duration, 300ms);
+
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: var(--gap, 0.5rem);
+	font-size: var(--font-size, 1rem);
+	// max-width: root co theo container khi input 100% (value = intrinsic width)
+	max-width: 100%;
+
+	// ── Native range input (source of truth, phủ TRÊN visual, in suốt) ──
+	// height: 0.75rem để input intrinsic width KHÔNG bị padding box rỗng làm giãn
+	// (value mapping = content box width = width visual track).
+	> input[type='range'] {
+		position: relative;
+		z-index: 1;
+		// width: input CHỦ ĐỘNG (in-flow) → root width = intrinsic width input;
+		// visual (absolute) KHÔNG ảnh hưởng layout.
+		// height = track + padding dọc 0.5rem → hit-area rộng hơn track (drag thoải mái);
+		// mapping min→max chỉ phụ thuộc CONTENT WIDTH (padding ngang = 0).
+		width: min(16rem, 100%);
+		height: calc(var(--slider-track-height) + 1rem);
+		margin: 0;
+		padding: 0.5rem 0;
+		box-sizing: border-box;
+		appearance: none;
+		-moz-appearance: none;
+		-webkit-appearance: none;
+		background: transparent;
+		cursor: pointer;
+		flex: none;
+
+		&::-webkit-slider-runnable-track {
+			background: transparent;
+			height: 100%;
+		}
+		&::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			background: transparent;
+			width: var(--slider-thumb-size);
+			height: var(--slider-thumb-size);
+		}
+		&::-moz-range-track {
+			background: transparent;
+			height: 100%;
+		}
+		&::-moz-range-thumb {
+			background: transparent;
+			width: var(--slider-thumb-size);
+			height: var(--slider-thumb-size);
+			border: none;
+		}
+		&::-moz-range-progress {
+			background: transparent;
+		}
+
+		// Focus ring chuẩn CONTRACT §6 — focus target = input (hộp = track).
+		&:focus {
+			outline: none;
+		}
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 2px;
+		}
+
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0; // opacity state nằm ở .slider-root (class disabled)
+		}
+	}
+
+	// ── Visual layer (pointer-events:none — KHÔNG che input) ──
+	.slider-visual {
+		position: absolute;
+		left: 0;
+		right: 0;
+		// DỌC: căn giữa input (padding box) — input cao hơn track do padding dọc
+		// 0.5rem mỗi bên (hit-area rộng), tâm content box = tâm padding box.
+		top: 50%;
+		transform: translateY(-50%);
+		width: min(16rem, 100%);
+		height: var(--slider-track-height);
+		pointer-events: none;
+	}
+
+	.slider-track {
+		position: absolute;
+		inset: 0;
+		background: var(--slider-track-color);
+		border-radius: 9999999px;
+		overflow: hidden;
+	}
+
+	.slider-fill {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: var(--slider-fill, 0%);
+		background: var(--slider-thumb-color);
+		border-radius: 9999999px;
+		transition: width var(--slider-duration) cubic-bezier(0.65, 0, 0.35, 1);
+
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
+	}
+
+	.slider-thumb {
+		position: absolute;
+		top: 50%;
+		left: var(--slider-fill, 0%);
+		// trừ nửa thumb để tâm thumb TRÙNG vị trí value (input mapping)
+		transform: translate(-50%, -50%);
+		width: var(--slider-thumb-size);
+		height: var(--slider-thumb-size);
+		background: var(--slider-thumb-color);
+		border: 2px solid var(--background, #fff);
+		border-radius: 50%;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+		transition: width var(--slider-duration) cubic-bezier(0.65, 0, 0.35, 1);
+
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		// scale thumb khi hover (guard PC-only — chuẩn toggle/input)
+		&:not(.disabled) .slider-visual:hover .slider-thumb {
+			width: calc(var(--slider-thumb-size) + 0.125rem);
+			height: calc(var(--slider-thumb-size) + 0.125rem);
+		}
+	}
+
+	// ── Ticks (optional — markers dọc track, decorative aria-hidden) ──
+	.slider-ticks {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+	.slider-tick {
+		position: absolute;
+		top: 50%;
+		left: var(--tick-pos, 0%);
+		transform: translate(-50%, -50%);
+		width: 2px;
+		height: var(--slider-tick-height);
+		background: var(--background, #fff);
+		opacity: 0.65;
+		border-radius: 1px;
+	}
+
+	// ── Value display (showValue — duplicate decorative, aria-hidden) ──
+	.slider-value {
+		flex: none;
+		min-width: 2.75rem;
+		text-align: right;
+		font-size: var(--font-size, 1rem);
+		line-height: var(--line-height, 1.5rem);
+		font-variant-numeric: tabular-nums;
+		opacity: 0.85;
+		user-select: none;
+	}
+
+	// ── Validation color (state class set trên root → inherit CSS var) ──
+	&.color-error {
+		--slider-thumb-color: var(--error);
+	}
+	&.color-success {
+		--slider-thumb-color: var(--success);
+	}
+
+	// ── Disabled (opacity token + not-allowed + fill muted) ──
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+		cursor: not-allowed;
+		--slider-thumb-color: var(--muted, #71717a);
+
+		> input[type='range'] {
+			cursor: not-allowed;
+		}
+	}
+}
