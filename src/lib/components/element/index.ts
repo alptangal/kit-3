@@ -181,3 +181,5 @@ export type {
 	DataTableSortOrder,
 	DataTableStatus
 } from './datatable/_interface';
+export { default as Alert } from './alert/Main.svelte';
+export type { AlertConfigs, AlertProps } from './alert/_interface';

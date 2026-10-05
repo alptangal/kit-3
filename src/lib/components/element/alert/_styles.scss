@@ -1,0 +1,107 @@
+// $components/element/alert/_styles.scss
+// Alert — inline notification: [icon] [content] (title + description).
+// Nền shadcn Alert — bảng semantic×palette (copy $colorRefs từ badge/tag),
+// chạy qua token: --background, --border-color, --color, --padding, --gap, --border-radius.
+// Không hardcode px chết; state (no-description) gán class JS → KHÔNG cần :has().
+@use '$styles/sizes.scss';
+
+// semantic → palette (đồng bộ bảng badge/tag)
+$colorRefs: (
+	'default': 'gray',
+	'secondary': 'cyan',
+	'success': 'green',
+	'info': 'sky',
+	'warning': 'amber',
+	'error': 'red',
+	'primary': 'indigo'
+);
+
+.alert-root {
+	--background: transparent;
+	--border-color: transparent;
+	--alert-desc-opacity: 0.8;
+
+	display: flex;
+	align-items: flex-start;
+	gap: var(--gap, 0.5rem);
+	max-width: 100%;
+	padding-block: var(--padding, 1rem);
+	padding-inline: var(--padding, 1rem);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius, 0.375rem);
+	background: var(--background);
+	color: var(--color, var(--foreground));
+	font-size: var(--font-size, 1rem);
+	line-height: var(--line-height, 1.5);
+	text-align: left;
+
+	/* Icon (iconify): svg inline 1em → điều khiển bằng font-size em (mẫu badge/select). */
+	.alert-icon {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		font-size: 1.125em;
+		line-height: 1;
+		// đệm block nhỏ để icon căn dọc khớp baseline hàng title (không hardcode px)
+		margin-block-start: 0.0625em;
+		color: var(--color, var(--foreground));
+	}
+
+	.alert-content {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25em;
+	}
+
+	.alert-title {
+		font-weight: 600;
+		color: var(--color, var(--foreground));
+	}
+
+	.alert-description {
+		font-weight: 400;
+		opacity: var(--alert-desc-opacity);
+	}
+
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+	}
+
+	/* Không có description → 1 hàng: icon + content căn giữa dọc (class JS, không :has()). */
+	&.no-description {
+		align-items: center;
+
+		.alert-icon {
+			margin-block-start: 0;
+		}
+	}
+
+	/* ── Color × palette (tint nhẹ theo semantic) ── */
+	@each $color, $ref in $colorRefs {
+		&.color-#{$color} {
+			@if $color == 'default' {
+				--color: var(--foreground);
+				--border-color: var(--color-gray-200);
+				@media (prefers-color-scheme: dark) {
+					--background: rgba(82, 82, 91, 0.28);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: var(--color-gray-100);
+				}
+			} @else {
+				--color: var(--color-#{$ref}-600);
+				--border-color: var(--color-#{$ref}-200);
+				@media (prefers-color-scheme: dark) {
+					--color: var(--color-#{$ref}-400);
+					--background: var(--color-#{$ref}-950);
+					--border-color: var(--color-#{$ref}-800);
+				}
+				@media (prefers-color-scheme: light) {
+					--background: var(--color-#{$ref}-50);
+				}
+			}
+		}
+	}
+}
