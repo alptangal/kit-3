@@ -151,13 +151,16 @@
 		margin-top: 0.5rem;
 	}
 
+	// Horizontal row (layout chuẩn shadcn hover-card): card mở bên dưới user 1
+	// KHÔNG che user 2/3 (cùng hàng ngang) — dễ soi screenshot.
 	.user-list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 		gap: 0.5rem;
+		flex-wrap: wrap;
 	}
 
 	.user-btn {
