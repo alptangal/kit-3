@@ -61,12 +61,12 @@
 
 			// @iconify/svelte render SVG 1em theo font-size, nhưng element Icon
 			// có :global(.icon){ font-size: var(--font-size) } (sm ~14px) ÁT font-size
-			// của .leading → SVG chỉ 14px. Ép trực tiếp SVG xuống đúng 1.5rem
-			// (descendant selector — scoped CSS vẫn match svg con từ @iconify).
-			svg {
-				width: 1.5rem;
-				height: 1.5rem;
-				display: block;
+			// của .leading → SVG chỉ 14px. `.icon` là class THẬT trên span con
+			// (descendant của .leading, không phải snippet content) → scoped CSS
+			// match được; `:global` để không hash class global này. font-size
+			// inherit → về 1.5rem của .leading → SVG 1em = 1.5rem (24px).
+			:global(.icon) {
+				font-size: inherit;
 			}
 		}
 
