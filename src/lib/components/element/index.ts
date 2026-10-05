@@ -148,3 +148,5 @@ export type {
 	AvatarImageProps,
 	AvatarFallbackProps
 } from './avatar/_interface';
+export { Pagination } from './pagination/index.ts';
+export type { PaginationProps, PaginationConfigs, PaginationEntry } from './pagination/_interface';
