@@ -57,6 +57,7 @@
 		events={configs.event}
 		icon={iconify['close-rounded']}
 		class={configs.style}
+		aria-label="Đóng thông báo"
 	/>
 {/if}
 

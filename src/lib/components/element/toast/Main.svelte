@@ -36,13 +36,28 @@
 		},
 		get duration() {
 			if (props.duration == 'infinite') return 'infinite';
-			return convertToMiliseconds(props.duration) ?? 300;
+			// Mặc định auto-dismiss 3s (design). Dev truyền duration cụ thể để ghi đè.
+			return convertToMiliseconds(props.duration) ?? 3000;
 		},
 		get offset() {
 			return props.offset ?? 10;
 		},
 		get position() {
 			return props.position ?? 'bottom';
+		},
+		// assertive cho success/error (urgent), polite cho còn lại (info/warning/default).
+		get liveRole() {
+			return this.color == 'success' || this.color == 'error' ? 'alert' : 'status';
+		},
+		get ariaLive() {
+			return this.color == 'success' || this.color == 'error' ? 'assertive' : 'polite';
+		},
+		get flyTransition() {
+			const base = omit(client.browser?.transition?.fly ?? {}, ['x']);
+			if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+				return { ...base, duration: 0 };
+			}
+			return base;
 		},
 		get event() {
 			const defaultEvents: ToastConfigs['event'] = [
@@ -111,7 +126,9 @@
 	this={props.as ?? 'div'}
 	bind:this={configs.ref}
 	class={configs.style}
-	transition:fly={omit(client.browser?.transition?.fly ?? {}, ['x'])}
+	transition:fly={configs.flyTransition}
+	role={configs.liveRole}
+	aria-live={configs.ariaLive}
 	data-position={configs.position}
 	style:--offset={`${configs.offset}px`}
 	{@attach handleEvents(configs.event)}

@@ -1,4 +1,3 @@
-import type { ButtonProps } from '$components/element/button/_interface';
 import type { ToastProps } from '$components/element/toast/_interface';
 import type { TooltipConfigs } from '$components/element/tooltip/_interface';
 import type { Color, Size, TimeUnits } from '$components/interface';
@@ -92,7 +91,13 @@ export interface MetaBrowser {
 				indicator?: string;
 				disabled?: boolean;
 				showCloseButton?: boolean;
-				action?: ButtonProps;
+				// shape runtime do `toast.create`/store ghi (khớp ToastData.action) — KHÔNG phải
+				// ButtonProps (ButtonProps không có `label`, và `onClick` optional).
+				action?: {
+					label: string;
+					onClick: () => void;
+					variant?: 'primary' | 'secondary' | 'ghost';
+				};
 				duration?: TimeUnits | 'infinite';
 				id?: string;
 				ref?: HTMLElement;
@@ -108,7 +113,12 @@ export interface MetaBrowser {
 			indicator?: string;
 			disabled?: boolean;
 			showCloseButton?: boolean;
-			action?: ButtonProps;
+			// shape runtime khớp ToastData.action (không phải ButtonProps).
+			action?: {
+				label: string;
+				onClick: () => void;
+				variant?: 'primary' | 'secondary' | 'ghost';
+			};
 			duration?: TimeUnits | 'infinite';
 			position?: ToastProps['position'];
 			offset?: number;

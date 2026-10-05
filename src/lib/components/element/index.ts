@@ -26,6 +26,8 @@ export const Toast = Object.assign(ToastRoot, {
 	Close: ToastClose
 });
 export { default as ToastWrapper } from './toast/Wrapper/Main.svelte';
+export { toast } from './toast/index.ts';
+export type { ToastData, ToastMethods } from './toast/index.ts';
 
 export { default as Button } from './button/Main.svelte';
 export { default as Tag } from './tag/Main.svelte';

@@ -1,5 +1,8 @@
 import { getContext, setContext } from 'svelte';
 import type { ToastConfigs } from './_interface';
+import { client } from '$store/basic.svelte';
+import { browser } from '$app/environment';
+import { SvelteMap } from 'svelte/reactivity';
 
 const key = Symbol('toast-context');
 export function setToastContext(context: ToastConfigs) {
@@ -37,43 +40,40 @@ export interface ToastMethods {
 	remove: (id: string) => void;
 }
 
-let toastMethods: ToastMethods | null = null;
+// Reactive source of truth for toasts. Kept on `client.browser.toasts` so the
+// globally-mounted ToastWrapper and any per-page wrapper both read the same map.
+// A SvelteMap (not a plain Map) is required for the Wrapper's `{#each}` to
+// re-render when entries are added/removed.
+type ToastStore = {
+	children: SvelteMap<string, ToastData & { id: string; showCloseButton: boolean }>;
+	create: (data: ToastData) => string;
+	remove: (key: string) => void;
+};
 
-export function setToastMethods(methods: ToastMethods) {
-	toastMethods = methods;
-}
-
-export function getToastMethods(): ToastMethods | null {
-	return toastMethods;
-}
-
-// Lazy getter for client - avoids SSR issues
-function getClient() {
-	// Dynamic import to avoid circular dependencies and SSR issues
-	const { client } = require('$store/basic.svelte');
-	return client;
+function ensureToastStore(): ToastStore | undefined {
+	if (!browser || !client.browser) return undefined;
+	const existing = (client.browser as { toasts?: ToastStore }).toasts;
+	if (existing) return existing;
+	const store: ToastStore = {
+		children: new SvelteMap(),
+		create(data: ToastData) {
+			const id = data.id ?? (typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : Date.now().toString(36));
+			const showCloseButton = data.showCloseButton ?? true;
+			this.children.set(id, { ...data, id, showCloseButton });
+			return id;
+		},
+		remove(key) {
+			this.children.delete(key);
+		}
+	};
+	(client.browser as { toasts?: ToastStore }).toasts = store;
+	return store;
 }
 
 function createToast(data: ToastData): string {
-	const client = getClient();
-	if (!client.browser) {
-		client.browser = {};
-	}
-	if (!client.browser.toasts) {
-		client.browser.toasts = {
-			children: new Map(),
-			create(toastData: ToastData) {
-				const id = toastData.id ?? crypto.randomUUID();
-				const showCloseButton = toastData.showCloseButton ?? true;
-				this.children.set(id, { ...toastData, id, showCloseButton });
-				return id;
-			},
-			remove(key: string) {
-				this.children.delete(key);
-			}
-		};
-	}
-	return client.browser.toasts.create(data);
+	const store = ensureToastStore();
+	if (!store) return '';
+	return store.create(data);
 }
 
 export const toast: ToastMethods = {
@@ -93,7 +93,6 @@ export const toast: ToastMethods = {
 		return createToast({ ...options, title, description, color: 'default' });
 	},
 	remove: (id: string) => {
-		const client = getClient();
-		client.browser?.toasts?.remove?.(id);
+		ensureToastStore()?.remove(id);
 	}
 };

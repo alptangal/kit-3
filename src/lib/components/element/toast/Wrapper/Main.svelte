@@ -1,16 +1,43 @@
 <script lang="ts">
 	import { styleSynced } from '$modules';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import type { ToastWrapperConfigs, ToastWrapperProps } from '../_interface';
 	import { client } from '$store/basic.svelte';
 	import { browser } from '$app/environment';
 	import { Button, Toast } from '$components/element';
 	import { handleEvents } from '$modules/_attachments';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { setToastWrapperContext } from '.';
+	import { setToastWrapperContext, toastWrapperRegistry } from '.';
 	import * as uuid from 'uuid';
 
 	let { ...props }: ToastWrapperProps = $props();
+
+	// Dedup: 1 trang có thể mount NHIỀU <ToastWrapper> (global layout + demo riêng). Vì tất
+	// cả cùng đọc MỘT store reactive (client.browser.toasts.children), nếu không dedup mỗi
+	// toast sẽ render một lần trên MỌI wrapper. Quy tắc: wrapper có `data-test` (primary)
+	// luôn render; wrapper không `data-test` (global) chỉ render khi không có primary nào.
+	// → demo page: chỉ demo-wrapper render; production page: chỉ global wrapper render.
+	// Chỉ đăng ký trên CLIENT (browser) để tránh leak registry qua nhiều request SSR
+	// (SSR không chạy onDestroy, nên nếu register trong SSR thì stale primary tích lũy).
+	const isPrimary = !!props['data-test'];
+	const wrapperId = uuid.v7();
+	let registered = false;
+	if (browser) {
+		toastWrapperRegistry.set(wrapperId, isPrimary);
+		registered = true;
+	}
+	onDestroy(() => {
+		if (registered) toastWrapperRegistry.delete(wrapperId);
+	});
+	const primaryCount = $derived(
+		!browser
+			? 0
+			: [...toastWrapperRegistry.entries()].filter(([, isPrimaryWrapper]) => isPrimaryWrapper).length
+	);
+	// SSR: mọi wrapper đều "render" (không có toasts ở SSR nên không ảnh hưởng output).
+	// Client: primary luôn render, non-primary render khi chưa có primary nào.
+	const shouldRender = $derived(!browser || isPrimary || primaryCount === 0);
+
 	let configs: ToastWrapperConfigs = $state({
 		get disabled() {
 			return props.disabled;
@@ -23,29 +50,17 @@
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
 		get event() {
-			const defaultEvents: ToastWrapperConfigs['event'] = [
-				{
-					events: {
-						load(_, data) {
-							if (
-								data?.node instanceof HTMLElement &&
-								client.browser?.toasts &&
-								!client.browser.toasts.ref
-							) {
-								document.body.appendChild(data.node);
-								client.browser.toasts.ref = data.node;
-							}
-						}
-					}
-				}
-			];
+			// (Việc append node lên <body> + claim toasts.ref nằm trong onMount — ở đó
+			// store client.browser.toasts CHẮC CHẮN đã tồn tại. load-attach chạy trước
+			// onMount nên không được dùng để append/claim.)
 			const propEvents = props.events ?? [];
-			return [...defaultEvents, ...propEvents];
+			return propEvents;
 		}
 	});
 	setToastWrapperContext(configs);
 
 	$effect(() => {
+		if (!shouldRender) return;
 		if (client.browser?.toasts?.children.size) {
 			const positions = ['top', 'left', 'bottom', 'right'];
 			positions.forEach((pos) => {
@@ -75,7 +90,6 @@
 								children.ref.style.top = `${(size - currentIndex - 1) * step * 2 + (children.offset ?? 0)}px`;
 								break;
 							case 'left':
-								console.log(children.position);
 								children.ref.style.transformOrigin = 'left';
 								children.ref.style.left = `${(size - currentIndex - 1) * step * 2 + (children.offset ?? 0)}px`;
 								break;
@@ -91,20 +105,28 @@
 	});
 
 	onMount(() => {
-		if (browser) {
-			if (!client.browser) client.browser = {};
-			if (!client.browser.toasts)
-				client.browser.toasts = {
-					children: new SvelteMap(),
-					create(data) {
-						const id = data.id ?? uuid.v7();
-						const showCloseButton = data.showCloseButton ?? true;
-						this.children.set(id, { ...data, id, showCloseButton });
-					},
-					remove(key) {
-						this.children.delete(key);
-					}
-				};
+		if (!browser) return;
+		if (!client.browser) client.browser = {};
+		if (!client.browser.toasts)
+			client.browser.toasts = {
+				children: new SvelteMap(),
+				create(data) {
+					const id = data.id ?? uuid.v7();
+					const showCloseButton = data.showCloseButton ?? true;
+					this.children.set(id, { ...data, id, showCloseButton });
+					return id;
+				},
+				remove(key) {
+					this.children.delete(key);
+				}
+			};
+		// Chỉ wrapper SỞ HỮI (shouldRender) append node của mình lên <body> + claim
+		// toasts.ref (để Main.svelte gắn ref + chạy auto-dismiss timer). Dedup bảo đảm
+		// mỗi trang chỉ có MỘT owner nên chỉ một lần append; guard `!toasts.ref` thêm
+		// lớp an toàn nếu hai owner mount (không xảy ra nhờ shouldRender).
+		if (shouldRender && configs.ref instanceof HTMLElement && !client.browser.toasts.ref) {
+			document.body.appendChild(configs.ref);
+			client.browser.toasts.ref = configs.ref;
 		}
 	});
 </script>
@@ -113,34 +135,43 @@
 	this={props.as ?? 'div'}
 	bind:this={configs.ref}
 	class={configs.style}
+	data-test={props['data-test']}
 	{@attach handleEvents(configs.event)}
 >
-	{#each [...(client.browser?.toasts?.children?.values() ?? [])] as children, _ (children.id)}
-		<Toast
-			duration={children.duration}
-			id={children.id}
-			position={children.position}
-			color={children.color}
-			offset={children.offset}
-			disabled={children.disabled}
-		>
-			{#if children.indicator}
-				<Toast.Indicator icon={children.indicator}></Toast.Indicator>
-			{/if}
-			<Toast.Content>
-				<Toast.Content.Title>{children.title}</Toast.Content.Title>
-				{#if children.description}
-					<Toast.Content.Description>Hello description</Toast.Content.Description>
+	{#if shouldRender}
+		{#each [...(client.browser?.toasts?.children?.values() ?? [])] as children, _ (children.id)}
+			<Toast
+				duration={children.duration}
+				id={children.id}
+				position={children.position}
+				color={children.color}
+				offset={children.offset}
+				disabled={children.disabled}
+			>
+				{#if children.indicator}
+					<Toast.Indicator icon={children.indicator}></Toast.Indicator>
 				{/if}
-			</Toast.Content>
-			{#if children.showCloseButton}
-				<Toast.Close></Toast.Close>
-			{/if}
-			{#if children.action}
-				<Button {...children.action}></Button>
-			{/if}
-		</Toast>
-	{/each}
+				<Toast.Content>
+					<Toast.Content.Title>{children.title}</Toast.Content.Title>
+					{#if children.description}
+						<Toast.Content.Description>{children.description}</Toast.Content.Description>
+					{/if}
+				</Toast.Content>
+				{#if children.showCloseButton}
+					<Toast.Close></Toast.Close>
+				{/if}
+				{#if children.action}
+					{@const action = children.action}
+					<Button
+							variant={action.variant == 'ghost' ? 'ghost' : 'solid'}
+							onClick={() => action.onClick()}
+							>
+							{action.label}
+						</Button>
+				{/if}
+			</Toast>
+		{/each}
+	{/if}
 </svelte:element>
 
 <style lang="scss">
