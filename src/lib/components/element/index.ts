@@ -167,3 +167,15 @@ export type {
 	DatePickerTriggerProps,
 	DatePickerContentProps
 } from './date-picker/_interface';
+export { DataTable, getDataTableContext, setDataTableContext } from './datatable/index.ts';
+export type {
+	DataTableAccessor,
+	DataTableColumn,
+	DataTableColumnAlign,
+	DataTableConfigs,
+	DataTableDensity,
+	DataTableRootProps,
+	DataTableSharedState,
+	DataTableSortOrder,
+	DataTableStatus
+} from './datatable/_interface';

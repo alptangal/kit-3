@@ -1,0 +1,18 @@
+// src/lib/components/element/datatable/_styles.scss
+// Mixin dùng chung cho DataTable (Root + Head + Body + Pagination).
+// Token thật: --content3 (line), --content2 (nền hover/header), --primary
+// (sort/selection), --content1-foreground (text). Không hardcode px/color.
+
+// Focus ring (mẫu button/element): :focus-visible outline indigo.
+@mixin focus-ring {
+	&:focus-visible {
+		outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+		outline-offset: 2px;
+	}
+}
+
+// Cell base: font-size theo size-* cascade (root đặt --font-size), line-height.
+@mixin cell-tokens {
+	font-size: var(--font-size, 1rem);
+	line-height: var(--line-height, 1.5);
+}
