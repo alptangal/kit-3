@@ -127,3 +127,15 @@ export type {
 	AlertDialogTitleProps,
 	AlertDialogTriggerProps
 } from './alert-dialog/_interface';
+export { Card } from './card/index.ts';
+export type {
+	CardElevation,
+	CardRootProps,
+	CardRootConfigs,
+	CardHeaderProps,
+	CardTitleProps,
+	CardDescriptionProps,
+	CardContentProps,
+	CardFooterProps,
+	CardActionProps
+} from './card/_interface';

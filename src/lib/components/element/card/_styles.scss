@@ -1,0 +1,29 @@
+// $components/element/card/_styles.scss
+// Token chung cho elevation của Card (dùng lại trong Root.svelte).
+// --border-radius / --border không tồn tại global trong theme hiện tại
+// (chỉ có --border-radius-{size} + --border-width) → fallback calc(--radius)/hsl đồng bộ sidebar.
+$card-border-color: var(--border, hsl(240 5.9% 90%));
+$card-radius: var(--border-radius-lg, calc(var(--radius, 0.5rem)));
+
+@mixin card-base {
+	background-color: var(--background, #fff);
+	border-radius: $card-radius;
+}
+
+@mixin card-elevation-border {
+	@include card-base;
+	border: 1px solid $card-border-color;
+}
+
+@mixin card-elevation-raised {
+	@include card-base;
+	border: 1px solid $card-border-color;
+	box-shadow: var(
+		--box-shadow-md,
+		0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)
+	);
+}
+
+@mixin card-elevation-none {
+	border-radius: $card-radius;
+}
