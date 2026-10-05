@@ -6,6 +6,9 @@ export default defineConfig({
 	cssFileTransformers: [transformerDirectives()],
 	extractors: [extractorSvelte()],
 	presets: [presetWind3()],
+	blocklist: [
+		/^size-(xs|sm|md|lg|xl|\d+xl)$/
+	],
 	content: {
 		pipeline: {
 			include: [
