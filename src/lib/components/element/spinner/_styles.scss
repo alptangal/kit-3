@@ -3,6 +3,8 @@
 // ĐO LƯỜNG NẶN TRÊN VARS: --spinner-size (theo size-*) + --spinner-duration (inline từ duration).
 // Màu: --color do class color-* (hệ token semantic, colors.scss) set trên root → mọi phần tử dùng currentColor.
 // Safari 15: KHÔNG dùng color-mix() → track opacity dùng opacity trên ring (giữ shape ring).
+@use '$styles/sizes.scss';
+@use '$styles/colors.scss';
 
 .spinner-root {
 	--spinner-size: 24px; // fallback md

@@ -4,13 +4,18 @@
 //
 // Kiểm tra:
 //  SP0 trang hiển thị + .spinner-root
-//  SP1 mỗi pattern có class pattern-* + element con đúng (dots → 3 dots)
-//  SP2 size → --spinner-size computed đúng px
-//  SP3 có label → role="status" + text sr-only
-//  SP4 không label → aria-hidden="true"
-//  SP5 color class
-//  SP6 reduced-motion: computed animation-name = 'none'
+//  SP1 4 màu KHÁC NHAU (primary/success/warning/error computed color ≠ nhau)
+//  SP2 KHÔNG inherit gray (spinner color ≠ computed color text label cùng section)
+//  SP3 KHỚP token (spinner primary = var(--primary), success = var(--success), ...)
+//  SP4 mỗi pattern có class pattern-* + element con đúng (dots → 3 dots)
+//  SP5 size → --spinner-size computed đúng px
+//  SP6 có label → role="status" + text sr-only
+//  SP7 không label → aria-hidden="true"
+//  SP8 color class
+//  SP9a normal: animation đang chạy (animation-name khác none)
+//  SP9 reduced-motion: computed animation-name = 'none'
 import { chromium } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 
 const results = [];
 const ok = (name, cond, extra = '') => {
@@ -36,7 +41,82 @@ await sleep(400);
 const rootCount = await page.locator('.spinner-root').count();
 ok('SP0 .spinner-root render (>= 20)', rootCount >= 20, `count=${rootCount}`);
 
-// SP1 — pattern class + children
+// SP1 — 4 màu KHÁC NHAU (primary/success/warning/error)
+const colors = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="sp-color"]');
+	const spinners = {
+		primary: scope.querySelector('.spinner-root.color-primary'),
+		success: scope.querySelector('.spinner-root.color-success'),
+		warning: scope.querySelector('.spinner-root.color-warning'),
+		error: scope.querySelector('.spinner-root.color-error')
+	};
+	return {
+		primary: spinners.primary ? getComputedStyle(spinners.primary).color : null,
+		success: spinners.success ? getComputedStyle(spinners.success).color : null,
+		warning: spinners.warning ? getComputedStyle(spinners.warning).color : null,
+		error: spinners.error ? getComputedStyle(spinners.error).color : null
+	};
+});
+const colorSet = new Set(Object.values(colors).filter(Boolean));
+ok('SP1: 4 màu KHÁC NHAU (primary/success/warning/error computed color)', colorSet.size === 4, JSON.stringify(colors));
+
+// SP2 — KHÔNG inherit gray (spinner color ≠ text label cùng section)
+const notInherited = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="sp-color"]');
+	const spinner = scope.querySelector('.spinner-root.color-primary');
+	const label = scope.querySelector('code');
+	return {
+		spinnerColor: spinner ? getComputedStyle(spinner).color : null,
+		labelColor: label ? getComputedStyle(label).color : null,
+		diff: spinner && label ? getComputedStyle(spinner).color !== getComputedStyle(label).color : false
+	};
+});
+ok('SP2: KHÔNG inherit gray (spinner color ≠ text label)', notInherited.diff, JSON.stringify(notInherited));
+
+// SP3 — KHỚP token (primary = var(--primary), success = var(--success), ...)
+const tokenMatch = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="sp-color"]');
+	// Tạo span ẩn với màu token để so sánh
+	const testSpan = (varName) => {
+		const span = document.createElement('span');
+		span.style.cssText = `position:absolute;visibility:hidden;color:var(${varName})`;
+		document.body.appendChild(span);
+		const c = getComputedStyle(span).color;
+		document.body.removeChild(span);
+		return c;
+	};
+	const tokenColors = {
+		primary: testSpan('--primary'),
+		success: testSpan('--success'),
+		warning: testSpan('--warning'),
+		danger: testSpan('--danger')
+	};
+	const spinners = {
+		primary: scope.querySelector('.spinner-root.color-primary'),
+		success: scope.querySelector('.spinner-root.color-success'),
+		warning: scope.querySelector('.spinner-root.color-warning'),
+		error: scope.querySelector('.spinner-root.color-error')
+	};
+	return {
+		primaryMatch: spinners.primary && getComputedStyle(spinners.primary).color === tokenColors.primary,
+		successMatch: spinners.success && getComputedStyle(spinners.success).color === tokenColors.success,
+		warningMatch: spinners.warning && getComputedStyle(spinners.warning).color === tokenColors.warning,
+		errorMatch: spinners.error && getComputedStyle(spinners.error).color === tokenColors.danger,
+		debug: {
+			spinnerPrimary: spinners.primary ? getComputedStyle(spinners.primary).color : null,
+			tokenPrimary: tokenColors.primary,
+			spinnerSuccess: spinners.success ? getComputedStyle(spinners.success).color : null,
+			tokenSuccess: tokenColors.success,
+			spinnerWarning: spinners.warning ? getComputedStyle(spinners.warning).color : null,
+			tokenWarning: tokenColors.warning,
+			spinnerError: spinners.error ? getComputedStyle(spinners.error).color : null,
+			tokenDanger: tokenColors.danger
+		}
+	};
+});
+ok('SP3: KHỚP token (primary=--primary, success=--success, warning=--warning, error=--danger)', tokenMatch.primaryMatch && tokenMatch.successMatch && tokenMatch.warningMatch && tokenMatch.errorMatch, JSON.stringify(tokenMatch));
+
+// SP4 — pattern class + children
 const patterns = await page.evaluate(() => {
 	const scope = document.querySelector('[data-test="sp-pattern"]');
 	const specs = [
@@ -52,11 +132,11 @@ const patterns = await page.evaluate(() => {
 		return { p: s.p, hasClass: !!el, children, arc };
 	});
 });
-ok('SP1 mỗi pattern có class pattern-* + đúng số element con', patterns.every((x) => x.hasClass && x.children >= 1), JSON.stringify(patterns));
+ok('SP4: mỗi pattern có class pattern-* + đúng số element con', patterns.every((x) => x.hasClass && x.children >= 1), JSON.stringify(patterns));
 const dots = patterns.find((x) => x.p === 'dots');
-ok('SP1a dots → đúng 3 .spinner-dot', dots?.children === 3, `dots=${dots?.children}`);
+ok('SP4a: dots → đúng 3 .spinner-dot', dots?.children === 3, `dots=${dots?.children}`);
 
-// SP2 — size → --spinner-size
+// SP5 — size → --spinner-size
 const sizes = await page.evaluate(() => {
 	const scope = document.querySelector('[data-test="sp-size"]');
 	const out = {};
@@ -66,9 +146,9 @@ const sizes = await page.evaluate(() => {
 	}
 	return out;
 });
-ok('SP2 size → --spinner-size (14/18/24/32px)', sizes.xs === '14px' && sizes.sm === '18px' && sizes.md === '24px' && sizes.lg === '32px', JSON.stringify(sizes));
+ok('SP5: size → --spinner-size (14/18/24/32px)', sizes.xs === '14px' && sizes.sm === '18px' && sizes.md === '24px' && sizes.lg === '32px', JSON.stringify(sizes));
 
-// SP3 — label → role=status + sr-only
+// SP6 — label → role=status + sr-only
 const labeled = await page.evaluate(() => {
 	const scope = document.querySelector('[data-test="sp-label"]');
 	const el = scope.querySelector('.spinner-root[role="status"]');
@@ -78,9 +158,9 @@ const labeled = await page.evaluate(() => {
 		srText: sr?.textContent?.trim() ?? null
 	};
 });
-ok('SP3 có label → role="status" + text sr-only', labeled.role && !!labeled.srText, JSON.stringify(labeled));
+ok('SP6: có label → role="status" + text sr-only', labeled.role && !!labeled.srText, JSON.stringify(labeled));
 
-// SP4 — không label → aria-hidden
+// SP7 — không label → aria-hidden
 const btnSpinner = await page.evaluate(() => {
 	const scope = document.querySelector('[data-test="sp-button"]');
 	const el = scope.querySelector('.spinner-root');
@@ -89,9 +169,9 @@ const btnSpinner = await page.evaluate(() => {
 		role: el?.getAttribute('role')
 	};
 });
-ok('SP4 trong button (không label) → aria-hidden="true" + không role', btnSpinner.hidden === 'true' && !btnSpinner.role, JSON.stringify(btnSpinner));
+ok('SP7: trong button (không label) → aria-hidden="true" + không role', btnSpinner.hidden === 'true' && !btnSpinner.role, JSON.stringify(btnSpinner));
 
-// SP5 — color class
+// SP8 — color class
 const colorClass = await page.evaluate(() => {
 	const scope = document.querySelector('[data-test="sp-color"]');
 	const found = {
@@ -102,9 +182,9 @@ const colorClass = await page.evaluate(() => {
 	const primary = !!document.querySelector('[data-test="sp-pattern"] .spinner-root.color-primary');
 	return { ...found, primary };
 });
-ok('SP5 color class (primary/success/warning/error)', Object.values(colorClass).every(Boolean), JSON.stringify(colorClass));
+ok('SP8: color class (primary/success/warning/error)', Object.values(colorClass).every(Boolean), JSON.stringify(colorClass));
 
-// SP6a — normal: animation đang chạy (animation-name khác none)
+// SP9a — normal: animation đang chạy (animation-name khác none)
 const normal = await page.evaluate(() => {
 	const arc = document.querySelector('[data-test="sp-pattern"] .spinner-root.pattern-circle .spinner-arc');
 	const dot = document.querySelector('[data-test="sp-pattern"] .spinner-root.pattern-dots .spinner-dot');
@@ -118,9 +198,9 @@ const normal = await page.evaluate(() => {
 	};
 });
 // Svelte hash keyframes (prefix s-xxx-), nên assert contains
-ok('SP6a normal: animation-name đang chạy (arc/dot/bar/square)', normal.arc?.includes('spinner-rotate') && normal.dot?.includes('spinner-pulse') && normal.bar?.includes('spinner-bar-grow') && normal.sq?.includes('spinner-rotate') && normal.sq?.includes('spinner-fade'), JSON.stringify(normal));
+ok('SP9a: normal animation đang chạy (arc/dot/bar/square)', normal.arc?.includes('spinner-rotate') && normal.dot?.includes('spinner-pulse') && normal.bar?.includes('spinner-bar-grow') && normal.sq?.includes('spinner-rotate') && normal.sq?.includes('spinner-fade'), JSON.stringify(normal));
 
-// SP6 — reduced-motion → animation-name = none
+// SP9 — reduced-motion → animation-name = none
 await page.emulateMedia({ reducedMotion: 'reduce' });
 await sleep(200);
 const reduced = await page.evaluate(() => {
@@ -136,8 +216,14 @@ const reduced = await page.evaluate(() => {
 	};
 });
 const noneAll = (v) => v === 'none';
-ok("SP6 reduced-motion → animation-name='none' (arc/square/dot/bar)", noneAll(reduced.arc) && noneAll(reduced.square) && noneAll(reduced.dot) && noneAll(reduced.bar), JSON.stringify(reduced));
+ok("SP9: reduced-motion → animation-name='none' (arc/square/dot/bar)", noneAll(reduced.arc) && noneAll(reduced.square) && noneAll(reduced.dot) && noneAll(reduced.bar), JSON.stringify(reduced));
 await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+// ── Screenshots ──
+console.log('\n=== SCREENSHOTS ===');
+const shotDir = 'tests/screenshot/spinner';
+mkdirSync(shotDir, { recursive: true });
+await page.locator('[data-test="sp-color"]').screenshot({ path: `${shotDir}/01-colors-fixed.png` });
 
 await browser.close();
 
