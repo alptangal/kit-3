@@ -17,3 +17,6 @@ partykit/build/
 partykit/public/dist/
 partykit/.env
 .env
+
+# Kho lưu tạm (script debug/scratch từ các phiên) — không theo dõi
+tests/_scratch/
