@@ -90,6 +90,13 @@ export function formatDateVN(date: Date | null): string {
 	return `${d}/${m}/${date.getFullYear()}`;
 }
 
+/** dd/mm/yyyy → dd/mm/yyyy (chuẩn VN) cho trigger range mode. */
+export function formatRangeVN(from: Date | null, to: Date | null): string {
+	if (!from && !to) return '';
+	if (!to) return formatDateVN(from);
+	return `${formatDateVN(from)} → ${formatDateVN(to)}`;
+}
+
 /** aria-label đầy đủ cho 1 ngày (screen reader): "Thứ ba, 05 Tháng 10, 2026" */
 export function ariaDateVN(date: Date): string {
 	return `${VN_WEEKDAYS_FULL[date.getDay()]}, ${String(date.getDate()).padStart(2, '0')} ${VN_MONTHS[date.getMonth()]}, ${date.getFullYear()}`;

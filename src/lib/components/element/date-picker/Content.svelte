@@ -10,6 +10,9 @@
 	// Ngày ngoài tháng hiển thị → faded + aria-disabled (không chọn được).
 	// Today = ring tròn. Selected = nền --primary. min/max → aria-disabled +
 	// cursor not-allowed. PURE JS — buildMonthGrid trong _dates.ts.
+	// RANGE mode (props.range): from → nền primary biên trái, to → biên phải,
+	// ngày giữa → nền indigo-100 (light) / indigo-950 (dark); hover giữa
+	// from/to → preview class (biên to tạm, do Root.setRangePreview quản lý).
 	import { browser } from '$app/environment';
 	import { styleSynced } from '$modules';
 	import { getDatePickerContext } from './_context';
@@ -20,6 +23,7 @@
 		dateKey,
 		isDisabledDate,
 		monthLabel,
+		ymd,
 		sameDay,
 		VN_WEEKDAYS_SHORT
 	} from './_dates';
@@ -42,6 +46,12 @@
 	const selected = $derived(ctx?.selected ?? null);
 	const size = $derived(ctx?.size ?? 'md');
 	const today = $derived(new Date());
+	const range = $derived(ctx?.range ?? false);
+	const rangeFrom = $derived(ctx?.rangeFrom ?? null);
+	const rangeTo = $derived(ctx?.rangeTo ?? null);
+	// Biên hiệu dụng của khoảng highlight: to chốt > preview hover (chỉ khi
+	// đang chờ to) > null (không highlight).
+	const rangeEnd = $derived(rangeTo ?? (rangeFrom ? ctx?.rangePreview ?? null : null));
 
 	// Lưới 6 hàng × 7 cột (42 ô) của tháng hiển thị.
 	const weeks = $derived.by(() => {
@@ -212,13 +222,23 @@
 						{@const isSelected = selected ? sameDay(day, selected) : false}
 						{@const isToday = sameDay(day, today)}
 						{@const isFocused = ctx?.focusDate ? sameDay(day, ctx.focusDate) : false}
+						<!-- RANGE: biên lo/hi theo ymd (hover trước from → from thành biên phải) -->
+						{@const rLo =
+							range && rangeFrom && rangeEnd ? (ymd(rangeFrom) <= ymd(rangeEnd) ? rangeFrom : rangeEnd) : null}
+						{@const rHi =
+							range && rangeFrom && rangeEnd ? (ymd(rangeFrom) <= ymd(rangeEnd) ? rangeEnd : rangeFrom) : null}
+						{@const isRangeStart = rLo ? sameDay(day, rLo) : false}
+						{@const isRangeEnd = rHi ? sameDay(day, rHi) : false}
+						{@const isRangeMid = rLo && rHi ? ymd(day) > ymd(rLo) && ymd(day) < ymd(rHi) : false}
+						{@const isRangePendingStart =
+							range && rangeFrom && !rangeEnd ? sameDay(day, rangeFrom) : false}
 						<button
 							type="button"
 							role="gridcell"
-							class="date-picker-day {inMonth ? '' : 'out-of-month'} {isToday ? 'today' : ''} {isSelected ? 'selected' : ''} {isDisabled ? 'disabled' : ''} {isFocused ? 'focused' : ''}"
+							class="date-picker-day {inMonth ? '' : 'out-of-month'} {isToday ? 'today' : ''} {isSelected ? 'selected' : ''} {isDisabled ? 'disabled' : ''} {isFocused ? 'focused' : ''} {isRangeStart ? 'range-start' : ''} {isRangeEnd && !isRangeStart ? 'range-end' : ''} {isRangeMid ? 'range-mid' : ''} {isRangePendingStart ? 'range-pending' : ''}"
 							data-dp-day={dateKey(day)}
 							aria-label={ariaDateVN(day)}
-							aria-selected={isSelected}
+							aria-selected={isSelected || (range ? isRangeStart || isRangeEnd || isRangePendingStart : false)}
 							aria-disabled={isDisabled || undefined}
 							tabindex={isFocused ? 0 : -1}
 							onclick={() => {
@@ -226,7 +246,13 @@
 								if (isDisabled) return;
 								ctx?.select(day);
 							}}
-							onfocus={() => ctx?.setFocus(day)}
+							onmouseenter={() => ctx?.setRangePreview(day)}
+							onmouseleave={() => ctx?.setRangePreview(null)}
+							onfocus={() => {
+								ctx?.setFocus(day);
+								// keyboard preview: focus di chuyển → band preview theo focus.
+								ctx?.setRangePreview(day);
+							}}
 						>
 							{day.getDate()}
 						</button>

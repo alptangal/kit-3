@@ -1,8 +1,8 @@
 <!-- src/routes/ui/date-picker/+page.svelte -->
 <script lang="ts">
 	// Demo DatePicker (shadcn date picker, PURE JS — KHÔNG date library):
-	// 5 case — (1) single date mặc định, (2) sizes xs/md/lg, (3) min/max,
-	// (4) controlled bind:value, (5) disabled.
+	// 6 case — (1) single date mặc định, (2) sizes xs/md/lg, (3) min/max,
+	// (4) controlled bind:value, (5) disabled, (6) range mode.
 	import { DatePicker } from '$components/element';
 
 	// ngày mặc định: 15 tháng hiện tại (SSR an toàn — tính theo Date local).
@@ -17,6 +17,9 @@
 	// controlled: state page (bind:value) — bắt đầu null.
 	let controlledValue = $state<Date | null>(null);
 
+	// range: state page (bind:value) — bắt đầu rỗng (chưa chọn).
+	let rangeValue = $state<{ from?: Date; to?: Date }>({});
+
 	// dd/mm/yyyy thuần JS (không format helper export — demo tự viết cho nhẹ).
 	function fmt(d: Date | null): string {
 		if (!d) return '';
@@ -24,15 +27,23 @@
 		const mm = String(d.getMonth() + 1).padStart(2, '0');
 		return `${dd}/${mm}/${d.getFullYear()}`;
 	}
+
+	// range → "dd/mm/yyyy → dd/mm/yyyy" (demo tự viết cho nhẹ).
+	function fmtRange(r: { from?: Date; to?: Date } | null): string {
+		if (!r?.from && !r?.to) return 'chưa chọn';
+		if (!r.to) return `${fmt(r.from ?? null)} → …`;
+		return `${fmt(r.from ?? null)} → ${fmt(r.to)}`;
+	}
 </script>
 
 <div class="page" data-test="date-picker-demo">
 	<h1 class="page-title">DatePicker · shadcn</h1>
 	<p class="page-desc">
 		Composite Root + Trigger + Content (panel lịch role=grid 7×6, tuần bắt đầu thứ Hai).
-		Root giữ <code>value</code> (bindable) + <code>open</code> + tháng hiển thị + roving focus.
-		Phím: ←/→ ±1 ngày, ↑/↓ ±7 ngày, Home/End đầu/cuối tuần, Enter/Space chọn,
-		Escape / click ngoài / Tab đóng + focus trả trigger. PURE JS — không date library.
+		Root giữ <code>value</code> (bindable — single hoặc range <code>{'{from, to}'}</code>) +
+		<code>open</code> + tháng hiển thị + roving focus. Phím: ←/→ ±1 ngày, ↑/↓ ±7 ngày,
+		Home/End đầu/cuối tuần, Enter/Space chọn, Escape / click ngoài / Tab đóng + focus trả
+		trigger. PURE JS — không date library.
 	</p>
 
 	<section class="demo" data-test="dp-single">
@@ -98,6 +109,20 @@
 			<DatePicker.Trigger />
 			<DatePicker.Content />
 		</DatePicker>
+	</section>
+
+	<section class="demo" data-test="dp-range-mode">
+		<h2>6. Range (chọn khoảng từ → đến)</h2>
+		<p class="demo-hint">
+			<code>range</code> — click ngày 1 → from (ring báo đang chờ), hover giữa → preview
+			highlight, click ngày 2 → to (to &lt; from tự swap, panel đóng). Click ngày 3 → bắt đầu
+			lại from. Trigger hiện "dd/mm/yyyy → dd/mm/yyyy".
+		</p>
+		<DatePicker range bind:value={rangeValue} aria-label="Chọn khoảng ngày">
+			<DatePicker.Trigger />
+			<DatePicker.Content />
+		</DatePicker>
+		<span class="picked" data-test="dp-range-value">Value: {fmtRange(rangeValue)}</span>
 	</section>
 </div>
 

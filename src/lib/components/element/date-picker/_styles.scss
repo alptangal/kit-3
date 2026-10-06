@@ -160,6 +160,64 @@
 			box-shadow: none;
 		}
 
+		// ── RANGE mode (props.range) — token raw palette --color-indigo-* ──
+		// Band liền mạch: start pill trái (tràn phải qua gap), end pill phải
+		// (tràn trái qua gap), mid hình chữ nhật tràn 2 bên (0.125rem = gap
+		// grid) → nền từ from nối liền tới to, không hở gap.
+		&.range-start {
+			background: var(--color-indigo-500);
+			color: var(--primary-foreground);
+			font-weight: 600;
+			box-shadow: none;
+			border-radius: 999px 0 0 999px;
+			width: calc(100% + 0.125rem);
+			margin-right: -0.125rem;
+
+			@media (prefers-color-scheme: dark) {
+				background: var(--color-indigo-600);
+			}
+		}
+
+		&.range-end {
+			background: var(--color-indigo-500);
+			color: var(--primary-foreground);
+			font-weight: 600;
+			box-shadow: none;
+			border-radius: 0 999px 999px 0;
+			width: calc(100% + 0.125rem);
+			margin-left: -0.125rem;
+
+			@media (prefers-color-scheme: dark) {
+				background: var(--color-indigo-600);
+			}
+		}
+
+		// pending (chỉ from chưa to): ring indigo-400 báo "đang chờ ngày thứ 2"
+		// (giữ tròn — chưa có band).
+		&.range-pending:not(.range-end) {
+			box-shadow: inset 0 0 0 1.5px var(--color-indigo-400);
+			border-radius: 50%;
+		}
+
+		// ngày giữa khoảng: nền tint indigo-100 (light) / indigo-950 (dark) —
+		// DESIGN_SYSTEM §4 (tint light -100/-200, dark -950); hover đậm hơn 1 bậc.
+		&.range-mid {
+			background: var(--color-indigo-100);
+			border-radius: 0;
+			width: calc(100% + 0.25rem);
+			margin-inline: -0.125rem;
+
+			@media (prefers-color-scheme: dark) {
+				background: var(--color-indigo-950);
+			}
+
+			@media (hover: hover) and (pointer: fine) {
+				&:hover {
+					background: var(--color-indigo-200);
+				}
+			}
+		}
+
 		// ngoài tháng hiển thị: faded + không chọn
 		&.out-of-month {
 			opacity: 0.35;
@@ -172,9 +230,10 @@
 			pointer-events: none;
 		}
 
-		// hover (desktop) — chỉ khi chọn được
+		// hover (desktop) — chỉ khi chọn được + KHÔNG phải range cell (range
+		// hover riêng trong từng class range-*; nếu không, gray-100 đè indigo).
 		@media (hover: hover) and (pointer: fine) {
-			&:not(.disabled):hover {
+			&:not(.disabled):not(.range-start):not(.range-end):not(.range-mid):hover {
 				background: var(--color-gray-100, hsl(0 0% 96%));
 			}
 		}

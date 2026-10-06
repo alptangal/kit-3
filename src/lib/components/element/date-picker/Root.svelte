@@ -1,21 +1,23 @@
 <script lang="ts">
 	// src/lib/components/element/date-picker/Root.svelte
 	// DatePicker.Root — composite wrapper (position:relative, mẫu popover).
-	// Giữ state: `value` (bindable Date|null) + `open` (bindable) +
-	// `displayMonth` (tháng hiển thị) + `focusDate` (roving focus trong lưới).
+	// Giữ state: `value` (bindable — Date|null single, hoặc {from,to} khi
+	// props.range) + `open` (bindable) + `displayMonth` (tháng hiển thị) +
+	// `focusDate` (roving focus trong lưới) + range state (from/to/preview).
 	// Symbol context + outside-click + Escape (đóng + focus trả trigger).
 	// PURE JS calendar — helper trong _dates.ts (KHÔNG date library).
 	import { browser } from '$app/environment';
 	import { styleSynced } from '$modules';
 	import { client } from '$store/basic.svelte';
 	import { setDatePickerContext } from './_context';
-	import { dateKey, firstEnabledDate, isDisabledDate, monthOf, sameDay } from './_dates';
-	import type { DatePickerConfigs, DatePickerRootProps } from './_interface';
+	import { dateKey, firstEnabledDate, isDisabledDate, monthOf, sameDay, ymd } from './_dates';
+	import type { DatePickerConfigs, DatePickerRangeValue, DatePickerRootProps } from './_interface';
 
 	let {
 		value = $bindable<Date | null>(),
 		defaultOpen = false,
 		open = $bindable(defaultOpen),
+		range = false,
 		min,
 		max,
 		initialMonth,
@@ -31,9 +33,33 @@
 	const triggerId = `dp-trigger-${Math.random().toString(36).slice(2, 10)}`;
 	const contentId = `dp-content-${Math.random().toString(36).slice(2, 10)}`;
 
+	// Range state (chỉ dùng khi props.range): from/to là biên đã chốt (to ≥ from),
+	// pendingTo = ngày thứ 2 đang chờ chốt (click 1 → from + pendingTo = null,
+	// click 2 → to). preview = ngày đang hover (biên to tạm — highlight từ from
+	// tới ngày hover). KHÔNG nằm trong `value` (value chỉ nhận {from,to} chốt).
+	let rangeFrom = $state<Date | null>(null);
+	let rangeTo = $state<Date | null>(null);
+	let rangePreview = $state<Date | null>(null);
+
+	// Normalize value (single | range) → selected/rangeFrom/rangeTo nội bộ.
+	// Props.value đổi từ ngoài (bind:value) → đồng bộ lại state range.
+	$effect(() => {
+		if (!range) return;
+		const v = value;
+		if (v && typeof v === 'object' && 'from' in (v as object)) {
+			const rv = v as DatePickerRangeValue;
+			rangeFrom = rv.from ?? null;
+			rangeTo = rv.to ?? null;
+		} else {
+			// value không phải range shape (Date|null hoặc rỗng) → reset range.
+			rangeFrom = null;
+			rangeTo = null;
+		}
+	});
+
 	// Tháng hiển thị ban đầu: initialMonth > tháng của value > tháng hiện tại.
 	const now = new Date();
-	const initialMonthRes = initialMonth ?? value ?? now;
+	const initialMonthRes = initialMonth ?? (value instanceof Date ? value : value && typeof value === 'object' && 'from' in value && value.from ? value.from : null) ?? now;
 	let displayMonth = $state({ year: initialMonthRes.getFullYear(), month: initialMonthRes.getMonth() });
 	let focusDate = $state<Date | null>(null);
 
@@ -46,7 +72,7 @@
 		const isOpen = open;
 		const y = displayMonth.year;
 		const m = displayMonth.month;
-		const v = value;
+		const v = value instanceof Date ? value : null;
 		const mn = min;
 		const mx = max;
 		if (!isOpen) {
@@ -57,6 +83,11 @@
 		wasOpen = true;
 		const today = new Date();
 		const inMonth = (d: Date) => monthOf(d).year === y && monthOf(d).month === m;
+		// seed: range từ (nếu đang ở tháng) > selected single > hôm nay > valid đầu tháng
+		if (range && rangeFrom && inMonth(rangeFrom) && !isDisabledDate(rangeFrom, mn, mx)) {
+			focusDate = rangeFrom;
+			return;
+		}
 		if (v && inMonth(v) && !isDisabledDate(v, mn, mx)) {
 			focusDate = v;
 			return;
@@ -75,8 +106,20 @@
 		get displayMonth() {
 			return displayMonth;
 		},
+		get range() {
+			return range;
+		},
 		get selected() {
-			return value ?? null;
+			return value instanceof Date ? value : null;
+		},
+		get rangeFrom() {
+			return range ? rangeFrom : null;
+		},
+		get rangeTo() {
+			return range ? rangeTo : null;
+		},
+		get rangePreview() {
+			return range ? rangePreview : null;
 		},
 		get initialMonth() {
 			return initialMonth ?? null;
@@ -103,12 +146,13 @@
 			return props.size ?? client.browser?.size ?? 'md';
 		},
 		get style() {
+			const hasRangeValue = range && !!rangeFrom;
 			const defaultStyles: (string | undefined)[] = [
 				'date-picker-root',
 				`size-${this.size}`,
 				this.disabled ? 'disabled' : undefined,
 				open ? 'open' : undefined,
-				value ? 'has-value' : undefined
+				(value instanceof Date && value) || hasRangeValue ? 'has-value' : undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
@@ -133,17 +177,51 @@
 		select(date: Date) {
 			if (props.disabled) return;
 			if (isDisabledDate(date, min, max)) return;
-			value = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+			// ngày chọn chuẩn (bỏ phần giờ — so sánh theo (y,m,d) địa phương).
+			const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+			if (range) {
+				// RANGE — click 1 → from (reset to cũ), click 2 → to (swap nếu
+				// to<from), click 3 → reset from. Panel GIỮ mở cho tới khi
+				// from+to chốt xong (đóng ở click 2).
+				if (rangeFrom && !rangeTo) {
+					// click 2: chốt to
+					if (ymd(day) === ymd(rangeFrom)) return; // trùng from → giữ from, chờ chọn khác
+					const [a, b] = ymd(day) < ymd(rangeFrom) ? [day, rangeFrom] : [rangeFrom, day];
+					rangeFrom = a;
+					rangeTo = b;
+					rangePreview = null;
+					value = { from: a, to: b };
+					open = false;
+					requestAnimationFrame(() => {
+						rootEl?.querySelector<HTMLElement>('[data-dp-trigger]')?.focus();
+					});
+				} else {
+					// click 1 (hoặc click 3 sau khi range chốt): bắt đầu lại từ from
+					rangeFrom = day;
+					rangeTo = null;
+					rangePreview = null;
+					value = { from: day };
+				}
+				return;
+			}
+			// SINGLE — giữ nguyên hành vi mặc định.
+			value = day;
 			open = false;
 			requestAnimationFrame(() => {
 				rootEl?.querySelector<HTMLElement>('[data-dp-trigger]')?.focus();
 			});
 		},
+		setRangePreview(date: Date | null) {
+			if (props.disabled || !range) return;
+			// chỉ preview khi đang chờ to (from đã chốt, to chưa) + ngày khác from.
+			rangePreview = rangeFrom && !rangeTo && date && ymd(date) !== ymd(rangeFrom) ? date : null;
+		},
 		shiftMonth(n: 1 | -1) {
 			const d = new Date(displayMonth.year, displayMonth.month + n, 1);
 			displayMonth = { year: d.getFullYear(), month: d.getMonth() };
 			// giữ focusDate nếu còn thuộc tháng mới + hợp lệ; không thì reseed.
-			const anchor = value ?? focusDate ?? new Date();
+			// anchor: selected single > range from > focusDate > hôm nay.
+			const anchor = value instanceof Date ? value : (range && rangeFrom) || focusDate || new Date();
 			const inMonth = monthOf(anchor).year === displayMonth.year && monthOf(anchor).month === displayMonth.month;
 			focusDate =
 				inMonth && !isDisabledDate(anchor, min, max)

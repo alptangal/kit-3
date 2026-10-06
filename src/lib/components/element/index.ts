@@ -165,9 +165,11 @@ export type {
 export { DatePicker, getDatePickerContext, setDatePickerContext } from './date-picker/index.ts';
 export type {
 	DatePickerConfigs,
+	DatePickerRangeValue,
 	DatePickerRootProps,
 	DatePickerTriggerProps,
-	DatePickerContentProps
+	DatePickerContentProps,
+	DatePickerValue
 } from './date-picker/_interface';
 export { DataTable, getDataTableContext, setDataTableContext } from './datatable/index.ts';
 export type {

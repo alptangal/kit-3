@@ -18,7 +18,9 @@ export { setDatePickerContext, getDatePickerContext } from './_context';
 
 export type {
 	DatePickerConfigs,
+	DatePickerRangeValue,
 	DatePickerRootProps,
 	DatePickerTriggerProps,
-	DatePickerContentProps
+	DatePickerContentProps,
+	DatePickerValue
 } from './_interface';

@@ -1,6 +1,7 @@
 // tests/date-picker-probe.mjs
 // Verify DatePicker (element) — composite PURE JS (không date library).
-// Trang demo: /ui/date-picker (5 case: single / sizes / min-max / controlled / disabled).
+// Trang demo: /ui/date-picker (6 case: single / sizes / min-max / controlled /
+// disabled / range).
 //
 // Kiểm tra:
 //  DP0 closed: không có panel/grid khi đóng
@@ -13,6 +14,11 @@
 //  DP6 roving focus: ArrowRight +1 ngày, ArrowDown +7 / ArrowUp -7 (so data-dp-day)
 //  DP7 Escape → đóng + focus về trigger
 //  DP8 today: ô hôm nay có class .today (ring tròn)
+//  DP9 range click 1 → from set (class range-pending, panel giữ mở, trigger text)
+//  DP10 range hover giữa → preview class range-mid + range-end
+//  DP11 range click 2 → to set (from<to, panel đóng, trigger "from → to")
+//  DP12 range click 3 → reset from (trigger chỉ còn from)
+//  DP13 range swap: to < from → tự swap (from luôn nhỏ hơn to)
 import { chromium } from '@playwright/test';
 
 const results = [];
@@ -47,9 +53,11 @@ const context = await browser.newContext({
 const page = await context.newPage();
 page.on('pageerror', (e) => console.log('PAGEERROR:', e.message));
 
-await page.goto('https://localhost:3000/ui/date-picker', { waitUntil: 'domcontentloaded' });
+// networkidle: chờ vite compile on-demand xong (tránh HMR reload giữa test —
+// đã gặp "Execution context destroyed" khi chạy ngay sau khi sửa file).
+await page.goto('https://localhost:3000/ui/date-picker', { waitUntil: 'networkidle' });
 await page.waitForSelector('.date-picker-root', { timeout: 20000 });
-await sleep(500);
+await sleep(1000);
 
 const single = () => page.locator('[data-test="dp-single"] .date-picker-root');
 const singleTrigger = () => single().locator('[data-dp-trigger]');
@@ -160,6 +168,10 @@ await page.locator('[data-test="dp-single"] [data-dp-prev]').click();
 await sleep(200);
 const labelBack = await page.locator('[data-test="dp-single"] [data-dp-month-label]').textContent();
 ok('DP3 nav: next → label tháng đổi; prev → về lại', labelAfter !== labelBefore && labelBack === labelBefore, `${labelBefore} → ${labelAfter} → ${labelBack}`);
+// đóng panel single (Escape) — panel absolute có thể đè trigger section sau,
+// Playwright click bị "subtree intercepts pointer events" → retry → timeout.
+await page.keyboard.press('Escape');
+await sleep(200);
 
 // ============ DP4 — min/max (section dp-range) ============
 const rangeTrigger = page.locator('[data-test="dp-range"] [data-dp-trigger]');
@@ -258,6 +270,153 @@ const dp7 = await page.evaluate(() => {
 	return { closed: !scope.querySelector('[data-dp-panel]'), focus: document.activeElement === trig };
 });
 ok('DP7 Escape → panel đóng + focus trả trigger', dp7.closed && dp7.focus, JSON.stringify(dp7));
+
+// ============ RANGE MODE (section dp-range-mode, bind:value) ============
+const rangeModeRoot = () => page.locator('[data-test="dp-range-mode"] .date-picker-root');
+const rangeModeTrigger = () => rangeModeRoot().locator('[data-dp-trigger]');
+// keys "dd/mm/yyyy" từ trigger text
+const parseVN = (text) => text?.match(/\d{2}\/\d{2}\/\d{4}/g) ?? [];
+
+// ============ DP9 — range click 1 → from set ============
+const fromKey = `${CY}-${CM}-8`;
+await rangeModeTrigger().click();
+await sleep(250);
+await page.locator(`[data-test="dp-range-mode"] [data-dp-day="${fromKey}"]`).click();
+await sleep(250);
+const dp9 = await page.evaluate((key) => {
+	const scope = document.querySelector('[data-test="dp-range-mode"]');
+	const panel = scope.querySelector('[data-dp-panel]');
+	const cell = scope.querySelector(`[data-dp-day="${key}"]`);
+	const trig = scope.querySelector('[data-dp-trigger]');
+	return {
+		panelStillOpen: !!panel,
+		pendingClass: cell?.classList.contains('range-pending') ?? false,
+		pendingSelected: cell?.getAttribute('aria-selected'),
+		triggerText: trig?.textContent?.trim()
+	};
+}, fromKey);
+ok(
+	'DP9 range click 1 → from set (class range-pending + panel giữ mở + trigger dd/mm/yyyy)',
+	dp9.panelStillOpen && dp9.pendingClass && dp9.pendingSelected === 'true' && parseVN(dp9.triggerText).length === 1,
+	JSON.stringify(dp9)
+);
+
+// ============ DP10 — range hover giữa → preview ============
+// hover ô giữa from và to (from = ngày 8 → hover ngày 11). Ô được hover trở
+// thành biên tạm (range-end) — band preview từ from → ngày hover; ngày giữa
+// (9, 10) nhận range-mid.
+const midKey = `${CY}-${CM}-11`;
+const midCell = page.locator(`[data-test="dp-range-mode"] [data-dp-day="${midKey}"]`);
+await midCell.hover();
+await sleep(200);
+const dp10 = await page.evaluate(({ key, fromKey }) => {
+	const scope = document.querySelector('[data-test="dp-range-mode"]');
+	const mid = scope.querySelector(`[data-dp-day="${key}"]`);
+	const from = scope.querySelector(`[data-dp-day="${fromKey}"]`);
+	const g = (k) => {
+		const [y, m, d] = k.split('-').map(Number);
+		return scope.querySelector(`[data-dp-day="${y}-${m}-${d + 1}"]`);
+	};
+	const between = g(fromKey); // ngày from+1 = giữa preview
+	const cs = mid ? getComputedStyle(mid) : null;
+	const csBetween = between ? getComputedStyle(between) : null;
+	return {
+		midClass: mid?.classList.contains('range-end') ?? false,
+		fromHasStart: from?.classList.contains('range-start') ?? false,
+		betweenClass: between?.classList.contains('range-mid') ?? false,
+		midBg: cs?.backgroundColor,
+		midRadius: cs?.borderRadius,
+		betweenBg: csBetween?.backgroundColor
+	};
+}, { key: midKey, fromKey });
+ok(
+	'DP10 range hover → preview: ô hover = range-end (biên tạm) + ngày giữa range-mindigo + from range-start',
+	dp10.midClass && dp10.fromHasStart && dp10.betweenClass && dp10.midBg !== 'rgba(0, 0, 0, 0)' && dp10.midRadius === '0px 999px 999px 0px',
+	JSON.stringify(dp10)
+);
+
+// ============ DP11 — range click 2 → to set + panel đóng ============
+const toKey = `${CY}-${CM}-14`;
+await page.locator(`[data-test="dp-range-mode"] [data-dp-day="${toKey}"]`).click();
+await sleep(250);
+const dp11 = await page.evaluate(({ fk, tk }) => {
+	const scope = document.querySelector('[data-test="dp-range-mode"]');
+	const panel = scope.querySelector('[data-dp-panel]');
+	const trig = scope.querySelector('[data-dp-trigger]');
+	const valueText = document.querySelector('[data-test="dp-range-value"]')?.textContent?.trim();
+	return {
+		panelClosed: !panel,
+		triggerText: trig?.textContent?.trim(),
+		valueText,
+		fk,
+		tk
+	};
+}, { fk: fromKey, tk: toKey });
+const vnKeys = parseVN(dp11.triggerText);
+const expFrom = (() => {
+	const [y, m, d] = fromKey.split('-').map(Number);
+	return `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${y}`;
+})();
+const expTo = (() => {
+	const [y, m, d] = toKey.split('-').map(Number);
+	return `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${y}`;
+})();
+ok(
+	'DP11 range click 2 → to set (from<to) + panel đóng + trigger "from → to"',
+	dp11.panelClosed && vnKeys[0] === expFrom && vnKeys[1] === expTo && dp11.valueText?.includes(expTo),
+	JSON.stringify(dp11)
+);
+
+// ============ DP12 — range click 3 → reset from ============
+await rangeModeTrigger().click();
+await sleep(250);
+const resetKey = `${CY}-${CM}-20`;
+await page.locator(`[data-test="dp-range-mode"] [data-dp-day="${resetKey}"]`).click();
+await sleep(250);
+const dp12 = await page.evaluate((key) => {
+	const scope = document.querySelector('[data-test="dp-range-mode"]');
+	const cell = scope.querySelector(`[data-dp-day="${key}"]`);
+	const trig = scope.querySelector('[data-dp-trigger]');
+	return {
+		panelStillOpen: !!scope.querySelector('[data-dp-panel]'),
+		newPending: cell?.classList.contains('range-pending') ?? false,
+		triggerText: trig?.textContent?.trim()
+	};
+}, resetKey);
+ok(
+	'DP12 range click 3 → reset from (panel mở + from mới pending + trigger 1 ngày)',
+	dp12.panelStillOpen && dp12.newPending && parseVN(dp12.triggerText).length === 1,
+	JSON.stringify(dp12)
+);
+
+// ============ DP13 — range swap (to < from → swap) ============
+// from hiện = ngày 20 (DP12). Click ngày 5 (< from) → swap: from=5, to=20.
+const swapKey = `${CY}-${CM}-5`;
+await page.locator(`[data-test="dp-range-mode"] [data-dp-day="${swapKey}"]`).click();
+await sleep(250);
+const dp13 = await page.evaluate(({ sk, rk }) => {
+	const scope = document.querySelector('[data-test="dp-range-mode"]');
+	const trig = scope.querySelector('[data-dp-trigger]');
+	const valueText = document.querySelector('[data-test="dp-range-value"]')?.textContent?.trim();
+	return { triggerText: trig?.textContent?.trim(), valueText, sk, rk };
+}, { sk: swapKey, rk: resetKey });
+const swapKeys = parseVN(dp13.triggerText);
+const expSwapFrom = (() => {
+	const [y, m, d] = swapKey.split('-').map(Number);
+	return `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${y}`;
+})();
+const expSwapTo = (() => {
+	const [y, m, d] = resetKey.split('-').map(Number);
+	return `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${y}`;
+})();
+ok(
+	'DP13 range swap: to < from → tự swap (from=ngày nhỏ, to=ngày lớn)',
+	swapKeys[0] === expSwapFrom && swapKeys[1] === expSwapTo,
+	JSON.stringify(dp13)
+);
+// đóng panel range (dọn state cho screenshot)
+await page.keyboard.press('Escape');
+await sleep(200);
 
 await browser.close();
 

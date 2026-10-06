@@ -1,12 +1,13 @@
 <script lang="ts">
 	// src/lib/components/element/date-picker/Trigger.svelte
-	// DatePicker.Trigger — button hiển thị ngày đã chọn (dd/mm/yyyy) hoặc
-	// placeholder. ARIA: aria-haspopup="dialog" + aria-expanded + aria-controls
+	// DatePicker.Trigger — button hiển thị ngày đã chọn (dd/mm/yyyy, hoặc
+	// range "dd/mm/yyyy → dd/mm/yyyy" khi props.range) hoặc placeholder.
+	// ARIA: aria-haspopup="dialog" + aria-expanded + aria-controls
 	// (contentId từ context). Icon calendar inline SVG (KHÔNG iconify → không
 	// phụ thuộc fetch runtime). Click → ctx.toggle(); kích thước đồng bộ
 	// Button↔Input (DESIGN_SYSTEM §2.1) qua class size-* trên ROOT.
 	import { getDatePickerContext } from './_context';
-	import { formatDateVN } from './_dates';
+	import { formatDateVN, formatRangeVN } from './_dates';
 	import type { DatePickerTriggerProps } from './_interface';
 
 	let {
@@ -20,7 +21,12 @@
 	const disabled = $derived(ctx?.disabled ?? false);
 	const placeholder = $derived(ctx?.placeholder ?? 'Chọn ngày');
 	const label = $derived(ariaLabel ?? ctx?.ariaLabel ?? 'Chọn ngày');
-	const selectedText = $derived(formatDateVN(ctx?.selected ?? null));
+	const isRange = $derived(ctx?.range ?? false);
+	const selectedText = $derived(
+		isRange
+			? formatRangeVN(ctx?.rangeFrom ?? null, ctx?.rangeTo ?? null)
+			: formatDateVN(ctx?.selected ?? null)
+	);
 	const size = $derived(ctx?.size ?? 'md');
 
 	function handleClick(e: MouseEvent) {
