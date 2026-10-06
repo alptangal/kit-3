@@ -19,8 +19,11 @@ export type {
 	DataTableColumnAlign,
 	DataTableConfigs,
 	DataTableDensity,
+	DataTableEditable,
+	DataTableLazyLoad,
 	DataTableRootProps,
 	DataTableSharedState,
 	DataTableSortOrder,
-	DataTableStatus
+	DataTableStatus,
+	DataTableVisual
 } from './_interface';

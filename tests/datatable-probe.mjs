@@ -8,6 +8,12 @@
 // - DT5  density compact (padding cell hẹp hơn default)
 // - DT6  empty state (data rỗng → full-span muted row)
 // - DT7  loading state (skeleton rows)
+// - DT8  live data ($state push → re-render, sort giữ, filter hoạt động)
+// - DT9  edit cell (click → input → gõ → Enter → callback + giá trị mới)
+// - DT10 cancel edit (Escape + nút ✕ → giữ giá trị cũ, callback không fired)
+// - DT11 row actions (nút ✎ row editor + 🗑 delete qua AlertDialog confirm)
+// - DT12 lazy load (IntersectionObserver scroll + nút load more → hết data ẩn)
+// - DT13 visual (striped bg khác nhau, bordered border-right, hover highlight)
 //
 // Trình tự: DT0 (chỉ đọc) → screenshots (trạng thái sạch) → DT2 filter →
 // DT3 pagination → DT4 selection (trở về size 10) → DT1 sort (đổi trạng thái
@@ -65,6 +71,19 @@ await page.waitForTimeout(250);
 await basic.screenshot({ path: `${shotDir}/02-filtered.png` });
 await basic.locator('input.datatable-search').fill('');
 await page.waitForTimeout(250);
+// Screenshot mới (task): live/edit/lazy/visual → tests/screenshots/datatable.
+const shotDirNew = 'tests/screenshots/datatable';
+mkdirSync(shotDirNew, { recursive: true });
+const editSecShot = page.locator('[data-test="dt-edit"]');
+const lazySecShot = page.locator('[data-test="dt-lazy"]');
+const visSecShot = page.locator('[data-test="dt-visual"]');
+await page.locator('[data-test="dt-live"]').screenshot({ path: `${shotDirNew}/03-live.png` });
+await editSecShot.locator('tr.datatable-row').first().locator('td.datatable-td').first().hover();
+await page.waitForTimeout(250);
+await editSecShot.screenshot({ path: `${shotDirNew}/04-rowactions.png` });
+await lazySecShot.screenshot({ path: `${shotDirNew}/05-lazyload.png` });
+await visSecShot.screenshot({ path: `${shotDirNew}/06-visual.png` });
+await page.waitForTimeout(100);
 
 console.log('\n=== DT2: FILTER (search mọi cột, nhạy dấu) + COUNT + CLEAR ===');
 await basic.locator('input.datatable-search').fill('cable');
@@ -161,6 +180,185 @@ console.log('\n=== DT7: LOADING STATE (skeleton) ===');
 const loading = page.locator('[data-test="dt-loading"]');
 ok('DT7: loading có skeleton rows (≥3)', (await loading.locator('tr.datatable-row--skeleton').count()) >= 3);
 ok('DT7: loading có class is-loading trên root', (await loading.locator('.datatable-root.is-loading').count()) === 1);
+
+console.log('\n=== DT8: LIVE DATA (thêm row động, sort giữ ổn định) ===');
+const live = page.locator('[data-test="dt-live"]');
+// Sắp theo Product asc để kiểm chứng sort giữ khi push row mới.
+await live.locator('button.datatable-sort[aria-label="Product — sort"]').click();
+await page.waitForTimeout(200);
+const rowCountBefore = await page.locator('[data-test="dt-row-count"]').textContent();
+ok('DT8: đếm row ban đầu (15 row)', rowCountBefore?.includes('15'), rowCountBefore ?? '');
+// Sort asc hiện "Bookshelf" (B < C...) — lưu first row trước push.
+const firstBefore = ((await live.locator('tr.datatable-row').nth(0).textContent()) ?? '').trim();
+await page.locator('[data-test="dt-add-row"]').click();
+await page.waitForTimeout(250);
+ok(
+	'DT8: push row → đếm tăng 16',
+	(await page.locator('[data-test="dt-row-count"]').textContent())?.includes('16')
+);
+ok(
+	'DT8: sort giữ — row đầu vẫn theo alphabet trước push',
+	((await live.locator('tr.datatable-row').nth(0).textContent()) ?? '').trim().startsWith(firstBefore.slice(0, 1))
+);
+ok('DT8: aria-sort vẫn ascending trên cột Product', (await live.locator('th.datatable-th[aria-sort="ascending"]').count()) >= 1);
+await page.locator('[data-test="dt-add-row"]').click();
+await page.waitForTimeout(250);
+ok('DT8: push row 2 → đếm 17', (await page.locator('[data-test="dt-row-count"]').textContent())?.includes('17'));
+// Row mới nằm ngoài trang 1 (pageSize 5) — filter "New Item" để xác nhận có mặt
+// (kiểm chứng luôn filter hoạt động trên live data).
+await live.locator('input.datatable-search').fill('New Item');
+await page.waitForTimeout(250);
+ok('DT8: filter "New Item" → 2 row mới (16 + 17)', (await live.locator('tr.datatable-row').count()) === 2, String(await live.locator('tr.datatable-row').count()));
+await live.locator('input.datatable-search').fill('');
+await page.waitForTimeout(200);
+
+console.log('\n=== DT9: EDIT CELL (click → input → gõ → Enter → callback + giá trị mới) ===');
+const editSec = page.locator('[data-test="dt-edit"]');
+// Click cell name của row p1 (Laptop) — data-cell-id format "rowId:columnId".
+const cellP1 = editSec.locator('td[data-cell-id="p1:name"]');
+ok('DT9: cell p1:name tồn tại', (await cellP1.count()) === 1);
+await cellP1.click();
+await page.waitForTimeout(200);
+ok('DT9: click cell → input editor hiện', (await editSec.locator('input.datatable-cell-input').count()) === 1);
+ok('DT9: editor có nút confirm ✓ (data-test)', (await editSec.locator('[data-test="datatable-cell-confirm"]').count()) === 1);
+ok('DT9: editor có nút cancel ✕ (data-test)', (await editSec.locator('[data-test="datatable-cell-cancel"]').count()) === 1);
+const cellInput = editSec.locator('input.datatable-cell-input');
+ok('DT9: input chứa giá trị cũ "Laptop"', (await cellInput.inputValue()) === 'Laptop');
+await cellInput.fill('Laptop Pro');
+await page.waitForTimeout(120);
+await cellInput.press('Enter');
+await page.waitForTimeout(250);
+ok('DT9: Enter → editor đóng (không còn input)', (await editSec.locator('input.datatable-cell-input').count()) === 0);
+ok('DT9: cell hiển thị giá trị mới "Laptop Pro"', ((await cellP1.textContent()) ?? '').includes('Laptop Pro'));
+const cellUpd = await page.locator('[data-test="dt-cell-update"]').textContent();
+ok('DT9: callback onCellUpdate fired "p1:name:Laptop→Laptop Pro"', cellUpd?.includes('p1:name') && cellUpd?.includes('Laptop→Laptop Pro'), cellUpd ?? '');
+
+console.log('\n=== DT10: CANCEL + ESCAPE (giữ giá trị cũ) ===');
+await cellP1.click();
+await page.waitForTimeout(200);
+const cancelInput = editSec.locator('input.datatable-cell-input');
+await cancelInput.fill('Draft Change');
+await page.waitForTimeout(100);
+await cancelInput.press('Escape');
+await page.waitForTimeout(200);
+ok('DT10: Escape → editor đóng', (await editSec.locator('input.datatable-cell-input').count()) === 0);
+ok('DT10: cell giữ giá trị cũ "Laptop Pro"', ((await cellP1.textContent()) ?? '').includes('Laptop Pro'));
+ok('DT10: callback KHÔNG fired khi cancel', !((await page.locator('[data-test="dt-cell-update"]').textContent()) ?? '').includes('Draft'));
+// Cancel button ✕ cũng đóng giữ giá trị cũ.
+await cellP1.click();
+await page.waitForTimeout(200);
+await editSec.locator('input.datatable-cell-input').fill('Draft 2');
+await page.locator('[data-test="datatable-cell-cancel"]').first().click();
+await page.waitForTimeout(200);
+ok('DT10: nút cancel ✕ → cell giữ giá trị cũ', ((await cellP1.textContent()) ?? '').includes('Laptop Pro'));
+
+console.log('\n=== DT11: ROW ACTIONS (hover → ✎/🗑, edit commit, delete qua AlertDialog) ===');
+const raSec = page.locator('[data-test="dt-edit"]');
+// (a) Row editor qua nút ✎: commit đổi nhiều cell.
+await raSec.locator('[data-test="datatable-row-edit"]').first().click();
+await page.waitForTimeout(200);
+ok('DT11: nút ✎ → row editor hiện (≥2 input)', (await raSec.locator('input.datatable-row-input').count()) >= 2);
+const nameInput = raSec.locator('input.datatable-row-input').first();
+await nameInput.fill('Gaming Laptop');
+await page.waitForTimeout(100);
+await nameInput.press('Enter');
+await page.waitForTimeout(250);
+ok('DT11: Enter → commit, cell name thành "Gaming Laptop"', ((await raSec.locator('td[data-cell-id="p1:name"]').textContent()) ?? '').includes('Gaming Laptop'));
+const rowUpd = await page.locator('[data-test="dt-row-update"]').textContent();
+ok('DT11: callback onRowUpdate fired (p1)', rowUpd?.includes('p1'), rowUpd ?? '');
+// (b) Delete: click 🗑 → AlertDialog xác nhận → Confirm → row mất.
+const rowsBeforeDelete = await raSec.locator('tr.datatable-row').count();
+await raSec.locator('[data-test="datatable-row-delete"]').first().click();
+await page.waitForTimeout(300);
+const overlay = page.locator('[data-ad-overlay]');
+ok('DT11: click 🗑 → AlertDialog mở (overlay)', (await overlay.count()) >= 1);
+ok('DT11: dialog title "Xóa row này?"/"Delete row?"', /xóa row này\?|delete row\?/i.test((await page.locator('[data-ad-header]').textContent()) ?? ''));
+const delBtn = page.locator('[data-ad-action]');
+await delBtn.click();
+await page.waitForTimeout(300);
+ok('DT11: Confirm → dialog đóng', (await overlay.count()) === 0);
+ok('DT11: row p1 bị xóa khỏi table', (await raSec.locator('td[data-cell-id="p1:name"]').count()) === 0);
+ok(
+	'DT11: số row giữ nguyên (trang kéo row từ trang sau lên — hành vi đúng)',
+	(await raSec.locator('tr.datatable-row').count()) === rowsBeforeDelete
+);
+const rowDel = await page.locator('[data-test="dt-row-delete"]').textContent();
+ok('DT11: callback onRowDelete fired (p1)', rowDel?.includes('p1'), rowDel ?? '');
+// (c) Cancel delete: click 🗑 → Cancel → row còn.
+const victim = raSec.locator('td[data-cell-id$=":name"]').first();
+const victimId = ((await victim.getAttribute('data-cell-id')) ?? '').split(':')[0];
+await raSec.locator('[data-test="datatable-row-delete"]').first().click();
+await page.waitForTimeout(300);
+await page.locator('[data-ad-cancel]').click();
+await page.waitForTimeout(300);
+ok('DT11: Cancel → dialog đóng, row còn', (await overlay.count()) === 0 && (await raSec.locator(`td[data-cell-id="${victimId}:name"]`).count()) === 1);
+
+console.log('\n=== DT12: LAZY LOAD (scroll cuối + nút load more → thêm page, hết data ẩn nút) ===');
+const lazySec = page.locator('[data-test="dt-lazy"]');
+ok('DT12: nút "Tải thêm"/"Load more" hiện', (await lazySec.locator('[data-test="datatable-load-more"]').count()) === 1);
+// Đếm row ban đầu (IntersectionObserver có thể fire sớm khi Playwright
+// auto-scroll section trước → chấp nhận 10 hoặc 20, ghi extra).
+const lazyRowsStart = await lazySec.locator('tr.datatable-row').count();
+ok('DT12: ban đầu ≥10 row (1 page, có thể auto-load 1)', lazyRowsStart >= 10, String(lazyRowsStart));
+const lazyCountStart = ((await page.locator('[data-test="dt-lazy-count"]').textContent()) ?? '').match(/\d+/)?.[0] ?? '0';
+// Infinite scroll: cuộn sentinel vào viewport → IntersectionObserver fire.
+await lazySec.locator('.datatable-lazyload-sentinel').scrollIntoViewIfNeeded();
+await page.waitForTimeout(700);
+const lazyCountAfterScroll = ((await page.locator('[data-test="dt-lazy-count"]').textContent()) ?? '').match(/\d+/)?.[0] ?? '0';
+ok(
+	'DT12: scroll cuối → onLoadMore fired (count tăng)',
+	Number(lazyCountAfterScroll) > Number(lazyCountStart),
+	`count ${lazyCountStart} → ${lazyCountAfterScroll}`
+);
+ok('DT12: sau scroll → row tăng so với trước', (await lazySec.locator('tr.datatable-row').count()) > lazyRowsStart, `${lazyRowsStart} → ${await lazySec.locator('tr.datatable-row').count()}`);
+ok('DT12: row mới "Page 2" xuất hiện', (await lazySec.locator('tr.datatable-row', { hasText: 'Page 2' }).count()) >= 1);
+// Nút load more bấm tới khi hết data (5 page).
+for (let i = 0; i < 6; i++) {
+	const btn = lazySec.locator('[data-test="datatable-load-more"]');
+	if ((await btn.count()) === 0) break;
+	await btn.click();
+	await page.waitForTimeout(500);
+}
+ok(
+	'DT12: hết data (page 5) → nút load more ẩn',
+	(await lazySec.locator('[data-test="datatable-load-more"]').count()) === 0
+);
+ok('DT12: tổng row lazy ≥40 (page 2-4 thêm ≥30)', (await lazySec.locator('tr.datatable-row').count()) >= 40, String(await lazySec.locator('tr.datatable-row').count()));
+
+console.log('\n=== DT13: VISUAL (striped/hoverable/bordered) ===');
+const vis = page.locator('[data-test="dt-visual"]');
+ok('DT13: root có class striped + hoverable + bordered-columns', (await vis.locator('.datatable-root.striped.hoverable.bordered-columns').count()) === 1);
+const bgBasic = await page.evaluate(() => {
+	const tdEven = document.querySelector('[data-test="dt-basic"] tr.datatable-row:nth-child(2) td.datatable-td');
+	const tdOdd = document.querySelector('[data-test="dt-basic"] tr.datatable-row:nth-child(3) td.datatable-td');
+	return {
+		even: tdEven ? getComputedStyle(tdEven).backgroundColor : '',
+		odd: tdOdd ? getComputedStyle(tdOdd).backgroundColor : ''
+	};
+});
+ok('DT13: basic KHÔNG striped (row chẵn = row lẻ cùng màu)', bgBasic.even === bgBasic.odd, `even=${bgBasic.even} odd=${bgBasic.odd}`);
+const bgVis = await page.evaluate(() => {
+	const tdEven = document.querySelector('[data-test="dt-visual"] tr.datatable-row:nth-child(2) td.datatable-td');
+	const tdOdd = document.querySelector('[data-test="dt-visual"] tr.datatable-row:nth-child(3) td.datatable-td');
+	return {
+		even: tdEven ? getComputedStyle(tdEven).backgroundColor : '',
+		odd: tdOdd ? getComputedStyle(tdOdd).backgroundColor : ''
+	};
+});
+ok('DT13: visual striped — row lẻ KHÁC row chẵn (nền alt)', bgVis.even !== bgVis.odd, `even=${bgVis.even} odd=${bgVis.odd}`);
+const borderVis = await page.evaluate(() => {
+	const td = document.querySelector('[data-test="dt-visual"] td.datatable-td');
+	return td ? getComputedStyle(td).borderRightWidth : '';
+});
+ok('DT13: bordered — td có border-right 1px', borderVis === '1px', borderVis);
+// Hover highlight (guard PC): hover row → nền đổi.
+await vis.locator('tr.datatable-row').nth(0).locator('td.datatable-td').first().hover();
+await page.waitForTimeout(200);
+const hoverBg = await page.evaluate(() => {
+	const td = document.querySelector('[data-test="dt-visual"] tr.datatable-row:first-child td.datatable-td');
+	return td ? getComputedStyle(td).backgroundColor : '';
+});
+ok('DT13: hover row → nền đổi (highlight)', hoverBg !== bgVis.even && hoverBg !== '', hoverBg);
 
 await browser.close();
 

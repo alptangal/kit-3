@@ -36,6 +36,48 @@ export interface DataTableColumn<T> {
 	noHighlight?: boolean;
 }
 
+/** Config inline edit cell (PC): click cell → input + confirm/cancel. */
+export interface DataTableEditable {
+	/** Bật edit cell (default true khi truyền object). */
+	enabled?: boolean;
+	/** Cột cho phép edit (default: mọi cột không status/render). */
+	columns?: string[];
+	/** Nhãn edit cell (i18n, aria-label input). */
+	cellLabel?: TranslateContent | string;
+	/** Nhãn confirm (i18n, aria-label + title). */
+	confirmLabel?: TranslateContent | string;
+	/** Nhãn cancel (i18n, aria-label + title). */
+	cancelLabel?: TranslateContent | string;
+}
+
+/** Config lazy load (infinite scroll + nút load more). */
+export interface DataTableLazyLoad {
+	/** Bật lazy load. */
+	enabled?: boolean;
+	/** Số row load mỗi lần (mặc định 10). */
+	pageSize?: number;
+	/** Gọi khi cuộn tới cuối (infinite scroll) / bấm load more. */
+	onLoadMore?: () => Promise<void> | void;
+	/** Còn data để load không (mặc định: tự đo bằng lần load trước). */
+	hasMore?: boolean;
+	/** Nút load more (mặc định true; false = chỉ infinite scroll). */
+	loadMoreButton?: boolean;
+	/** Nhãn nút load more (i18n). */
+	loadMoreLabel?: TranslateContent | string;
+	/** Nhãn loading more (i18n). */
+	loadingMoreLabel?: TranslateContent | string;
+}
+
+/** Visual tùy chỉnh bề mặt row/cột (zebra/hover/border column). */
+export interface DataTableVisual {
+	/** Zebra striping (row lẻ nền alt). */
+	striped?: boolean;
+	/** Hover highlight row (PC). */
+	hoverable?: boolean;
+	/** Viền dọc giữa các cột. */
+	bordered?: boolean;
+}
+
 export interface DataTableRootProps<T = Record<string, unknown>> extends BasicProps {
 	/** Dữ liệu row. */
 	data?: T[];
@@ -87,6 +129,20 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	nextLabel?: TranslateContent | string;
 	/** Định danh row (default: index). */
 	getRowId?: (row: T, index: number) => string;
+	/** Cho phép update/delete row (PC: hover row → action buttons; mobile: tap row → expand actions). */
+	rowActions?: boolean;
+	/** Cho phép edit cell inline (click cell → input + confirm/cancel). */
+	editable?: boolean | DataTableEditable;
+	/** Lazy load row (infinite scroll + load more). */
+	lazyLoad?: DataTableLazyLoad;
+	/** Visual row/cột (zebra/hover/border). */
+	visual?: DataTableVisual;
+	/** Callback khi cell update (row, column id, oldValue, newValue). */
+	onCellUpdate?: (row: T, columnId: string, oldValue: unknown, newValue: unknown) => void | Promise<void>;
+	/** Callback khi row update (row, rowId). */
+	onRowUpdate?: (row: T, rowId: string) => void | Promise<void>;
+	/** Callback khi xóa row (row, rowId). */
+	onRowDelete?: (row: T, rowId: string) => void | Promise<void>;
 	/** Callback khi sort đổi (column id, order). */
 	onSortChange?: (columnId: string, order: DataTableSortOrder) => void;
 	/** Callback khi page đổi. */
@@ -129,6 +185,37 @@ export interface DataTableConfigs extends BasicConfigs {
 	nextText: string;
 	/** `{page}`/`{total}` thay bằng số. */
 	pageInfoText: string;
+	/** Confirm delete row (AlertDialog) đang mở cho rowId này (undefined nếu không). */
+	deleteRowId: string | undefined;
+	/** Row đang mở action bar mobile (undefined nếu không). */
+	expandedRowId: string | undefined;
+	/** Edit cell đang mở {rowId, columnId, value} (undefined nếu không). */
+	editCell: { rowId: string; columnId: string; value: string } | undefined;
+	/** Lazy load đang gọi onLoadMore? */
+	loadingMore: boolean;
+	/** Còn data để load không (lazy load). */
+	hasMore: boolean;
+	/** Visual config đã resolve (zebra/hover/border). */
+	striped: boolean;
+	hoverable: boolean;
+	bordered: boolean;
+	/** Edit cell bật? (cho class 'editable' trên root). */
+	editable: boolean;
+	/** Mobile? (client.browser?.isMobile — tap row → expand actions). */
+	isMobile: boolean;
+	/** Nhãn edit (i18n). */
+	editText: string;
+	confirmText: string;
+	cancelText: string;
+	deleteText: string;
+	/** Nhãn nút update row (i18n). */
+	updateText: string;
+	deleteTitleText: string;
+	deleteDescText: string;
+	loadMoreText: string;
+	loadingMoreText: string;
+	/** Nhãn action bar mobile (i18n). */
+	rowActionsLabel: string;
 }
 
 /** Shared state root → sub (Head/Body/Pagination), bỏ writable store của v1. */
@@ -174,4 +261,56 @@ export interface DataTableSharedState {
 	changePageSize: (size: number) => void;
 	/** Gọi onRowClick (kèm id). */
 	handleRowClick: (row: Record<string, unknown>, index: number) => void;
+	/** Edit cell bật? (configs.editableDerived). */
+	editable: boolean;
+	/** Cột cho phép edit (undefined = mọi cột). */
+	editableColumns: string[] | undefined;
+	/** Row actions (update/delete) bật? */
+	rowActions: boolean;
+	/** Mobile? (client.browser?.isMobile — tap row → expand actions). */
+	isMobile: boolean;
+	/** Chế độ sửa CẢ ROW đang mở cho rowId này (undefined nếu không). */
+	isRowEditing: (rowId: string) => boolean;
+	/** Mở row editor (PC nút ✎ / mobile nút Update). */
+	openRowEditor: (rowId: string) => void;
+	/** Đóng row editor (commit=true: gọi onCellUpdate/onRowUpdate). */
+	closeRowEditor: (commit: boolean) => void;
+	/** Giá trị đang sửa của cell trong row editor (undefined nếu không mở). */
+	getRowEditValue: (rowId: string, columnId: string) => string | undefined;
+	/** Ghi giá trị đang sửa vào row editor. */
+	setRowEditValue: (rowId: string, columnId: string, value: string) => void;
+	/** Dialog confirm delete đang mở? */
+	deleteOpen: boolean;
+	/** Mở editor cho cell (click cell giá trị). */
+	openCellEditor: (rowId: string, columnId: string, value: unknown) => void;
+	/** Confirm edit (Enter/nút ✓) — gọi onCellUpdate + đóng editor. */
+	confirmCellEditor: () => void;
+	/** Cancel edit (Escape/nút ✕) — đóng editor giữ giá trị cũ. */
+	cancelCellEditor: () => void;
+	/** Row đang mở editor? */
+	isEditing: (rowId: string, columnId: string) => boolean;
+	/** Ghi giá trị đang gõ vào editCell.value (2-way input). */
+	setEditValue: (value: string) => void;
+	/** Giá trị đang gõ của editor (undefined nếu không mở). */
+	getEditValue: () => string | undefined;
+	/** Mở confirm delete row (AlertDialog). */
+	requestDeleteRow: (rowId: string) => void;
+	/** Xác nhận delete (Action AlertDialog) → gọi onRowDelete. */
+	confirmDeleteRow: () => void;
+	/** Row (id) đang đợi confirm delete? */
+	isDeletePending: (rowId: string) => boolean;
+	/** Toggle action bar mobile dưới row (tap row). */
+	toggleRowActions: (rowId: string) => void;
+	/** Row (id) đang mở action bar mobile? */
+	isRowExpanded: (rowId: string) => boolean;
+	/** Gọi onRowUpdate (PC/mobile nút "Update" — row toàn phần). */
+	handleRowUpdate: (row: Record<string, unknown>, rowId: string) => void;
+	/** Gọi onRowDelete trực tiếp (bỏ qua confirm — mobile nút delete đã qua confirm). */
+	handleRowDeleteDirect: (row: Record<string, unknown>, rowId: string) => void;
+	/** Lazy load: còn data? */
+	hasMoreLazy: boolean;
+	/** Lazy load: gọi onLoadMore (infinite scroll sentinel + nút load more). */
+	loadMore: () => void;
+	/** Lazy load: đang loading? */
+	isLoadingMore: boolean;
 }
