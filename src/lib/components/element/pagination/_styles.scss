@@ -31,6 +31,28 @@
 			opacity 150ms ease;
 	}
 
+	// ── Icon (iconify) — svg inline 1em, KHÔNG override được → điều khiển qua
+	// font-size trên root .icon (hash của Icon.svelte → :global, precedent Select).
+	// Gap icon↔label = 0.25em (margin, không ảnh hưởng counter). ──
+	.pagination-item :global(.icon) {
+		font-size: 1.25em;
+		margin-right: 0.25em;
+	}
+
+	// Icon-only (label rỗng + có icon) → aspect-square (DESIGN_SYSTEM §2.2)
+	// Class .aspect-square gán JS khi prevIconOnly/nextIconOnly = true.
+	.pagination-item.aspect-square {
+		aspect-ratio: 1 / 1;
+		padding-inline: 0;
+		min-width: 0;
+		width: var(--min-height, 2.5rem);
+		flex-shrink: 0;
+
+		:global(.icon) {
+			margin-right: 0;
+		}
+	}
+
 	// ── Nút trang: active = --primary + text --background (token, không hardcode) ──
 	.pagination-page {
 		&.active {
@@ -43,9 +65,16 @@
 				background: var(--content2);
 			}
 		}
+
+		// Trang active không còn hành động tiếp theo → cursor not-allowed (PC)
+		@media (hover: hover) and (pointer: fine) {
+			&.active {
+				cursor: var(--cursor-disabled, not-allowed);
+			}
+		}
 	}
 
-	// ── Prev/Next: disabled = opacity token ──
+	// ── Prev/Next: disabled = opacity token + cursor not-allowed ──
 	.pagination-prev,
 	.pagination-next {
 		&:disabled {
@@ -65,5 +94,110 @@
 		cursor: default;
 		opacity: 0.7;
 		user-select: none;
+	}
+
+	// ── Counter (variant compact): prev + "current/total" + next ──
+	// Base styles đồng .pagination-item (min-height token, padding-inline token).
+	.pagination-counter {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0;
+		min-height: var(--min-height, 2.5rem);
+		padding-inline: var(--padding, 0.75rem);
+		border: 0;
+		border-radius: var(--border-radius, 0.5rem);
+		background: transparent;
+		color: var(--foreground);
+		font-family: inherit;
+		font-size: var(--font-size, 1rem);
+		font-weight: 500;
+		line-height: var(--line-height, 1.5);
+		cursor: pointer;
+		transition:
+			background-color 150ms ease,
+			color 150ms ease,
+			opacity 150ms ease;
+
+		@media (hover: hover) and (pointer: fine) {
+			&:hover:not(:disabled) {
+				background: var(--content2);
+			}
+		}
+
+		&:disabled {
+			opacity: var(--disabled-opacity, 0.5);
+			cursor: not-allowed;
+		}
+
+		&.editing {
+			background: var(--content1);
+		}
+
+		.counter-current {
+			color: var(--primary);
+			font-weight: 600;
+		}
+
+		.counter-sep {
+			margin-inline: 0.25em;
+			opacity: 0.6;
+		}
+
+		.counter-total {
+			color: var(--foreground);
+		}
+	}
+
+	// ── Page input (edit mode trong counter) — cursor: text + focus ring control ──
+	.pagination-page-input {
+		width: 5ch;
+		max-width: 5ch;
+		padding: 0.125rem 0;
+		border: 0;
+		border-bottom: var(--border-width, 1px) solid currentColor;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		font-weight: 600;
+		text-align: center;
+		cursor: text;
+		outline: none;
+
+		// Control độc lập (DESIGN_SYSTEM §3.1): outline indigo, offset 2px
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 2px;
+		}
+	}
+
+	// ── Loading (đang đồng bộ data): mờ token + mọi item vô hiệu ──
+	&.loading {
+		opacity: var(--disabled-opacity, 0.5);
+
+		.pagination-item,
+		.pagination-counter {
+			pointer-events: none;
+		}
+
+		@media (hover: hover) and (pointer: fine) {
+			.pagination-item,
+			.pagination-counter {
+				cursor: var(--cursor-disabled, not-allowed);
+			}
+		}
+	}
+
+	// ── Root disabled (BasicProps.disabled): mọi item vô hiệu ──
+	&.disabled {
+		opacity: var(--disabled-opacity, 0.5);
+		pointer-events: none;
+
+		@media (hover: hover) and (pointer: fine) {
+			.pagination-item,
+			.pagination-counter {
+				cursor: var(--cursor-disabled, not-allowed);
+			}
+		}
 	}
 }

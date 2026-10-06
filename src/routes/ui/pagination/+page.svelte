@@ -1,6 +1,7 @@
 <!-- src/routes/ui/pagination/+page.svelte -->
 <script lang="ts">
 	import { Pagination } from '$components/element';
+	import { iconify } from '$assets/icons/iconify';
 
 	// ── State (probe locate qua data-test; mỗi instance 1 binding riêng) ──
 	let page1 = $state(1);
@@ -11,6 +12,8 @@
 	let smallPage = $state(2);
 	let sizePage = $state(1);
 	let itemsPage = $state(3);
+	let compactPage = $state(1);
+	let activePage = $state(5);
 </script>
 
 <div class="page" data-test="pagination-demo">
@@ -130,6 +133,44 @@
 		<p class="demo-hint">
 			Trang hiện tại: <code>{itemsPage}</code> / 10 — totalPages tự suy ra (ceil(95/10)).
 		</p>
+	</section>
+
+	<!-- Compact: chỉ prev + counter (jump-to input) + next -->
+	<section class="demo" data-test="pg-compact">
+		<h2>Compact (chỉ prev + counter + next · jump-to input)</h2>
+		<Pagination variant="compact" totalPages={42} bind:page={compactPage} aria-label="Phân trang compact" />
+		<p class="demo-hint">
+			Click counter để nhập số trang: Enter = jump, Escape = hủy, ↑/↓ = ±1, blur = commit.
+			Trang hiện tại: <code data-test="pg-compact-current">{compactPage}</code>
+		</p>
+	</section>
+
+	<!-- Loading (đang đồng bộ data) -->
+	<section class="demo" data-test="pg-loading">
+		<h2>Loading (đang đồng bộ data — mọi item vô hiệu)</h2>
+		<Pagination variant="compact" totalPages={42} loading page={7} aria-label="Phân trang loading" />
+		<p class="demo-hint">nav aria-busy="true", mọi item disabled + mờ + cursor not-allowed.</p>
+	</section>
+
+	<!-- Icons prev/next (iconify) -->
+	<section class="demo" data-test="pg-icons">
+		<h2>Prev/Next icons (iconify)</h2>
+		<Pagination prevIcon={iconify['arrow-left-rounded']} nextIcon={iconify['arrow-right-rounded']} totalPages={8} aria-label="Phân trang icons" />
+		<p class="demo-hint">Icon render trước label (gap 0.25em); kích thước theo font-size của nút.</p>
+	</section>
+
+	<!-- Active cursor (not-allowed trên trang active) -->
+	<section class="demo" data-test="pg-active">
+		<h2>Active cursor (trang active = không hành động tiếp → not-allowed)</h2>
+		<Pagination totalPages={5} bind:page={activePage} aria-label="Phân trang active" />
+		<p class="demo-hint">Trang 5 đang active — con trỏ trên đó phải là not-allowed (PC).</p>
+	</section>
+
+	<!-- Icon-only prev/next (aspect-square) -->
+	<section class="demo" data-test="pg-icon-only">
+		<h2>Icon-only prev/next (aspect-square — label rỗng)</h2>
+		<Pagination prevIcon={iconify['arrow-left-rounded']} nextIcon={iconify['arrow-right-rounded']} prevLabel="" nextLabel="" totalPages={3} aria-label="Phân trang icon-only" />
+		<p class="demo-hint">Label rỗng + có icon → nút aspect-square (width = min-height).</p>
 	</section>
 </div>
 

@@ -25,6 +25,14 @@ export interface PaginationProps extends BasicProps {
 	/** Màu trang active (default 'primary'). */
 	color?: Color;
 	'aria-label'?: string;
+	/** Kiểu hiển thị: 'default' (hiện dải trang) hoặc 'compact' (chỉ prev + counter + next). */
+	variant?: 'default' | 'compact';
+	/** Đang đồng bộ data: root aria-busy, MỌI item disabled + mờ + cursor not-allowed. */
+	loading?: boolean;
+	/** Iconify name cho nút prev (vd 'material-symbols-light:arrow-left-rounded') — render trước label. */
+	prevIcon?: string;
+	/** Iconify name cho nút next — render trước label. */
+	nextIcon?: string;
 }
 
 export interface PaginationConfigs extends Omit<BasicConfigs, 'value' | 'status'> {
@@ -33,6 +41,8 @@ export interface PaginationConfigs extends Omit<BasicConfigs, 'value' | 'status'
 	entries: PaginationEntry[];
 	size: Size;
 	color: Color;
+	variant: 'default' | 'compact';
+	loading: boolean;
 }
 
 /** Một entry render trong dải trang. */
