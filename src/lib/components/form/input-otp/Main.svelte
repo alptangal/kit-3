@@ -254,7 +254,8 @@
 	}
 
 	// Keydown scoped trên root (bubbles từ native inputs):
-	// Arrow di chuyển, Backspace trên ô rỗng → về ô trước + xóa ô trước
+	// Arrow di chuyển, Overwrite trên ô có giá trị, Backspace trên ô rỗng →
+	// về ô trước + xóa ô trước
 	function handleKeydown(e: KeyboardEvent) {
 		if (configs.disabled) return;
 		const idx = activeIndex;
@@ -267,6 +268,29 @@
 		if (e.key === 'ArrowLeft') {
 			e.preventDefault();
 			focusBox(idx - 1);
+			return;
+		}
+		// ── Overwrite (ghi đè): ô đang focus ĐÃ có giá trị + phím ký tự đơn ──
+		// native maxlength=1 CHẶN phím khi ô đầy (không fire input) → intercept
+		// keydown: ghi đè giá trị tại chỗ + auto-advance (hành vi gõ thông
+		// thường). Guard: không Ctrl/Cmd/Alt (chừa copy/paste/selectall), không
+		// IME composing, key 1 ký tự. Phím không qua filter (vd numeric + chữ)
+		// → preventDefault + bỏ qua (native cũng chặn — hành vi cũ).
+		if (
+			e.key.length === 1 &&
+			!e.ctrlKey &&
+			!e.metaKey &&
+			!e.altKey &&
+			!e.isComposing &&
+			boxes[idx] !== ''
+		) {
+			e.preventDefault();
+			const ch = filterChar(e.key);
+			if (ch) {
+				boxes[idx] = ch;
+				syncValue();
+				if (idx < length - 1) focusBox(idx + 1);
+			}
 			return;
 		}
 		if (e.key === 'Backspace' && boxes[idx] === '') {

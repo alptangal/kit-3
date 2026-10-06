@@ -216,10 +216,52 @@ ok('I8: set "777777" → 6 ô hiện "7"', vals8.every((v) => v === '7'), vals8.
 const hint8 = await page.locator('[data-test="otp-basic-value"]').textContent();
 ok('I8: hint page state đồng bộ "777777"', hint8?.trim() === '777777', hint8);
 
+// ============ I9 — OVERWRITE ON FILLED BOX ============
+console.log('\n=== I9: OVERWRITE (ô đã có giá trị + phím mới → ghi đè + advance) ===');
+// Reset basic: xóa sạch 6 ô (fill('') trigger input → boxes[i]='' + syncValue)
+for (let i = 0; i < 6; i++) await boxes('otp-basic').nth(i).fill('');
+await page.waitForTimeout(150);
+// B1: focus ô 0 (trống) + điền "1" → auto-advance sang ô 1 (hành vi gõ thường)
+await boxes('otp-basic').first().click();
+await page.keyboard.type('1');
+await page.waitForTimeout(150);
+const activeI9a = await page.evaluate(() => {
+	const all = [...document.querySelectorAll('[data-test="otp-basic"] .otp-box')];
+	return all.indexOf(document.activeElement);
+});
+ok('I9: ô 0 trống + điền "1" → ô 0 = "1"', (await boxes('otp-basic').first().inputValue()) === '1');
+ok('I9: điền ô trống → auto-advance focus ô 1', activeI9a === 1, `activeIndex=${activeI9a}`);
+// B2: click cursor VỀ ô 0 (đã có "1") + nhấn "9" → ghi đè tại chỗ + advance
+await boxes('otp-basic').first().click();
+await page.keyboard.press('9');
+await page.waitForTimeout(150);
+const activeI9b = await page.evaluate(() => {
+	const all = [...document.querySelectorAll('[data-test="otp-basic"] .otp-box')];
+	return all.indexOf(document.activeElement);
+});
+ok('I9: ô 0 ĐÃ có "1" + nhấn "9" → ghi đè thành "9"', (await boxes('otp-basic').first().inputValue()) === '9');
+ok('I9: ghi đè xong → focus chuyển ô 1', activeI9b === 1, `activeIndex=${activeI9b}`);
+const hintI9 = await page.locator('[data-test="otp-basic-value"]').textContent();
+ok('I9: page state bind:value đồng bộ "9"', hintI9?.trim() === '9', hintI9);
+// B3: guard — Ctrl+A (select all) KHÔNG bị intercept (native select vẫn chạy)
+await boxes('otp-basic').first().click();
+await page.keyboard.press('Control+a');
+await page.waitForTimeout(100);
+const selectedI9 = await page.evaluate(() => {
+	const el = document.querySelector('[data-test="otp-basic"] .otp-box');
+	return el === document.activeElement ? el.selectionEnd - el.selectionStart : -1;
+});
+ok('I9: Ctrl+A trên ô có giá trị → native select (không ghi đè)', selectedI9 === 1, `selLength=${selectedI9}`);
+
 // ── Screenshots cho ui-checker ──
 console.log('\n=== SCREENSHOTS ===');
-const shotDir = 'tests/screenshot/input-otp';
+const shotDir = 'tests/screenshots/input-otp';
 mkdirSync(shotDir, { recursive: true });
+// Restore "777777" (I9 đã ghi đè ô 0 = "9") để 01-basic hiện đủ 6 ô filled
+await page.locator('[data-test="otp-set777"]').click();
+await page.waitForTimeout(250);
+// 00-full-page: toàn bộ demo page (basic 777777 + required + disabled + form)
+await page.screenshot({ path: `${shotDir}/00-full-page.png`, fullPage: true });
 // 01-basic: basic với giá trị 777777 (ô filled) + hint
 await page.locator('[data-test="otp-basic"]').screenshot({ path: `${shotDir}/01-basic.png` });
 // 02-error: required case (hiện tại đang success + showValid) → gây error để chụp:
