@@ -94,6 +94,33 @@
 		animation: chart-bar-grow var(--chart-duration) var(--chart-ease) both;
 		transition: opacity var(--chart-duration) var(--chart-ease);
 	}
+	/* Live: marks update in-place (không {#key} remount) → transition geometry mượt,
+	   không nhảy layout (x/y/width/height bằng attribute — transition áp SVG geometry
+	   attribute qua CSS chỉ hoạt động với CSS-able properties; dùng transition x/y
+	   vẫn mượt trên Chromium/Firefox hiện đại). */
+	&.is-live {
+		.chart-bar {
+			transition:
+				x var(--chart-duration) var(--chart-ease),
+				y var(--chart-duration) var(--chart-ease),
+				width var(--chart-duration) var(--chart-ease),
+				height var(--chart-duration) var(--chart-ease),
+				opacity var(--chart-duration) var(--chart-ease);
+			animation: none;
+		}
+		.chart-line {
+			animation: none;
+			stroke-dashoffset: 0;
+			transition: d var(--chart-duration) var(--chart-ease);
+		}
+		.chart-point {
+			animation: none;
+			opacity: 1;
+			transition:
+				cx var(--chart-duration) var(--chart-ease),
+				cy var(--chart-duration) var(--chart-ease);
+		}
+	}
 	.chart-line {
 		fill: none;
 		stroke-width: var(--chart-line-w);
@@ -140,6 +167,119 @@
 		white-space: nowrap;
 		border: 0;
 	}
+
+	/* LIVE badge (live bật): dot pulse + chữ, góc phải header chart */
+	.chart-live-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		align-self: flex-end;
+		font-size: var(--chart-font);
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		color: var(--success);
+		.chart-live-dot {
+			width: 0.5rem;
+			height: 0.5rem;
+			border-radius: var(--border-radius-full, 999px);
+			background: var(--success);
+			animation: chart-live-pulse 1.5s ease-in-out infinite;
+		}
+	}
+}
+
+/* Tooltip hover (portal vào body → KHÔNG scoped trong .chart-root, khai báo
+   :global cùng pattern tooltip-content). Màu: nền surface + border hairline +
+   elevation nhẹ — nổi trên mọi nền, đồng bộ tooltip component (z-index 10500). */
+:global(.chart-tooltip) {
+	position: fixed;
+	transform: translate(-50%, calc(-100% - 10px));
+	background: var(--content1);
+	color: var(--content1-foreground, var(--foreground));
+	border: 1px solid var(--content3);
+	border-radius: var(--border-radius-sm, 4px);
+	padding: 0.5rem 0.625rem;
+	min-width: 7rem;
+	max-width: 16rem;
+	width: fit-content;
+	pointer-events: none;
+	font-family: inherit;
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	box-shadow:
+		0 4px 12px rgba(0, 0, 0, 0.18),
+		0 2px 4px rgba(0, 0, 0, 0.1);
+	z-index: 10500;
+	animation: chart-tooltip-in 150ms ease both;
+
+	.chart-tooltip__label {
+		display: block;
+		font-weight: 600;
+		margin-bottom: 0.25rem;
+		color: var(--content1-foreground, var(--foreground));
+	}
+	.chart-tooltip__rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+	.chart-tooltip__row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+	.chart-tooltip__swatch {
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: var(--border-radius-xs, 2px);
+		flex-shrink: 0;
+		display: inline-block;
+	}
+	.chart-tooltip__name {
+		color: var(--muted, var(--content4-foreground));
+	}
+	.chart-tooltip__value {
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		margin-left: auto;
+	}
+	.chart-tooltip__percent {
+		color: var(--muted, var(--content4-foreground));
+		font-variant-numeric: tabular-nums;
+		min-width: 2.5rem;
+		text-align: right;
+	}
+	.chart-tooltip__delta {
+		font-variant-numeric: tabular-nums;
+		font-weight: 500;
+		&.chart-tooltip__delta--up {
+			color: var(--success);
+		}
+		&.chart-tooltip__delta--down {
+			color: var(--error);
+		}
+		&.chart-tooltip__delta--flat {
+			color: var(--muted, var(--content4-foreground));
+		}
+	}
+}
+
+@keyframes chart-tooltip-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes chart-live-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
 }
 
 @keyframes chart-bar-grow {
@@ -161,5 +301,10 @@
 		.chart-bar { animation: none; }
 		.chart-line { animation: none; stroke-dashoffset: 0; }
 		.chart-point { animation: none; opacity: 1; }
+		&.is-live {
+			.chart-bar, .chart-line, .chart-point { transition: none; }
+		}
 	}
+	:global(.chart-tooltip) { animation: none; }
+	.chart-live-badge .chart-live-dot { animation: none; }
 }

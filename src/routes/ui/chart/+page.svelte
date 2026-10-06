@@ -39,6 +39,33 @@
 		{ label: 'Q3', value: 2500000 },
 		{ label: 'Q4', value: 1200 }
 	];
+
+	// (5) Live data — mirror $state + setInterval (client only). Cửa sổ trượt max=10.
+	const liveData = $state<{ label: string; value: number }[]>([
+		{ label: '0s', value: 120 },
+		{ label: '1s', value: 340 },
+		{ label: '2s', value: 220 }
+	]);
+	let liveTick = $state(3);
+	let liveTimer: ReturnType<typeof setInterval> | undefined;
+
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		liveTimer = setInterval(() => {
+			const v = 100 + Math.round(Math.random() * 500);
+			liveData.push({ label: `${liveTick}s`, value: v });
+			if (liveData.length > 10) liveData.shift();
+			liveTick += 1;
+		}, 1000);
+		return () => clearInterval(liveTimer);
+	});
+
+	// (6) Live với source poll — chart tự poll theo interval prop.
+	let sourceTick = 0;
+	const pollSource = () => {
+		sourceTick += 1;
+		return { label: `n${sourceTick}`, value: 200 + Math.round(Math.random() * 400) };
+	};
 </script>
 
 <div class="page" data-test="chart-demo">
@@ -46,18 +73,19 @@
 
 	<section class="demo" data-test="chart-bar">
 		<h2>Bar đơn (doanh thu 6 tháng)</h2>
-		<p class="demo-hint">type="bar". Mỗi point = một bar rounded-top, align baseline. Hover bar → tooltip native (title).</p>
-		<Chart type="bar" data={revenue} title="Doanh thu theo tháng" aria-label="Biểu đồ doanh thu theo tháng" />
+		<p class="demo-hint">type="bar". Mỗi point = một bar rounded-top, align baseline. Hover bar → tooltip đa thông tin (label + value + % + delta).</p>
+		<Chart type="bar" data={revenue} tooltip title="Doanh thu theo tháng" aria-label="Biểu đồ doanh thu theo tháng" />
 	</section>
 
 	<section class="demo" data-test="chart-line">
 		<h2>Line đơn (visitor, showArea + showPoints)</h2>
-		<p class="demo-hint">type="line" + showArea (nền 10%) + showPoints (marker r=4, ring nền).</p>
+		<p class="demo-hint">type="line" + showArea (nền 10%) + showPoints (marker r=4, ring nền). Hover → tooltip + delta so điểm kề (mặc định line).</p>
 		<Chart
 			type="line"
 			data={visitors}
 			showArea
 			showPoints
+			tooltip
 			title="Lượng visitor"
 			aria-label="Biểu đồ lượng visitor theo tháng"
 		/>
@@ -65,12 +93,13 @@
 
 	<section class="demo" data-test="chart-multi">
 		<h2>Multiple series line (3 series + legend)</h2>
-		<p class="demo-hint">series[] (stretch). Legend hiện tên + swatch (kênh nhận dạng, không chỉ màu). Series 2 = secondary, 3 = success.</p>
+		<p class="demo-hint">series[] (stretch). Legend hiện tên + swatch (kênh nhận dạng, không chỉ màu). Tooltip hover: value từng series + % so tổng tại điểm.</p>
 		<Chart
 			type="line"
 			data={months}
 			series={multiSeries}
 			showPoints
+			tooltip
 			title="Doanh thu / Chi phí / Lợi nhuận"
 			aria-label="Biểu đồ doanh thu chi phí lợi nhuận theo tháng"
 		/>
@@ -82,6 +111,18 @@
 		<Chart type="bar" data={bigValues} title="Doanh thu quý (formatter M/k)" />
 		<p class="demo-hint">showGrid={false} — chỉ còn axis baseline, không gridlines.</p>
 		<Chart type="bar" data={bigValues} showGrid={false} />
+	</section>
+
+	<section class="demo" data-test="chart-live">
+		<h2>Live data (cửa sổ trượt max=10, interval 1s)</h2>
+		<p class="demo-hint">Demo tự đẩy bằng $state + setInterval. Chart re-render mượt (transition geometry, không nhảy layout); badge LIVE + dot pulse. Vượt 10 điểm → bỏ điểm cũ nhất.</p>
+		<Chart type="line" data={liveData} live showPoints showArea title="Live traffic (max 10)" aria-label="Biểu đồ live traffic" />
+	</section>
+
+	<section class="demo" data-test="chart-live-source">
+		<h2>Live data với source poll (interval 800ms, max=8)</h2>
+		<p class="demo-hint">live={ '{' } source, interval, max { '}' } — chart tự poll nguồn, append điểm mới + cửa sổ trượt bỏ điểm cũ nhất khi vượt max.</p>
+		<Chart type="bar" data={[]} live={{ source: pollSource, interval: 800, max: 8 }} title="Live polled (max 8)" aria-label="Biểu đồ live polled" />
 	</section>
 
 	<section class="demo" data-test="chart-empty">

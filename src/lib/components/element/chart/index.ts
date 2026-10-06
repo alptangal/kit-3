@@ -6,7 +6,12 @@ export type {
 	ChartDatum,
 	ChartSeries,
 	ChartProps,
-	ChartConfigs
+	ChartConfigs,
+	ChartTooltipOptions,
+	ChartLiveOptions,
+	ChartTooltipMeta,
+	ChartTooltipSeriesMeta,
+	ChartTooltipRow
 } from './_interface';
 export {
 	niceScale,
@@ -15,6 +20,8 @@ export {
 	roundedTopBar,
 	buildLinePath,
 	buildAreaPath,
+	buildTooltipRows,
+	deltaDir,
 	rnd
 } from './_scale';
 export type { ChartScale, ChartPoint } from './_scale';

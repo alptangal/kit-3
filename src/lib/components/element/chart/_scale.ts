@@ -123,9 +123,53 @@ export function buildLinePath(points: ChartPoint[]): string {
 /** Area path: polyline + khép xuống baseline (2 cạnh dọc đầu/cuối). */
 export function buildAreaPath(points: ChartPoint[], baseline: number): string {
 	if (points.length === 0) return '';
-	const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${rnd(p.x)} ${rnd(p.y)}`).join(' ');
+	const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${rnd(p.x)} ${rnd(p.y).toFixed(2)}`).join(' ');
 	const xFirst = rnd(points[0].x);
 	const xLast = rnd(points[points.length - 1].x);
 	const b = rnd(baseline);
 	return `${line} L ${xLast} ${b} L ${xFirst} ${b} Z`;
+}
+
+/** Hướng delta so mốc trước: up/down/flat (deadzone ±1e-9 tránh float noise). */
+export function deltaDir(delta: number | undefined): 'up' | 'down' | 'flat' {
+	if (delta === undefined || !Number.isFinite(delta)) return 'flat';
+	if (delta > 1e-9) return 'up';
+	if (delta < -1e-9) return 'down';
+	return 'flat';
+}
+
+/**
+ * Build rows cho tooltip mặc định (pure, test được).
+ * - value đã format qua `fmt`; percent = tỉ trọng so `total` ("12%").
+ * - delta so điểm kề trước (undefined ở điểm đầu → không hiện; dir up → dấu "+").
+ * - opts.percentTotal: base tính % (single series → tổng toàn chart, không phải
+ *   giá trị series = 100%); mặc định = tổng value các series truyền vào.
+ */
+export function buildTooltipRows(
+	seriesAtPoint: { name: string; color: string; value: number; delta?: number }[],
+	fmt: (n: number) => string,
+	opts?: { showPercent?: boolean; showDelta?: boolean; percentTotal?: number }
+) {
+	const showPercent = opts?.showPercent ?? true;
+	const showDelta = opts?.showDelta ?? false;
+	const total =
+		opts?.percentTotal ??
+		seriesAtPoint.reduce((sum, s) => sum + (Number.isFinite(s.value) ? s.value : 0), 0);
+	return seriesAtPoint.map((s) => {
+		const raw = Number.isFinite(s.value) ? s.value : 0;
+		const dir = deltaDir(s.delta);
+		const deltaStr =
+			showDelta && s.delta !== undefined
+				? `${dir === 'up' ? '+' : '-'}${fmt(Math.abs(s.delta))}`
+				: undefined;
+		return {
+			name: s.name,
+			color: s.color,
+			value: fmt(raw),
+			percent:
+				showPercent && total > 0 ? `${Math.round((raw / total) * 1000) / 10}%` : undefined,
+			delta: deltaStr,
+			deltaDir: showDelta && s.delta !== undefined ? dir : undefined
+		};
+	});
 }
