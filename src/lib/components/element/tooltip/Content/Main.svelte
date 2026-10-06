@@ -16,6 +16,8 @@
 			const defaultStyles: (string | undefined)[] = [
 				'tooltip-content',
 				`size-${this.size}`,
+				`color-${this.color}`,
+				`variant-${this.variant}`,
 				`rounded-${this.rounded}`
 			];
 			return styleSynced(
@@ -29,6 +31,14 @@
 		previousPosition: undefined,
 		get size() {
 			return props.size ?? tooltipCtx?.size ?? client.browser?.size ?? 'md';
+		},
+		// Bề mặt màu theo hệ thống chung (Color + variant) — class `color-*`/`variant-*`
+		// resolve qua ma trận trong _styles.scss (khai báo :global vì render vào body).
+		get color() {
+			return props.color ?? tooltipCtx?.color ?? 'info';
+		},
+		get variant() {
+			return props.variant ?? tooltipCtx?.variant ?? 'solid';
 		},
 		get delay() {
 			return convertToMiliseconds(props.delay) ?? tooltipCtx?.delay ?? client.browser?.delay ?? 300;
@@ -57,29 +67,33 @@
 							}
 						});
 					}
+					// Điểm neo: ưu tiên anchor (chốt lúc đầu hover — ỔN ĐỊNH, không đổi
+					// theo mousemove), fallback mousePosition (trường hợp không có anchor,
+					// vd mobile actionButton).
+					const anchor = tooltipCtx?.status?.anchor ?? tooltipCtx?.status?.mousePosition;
 					if (
 						data?.node instanceof HTMLElement &&
 						tooltipCtx?.ref &&
-						tooltipCtx.status?.mousePosition?.x &&
-						tooltipCtx.status?.mousePosition?.y
+						anchor?.x &&
+						anchor?.y
 					) {
 						document.body.appendChild(data.node);
-						setPositionTooltip(tooltipCtx.ref, data.node, tooltipCtx.status.mousePosition);
+						setPositionTooltip(tooltipCtx.ref, data.node, anchor);
 						const mutationObs = new MutationObserver(() => {
 							if (
 								data?.node instanceof HTMLElement &&
 								tooltipCtx?.ref &&
-								tooltipCtx.status?.mousePosition?.x
+								anchor?.x
 							)
-								setPositionTooltip(tooltipCtx.ref, data.node, tooltipCtx.status.mousePosition);
+								setPositionTooltip(tooltipCtx.ref, data.node, anchor);
 						});
 						const resizeObs = new ResizeObserver(() => {
 							if (
 								data?.node instanceof HTMLElement &&
 								tooltipCtx?.ref &&
-								tooltipCtx.status?.mousePosition?.x
+								anchor?.x
 							)
-								setPositionTooltip(tooltipCtx.ref, data.node, tooltipCtx.status.mousePosition);
+								setPositionTooltip(tooltipCtx.ref, data.node, anchor);
 						});
 						mutationObs.observe(data.node, { childList: true, subtree: true });
 						resizeObs.observe(data.node);
@@ -177,7 +191,10 @@
 					case 'left':
 						contentRef.style.maxWidth = `${targetRect.left - arrowSize - OFFSET}px`;
 						contentRef.style.maxHeight = `${(client.browser?.height ?? 0) - OFFSET * 2}px`;
-						contentRef.style.left = `${targetRect.left - contentRect.width - arrowSize - configs.offset}px`;
+						contentRef.style.left = `${Math.max(
+							OFFSET,
+							targetRect.left - contentRect.width - arrowSize - configs.offset
+						)}px`;
 						if (contentRef.offsetHeight > targetRect.height) {
 							if (contentRef.offsetHeight < (client.browser?.height ?? 0) - OFFSET * 2) {
 								contentRef.style.top = `${targetRect.top + targetRect.height / 2 - contentRef.offsetHeight / 2}px`;
@@ -191,7 +208,10 @@
 					case 'right':
 						contentRef.style.maxWidth = `${(client.browser?.width ?? 0) - targetRect.right - arrowSize - OFFSET}px`;
 						contentRef.style.maxHeight = `${(client.browser?.height ?? 0) - OFFSET * 2}px`;
-						contentRef.style.left = `${targetRect.right + arrowSize + configs.offset}px`;
+						contentRef.style.left = `${Math.min(
+							(client.browser?.width ?? 0) - contentRef.offsetWidth - OFFSET,
+							targetRect.right + arrowSize + configs.offset
+						)}px`;
 						if (contentRef.offsetHeight > targetRect.height) {
 							if (contentRef.offsetHeight < (client.browser?.height ?? 0) - OFFSET * 2) {
 								contentRef.style.top = `${targetRect.top + targetRect.height / 2 - contentRef.offsetHeight / 2}px`;
@@ -203,6 +223,9 @@
 						}
 						break;
 				}
+				// ARROW SYNC: content đã định vị (có thể clamp) → bump version để arrow
+				// đọc rect CUỐI CÙNG của content và bám theo (không lệch ra ngoài khung).
+				tooltipCtx?.bumpContentVersion?.();
 			}, configs.delay)
 		);
 	}
@@ -221,17 +244,18 @@
 
 <style lang="scss">
 	@use '$styles/sizes.scss';
+	/* Ma trận màu (variant × color → --background/--color/--border-color) dùng
+	   CHUNG với tooltip-arrow (_styles.scss, khai báo :global) — @use để content
+	   element (portal vào body) ăn đúng class variant và color. */
+	@use '../_styles.scss';
 	.tooltip-content {
-		/* Bề mặt tooltip — dùng DESIGN TOKEN (không hardcode gray/black/white) để
-		   đồng bộ theme light/dark + đổi màu theo brand (themeable) như các
-		   component khác. Nền = --primary (bề mặt nổi), chữ = --primary-foreground.
-		   Mũi tên (Arrow) đồng màu qua color='info' (→ var(--primary)). */
-		--background: var(--primary);
-		--color: var(--primary-foreground);
 		overflow: auto;
 		pointer-events: none;
 		background: var(--background);
 		color: var(--color);
+		/* Variant outline: border ăn màu palette (từ ma trận) — variant khác
+		   resolve --border-color: transparent nên không lộ viền. */
+		border: 1px solid var(--border-color, transparent);
 		width: fit-content;
 		height: fit-content;
 		padding-inline: var(--padding);

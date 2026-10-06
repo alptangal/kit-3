@@ -12,15 +12,18 @@
 			return props.size ?? tooltipCtx?.contentMeta?.size ?? tooltipCtx?.size ?? 'md';
 		},
 		get color() {
-			// Mặc định 'info' (→ var(--primary)) để mũi tên ĐỒNG MÀU với nền
-			// tooltip-content (nền = --primary). Dùng 'default' (→ var(--default))
-			// sẽ lệch: trắng trên nền light, xanh đậm trên dark.
-			return props.color ?? 'info';
+			// Bề mặt màu theo root (Color + variant) — ĐỒNG BỘ với tooltip-content qua
+			// cùng ma trận _styles.scss (--arrow-color). Tự đặt màu riêng vẫn được.
+			return props.color ?? tooltipCtx?.color ?? 'info';
+		},
+		get variant() {
+			return props.variant ?? tooltipCtx?.variant ?? 'solid';
 		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
 				'tooltip-arrow',
 				`color-${this.color}`,
+				`variant-${this.variant}`,
 				`size-${this.size}`,
 				tooltipCtx?.contentMeta?.position
 					? `position-${tooltipCtx.contentMeta.position}`
@@ -51,97 +54,83 @@
 	});
 
 	$effect(() => {
+		const contentRef = tooltipCtx?.contentMeta?.ref;
+		const targetRef = tooltipCtx?.ref;
+		const arrowRef = configs.ref;
+		// ARROW SYNC — cùng nguồn dữ liệu với content (anchor):
+		//  1. anchor = điểm mouse LÚC BẮT ĐẦU hover (không đổi theo mousemove →
+		//     arrow không còn "chạy theo chuột" trong khi content đứng yên);
+		//  2. clamp vào rect CUỐI CÙNG của content (đã clamp theo viewport);
+		//  3. contentVersion tăng mỗi lần content reposition → effect re-sync,
+		//     arrow luôn bám rect mới (không lộ ra ngoài khung content).
+		const anchor = tooltipCtx?.status?.anchor ?? tooltipCtx?.status?.mousePosition;
+		const position = tooltipCtx?.contentMeta?.position;
+		const version = tooltipCtx?.contentVersion;
 		if (
-			tooltipCtx?.contentMeta?.position &&
-			tooltipCtx.status?.mousePosition &&
-			tooltipCtx.ref &&
-			tooltipCtx.contentMeta.ref &&
-			configs.ref
-		) {
-			if (!configs.timeId) configs.timeId = new Map();
-			const name = 'arrow-animation';
-			const timeId = configs.timeId.get('arrow-animation');
-			if (timeId) clearTimeout(timeId);
-			configs.timeId.set(
-				name,
-				setTimeout(() => {
-					if (
-						tooltipCtx?.contentMeta?.position &&
-						tooltipCtx.status?.mousePosition &&
-						tooltipCtx.ref &&
-						tooltipCtx.contentMeta.ref &&
-						configs.ref
-					) {
-						const contentRect = tooltipCtx.contentMeta.ref.getBoundingClientRect();
-						const targetRect = tooltipCtx.ref.getBoundingClientRect();
-						const contentPosition = tooltipCtx.contentMeta.position;
-						const { x: mouseX, y: mouseY } = tooltipCtx.status.mousePosition;
-						let arrowSize: undefined | number = 0;
-						if (tooltipCtx?.arrowMeta?.ref)
-							arrowSize =
-								(convertToPixels(
-									getComputedStyle(tooltipCtx.arrowMeta.ref).getPropertyValue(
-										'--size'
-									) as DistanceUnits
-								) ?? 0) / 2;
+			!position ||
+			version === undefined ||
+			!(contentRef instanceof HTMLElement) ||
+			!(targetRef instanceof HTMLElement) ||
+			!(arrowRef instanceof HTMLElement) ||
+			!anchor
+		)
+			return;
+		// Content đã chờ delay rồi mới định vị + bump version → arrow áp NGAY
+		// (không chờ thêm) để mũi tên xuất hiện CÙNG lúc content.
+		if (!contentRef.isConnected || !arrowRef.isConnected || !targetRef.isConnected) return;
+		const contentRect = contentRef.getBoundingClientRect();
+		const targetRect = targetRef.getBoundingClientRect();
+		let arrowSize: undefined | number = 0;
+		if (tooltipCtx?.arrowMeta?.ref)
+			arrowSize =
+				(convertToPixels(
+					getComputedStyle(tooltipCtx.arrowMeta.ref).getPropertyValue('--size') as DistanceUnits
+				) ?? 0) / 2;
 
-						configs.ref.classList.forEach((clss) =>
-							clss.includes('position') ? configs.ref?.classList.remove(clss) : undefined
-						);
-						switch (contentPosition) {
-							case 'top':
-								configs.ref.style.left = `${mouseX - arrowSize / 2}px`;
-								configs.ref.style.top = `${targetRect.top - (tooltipCtx.contentMeta.offset ?? 0) - arrowSize}px`;
-								if (mouseX < contentRect.left + (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-top-left');
-								} else if (mouseX > contentRect.right - (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-top-right');
-								} else {
-									configs.ref.classList.add('position-top');
-								}
-								break;
-							case 'bottom':
-								configs.ref.style.left = `${mouseX - arrowSize / 2}px`;
-								configs.ref.style.top = `${targetRect.bottom + (tooltipCtx.contentMeta.offset ?? 0)}px`;
-								if (mouseX < contentRect.left + (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-bottom-left');
-								} else if (mouseX > contentRect.right - (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-bottom-right');
-								} else {
-									configs.ref.classList.add('position-bottom');
-								}
-								break;
-							case 'left':
-								configs.ref.style.top = `${mouseY - arrowSize / 2}px`;
-								configs.ref.style.left = `${targetRect.left - (tooltipCtx.contentMeta.offset ?? 0) - arrowSize}px`;
-								if (mouseY < contentRect.top + (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-left-top');
-								} else if (mouseY > contentRect.bottom - (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-left-bottom');
-								} else {
-									configs.ref.classList.add('position-left');
-								}
-								break;
-							case 'right':
-								configs.ref.style.top = `${mouseY - arrowSize / 2}px`;
-								configs.ref.style.left = `${targetRect.right + (tooltipCtx.contentMeta.offset ?? 0)}px`;
-								if (mouseY < contentRect.top + (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-right-top');
-								} else if (mouseY > contentRect.bottom - (tooltipCtx.offset ?? 0)) {
-									configs.ref.classList.add('position-right-bottom');
-								} else {
-									configs.ref.classList.add('position-right');
-								}
-								break;
-						}
-					}
-				}, tooltipCtx.delay)
-			);
+		for (const clss of [...arrowRef.classList])
+			if (clss.includes('position')) arrowRef.classList.remove(clss);
+		const gap = tooltipCtx?.contentMeta?.offset ?? 0;
+		const cl = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+		// Điểm neo đã clamp vào khung content (chừa nửa mũi tên mỗi mép).
+		const ax = cl(anchor.x, contentRect.left + arrowSize, contentRect.right - arrowSize);
+		const ay = cl(anchor.y, contentRect.top + arrowSize, contentRect.bottom - arrowSize);
+		switch (position) {
+			case 'top':
+				arrowRef.style.left = `${ax - arrowSize / 2}px`;
+				arrowRef.style.top = `${targetRect.top - gap - arrowSize}px`;
+				if (anchor.x < contentRect.left + gap) arrowRef.classList.add('position-top-left');
+				else if (anchor.x > contentRect.right - gap) arrowRef.classList.add('position-top-right');
+				else arrowRef.classList.add('position-top');
+				break;
+			case 'bottom':
+				arrowRef.style.left = `${ax - arrowSize / 2}px`;
+				arrowRef.style.top = `${targetRect.bottom + gap}px`;
+				if (anchor.x < contentRect.left + gap) arrowRef.classList.add('position-bottom-left');
+				else if (anchor.x > contentRect.right - gap)
+					arrowRef.classList.add('position-bottom-right');
+				else arrowRef.classList.add('position-bottom');
+				break;
+			case 'left':
+				arrowRef.style.top = `${ay - arrowSize / 2}px`;
+				arrowRef.style.left = `${targetRect.left - gap - arrowSize}px`;
+				if (anchor.y < contentRect.top + gap) arrowRef.classList.add('position-left-top');
+				else if (anchor.y > contentRect.bottom - gap)
+					arrowRef.classList.add('position-left-bottom');
+				else arrowRef.classList.add('position-left');
+				break;
+			case 'right':
+				arrowRef.style.top = `${ay - arrowSize / 2}px`;
+				arrowRef.style.left = `${targetRect.right + gap}px`;
+				if (anchor.y < contentRect.top + gap) arrowRef.classList.add('position-right-top');
+				else if (anchor.y > contentRect.bottom - gap)
+					arrowRef.classList.add('position-right-bottom');
+				else arrowRef.classList.add('position-right');
+				break;
 		}
 	});
 </script>
 
-{#if tooltipCtx?.contentMeta?.position}
+{#if tooltipCtx?.status?.hover && tooltipCtx?.contentMeta?.position}
 	<svelte:element
 		this={props.as ?? 'div'}
 		bind:this={configs.ref}
@@ -151,8 +140,14 @@
 {/if}
 
 <style lang="scss">
-	@use '$styles/colors.scss';
+	/* Ma trận màu (variant × color → --arrow-color) dùng CHUNG với tooltip-content
+	   (_styles.scss, khai báo :global) — @use để arrow element (portal vào body)
+	   ăn đúng class variant + color như content. */
+	@use '../_styles.scss';
 	.tooltip-arrow {
+		&.size-2xs {
+			--size: var(--font-size-2xs);
+		}
 		&.size-xs {
 			--size: var(--font-size-xs);
 		}
@@ -192,63 +187,65 @@
 		&.size-9xl {
 			--size: var(--font-size-9xl);
 		}
+		/* Màu mũi tên qua --arrow-color (ma trận _styles.scss) — KHÔNG dùng --color
+		   (semantic map colors.scss) để variant/color tự resolve theo root. */
 		&.position-top {
 			top: 100%;
-			border-top: calc(var(--size) / 2) solid var(--color);
+			border-top: calc(var(--size) / 2) solid var(--arrow-color);
 			border-left: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 			border-right: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 		}
 		&.position-top-left {
 			top: 100%;
 			left: 0px;
-			border-top: calc(var(--size) / 2) solid var(--color);
+			border-top: calc(var(--size) / 2) solid var(--arrow-color);
 			border-right: calc((var(--size)) / 2) solid transparent;
 		}
 		&.position-top-right {
 			top: 100%;
 			right: 0px;
-			border-top: calc(var(--size) / 2) solid var(--color);
+			border-top: calc(var(--size) / 2) solid var(--arrow-color);
 			border-left: calc((var(--size)) / 2) solid transparent;
 		}
 		&.position-bottom {
 			bottom: 100%;
-			border-bottom: calc(var(--size) / 2) solid var(--color);
+			border-bottom: calc(var(--size) / 2) solid var(--arrow-color);
 			border-left: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 			border-right: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 		}
 		&.position-bottom-left {
 			bottom: 100%;
 			left: 0px;
-			border-bottom: calc(var(--size) / 2) solid var(--color);
+			border-bottom: calc(var(--size) / 2) solid var(--arrow-color);
 			border-right: calc((var(--size)) / 2) solid transparent;
 		}
 		&.position-bottom-right {
 			bottom: 100%;
 			right: 0px;
-			border-bottom: calc(var(--size) / 2) solid var(--color);
+			border-bottom: calc(var(--size) / 2) solid var(--arrow-color);
 			border-left: calc((var(--size)) / 2) solid transparent;
 		}
 		&.position-left {
 			left: 100%;
-			border-left: calc(var(--size) / 2) solid var(--color);
+			border-left: calc(var(--size) / 2) solid var(--arrow-color);
 			border-top: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 			border-bottom: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 		}
 		&.position-left-top {
 			left: 100%;
 			top: 0px;
-			border-left: calc(var(--size) / 2) solid var(--color);
+			border-left: calc(var(--size) / 2) solid var(--arrow-color);
 			border-bottom: calc((var(--size)) / 2) solid transparent;
 		}
 		&.position-left-bottom {
 			bottom: 100%;
 			right: 0px;
-			border-left: calc(var(--size) / 2) solid var(--color);
+			border-left: calc(var(--size) / 2) solid var(--arrow-color);
 			border-top: calc((var(--size)) / 2) solid transparent;
 		}
 		&.position-right {
 			right: 100%;
-			border-right: calc(var(--size) / 2) solid var(--color);
+			border-right: calc(var(--size) / 2) solid var(--arrow-color);
 			border-top: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 			border-bottom: calc((var(--size)) / (sqrt(3) * 2)) solid transparent;
 			border-left: 0 solid transparent;
@@ -256,7 +253,7 @@
 		&.position-right-top {
 			right: 100%;
 			top: 0%;
-			border-right: calc(var(--size) / 2) solid var(--color);
+			border-right: calc(var(--size) / 2) solid var(--arrow-color);
 			border-bottom: calc((var(--size)) / 2) solid transparent;
 			border-top: 0 solid transparent;
 			border-left: 0 solid transparent;
@@ -264,7 +261,7 @@
 		&.position-right-bottom {
 			right: 100%;
 			bottom: 0%;
-			border-right: calc(var(--size) / 2) solid var(--color);
+			border-right: calc(var(--size) / 2) solid var(--arrow-color);
 			border-top: calc((var(--size)) / 2) solid transparent;
 			border-bottom: 0 solid transparent;
 			border-left: 0 solid transparent;
@@ -272,6 +269,8 @@
 		width: 0px;
 		height: 0px;
 		position: fixed;
-		transition: all ease-in-out 0.3s;
+		/* Chỉ mượt opacity — left/top áp tức thì: arrow KHÔNG trượt lệch khi content
+		   reposition (transition all làm "arrow chạy" chậm hơn content). */
+		transition: opacity ease-in-out 0.2s;
 	}
 </style>

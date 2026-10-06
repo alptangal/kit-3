@@ -26,6 +26,12 @@
 		get size() {
 			return props.size ?? client.browser?.size ?? 'md';
 		},
+		get color() {
+			return props.color ?? 'info';
+		},
+		get variant() {
+			return props.variant ?? 'solid';
+		},
 		get delay() {
 			return convertToMiliseconds(props.delay) ?? client.browser?.delay ?? 300;
 		},
@@ -76,6 +82,12 @@
 									}
 									if (topmost === configs.ref) {
 										if (!configs.status) configs.status = {};
+										// CHỐT anchor = điểm mouse LÚC BẮT ĐẦU hover (chỉ 1 lần) — content + arrow
+										// cùng bám điểm này để không lệch nhau (tooltip "neo" tại điểm vào,
+										// mô hình chuẩn shadcn/Radix — ổn định, không chạy theo chuột).
+										const overEvent = e as MouseEvent;
+										if (!configs.status.anchor && overEvent)
+											configs.status.anchor = { x: overEvent.clientX, y: overEvent.clientY };
 										configs.status.hover = true;
 									}
 								}
@@ -87,7 +99,9 @@
 						},
 						mouseleave() {
 							if (!configs.status) configs.status = {};
+							// Xoá anchor để lần hover sau chột lại điểm mới.
 							configs.status.hover = false;
+							configs.status.anchor = undefined;
 						}
 					};
 			const propEvents = (props.events ?? []).map((ev) =>
@@ -162,6 +176,7 @@
 	});
 	let contentMeta: ContentMeta = $state({});
 	let arrowMeta: ArrowMeta = $state({});
+	let contentVersion = $state(0);
 	setToolTipCtx({
 		get size() {
 			return configs.size;
@@ -184,6 +199,12 @@
 		get rounded() {
 			return configs.rounded;
 		},
+		get color() {
+			return configs.color;
+		},
+		get variant() {
+			return configs.variant;
+		},
 		updateContentMeta(data) {
 			contentMeta = data;
 		},
@@ -192,6 +213,12 @@
 		},
 		updateArrowMeta(data) {
 			arrowMeta = data;
+		},
+		bumpContentVersion() {
+			contentVersion += 1;
+		},
+		get contentVersion() {
+			return contentVersion;
 		}
 	});
 	onMount(() => {});

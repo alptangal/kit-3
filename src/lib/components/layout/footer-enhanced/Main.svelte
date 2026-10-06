@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { BasicProps } from '$components/interface';
-	import type { ToastConfigs, ToastProps } from '$components/element/tooltip/_interface';
+	import type { ToastConfigs, ToastProps } from '$components/element/toast/_interface';
 
 	export interface FooterProps extends BasicProps {
 		companyName?: string;

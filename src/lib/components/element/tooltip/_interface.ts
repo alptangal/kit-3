@@ -4,6 +4,10 @@ import type { BasicConfigs, BasicProps, DistanceUnits, TimeUnits, Color, Size } 
 import type { SvelteComponent } from 'svelte';
 import type { ButtonConfigs } from '../button/_interface';
 
+// Re-export để các file khác import Color/Size/TooltipVariant từ đây (chỉ import
+// thì module không "declare" được cho consumer).
+export type { Color, Size };
+
 // export interface TooltipProps_old extends BasicProps {
 // 	label?:
 // 		| string
@@ -56,11 +60,14 @@ import type { ButtonConfigs } from '../button/_interface';
 // 	parentRef?: HTMLElement;
 // 	withArrow?: boolean;
 // }
+export type TooltipVariant = 'solid' | 'outline' | 'soft' | 'ghost';
 export interface TooltipProps extends BasicProps {
 	disabled?: boolean;
 	delay?: TimeUnits;
 	offset?: DistanceUnits;
 	rounded?: Size | 'full' | 'none';
+	color?: Color;
+	variant?: TooltipVariant;
 	actionButtons?: {
 		info?: {
 			hide?: boolean;
@@ -69,12 +76,16 @@ export interface TooltipProps extends BasicProps {
 }
 export interface TooltipConfigs extends BasicConfigs {
 	size: Size;
+	color: Color;
+	variant: TooltipVariant;
 	status: {
 		hover?: boolean;
 		mousePosition?: {
 			x: number;
 			y: number;
 		};
+		/** Điểm neo (mouse lúc bắt đầu hover) — content & arrow cùng bám. */
+		anchor?: { x: number; y: number };
 	};
 	delay: number;
 	offset: number;
@@ -92,6 +103,9 @@ export interface TooltipContentProps extends BasicProps {
 	size?: Size;
 	offset?: DistanceUnits;
 	rounded?: Size | 'full' | 'none';
+	// Bề mặt màu — override riêng từng content (mặc định bám root qua ctx).
+	color?: Color;
+	variant?: TooltipVariant;
 }
 export interface TooltipContentConfigs extends BasicConfigs {
 	size: Size;
@@ -100,12 +114,16 @@ export interface TooltipContentConfigs extends BasicConfigs {
 	offset: number;
 	position?: 'top' | 'bottom' | 'left' | 'right';
 	rounded: Size | 'full' | 'none';
+	color: Color;
+	variant: TooltipVariant;
 }
 export interface TooltipArrowProps extends BasicProps {
 	size?: Size;
 	color?: Color;
+	variant?: TooltipVariant;
 }
 export interface TooltipArrowConfigs extends BasicConfigs {
 	size: Size;
 	color: Color;
+	variant: TooltipVariant;
 }

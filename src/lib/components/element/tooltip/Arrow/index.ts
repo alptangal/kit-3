@@ -1,4 +1,4 @@
-import type { Color, Size } from '$interfaces/basic';
+import type { Color, Size } from '$components/interface';
 import type { Snippet } from 'svelte';
 
 export interface Arrow {

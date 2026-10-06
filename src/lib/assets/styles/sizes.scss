@@ -156,6 +156,9 @@
 	--width: 100%;
 	--height: 100%;
 }
+.rounded-2xs {
+	--border-radius: var(--border-radius-2xs);
+}
 .rounded-xs {
 	--border-radius: var(--border-radius-xs);
 }

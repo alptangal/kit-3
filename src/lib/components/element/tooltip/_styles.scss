@@ -1,95 +1,80 @@
-[data-position] {
-	&[data-with-arrow] {
-		--arrow-size: 5;
-	}
-}
-[data-position='bottom'] {
-	position: fixed;
-	display: flex;
-	flex-direction: column;
-	top: var(--rect-bottom);
-	&[data-with-arrow] {
-		.tooltip-arrow {
-			width: fit-content;
-			border-bottom: calc(var(--arrow-size) * 1px) solid black;
-			border-right: calc(((2 * var(--arrow-size) / sqrt(3)) / 2) * 1px) solid transparent;
-			border-left: calc(((2 * var(--arrow-size) / sqrt(3)) / 2) * 1px) solid transparent;
-		}
-	}
-}
-[data-position='right'] {
-	position: fixed;
-	left: var(--rect-right);
-	&[data-with-arrow] {
-		.tooltip-arrow {
-			width: fit-content;
-			border-bottom: calc(((2 * var(--arrow-size) / sqrt(3)) / 2) * 1px) solid transparent;
-			border-right: calc(var(--arrow-size) * 1px) solid black;
-			border-top: calc(((2 * var(--arrow-size) / sqrt(3)) / 2) * 1px) solid transparent;
+// Ma trận màu CHUNG của Tooltip — class `variant-*` × `color-*` cho
+// .tooltip-content + .tooltip-arrow (cả hai render portal vào body → khai báo
+// :global). Ở đây dùng SCSS @each lồng (y hệt button/_styles.scss) vì CSS
+// custom property KHÔNG thể nội suy từ biến CSS runtime.
+//
+// Dùng RAW PALETTE token (--color-<palette>-N) GIỐNG Button (useButtonColor.ts):
+// semantic token (--primary, --success…) ĐẢO scale theo theme (dark override
+// cả 11 bậc) → cùng "success" đổi nghĩa giữa 2 theme; raw palette giữ nguyên.
+//
+// Chốt màu từng variant (tooltip nổi trên nội dung):
+//  solid   — nền đậm 600 + chữ trắng; arrow đồng màu nền (không lộ "gãy")
+//  outline — nền surface (đồng theme) + border & chữ 500; arrow = nền surface
+//  soft    — nền nhạt 100 + chữ 600; arrow đồng màu nền
+//  ghost   — nền trong suốt + chữ 500; arrow đồng màu chữ (nền rỗng, arrow
+//            cùng màu để không mất trên nền trang)
+$colorRefs: (
+	'default': 'gray',
+	'secondary': 'cyan',
+	'success': 'green',
+	'info': 'sky',
+	'warning': 'amber',
+	'error': 'red',
+	'primary': 'indigo'
+);
+
+@use '$styles/sizes.scss';
+
+:global(.tooltip-content) {
+	@each $color, $ref in $colorRefs {
+		&.color-#{$color} {
+			// solid — nền đậm, chữ sáng
+			&.variant-solid {
+				--background: var(--color-#{$ref}-600);
+				--color: white;
+				--arrow-color: var(--color-#{$ref}-600);
+				--border-color: transparent;
+			}
+			// outline — nền surface, border + chữ cùng palette
+			&.variant-outline {
+				--background: var(--content1);
+				--color: var(--color-#{$ref}-500);
+				--arrow-color: var(--content1);
+				--border-color: var(--color-#{$ref}-500);
+			}
+			// soft — nền nhạt, chữ đậm
+			&.variant-soft {
+				--background: var(--color-#{$ref}-100);
+				--color: var(--color-#{$ref}-600);
+				--arrow-color: var(--color-#{$ref}-100);
+				--border-color: transparent;
+			}
+			// ghost — nền trong suốt, chữ 500
+			&.variant-ghost {
+				--background: transparent;
+				--color: var(--color-#{$ref}-500);
+				--arrow-color: var(--color-#{$ref}-500);
+				--border-color: transparent;
+			}
 		}
 	}
 }
 
-[data-with-arrow='123'] {
-	position: relative;
-	--arrow-size: 10;
-	/* &[data-position='top'] {
-		&::before {
-			border-top: calc(sqrt(pow(var(--arrow-size) * 2, 2) - pow(var(--arrow-size), 2)) * 1px) solid
-				black;
-			border-right: calc(var(--arrow-size) * 1px) solid transparent;
-			border-left: calc(var(--arrow-size) * 1px) solid transparent;
-			content: '';
-			position: absolute;
-			top: 0px;
-			left: 0px;
-		}
-	}
-	&[data-position='bottom'] {
-		&::before {
-			border-bottom: calc(sqrt(pow(var(--arrow-size) * 2, 2) - pow(var(--arrow-size), 2)) * 1px)
-				solid black;
-			border-right: calc(var(--arrow-size) * 1px) solid transparent;
-			border-left: calc(var(--arrow-size) * 1px) solid transparent;
-			content: '';
-			position: absolute;
-			top: 0px;
-			left: 0px;
-		}
-	} */
-	&[data-position='bottom'] {
-		.tooltip-arrow {
-			border-bottom: calc(sqrt(pow(var(--arrow-size) * 2, 2) - pow(var(--arrow-size), 2)) * 1px)
-				solid black;
-			border-right: calc(var(--arrow-size) * 1px) solid transparent;
-			border-left: calc(var(--arrow-size) * 1px) solid transparent;
-
-			position: absolute;
-			top: 0px;
-			left: 0px;
-		}
-	}
-	&[data-position='bottom-start'] {
-		.tooltip-arrow {
-			border-bottom: calc(sqrt(pow(var(--arrow-size) * 2, 2) - pow(var(--arrow-size), 2)) * 1px)
-				solid black;
-			border-right: calc(sqrt(pow(var(--arrow-size) * 2, 2) - pow(var(--arrow-size), 2)) * 1px)
-				solid transparent;
-
-			position: absolute;
-			top: 0px;
-			left: 0px;
-		}
-	}
-	&[data-position='bottom-end'] {
-		.tooltip-arrow {
-			border-bottom: calc(sqrt(pow(var(--arrow-size) * 2, 2) - pow(var(--arrow-size), 2)) * 1px)
-				solid black;
-			border-left: calc(sqrt(pow(var(--arrow-size) * 2, 2) - pow(var(--arrow-size), 2)) * 1px) solid
-				transparent;
-			position: absolute;
-			top: 0px;
-			left: 0px;
+:global(.tooltip-arrow) {
+	@each $color, $ref in $colorRefs {
+		&.color-#{$color} {
+			&.variant-solid {
+				--arrow-color: var(--color-#{$ref}-600);
+			}
+			&.variant-outline {
+				--arrow-color: var(--content1);
+			}
+			&.variant-soft {
+				--arrow-color: var(--color-#{$ref}-100);
+			}
+			&.variant-ghost {
+				--arrow-color: var(--color-#{$ref}-500);
+			}
 		}
 	}
 }
