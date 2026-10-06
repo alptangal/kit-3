@@ -85,5 +85,36 @@ if (sidebarBox) {
 	await shot('07-sidebar-switcher-open', { x: 0, y: 0, width: Math.min(520, sidebarBox.width + 320), height: 520 });
 }
 
+// ============ Viewport collision ============
+await page.goto('https://localhost:3000/ui/dropdown-menu', { waitUntil: 'networkidle' });
+await page.waitForSelector('[data-test="dm-viewport-bottom"]', { timeout: 20000 });
+await page.waitForTimeout(500);
+
+// 08: viewport bottom — menu flip lên trên (trigger đáy viewport)
+const bottomTrigger = page.locator('[data-test="dm-viewport-bottom-trigger"]');
+await bottomTrigger.scrollIntoViewIfNeeded();
+await page.waitForTimeout(200);
+await bottomTrigger.click();
+await page.waitForTimeout(300);
+const bottomBox = await page.locator('[data-test="dm-viewport-bottom"] [role="menu"]').boundingBox();
+if (bottomBox) {
+	// Clip vùng trigger + menu (menu nằm TRÊN trigger khi flip)
+	await shot('08-viewport-flip', { x: Math.max(0, bottomBox.x - 80), y: Math.max(0, bottomBox.y - 20), width: 400, height: 500 });
+}
+
+// 09: viewport right — menu clamp nudge trái (trigger mép phải)
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+const rightTrigger = page.locator('[data-test="dm-viewport-right-trigger"]');
+await rightTrigger.scrollIntoViewIfNeeded();
+await page.waitForTimeout(200);
+await rightTrigger.click();
+await page.waitForTimeout(300);
+const rightBox = await page.locator('[data-test="dm-viewport-right"] [role="menu"]').boundingBox();
+if (rightBox) {
+	// Clip vùng trigger + menu (menu bị nudge trái để không vượt mép phải viewport)
+	await shot('09-viewport-clamp', { x: Math.max(0, rightBox.x - 100), y: Math.max(0, rightBox.y - 80), width: 450, height: 300 });
+}
+
 await browser.close();
 console.log('DONE →', OUT);

@@ -24,6 +24,8 @@ const ok = (name, cond, extra = '') => {
 	console.log(`${cond ? 'PASS' : 'FAIL' }  ${name}${extra ? '  → ' + extra : ''}`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Margin an toàn mép viewport (đồng bộ MARGIN trong Content.svelte).
+const vpMargin = 8;
 
 const browser = await chromium.launch({ args: ['--ignore-certificate-errors'] });
 const context = await browser.newContext({
@@ -258,8 +260,115 @@ await page.locator('[data-test="dm-switcher-section"] [role="menuitem"]', { hasT
 await sleep(200);
 const createdAfter = await page.locator('[data-test="dm-team-created"]').textContent();
 ok('DM12 TeamSwitcher "Tạo team" → oncreate (counter tăng)', createdAfter !== createdBefore, `${createdBefore} → ${createdAfter}`);
+	// ============ VIEWPORT COLLISION CHECKS (DMV0-3) ============
+	await page.goto('https://localhost:3000/ui/dropdown-menu', { waitUntil: 'domcontentloaded' });
+	await page.waitForSelector('[data-test="dm-viewport-bottom"]', { timeout: 20000 });
+	await sleep(300);
 
-await browser.close();
+	// DMV0 — viewport bottom: trigger gần đáy → menu flip lên trên (class .flipped)
+	const bottomTrigger = page.locator('[data-test="dm-viewport-bottom-trigger"]');
+	// Scroll trang để trigger nằm sát mép dưới viewport.
+	// Fixture viewport-bottom: min-height: 100vh, justify-end → trigger ở dưới cùng section.
+	// scrollTo trigger y - viewportHeight + 100px (trigger cách đáy 100px).
+	await page.evaluate(() => {
+		const trig = document.querySelector('[data-test="dm-viewport-bottom-trigger"]');
+		if (!trig) return;
+		const rect = trig.getBoundingClientRect();
+		window.scrollTo(0, window.scrollY + rect.bottom - 100);
+	});
+	await sleep(300);
+	await bottomTrigger.click();
+	await sleep(300);
+	const bottomMenu = await page.evaluate(() => {
+		const scope = document.querySelector('[data-test="dm-viewport-bottom"]');
+		const menu = scope?.querySelector('[role="menu"]');
+		const trig = scope?.querySelector('[data-test="dm-viewport-bottom-trigger"]');
+		if (!menu || !trig) return null;
+		const menuRect = menu.getBoundingClientRect();
+		const trigRect = trig.getBoundingClientRect();
+		return {
+			flipped: menu.classList.contains('flipped'),
+			menuTop: menuRect.top,
+			menuBottom: menuRect.bottom,
+			menuLeft: menuRect.left,
+			menuRight: menuRect.right,
+			menuH: menuRect.height,
+			spaceBelow: window.innerHeight - trigRect.bottom - 4, // sideOffset 4
+			spaceAbove: trigRect.top - 4
+		};
+	});
+	const flipExpected = bottomMenu && bottomMenu.spaceBelow < bottomMenu.menuH + vpMargin && bottomMenu.spaceAbove > bottomMenu.spaceBelow;
+	ok('DMV0 viewport bottom: menu flip up (class .flipped) khi chỗ dưới không đủ', bottomMenu?.flipped === true && flipExpected === true, JSON.stringify({ flipped: bottomMenu?.flipped, flipExpected, spaceBelow: bottomMenu?.spaceBelow, menuH: bottomMenu?.menuH, spaceAbove: bottomMenu?.spaceAbove }));
+	ok('DMV0b content trong viewport (top>=0, bottom<=900, left>=0, right<=1280)', bottomMenu && bottomMenu.menuTop >= 0 && bottomMenu.menuBottom <= 900 && bottomMenu.menuLeft >= 0 && bottomMenu.menuRight <= 1280, JSON.stringify({ top: bottomMenu?.menuTop, bottom: bottomMenu?.menuBottom, left: bottomMenu?.menuLeft, right: bottomMenu?.menuRight }));
+
+	// DMV1 — viewport right: trigger mép phải align-start → clamp nudge trái (rect.right <= 1280 - 8)
+	// Scroll đến fixture viewport-right (trigger ở gần mép phải viewport)
+	await page.evaluate(() => {
+		const section = document.querySelector('[data-test="dm-viewport-right"]');
+		section?.scrollIntoView({ behavior: 'instant', block: 'center' });
+	});
+	await sleep(300);
+	const rightTrigger = page.locator('[data-test="dm-viewport-right-trigger"]');
+	await rightTrigger.click();
+	await sleep(300);
+	const rightMenu = await page.evaluate(() => {
+		const scope = document.querySelector('[data-test="dm-viewport-right"]');
+		const menu = scope?.querySelector('[role="menu"]');
+		if (!menu) return null;
+		const menuRect = menu.getBoundingClientRect();
+		return {
+			menuTop: menuRect.top,
+			menuBottom: menuRect.bottom,
+			menuRight: menuRect.right,
+			menuLeft: menuRect.left,
+			shiftX: getComputedStyle(menu).getPropertyValue('--dm-shift-x').trim()
+		};
+	});
+	ok('DMV1 viewport right: menu không vượt mép phải (right <= 1280 - 8)', rightMenu && rightMenu.menuRight <= 1280 - vpMargin, JSON.stringify({ right: rightMenu?.menuRight, shiftX: rightMenu?.shiftX }));
+	ok('DMV1b content trong viewport (top>=0, bottom<=900, left>=0, right<=1280)', rightMenu && rightMenu.menuLeft >= 0 && rightMenu.menuRight <= 1280 && rightMenu.menuTop >= 0 && rightMenu.menuBottom <= 900, JSON.stringify({ left: rightMenu?.menuLeft, right: rightMenu?.menuRight, top: rightMenu?.menuTop, bottom: rightMenu?.menuBottom }));
+
+	// DMV2 — reposition khi scroll: fixture bottom, scrollBy 300px → menu vẫn trong viewport
+	// (Mở lại menu bottom vì DMV1 đã đóng)
+	await bottomTrigger.click();
+	await sleep(300);
+	await page.evaluate(() => window.scrollBy(0, 300));
+	await sleep(300);
+	const afterScroll = await page.evaluate(() => {
+		const scope = document.querySelector('[data-test="dm-viewport-bottom"]');
+		const menu = scope?.querySelector('[role="menu"]');
+		if (!menu) return null;
+		const menuRect = menu.getBoundingClientRect();
+		return {
+			flipped: menu.classList.contains('flipped'),
+			menuTop: menuRect.top,
+			menuBottom: menuRect.bottom,
+			menuLeft: menuRect.left,
+			menuRight: menuRect.right
+		};
+	});
+	ok('DMV2 reposition scroll: menu vẫn trong viewport sau scroll 300px', afterScroll && afterScroll.menuTop >= 0 && afterScroll.menuBottom <= 900 && afterScroll.menuLeft >= 0 && afterScroll.menuRight <= 1280, JSON.stringify(afterScroll));
+
+	// DMV3 — regression: menu thường (dm-basic, trigger giữa trang) KHÔNG flip + top ≈ trigger.bottom + 4px
+	await page.evaluate(() => window.scrollTo(0, 0));
+	await sleep(200);
+	await basicTrigger.click();
+	await sleep(300);
+	const basicMenu = await page.evaluate(() => {
+		const scope = document.querySelector('[data-test="dm-basic"]');
+		const menu = scope?.querySelector('[role="menu"]');
+		const trig = scope?.querySelector('[data-dm-trigger]');
+		if (!menu || !trig) return null;
+		const menuRect = menu.getBoundingClientRect();
+		const trigRect = trig.getBoundingClientRect();
+		return {
+			flipped: menu.classList.contains('flipped'),
+			menuTop: menuRect.top,
+			expectedTop: trigRect.bottom + 4
+		};
+	});
+	ok('DMV3 regression: menu cơ bản KHÔNG flip + top ≈ trigger.bottom + 4px (±2)', basicMenu && basicMenu.flipped === false && Math.abs(basicMenu.menuTop - basicMenu.expectedTop) <= 2, JSON.stringify({ flipped: basicMenu?.flipped, top: basicMenu?.menuTop, expected: basicMenu?.expectedTop }));
+
+	await browser.close();
 
 const passed = results.filter((r) => r.pass).length;
 const failed = results.filter((r) => !r.pass);

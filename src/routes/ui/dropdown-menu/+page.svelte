@@ -211,6 +211,79 @@
 			</div>
 		</div>
 	</section>
+
+	<!-- Viewport collision: fixture "full-bleed" (rộng = 100vw) để trigger chạm mép
+		 viewport thật — trigger ở ĐÁY (menu phải flip lên trên) và trigger ở mép
+		 PHẢI (menu align-start vượt mép → clamp nudge trái). -->
+	<section class="demo viewport-fixture viewport-bottom" data-test="dm-viewport-bottom">
+		<h2>Viewport collision · mép dưới (flip lên trên)</h2>
+		<p class="demo-hint">
+			Trigger nằm đáy viewport; menu dài hơn chỗ trống bên dưới → Content tự flip
+			hiện TRÊN trigger (class <code>.flipped</code>), không bị cắt mép dưới.
+		</p>
+		<div class="row">
+			<DropdownMenu aria-label="Menu mép dưới">
+				<DropdownMenu.Trigger data-test="dm-viewport-bottom-trigger">
+					Menu dài (flip up)
+					<span class="demo-chevron" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none">
+							<path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+						</svg>
+					</span>
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content>
+					<DropdownMenu.Label>Chất lượng</DropdownMenu.Label>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Sao chép link')}>Sao chép link</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Sao chép ảnh')}>Sao chép ảnh</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Chuyển tới')}>Chuyển tới</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Đánh dấu')}>Đánh dấu</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Lưu bản sao')}>Lưu bản sao</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Tạo bản sao')}>Tạo bản sao</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Chia sẻ')}>Chia sẻ</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Tải xuống')}>Tải xuống</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'In')}>In</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Thêm vào')}>Thêm vào bộ sưu tập</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item variant="destructive" onselect={() => (lastSelected = 'Xóa')}>
+						Xóa
+					</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu>
+		</div>
+	</section>
+
+	<section class="demo viewport-fixture viewport-right" data-test="dm-viewport-right">
+		<h2>Viewport collision · mép phải (clamp ngang)</h2>
+		<p class="demo-hint">
+			Trigger sát mép PHẢI viewport; menu align-start mở sang phải vượt mép →
+			Content tự nudge trái (var <code>--dm-shift-x</code>), menu không bị cắt.
+		</p>
+		<div class="row row-end">
+			<DropdownMenu aria-label="Menu mép phải">
+				<DropdownMenu.Trigger data-test="dm-viewport-right-trigger">
+					Menu mép phải
+					<span class="demo-chevron" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none">
+							<path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+						</svg>
+					</span>
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="start">
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Sao chép vp')}>Sao chép</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Chia sẻ vp')}>Chia sẻ</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={() => (lastSelected = 'Chuyển vp')}>Chuyển</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item variant="destructive" onselect={() => (lastSelected = 'Xóa vp')}>
+						Xóa
+					</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu>
+		</div>
+	</section>
+
+	<!-- Spacer cho probe DMV2: cần ≥ 300px đường scroll DƯỚI trigger fixture bottom
+		 (wheel 300px) mà trang vẫn scroll được đủ. -->
+	<div class="page-spacer" aria-hidden="true"></div>
 </div>
 
 <style lang="scss">
@@ -305,6 +378,54 @@
 		width: 1.125rem;
 		height: 1.125rem;
 		color: var(--muted, var(--foreground));
+	}
+
+	.demo-hint {
+		font-size: 0.8125rem;
+		color: var(--muted, var(--foreground));
+		margin: 0 0 0.5rem;
+		max-width: 40rem;
+	}
+
+	// Fixture viewport-collision: full-bleed (phá vỡ max-width 44rem của .page)
+	// để trigger chạm mép viewport thật.
+	.viewport-fixture {
+		width: 100vw;
+		margin-left: calc(50% - 50vw);
+		box-sizing: border-box;
+		border: 1px dashed var(--border, hsl(240 5.9% 90%));
+	}
+
+	.viewport-bottom {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
+		align-items: center;
+		padding: 1rem 1.5rem 0.5rem;
+
+		.row {
+			justify-content: center;
+		}
+	}
+
+	.viewport-right {
+		padding: 1rem 0 1rem 1.5rem;
+
+		.row-end {
+			justify-content: flex-end;
+		}
+	}
+
+	// Spacer cuối trang: probe DMV2 cần đường scroll dưới trigger fixture bottom.
+	.page-spacer {
+		height: 480px;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.viewport-fixture {
+			border-color: hsl(240 5.9% 20%);
+		}
 	}
 
 	code {
