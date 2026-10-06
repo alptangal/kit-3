@@ -160,7 +160,12 @@ export type {
 	ChartProps,
 	ChartConfigs,
 	ChartScale,
-	ChartPoint
+	ChartPoint,
+	ChartTooltipOptions,
+	ChartLiveOptions,
+	ChartTooltipMeta,
+	ChartTooltipSeriesMeta,
+	ChartTooltipRow
 } from './chart/index.ts';
 export { DatePicker, getDatePickerContext, setDatePickerContext } from './date-picker/index.ts';
 export type {
@@ -178,10 +183,13 @@ export type {
 	DataTableColumnAlign,
 	DataTableConfigs,
 	DataTableDensity,
+	DataTableEditable,
+	DataTableLazyLoad,
 	DataTableRootProps,
 	DataTableSharedState,
 	DataTableSortOrder,
-	DataTableStatus
+	DataTableStatus,
+	DataTableVisual
 } from './datatable/_interface';
 export { default as Alert } from './alert/Main.svelte';
 export type { AlertConfigs, AlertProps } from './alert/_interface';
