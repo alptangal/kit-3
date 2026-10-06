@@ -97,6 +97,10 @@
 				non-digit).
 			</li>
 			<li>
+				Gõ số vào ô <strong>đã có giá trị</strong> → ghi đè tại chỗ + auto-advance
+				(như hành vi gõ thông thường).
+			</li>
+			<li>
 				Paste chuỗi "123456" vào ô 0 → phân tán đầy 6 ô.
 			</li>
 			<li>
