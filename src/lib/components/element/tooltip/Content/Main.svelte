@@ -18,7 +18,15 @@
 				`size-${this.size}`,
 				`color-${this.color}`,
 				`variant-${this.variant}`,
-				`rounded-${this.rounded}`
+				`rounded-${this.rounded}`,
+				// Animate: class animate-* chọn from-state transform (CSS _styles.scss);
+				// pos-* chọn hướng slide theo position (cập nhật khi flip hướng).
+				`animate-${this.animate}`,
+				this.position ? `pos-${this.position}` : undefined,
+				// is-shown: đặt SAU khi content + arrow định vị xong → transition
+				// opacity/transform chạy từ from-state (opacity 0 trước đó) — fix arrow
+				// hiện trước content (cả hai cùng frame fade in).
+				this.shown ? 'is-shown' : undefined
 			];
 			return styleSynced(
 				{
@@ -49,6 +57,11 @@
 		get rounded() {
 			return props.rounded ?? tooltipCtx?.rounded ?? this.size;
 		},
+		// Animate đọc từ ctx (root resolve prop animate, true → 'fade').
+		get animate() {
+			return tooltipCtx?.animate ?? 'fade';
+		},
+		shown: false,
 		position: undefined,
 		get event() {
 			const defaultEvents: EventListener = {
@@ -85,7 +98,7 @@
 								tooltipCtx?.ref &&
 								anchor?.x
 							)
-								setPositionTooltip(tooltipCtx.ref, data.node, anchor);
+								applyPosition(tooltipCtx.ref, data.node, liveAnchor());
 						});
 						const resizeObs = new ResizeObserver(() => {
 							if (
@@ -93,7 +106,7 @@
 								tooltipCtx?.ref &&
 								anchor?.x
 							)
-								setPositionTooltip(tooltipCtx.ref, data.node, anchor);
+								applyPosition(tooltipCtx.ref, data.node, liveAnchor());
 						});
 						mutationObs.observe(data.node, { childList: true, subtree: true });
 						resizeObs.observe(data.node);
@@ -101,6 +114,11 @@
 							mutationObs.disconnect();
 							resizeObs.disconnect();
 							if (data.node instanceof HTMLElement) data.node.remove();
+							// Reset from-state cho lần hover SAU: is-shown + position xoá →
+							// content mount lại ở from-state (opacity 0, fade in đúng mỗi lần
+							// hover) và arrow KHÔNG mount sớm với vị trí cũ (stale position).
+							configs.shown = false;
+							configs.position = undefined;
 						};
 					}
 				}
@@ -109,6 +127,26 @@
 		}
 	});
 	const tooltipCtx = getTooltipCtx();
+
+	// Anchor ĐỘNG: follow=true → đọc anchor mới mỗi lần áp (mousemove đã cập nhật
+	// qua rAF); follow=false → chốt lúc load (không đổi theo chuột).
+	function liveAnchor(): { x: number; y: number } {
+		if (tooltipCtx?.follow) {
+			const a = tooltipCtx?.status?.anchor ?? tooltipCtx?.status?.mousePosition;
+			if (a?.x && a?.y) return a;
+		}
+		return tooltipCtx?.status?.anchor ?? tooltipCtx?.status?.mousePosition ?? { x: 0, y: 0 };
+	}
+
+	// Re-position NGAY (không chờ delay) — follow/mutation/resize: tooltip đã hiển
+	// thị, chỉ cập nhật vị trí (delay chỉ áp cho lần hiển thị đầu từ load).
+	function applyPosition(
+		targetRef: HTMLElement | Element,
+		contentRef: HTMLElement,
+		anchor: { x: number; y: number }
+	) {
+		placeAt(targetRef, contentRef, anchor);
+	}
 
 	function setPositionTooltip(
 		targetRef: HTMLElement | Element,
@@ -121,7 +159,18 @@
 		if (timeId) clearTimeout(timeId);
 		configs.timeId.set(
 			name,
-			setTimeout(async () => {
+			setTimeout(() => {
+				placeAt(targetRef, contentRef, mousePosition);
+			}, configs.delay)
+		);
+	}
+
+	function placeAt(
+		targetRef: HTMLElement | Element,
+		contentRef: HTMLElement,
+		mousePosition: { x: number; y: number }
+	) {
+		{
 				// contentRef.style.width = '';
 				// contentRef.style.maxWidth = '';
 				// contentRef.style.maxHeight = '';
@@ -130,7 +179,12 @@
 				// contentRef.style.right = '';
 				// contentRef.style.bottom = '';
 				const targetRect = targetRef.getBoundingClientRect();
-				const contentRect = contentRef.getBoundingClientRect();
+				// Layout size (offsetWidth/Height) KHÔNG bao gồm transform —
+				// getBoundingClientRect bao gồm transform (animate=scale → from-state
+				// scale 0.95 → đo sai 5%, top/left tính từ kích thước thu nhỏ → tooltip
+				// nhảy khi transition xong).
+				const contentWidth = contentRef.offsetWidth;
+				const contentHeight = contentRef.offsetHeight;
 				let arrowSize: undefined | number = 0;
 				if (tooltipCtx?.arrowMeta?.ref)
 					arrowSize =
@@ -162,7 +216,7 @@
 					case 'top':
 						contentRef.style.maxWidth = `${(client.browser?.width ?? 0) - OFFSET * 2}px`;
 						contentRef.style.maxHeight = `${targetRect.top - arrowSize - configs.offset - OFFSET}px`;
-						contentRef.style.top = `${targetRect.top - arrowSize - contentRect.height - configs.offset}px`;
+						contentRef.style.top = `${targetRect.top - arrowSize - contentHeight - configs.offset}px`;
 						if (contentRef.offsetWidth > targetRect.width) {
 							if (contentRef.offsetWidth < (client.browser?.width ?? 0) - OFFSET * 2) {
 								contentRef.style.left = `${targetRect.left + targetRect.width / 2 - contentRef.offsetWidth / 2}px`;
@@ -193,7 +247,7 @@
 						contentRef.style.maxHeight = `${(client.browser?.height ?? 0) - OFFSET * 2}px`;
 						contentRef.style.left = `${Math.max(
 							OFFSET,
-							targetRect.left - contentRect.width - arrowSize - configs.offset
+							targetRect.left - contentWidth - arrowSize - configs.offset
 						)}px`;
 						if (contentRef.offsetHeight > targetRect.height) {
 							if (contentRef.offsetHeight < (client.browser?.height ?? 0) - OFFSET * 2) {
@@ -226,9 +280,44 @@
 				// ARROW SYNC: content đã định vị (có thể clamp) → bump version để arrow
 				// đọc rect CUỐI CÙNG của content và bám theo (không lệch ra ngoài khung).
 				tooltipCtx?.bumpContentVersion?.();
-			}, configs.delay)
-		);
+				// is-shown: đặt SAU khi content định vị xong — transition opacity +
+				// transform chạy từ from-state (fix arrow hiện trước content: arrow
+				// cũng chỉ hiện khi bump/is-shown cùng frame).
+				configs.shown = true;
+		}
 	}
+
+	// FOLLOW: anchor cập nhật theo mousemove (rAF, do root set) → content re-position
+	// NGAY theo anchor mới (bỏ delay — tooltip đã hiển thị, chỉ dời vị trí), rồi
+	// bumpContentVersion để arrow bám lại. KHÔNG đọc contentVersion trong effect
+	// (placeAt bump version → version đổi → effect re-run → placeAt → ... vòng lặp
+	// vô hạn ~60fps khi follow=true). Chỉ chạy sau khi shown (đỡ việc định vị lần
+	// đầu đã có load handler + delay).
+	let followContentRaf = 0;
+	$effect(() => {
+		const follow = tooltipCtx?.follow;
+		const anchor = tooltipCtx?.status?.anchor;
+		const shown = configs.shown;
+		const contentRef = configs.ref;
+		const targetRef = tooltipCtx?.ref;
+		if (
+			!follow ||
+			!shown ||
+			!anchor ||
+			!(contentRef instanceof HTMLElement) ||
+			!(targetRef instanceof HTMLElement)
+		)
+			return;
+		if (!followContentRaf) {
+			followContentRaf = requestAnimationFrame(() => {
+				followContentRaf = 0;
+				if (!(contentRef instanceof HTMLElement) || !(targetRef instanceof HTMLElement)) return;
+				const a = tooltipCtx?.status?.anchor;
+				if (!a) return;
+				placeAt(targetRef, contentRef, a);
+			});
+		}
+	});
 </script>
 
 {#if tooltipCtx?.status?.hover}
@@ -274,6 +363,19 @@
 		z-index: 10500;
 		font-size: var(--font-size);
 		line-height: 1.4;
-		transition: opacity ease-in-out 0.2s, box-shadow ease-in-out 0.2s;
+		/* Animate: transform/opacity from-state (animate-* + pos-* + is-shown khai báo
+		   :global trong _styles.scss). Transition transform + opacity (KHÔNG all -
+		   top/left/maxWidth áp tức thì, không trượt khi reposition/follow). */
+		transition:
+			opacity ease-in-out 0.2s,
+			transform ease-in-out 0.2s,
+			box-shadow ease-in-out 0.2s;
+
+		/* Reduced motion: bỏ transition (hiện ngay trạng thái cuối) — LỒNG sau
+		   transition trong chính rule này (không đặt @media trong _styles.scss bị
+		   @use TRƯỚC — cùng specificity, rule sau thắng → @media đó chết). */
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
 	}
 </style>

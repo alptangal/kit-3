@@ -230,6 +230,112 @@ ok(
 	}
 }
 
+// FOLLOW probe: hover trigger → move mouse TRONG trigger (mousemove fire, hover
+// giữ — move ra ngoài sẽ mouseleave → unmount) → đo content rect TRƯỚC và SAU move.
+// follow=true → rect ĐỔI theo anchor mới (mousemove block cập nhật anchor qua
+// rAF + FollowContent $effect re-position); follow=false → rect GIỮ NGUYÊN
+// (anchor chốt lúc đầu hover, mô hình shadcn/Radix).
+async function followProbe(testId) {
+	const trigger = page.locator(`[data-test="${testId}"]`);
+	// Scroll vào view TRƯỚC khi lấy box — mouse.move thô không tự scroll (section
+	// nằm dưới trang → boundingBox ngoài viewport 900px → move không fire event).
+	await trigger.scrollIntoViewIfNeeded();
+	await page.waitForTimeout(150);
+	const box = await trigger.boundingBox();
+	// Hover điểm TRÁI trigger → anchor chốt ở đây.
+	await page.mouse.move(Math.round(box.x + 20), Math.round(box.y + box.height / 2));
+	await page.waitForTimeout(700);
+	const before = await page.evaluate(() => {
+		const tip = document.querySelector('.tooltip-content');
+		if (!tip) return null;
+		const r = tip.getBoundingClientRect();
+		return { left: Math.round(r.left), top: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+	});
+	// Move chuột TRONG trigger sang phải (di ngang, cùng y — không rời element).
+	await page.mouse.move(Math.round(box.x + box.width - 20), Math.round(box.y + box.height / 2), { steps: 5 });
+	await page.waitForTimeout(350); // rAF + effect + reposition + transition
+	const after = await page.evaluate(() => {
+		const tip = document.querySelector('.tooltip-content');
+		if (!tip) return null;
+		const r = tip.getBoundingClientRect();
+		return { left: Math.round(r.left), top: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+	});
+	await page.mouse.move(640, 850);
+	await page.waitForTimeout(250);
+	return { before, after };
+}
+
+// TP8 — follow=true: content rect ĐỔI theo chuột (đã định vị + is-shown)
+const tp8 = await followProbe('tp-follow-trigger');
+ok(
+	'TP8 follow=true: content rect đổi theo chuột',
+	tp8?.before !== null && tp8?.after !== null && (tp8.before.left !== tp8.after.left || tp8.before.top !== tp8.after.top),
+	`before=${JSON.stringify(tp8?.before)} after=${JSON.stringify(tp8?.after)}`
+);
+
+// TP8b — follow=true: tooltip vẫn visible sau move (không treo vòng lặp rAF)
+ok(
+	'TP8b follow=true: tooltip visible sau move (không loop)',
+	tp8?.after !== null && tp8.after.w > 0 && tp8.after.h > 0,
+	`after=${JSON.stringify(tp8?.after)}`
+);
+
+// TP9 — follow=false: content rect GIỮ NGUYÊN (anchor chốt lúc hover)
+const tp9 = await followProbe('tp-nofollow-trigger');
+ok(
+	'TP9 follow=false: content rect giữ nguyên',
+	tp9?.before !== null && tp9?.after !== null && tp9.before.left === tp9.after.left && tp9.before.top === tp9.after.top,
+	`before=${JSON.stringify(tp9?.before)} after=${JSON.stringify(tp9?.after)}`
+);
+
+// TP10 — animate=scale: class animate-scale + tooltip visible
+const tp10 = await hoverProbe('tp-animate-scale-trigger');
+ok(
+	'TP10 animate=scale: class animate-scale + visible',
+	tp10?.found === true && tp10?.visible === true && tp10?.classes?.includes('animate-scale'),
+	`classes=${tp10?.classes}`
+);
+
+// TP10b — animate=scale: is-shown đặt (opacity 1 sau định vị) + arrow bám
+ok(
+	'TP10b animate=scale: is-shown + arrow sync',
+	tp10?.classes?.includes('is-shown') && tp10?.arrow === true,
+	`classes=${tp10?.classes} arrow=${tp10?.arrow}`
+);
+
+// TP11 — animate=slide: class animate-slide + pos-* (hướng position)
+const tp11 = await hoverProbe('tp-animate-slide-trigger');
+ok(
+	'TP11 animate=slide: class animate-slide + visible',
+	tp11?.found === true && tp11?.visible === true && tp11?.classes?.includes('animate-slide'),
+	`classes=${tp11?.classes}`
+);
+
+// TP11b — animate=slide: is-shown + arrow bám (đã định vị)
+ok(
+	'TP11b animate=slide: is-shown + arrow sync',
+	tp11?.classes?.includes('is-shown') && tp11?.arrow === true && /position-(top|bottom|left|right)/.test(tp11?.arrowClasses ?? ''),
+	`classes=${tp11?.classes} arrowClasses=${tp11?.arrowClasses}`
+);
+
+// TP12 — reduced motion: emulateMedia reduce → transition '0s' (hiện ngay)
+{
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	const snap = await hoverProbe('tp-enabled-trigger');
+	const cs = await page.evaluate(() => {
+		const tip = document.querySelector('.tooltip-content');
+		if (!tip) return null;
+		return window.getComputedStyle(tip).transitionDuration;
+	});
+	ok(
+		'TP12 reduced motion: transition none',
+		snap?.found === true && cs === '0s',
+		`transitionDuration=${cs}`
+	);
+	// Khôi phục media để các probe sau (nếu thêm) chạy bình thường.
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+}
+
 await browser.close();
 
 const passed = results.filter((r) => r.pass).length;

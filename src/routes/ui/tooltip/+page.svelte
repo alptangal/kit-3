@@ -120,6 +120,63 @@
 			{/each}
 		</div>
 	</section>
+
+	<section class="demo" data-test="tp-follow">
+		<h2>Follow (bám theo chuột)</h2>
+		<p class="demo-hint">
+			<code>follow</code> → anchor cập nhật theo mousemove (rAF throttle) — tooltip
+			và arrow bám vị trí chuột hiện tại. Không follow → neo tại điểm vào hover.
+		</p>
+		<div class="grid">
+			<Tooltip follow data-test="tp-follow-on">
+				<button class="demo-btn" data-test="tp-follow-trigger">
+					follow=true (bám chuột)
+				</button>
+				<Tooltip.Content>
+					<Tooltip.Arrow />
+					Tooltip follow — bám theo chuột (rAF).
+				</Tooltip.Content>
+			</Tooltip>
+			<Tooltip data-test="tp-follow-off">
+				<button class="demo-btn" data-test="tp-nofollow-trigger">
+					follow=false (neo điểm vào)
+				</button>
+				<Tooltip.Content>
+					<Tooltip.Arrow />
+					Tooltip neo — đứng tại điểm vào hover.
+				</Tooltip.Content>
+			</Tooltip>
+		</div>
+	</section>
+
+	<section class="demo" data-test="tp-animate">
+		<h2>Animate (fade / scale / slide)</h2>
+		<p class="demo-hint">
+			3 kiểu transition: <code>fade</code> (mặc định, chỉ opacity), <code>scale</code>
+			(opacity + scale 0.95), <code>slide</code> (opacity + dịch 4px theo hướng
+			position). Content + arrow fade in CÙNG frame.
+		</p>
+		<div class="grid">
+			<Tooltip animate="scale" data-test="tp-animate-scale">
+				<button class="demo-btn" data-test="tp-animate-scale-trigger">
+					animate=scale
+				</button>
+				<Tooltip.Content>
+					<Tooltip.Arrow />
+					Tooltip animate scale — opacity + scale.
+				</Tooltip.Content>
+			</Tooltip>
+			<Tooltip animate="slide" data-test="tp-animate-slide">
+				<button class="demo-btn" data-test="tp-animate-slide-trigger">
+					animate=slide
+				</button>
+				<Tooltip.Content>
+					<Tooltip.Arrow />
+					Tooltip animate slide — trượt từ hướng position.
+				</Tooltip.Content>
+			</Tooltip>
+		</div>
+	</section>
 </div>
 
 <style lang="scss">

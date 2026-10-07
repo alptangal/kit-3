@@ -78,3 +78,55 @@ $colorRefs: (
 		}
 	}
 }
+
+// Animate (fade mặc định, scale, slide): from-state = opacity 0 + transform từ
+// custom property (đổi theo class animate-* + pos-*) — chỉ áp khi CHƯA shown
+// (:not(.is-shown)). Dùng :not() thay vì reset trong .is-shown vì specificity:
+// .tooltip-content.animate-slide.pos-top (3 class) THẮNG .tooltip-content.is-shown
+// (2 class) → offset không reset khi shown (tooltip lệch 4px vĩnh viễn + nhảy
+// khi flip position). is-shown (đặt sau khi content + arrow định vị xong) chỉ
+// cần chuyển opacity → transition chạy CÙNG LÚC cả hai (fix arrow hiện trước
+// content). Transform luôn cùng dạng hàm translate(...) scale(...) → interpolate
+// mượt, không cần !important.
+:global(.tooltip-content) {
+	transform: translate(0px, 0px) scale(1);
+	opacity: 1;
+
+	&:not(.is-shown) {
+		--enter-x: 0px;
+		--enter-y: 0px;
+		--enter-scale: 1;
+		&.animate-scale {
+			--enter-scale: 0.95;
+		}
+		&.animate-slide {
+			// Slide 4px theo hướng position (tooltip trượt từ hướng position về target).
+			&.pos-top {
+				--enter-y: 4px;
+			}
+			&.pos-bottom {
+				--enter-y: -4px;
+			}
+			&.pos-left {
+				--enter-x: 4px;
+			}
+			&.pos-right {
+				--enter-x: -4px;
+			}
+		}
+		transform: translate(var(--enter-x), var(--enter-y)) scale(var(--enter-scale));
+		opacity: 0;
+	}
+}
+
+:global(.tooltip-arrow) {
+	opacity: 1;
+
+	&:not(.is-shown) {
+		opacity: 0;
+	}
+}
+
+// Reduced motion: KHÔNG khai báo @media ở đây — rule transition của component
+// (Content/Arrow Main.svelte, sau @use) thắng cùng specificity (rule sau) →
+// @media ở file bị import trước sẽ chết. Component tự lồng @media sau transition.

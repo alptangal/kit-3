@@ -61,6 +61,10 @@ export type { Color, Size };
 // 	withArrow?: boolean;
 // }
 export type TooltipVariant = 'solid' | 'outline' | 'soft' | 'ghost';
+// Kiểu animate khi tooltip đổi trạng thái (hover in, position flip): fade = chỉ
+// opacity (mặc định), scale = opacity + scale 0.95, slide = opacity + dịch 4px
+// theo hướng position. Prop animate nhận thêm boolean (true = fade).
+export type TooltipAnimation = 'fade' | 'scale' | 'slide';
 export interface TooltipProps extends BasicProps {
 	disabled?: boolean;
 	delay?: TimeUnits;
@@ -68,6 +72,10 @@ export interface TooltipProps extends BasicProps {
 	rounded?: Size | 'full' | 'none';
 	color?: Color;
 	variant?: TooltipVariant;
+	/** Anchor cập nhật theo mousemove (rAF throttle) — arrow bám điểm chuột hiện tại. */
+	follow?: boolean;
+	/** Transition mượt khi đổi trạng thái — 'fade' | 'scale' | 'slide' (true = fade). */
+	animate?: TooltipAnimation | boolean;
 	actionButtons?: {
 		info?: {
 			hide?: boolean;
@@ -90,6 +98,8 @@ export interface TooltipConfigs extends BasicConfigs {
 	delay: number;
 	offset: number;
 	rounded: Size | 'full' | 'none';
+	/** Anchor bám theo mousemove (rAF) — mousemove block đọc cờ này để cập nhật anchor. */
+	follow: boolean;
 	previousPosition?: 'top' | 'bottom' | 'left' | 'right';
 	actionButtons: {
 		info: BasicConfigs & {
@@ -116,6 +126,10 @@ export interface TooltipContentConfigs extends BasicConfigs {
 	rounded: Size | 'full' | 'none';
 	color: Color;
 	variant: TooltipVariant;
+	/** Class animate (animate-scale / animate-slide) resolve qua _styles.scss. */
+	animate?: TooltipAnimation;
+	/** Đã định vị + is-shown (opacity 1) — from-state trước đó (opacity 0). */
+	shown?: boolean;
 }
 export interface TooltipArrowProps extends BasicProps {
 	size?: Size;

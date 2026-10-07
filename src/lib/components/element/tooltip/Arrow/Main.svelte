@@ -66,6 +66,9 @@
 		const anchor = tooltipCtx?.status?.anchor ?? tooltipCtx?.status?.mousePosition;
 		const position = tooltipCtx?.contentMeta?.position;
 		const version = tooltipCtx?.contentVersion;
+		// IS-SHOWN: arrow chỉ hiện KHI content đã định vị (bump version > 0) —
+		// cùng frame fade in với content (fix arrow hiện TRƯỚC content panel).
+		const versionSeen = version ?? 0;
 		if (
 			!position ||
 			version === undefined ||
@@ -127,6 +130,9 @@
 				else arrowRef.classList.add('position-right');
 				break;
 		}
+		// is-shown đặt SAU khi set left/top — arrow fade in cùng frame content.
+		if (versionSeen > 0) arrowRef.classList.add('is-shown');
+		else arrowRef.classList.remove('is-shown');
 	});
 </script>
 
@@ -272,5 +278,11 @@
 		/* Chỉ mượt opacity — left/top áp tức thì: arrow KHÔNG trượt lệch khi content
 		   reposition (transition all làm "arrow chạy" chậm hơn content). */
 		transition: opacity ease-in-out 0.2s;
+
+		/* Reduced motion: bỏ transition — LỒNG sau transition (không đặt @media
+		   trong _styles.scss bị @use TRƯỚC — cùng specificity, rule sau thắng). */
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
 	}
 </style>

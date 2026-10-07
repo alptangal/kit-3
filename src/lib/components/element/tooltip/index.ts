@@ -1,6 +1,6 @@
 // Size không được export từ $interfaces/basic — lấy từ $components/interface
 import type { Size } from '$components/interface';
-import type { Color, TooltipVariant } from './_interface';
+import type { Color, TooltipAnimation, TooltipVariant } from './_interface';
 import { getContext, setContext } from 'svelte';
 
 export interface ContentMeta {
@@ -23,7 +23,8 @@ interface TooltipContext {
 			y: number;
 		};
 		/** Điểm "neo" (mouse lúc bắt đầu hover) — content & arrow CÙNG bám điểm này
-		   để không lệch nhau (arrow không chạy theo chuột, content đứng yên). */
+		   để không lệch nhau (arrow không chạy theo chuột, content đứng yên).
+		   follow=true: điểm này CẬP NHẬT theo mousemove (rAF throttle). */
 		anchor?: { x: number; y: number };
 	};
 	rounded?: Size | 'full' | 'none';
@@ -31,6 +32,10 @@ interface TooltipContext {
 	variant?: TooltipVariant;
 	delay?: number;
 	offset?: number;
+	/** Anchor bám theo mousemove (rAF) — arrow + content re-position theo chuột. */
+	follow?: boolean;
+	/** Transition mượt khi tooltip đổi trạng thái ('fade' | 'scale' | 'slide'). */
+	animate?: TooltipAnimation;
 	contentMeta?: ContentMeta;
 	updateContentMeta?: (meta: ContentMeta) => void;
 	arrowMeta?: ArrowMeta;

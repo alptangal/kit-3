@@ -41,6 +41,12 @@
 		get rounded() {
 			return props.rounded ?? this.size ?? client.browser?.size ?? 'md';
 		},
+		// FOLLOW: mousemove block đọc cờ này để cập nhật anchor theo chuột hiện tại
+		// (trước đây đọc configs.follow nhưng field không tồn tại → luôn undefined —
+		// follow chưa bao giờ hoạt động).
+		get follow() {
+			return props.follow ?? false;
+		},
 		get event() {
 			const defaultEvents: EventListener = client.browser?.isMobile
 				? {}
@@ -60,6 +66,22 @@
 							const event = e as MouseEvent;
 							if (!configs.status) configs.status = {};
 							configs.status.mousePosition = { x: event.clientX, y: event.clientY };
+							// FOLLOW: anchor bám theo chuột hiện tại — gom các move trong 1 frame
+							// (rAF throttle, không re-position mỗi pixel). follow=false giữ nguyên
+							// anchor chốt lúc bắt đầu hover (mô hình shadcn/Radix).
+							if (configs.follow && configs.status.anchor) {
+								if (!followRaf) {
+									const anchorAtMove = configs.status.anchor;
+									followRaf = requestAnimationFrame(() => {
+										followRaf = 0;
+										if (!configs.status) return;
+										configs.status.anchor = {
+											x: configs.status.mousePosition?.x ?? anchorAtMove.x,
+											y: configs.status.mousePosition?.y ?? anchorAtMove.y
+										};
+									});
+								}
+							}
 						},
 						mouseover: {
 							handler(e) {
@@ -85,6 +107,8 @@
 										// CHỐT anchor = điểm mouse LÚC BẮT ĐẦU hover (chỉ 1 lần) — content + arrow
 										// cùng bám điểm này để không lệch nhau (tooltip "neo" tại điểm vào,
 										// mô hình chuẩn shadcn/Radix — ổn định, không chạy theo chuột).
+										// follow=true: anchor tiếp tục cập nhật theo mousemove (rAF) — arrow
+										// bám vị trí chuột hiện tại.
 										const overEvent = e as MouseEvent;
 										if (!configs.status.anchor && overEvent)
 											configs.status.anchor = { x: overEvent.clientX, y: overEvent.clientY };
@@ -177,6 +201,8 @@
 	let contentMeta: ContentMeta = $state({});
 	let arrowMeta: ArrowMeta = $state({});
 	let contentVersion = $state(0);
+	// rAF id đang chờ cho follow mousemove (0 = không có frame chờ).
+	let followRaf = 0;
 	setToolTipCtx({
 		get size() {
 			return configs.size;
@@ -192,6 +218,16 @@
 		},
 		get offset() {
 			return configs.offset;
+		},
+		// FOLLOW: content + arrow đọc cờ này để re-position theo anchor mới.
+		get follow() {
+			return props.follow ?? false;
+		},
+		// ANIMATE: content/arrow chọn transition theo kiểu (true/false → fade).
+		get animate() {
+			const a = props.animate;
+			if (a === true || a === false) return 'fade' as const;
+			return a ?? 'fade';
 		},
 		get contentMeta() {
 			return contentMeta;
@@ -221,7 +257,10 @@
 			return contentVersion;
 		}
 	});
-	onMount(() => {});
+	// Dọn frame rAF chờ của follow khi component unmount.
+	onMount(() => () => {
+		if (followRaf) cancelAnimationFrame(followRaf);
+	});
 </script>
 
 <svelte:element
