@@ -6,7 +6,7 @@
 	import { browser } from '$app/environment';
 	import { Button, Toast } from '$components/element';
 	import { handleEvents } from '$modules/_attachments';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { setToastWrapperContext, toastWrapperRegistry } from '.';
 	import * as uuid from 'uuid';
 
@@ -55,9 +55,70 @@
 			// onMount nên không được dùng để append/claim.)
 			const propEvents = props.events ?? [];
 			return propEvents;
+		},
+		// Hover-expand group: getter lazy (thân getter chỉ chạy khi toast item đọc qua
+		// context — sau khi script cha chạy xong, setGroupHover chắc chắn đã init).
+		get setGroupHover() {
+			return setGroupHover;
+		},
+		get releaseGroupHover() {
+			return releaseGroupHover;
 		}
 	});
 	setToastWrapperContext(configs);
+
+	// ── Hover-expand group ──
+	// Hover vào vùng có toast (mouseenter trên TỪNG toast, không phải wrapper — wrapper
+	// là div rỗng 0×0 không nhận pointer event) → toàn bộ toast cùng position EXPAND
+	// thẳng hàng (column với top/bottom, row với left/right), mỗi toast full nguyên bản
+	// (scale 1, không chồng). Mouse rời (delay collapse 150ms chống flicker khi chuột
+	// đi qua khoảng trống giữa các toast) → trả về stack chồng như cũ.
+	// hoveredToasts: Set id của các toast đang giữ chuột (reactive) — size > 0 →
+	// expanded. Dùng Set theo id (không counter) vì mouseleave toast A bắn TRƯỚC
+	// mouseenter toast B khi di chuột qua A→B (counter bị drift), và vì toast bị XÓA
+	// khi đang hover KHÔNG bắn mouseleave (releaseGroupHover từ destroy xử lý).
+	const hoveredToasts = new SvelteSet<string>();
+	const collapseTimeIds = new Map<string, ReturnType<typeof setTimeout>>();
+	// setGroupHover/releaseGroupHover được toast item (Main.svelte) gọi qua wrapper context.
+	const setGroupHover = (hovering: boolean, id?: string) => {
+		const key = id ?? 'anonymous';
+		if (hovering) {
+			// Hủy collapse đang chờ của cùng toast (chuột quay lại nhanh).
+			const pending = collapseTimeIds.get(key);
+			if (pending) {
+				clearTimeout(pending);
+				collapseTimeIds.delete(key);
+			}
+			hoveredToasts.add(key);
+		} else {
+			// Delay 150ms: nếu chuột đi vào toast khác trong nhóm (mouseenter mới) thì hủy
+			// collapse; nếu thực sự rời nhóm → collapse về stack chồng.
+			const pending = collapseTimeIds.get(key);
+			if (pending) clearTimeout(pending);
+			collapseTimeIds.set(
+				key,
+				setTimeout(() => {
+					hoveredToasts.delete(key);
+					collapseTimeIds.delete(key);
+				}, 150)
+			);
+		}
+	};
+	// Toast bị XÓA khi đang hover (click X, auto-dismiss) KHÔNG bắn mouseleave → gọi
+	// ngay từ destroy của toast item để group không kẹt expanded.
+	const releaseGroupHover = (id?: string) => {
+		const key = id ?? 'anonymous';
+		const pending = collapseTimeIds.get(key);
+		if (pending) {
+			clearTimeout(pending);
+			collapseTimeIds.delete(key);
+		}
+		hoveredToasts.delete(key);
+	};
+	onDestroy(() => {
+		collapseTimeIds.forEach((timeId) => clearTimeout(timeId));
+	});
+	const groupExpanded = $derived(shouldRender && hoveredToasts.size > 0);
 
 	$effect(() => {
 		if (!shouldRender) return;
@@ -69,6 +130,10 @@
 					(children) => children.position == pos
 				);
 				const size = childrensFiltered.length;
+				// groupExpanded đọc ở đây → effect re-run khi hover state đổi.
+				const expanded = groupExpanded && size > 0;
+				// Gap giữa các toast khi expanded (px).
+				const gap = 10;
 				for (const children of childrensFiltered) {
 					if (children.ref) {
 						positions.forEach((side) => {
@@ -77,26 +142,36 @@
 						});
 
 						const currentIndex = childrensFiltered.findIndex((k) => k.id == children.id);
-						const step = 5;
-						children.ref.style.transform = `${['bottom', 'top'].includes(children.position ?? '') ? 'translateX(-50%)' : 'translateY(-50%)'} scale(${(100 - (size - 1 - currentIndex) * step) / 100})`;
+						// rank: 0 = toast MỚI NHẤT (ở mép neo), tăng dần với toast cũ hơn — cùng
+						// thứ tự với stack chồng → expand/collapse KHÔNG đảo vị trí toast.
+						const rank = size - 1 - currentIndex;
+						const isVertical = pos == 'bottom' || pos == 'top';
+						// Hướng dịch vào trong: bottom → lên (-Y), top → xuống (+Y),
+						// left → phải (+X), right → trái (-X).
+						const direction = pos == 'bottom' || pos == 'right' ? -1 : 1;
+						const centering = isVertical ? 'translateX(-50%)' : 'translateY(-50%)';
+						const axis = isVertical ? 'Y' : 'X';
+						// Anchor MỘT giá trị chung cho cả nhóm ở CẢ HAI chế độ (children.offset) —
+						// stagger của stack chồng cũng đặt vào transform → chuyển trạng thái thuần
+						// transform (KHÔNG transition top/right/bottom/left — px nhảy).
 						children.ref.style.position = 'absolute';
-						switch (children.position) {
-							case 'bottom':
-								children.ref.style.transformOrigin = 'bottom';
-								children.ref.style.bottom = `${(size - currentIndex - 1) * step * 2 + (children.offset ?? 0)}px`;
-								break;
-							case 'top':
-								children.ref.style.transformOrigin = 'top';
-								children.ref.style.top = `${(size - currentIndex - 1) * step * 2 + (children.offset ?? 0)}px`;
-								break;
-							case 'left':
-								children.ref.style.transformOrigin = 'left';
-								children.ref.style.left = `${(size - currentIndex - 1) * step * 2 + (children.offset ?? 0)}px`;
-								break;
-							case 'right':
-								children.ref.style.transformOrigin = 'right';
-								children.ref.style.right = `${(size - currentIndex - 1) * step * 2 + (children.offset ?? 0)}px`;
-								break;
+						children.ref.style.transformOrigin = pos;
+						// `pos` là string từ array — style indexable cần cast qua unknown
+						// (svelte-check: CSSStyleDeclaration không có index signature).
+						(children.ref.style as unknown as Record<string, string>)[pos] = `${children.offset ?? 0}px`;
+						if (expanded) {
+							// EXPAND thẳng hàng: mỗi toast full nguyên bản (scale 1), xếp hàng theo
+							// rank * (size + gap). Size đo FRESH từ ref (offsetWidth/Height — layout
+							// size, KHÔNG bị transform scale ảnh hưởng) để đúng cả khi font load muộn.
+							const step = isVertical ? children.ref.offsetHeight : children.ref.offsetWidth;
+							children.ref.style.transform = `${centering} translate${axis}(${direction * rank * (step + gap)}px)`;
+						} else {
+							// STACK chồng nguyên trạng: scale step 5% (toast cũ nhỏ dần) + peek
+							// rank * 10px qua transform (tương đương anchor stagger cũ — visual giữ
+							// nguyên,verify bằng probe).
+							const peek = rank * 10;
+							const scale = (100 - rank * 5) / 100;
+							children.ref.style.transform = `${centering} translate${axis}(${direction * peek}px) scale(${scale})`;
 						}
 					}
 				}

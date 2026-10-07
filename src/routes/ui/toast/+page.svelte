@@ -3,6 +3,7 @@
 	import { ToastWrapper } from '$components/element';
 	import { toast } from '$components/element/toast';
 	import { iconify } from '$assets/icons/iconify';
+	import { browser } from '$app/environment';
 
 	// ── State (probe locate qua data-test) ──
 	// lastToast: id của toast mới nhất (mỗi toast-method click cập nhật)
@@ -11,6 +12,8 @@
 	let actionLog = $state<string>('chưa có');
 	// stackIds: danh sách id của 3 toast "Nhiều cùng lúc" (infinite) để xóa sạch.
 	let stackIds = $state<string[]>([]);
+	// probeIds: id các toast do probe event tạo (fire/fire-pause) — clear xóa sạch.
+	let probeIds = $state<string[]>([]);
 
 	function triggerSuccess() {
 		lastToast = toast.success('Đã lưu thành công', 'Dữ liệu đã được ghi vào cơ sở dữ liệu.', {
@@ -93,6 +96,40 @@
 		} else if (lastToast) {
 			toast.remove(lastToast);
 		}
+	}
+
+	// ── Probe-only events (toast-hover-probe.mjs) ──
+	// fire: tạo N toast infinite cùng position (title "H toast i").
+	// fire-pause: 1 toast "H pause toast" duration tùy chỉnh (test pause auto-dismiss).
+	// clear: xóa mọi toast do probe tạo (probeIds) + stack — test releaseGroupHover.
+	// Lắng nghe qua window CustomEvent vì probe chạy từ console (không import được module).
+	if (browser) {
+		window.addEventListener('toast-probe:fire', (e) => {
+			const detail = (e as CustomEvent).detail as {
+				n?: number;
+				position?: 'top' | 'bottom' | 'left' | 'right';
+			};
+			const n = detail?.n ?? 3;
+			const position = detail?.position ?? 'bottom';
+			for (let i = 1; i <= n; i++) {
+				probeIds.push(toast.info(`H toast ${i}`, undefined, { position, duration: 'infinite' }));
+			}
+		});
+		window.addEventListener('toast-probe:fire-pause', (e) => {
+			const detail = (e as CustomEvent).detail as { duration?: number };
+			probeIds.push(
+				toast.info('H pause toast', 'Timer pause khi hover.', {
+					position: 'bottom',
+					duration: detail?.duration ?? 2500
+				})
+			);
+		});
+		window.addEventListener('toast-probe:clear', () => {
+			probeIds.forEach((id) => id && toast.remove(id));
+			probeIds.length = 0;
+			stackIds.forEach((id) => id && toast.remove(id));
+			stackIds = [];
+		});
 	}
 </script>
 

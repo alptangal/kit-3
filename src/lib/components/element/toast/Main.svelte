@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { convertToMiliseconds, styleSynced } from '$modules';
 	import { client } from '$store/basic.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import type { ToastConfigs, ToastProps } from './_interface';
 	import { getToastWrapperContext } from './Wrapper';
 	import { handleEvents } from '$modules/_attachments';
@@ -73,16 +73,26 @@
 								if (!configs.timeId) configs.timeId = new SvelteMap();
 								const timeName = 'processingDuration';
 								const startAt = performance.now();
+								// Elapsed-based auto-dismiss: chỉ cộng dồn thời gian KHI KHÔNG hover
+								// (configs.status.hover do mouseenter/mouseleave set) → hover toast
+								// (hoặc cả group) PAUSE timer, mouse rời chạy tiếp.
+								let lastTick = startAt;
+								let elapsed = 0;
 								const currentIndex = [...client.browser.toasts.ref.children].findIndex((children) =>
 									children.isSameNode(data.node as Node)
 								);
 								const initValue = client.browser.toasts.children.get(props.id);
 								if (initValue) {
+									// width/height: đo bằng offsetWidth/offsetHeight (layout size — KHÔNG
+									// bị transform scale ảnh hưởng như getBoundingClientRect) để Wrapper
+									// tính bước dịch khi hover-expand (mỗi toast full nguyên bản).
 									client.browser.toasts.children.set(props.id, {
 										...initValue,
 										ref: data.node,
 										position: configs.position,
-										offset: configs.offset
+										offset: configs.offset,
+										width: (data.node as HTMLElement).offsetWidth,
+										height: (data.node as HTMLElement).offsetHeight
 									});
 								}
 
@@ -90,7 +100,11 @@
 									const processingDuration = () => {
 										if (configs.duration == 'infinite') return;
 										const currentTime = performance.now();
-										if (currentTime - startAt >= configs.duration) {
+										if (!configs.status.hover) {
+											elapsed += currentTime - lastTick;
+										}
+										lastTick = currentTime;
+										if (elapsed >= configs.duration) {
 											if (client.browser?.toasts?.remove && props.id) {
 												client.browser.toasts.remove(props.id);
 											}
@@ -105,9 +119,18 @@
 						},
 						mouseenter() {
 							configs.status.hover = true;
+							configs.status.groupHover = true;
+							// Hover-expand group: báo Wrapper (qua context) để toàn bộ toast cùng
+							// position EXPAND thẳng hàng. Gửi id để Wrapper track per-toast
+							// (mouseleave A bắn trước mouseenter B khi di chuột A→B).
+							toastWrapperContext?.setGroupHover?.(true, configs.id);
 						},
 						mouseleave() {
 							configs.status.hover = false;
+							configs.status.groupHover = false;
+							// Mouse rời toast: Wrapper delay collapse 150ms (chống flicker khi chuột
+							// đi qua khoảng trống giữa các toast đang expand).
+							toastWrapperContext?.setGroupHover?.(false, configs.id);
 						}
 					}
 				}
@@ -119,7 +142,13 @@
 	const toastWrapperContext = getToastWrapperContext();
 	setToastContext(configs);
 
-	onMount(() => {});
+	// Toast bị XÓA khi đang hover (click X, auto-dismiss khi hover-paused) KHÔNG bắn
+	// mouseleave → release hover tại đây (chống group kẹt expanded vĩnh viễn).
+	onDestroy(() => {
+		if (configs.status.groupHover) {
+			toastWrapperContext?.releaseGroupHover?.(configs.id);
+		}
+	});
 </script>
 
 <svelte:element
@@ -174,6 +203,22 @@
 		padding-block: calc(var(--padding) / 4);
 		background: var(--background);
 		color: var(--foreground);
-		box-shadow: var(--box-shadow-md);
+		/* Elevation: --shadow-color không được define trong theme hiện tại → token
+		   --box-shadow-md resolve 'none' (toast trắng nền trắng vô hình trừ text).
+		   Dùng literal (pattern tooltip Content — ĐẠT ui-checker) + border lộ viền. */
+		box-shadow:
+			0 4px 12px rgba(0, 0, 0, 0.18),
+			0 2px 4px rgba(0, 0, 0, 0.1);
+		border: 1px solid var(--border-color, var(--border, rgba(0, 0, 0, 0.08)));
+		/* Hover-expand group: transition transform (không top/right/bottom/left — px nhảy).
+		   CSS transition hoạt động cùng WAAPI fly transition (Svelte 5) vì fly chỉ chạy
+		   intro lúc mount rồi abort — sau đó inline transform thay đổi được transition mượt. */
+		transition: transform 200ms ease;
+	}
+	/* Reduced-motion: bỏ transition transform (hover expand/collapse tức thì). */
+	@media (prefers-reduced-motion: reduce) {
+		.toast-root {
+			transition: none;
+		}
 	}
 </style>
