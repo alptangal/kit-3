@@ -3,7 +3,9 @@
 	// LIGHT ATOM — Pagination (mirror shadcn usePagination): không context, không form.
 	// Bindable `page` (clamped 1..totalPages), totalPages suy từ totalItems/pageSize,
 	// dải entries: [boundary..., ellipsis-start, sibling..., ellipsis-end, boundary...].
+	// Sibling range CLAMP theo boundary → không đè dải biên, không lặp trang.
 	// Variant 'compact': chỉ prev + counter (jump-to input) + next — không render entries.
+	// Compact counter: pageAtEditStart (blur/xoá rỗng → page trước khi edit, KHÔNG snap 1).
 	// Loading: root aria-busy + MỌI item disabled + mờ + cursor not-allowed (đồng bộ data).
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
@@ -48,6 +50,8 @@
 	// ── Compact counter (jump-to input) ──
 	let editing = $state(false);
 	let draft = $state('');
+	// Trang hiện tại TRƯỚC thời điểm vào edit — blur/xoá rỗng → trả về giá trị này (KHÔNG snap 1)
+	let pageAtEditStart = $state(1);
 	let inputRef: HTMLInputElement | undefined = $state();
 
 	const counterAria = $derived(getText(undefined, { en: 'Page', vi: 'Trang' }));
@@ -63,6 +67,7 @@
 	function startEdit() {
 		if (loading || disabled || editing) return;
 		draft = String(safePage);
+		pageAtEditStart = safePage;
 		editing = true;
 		requestAnimationFrame(() => {
 			inputRef?.focus();
@@ -87,12 +92,14 @@
 		}
 	}
 
-	// Commit: NaN/'' → giữ page hiện tại; > totalPages → snap cuối; < 1 → snap đầu.
+	// Commit (blur hoặc Enter): giá trị RỖNG/không phải số → trả về page TRƯỚC thời điểm
+	// vào edit (pageAtEditStart — KHÔNG snap 1); số trong 1..totalPages → commit (clamp).
+	// Giá trị ngoài range → không commit vô nghĩa (số âm → snap đầu, quá lớn → snap cuối).
 	function commitPage() {
 		if (!editing) return;
 		editing = false;
 		const n = parseInt(draft, 10);
-		page = Number.isNaN(n) ? safePage : clampPage(n);
+		page = Number.isNaN(n) ? pageAtEditStart : clampPage(n);
 	}
 
 	// Blur (click chỗ khác) → commit giá trị hợp lệ
@@ -100,14 +107,16 @@
 		commitPage();
 	}
 
-	// oninput: chỉ giữ [0-9] — paste "abc12" → "12" ngay lập tức.
+	// oninput: chỉ giữ [0-9] — paste "abc" → rỗng (blur → pageAtEditStart), "abc12" → "12".
 	function onDraftInput(e: Event & { currentTarget: EventTarget & HTMLInputElement }) {
 		draft = (e.currentTarget.value ?? '').replace(/[^0-9]/g, '');
 	}
 
-	// ── shadcn usePaginationRange algorithm (mirror 1-1) ──
-	// siblingStart = max(2, page - siblingCount); siblingEnd = min(pages - 1, page + siblingCount)
-	// Dải hẹp (siblingStart <= 3 && siblingEnd >= pages - 2) → hiện toàn bộ.
+	// ── shadcn usePaginationRange algorithm (mirror) ──
+	// Sibling range CLAMP theo boundary: siblingStart = max(boundary+1, page-siblingCount);
+	// siblingEnd = min(total-boundary, page+siblingCount) → KHÔNG đè lên dải biên,
+	// không bao giờ lặp trang (page 2 chỉ thuộc firstBoundary HOẶC sibling, không cả hai).
+	// Dải hẹp (siblingStart <= boundary+2 && siblingEnd >= total-boundary-2) → hiện toàn bộ.
 	// Ngược lại: firstBoundary + middle + lastBoundary, xen -1 (ellipsis) khi có khoảng trống.
 	const entries = $derived.by((): PaginationEntry[] => {
 		const total = totalPages;
@@ -119,11 +128,11 @@
 		const range = (start: number, end: number): number[] =>
 			startPages(Math.max(0, end - start + 1)).map((i) => start + i - 1);
 
-		const siblingStart = Math.max(2, current - siblingCount);
-		const siblingEnd = Math.min(total - 1, current + siblingCount);
+		const siblingStart = Math.max(boundary + 1, current - siblingCount);
+		const siblingEnd = Math.min(total - boundary, current + siblingCount);
 
 		let nums: number[];
-		if (siblingStart <= 3 && siblingEnd >= total - 2) {
+		if (siblingStart <= boundary + 2 && siblingEnd >= total - boundary - 2) {
 			// Tổng trang ít → hiện đủ, không ellipsis
 			nums = startPages(total);
 		} else {

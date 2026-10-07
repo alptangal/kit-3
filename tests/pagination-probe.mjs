@@ -1,7 +1,9 @@
 // pagination-probe.mjs
 // Functional probe cho task "Pagination (light atom, shadcn usePagination)":
 // PC0-PC6: probe cũ (nav/aria/entries/click/disabled/sibling/items)
+// PC5b-PC5e: sibling fix (clamp theo boundary → không lặp trang)
 // PC7-PC15: compact counter (jump-to input), loading, icons, active cursor
+// PC14b-PC14d: compact pageAtEditStart (xoá rỗng → page trước edit) + range clamp blur
 // Chạy: node tests/pagination-probe.mjs (dev server phải chạy ở https://localhost:3000)
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -101,15 +103,110 @@ ok(
 	(await p10.locator('.pagination-next').isDisabled())
 );
 
-console.log('\n=== PC5: SIBLING=2 + BOUNDARY=2, PAGE 5/10 ===');
+console.log('\n=== PC5: SIBLING=2 + BOUNDARY=2, PAGE 5/10 → ĐỦ 1-10 (KHÔNG LẶP) ===');
 const sEntries = await entriesOf('[data-test="pg-sibling"]');
-// shadcn: siblingStart = max(2, 5−2) = 3; siblingEnd = min(9, 5+2) = 7
-// → firstBoundary 1,2 + middle 3–7 + lastBoundary 9,10 (2 ellipsis)
+// FIX sibling: siblingStart = max(b+1, 5−2) = 3; siblingEnd = min(total−b, 5+2) = 7
+// Dải hẹp: 3 <= b+2 (4) && 7 >= total−b−2 (6) → hiện ĐỦ 1-10, không ellipsis, không lặp.
 ok(
-	'PC5: sibling=2/boundary=2 page=5 → [1, 2, …, 3, 4, 5, 6, 7, …, 9, 10]',
-	JSON.stringify(sEntries[0]) === JSON.stringify(['1', '2', '…', '3', '4', '5', '6', '7', '…', '9', '10']),
+	'PC5: sibling=2/boundary=2 page=5 → đủ 1-10 (mỗi trang đúng 1 lần)',
+	JSON.stringify(sEntries[0]) === JSON.stringify(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']),
 	JSON.stringify(sEntries[0])
 );
+
+console.log('\n=== PC5b: SIBLING FIX — CLICK PAGE 9 → KHÔNG LẶP (1 BUTTON "9" DUY NHẤT) ===');
+// Bug cũ: click 9 → entries 1,2,-1,7,8,9,9,10 (page 9 LẶP — sibling đè lastBoundary).
+await pageBtn(navIn('pg-sibling'), 9).click();
+await page.waitForTimeout(150);
+const sb9 = (await entriesOf('[data-test="pg-sibling"]'))[0];
+const count9 = sb9.filter((x) => x === '9').length;
+ok(
+	'PC5b: click page 9 → [1, 2, …, 7, 8, …, 9, 10] — không lặp',
+	JSON.stringify(sb9) === JSON.stringify(['1', '2', '…', '7', '8', '…', '9', '10']) && count9 === 1,
+	`${JSON.stringify(sb9)} count9=${count9}`
+);
+ok(
+	'PC5b: chỉ MỘT button "9" trong nav pg-sibling',
+	(await navIn('pg-sibling').locator('button.pagination-page', { hasText: /^9$/ }).count()) === 1
+);
+
+console.log('\n=== PC5c: SIBLING FIX — CLICK PAGE 2 → KHÔNG LẶP (1 BUTTON "2" DUY NHẤT) ===');
+// Bug cũ: init page 2 → entries 1,2,2,3,4,-1,9,10 (page 2 LẶP — sibling đè firstBoundary).
+await pageBtn(navIn('pg-sibling'), 2).click();
+await page.waitForTimeout(150);
+const sb2 = (await entriesOf('[data-test="pg-sibling"]'))[0];
+const count2 = sb2.filter((x) => x === '2').length;
+ok(
+	'PC5c: click page 2 → [1, 2, …, 3, 4, …, 9, 10] — không lặp',
+	JSON.stringify(sb2) === JSON.stringify(['1', '2', '…', '3', '4', '…', '9', '10']) && count2 === 1,
+	`${JSON.stringify(sb2)} count2=${count2}`
+);
+ok(
+	'PC5c: chỉ MỘT button "2" trong nav pg-sibling',
+	(await navIn('pg-sibling').locator('button.pagination-page', { hasText: /^2$/ }).count()) === 1
+);
+
+console.log('\n=== PC5d: SIBLING FIX — ĐẦU/GIỮA/CUỐI (s2 b2) KHÔNG LẶP ===');
+// Chuỗi click CHỈ qua nút đang hiển thị (đầu 1 → 3 → giữa 5 → cuối 10):
+// cur=1 → [1,2,…,3,…,9,10]; cur=3 → [1,2,…,3,4,5,…,9,10]; cur=5 → đủ 1-10; cur=10 → [1,2,…,8,…,9,10].
+const sbSeq = [];
+await pageBtn(navIn('pg-sibling'), 1).click();
+await page.waitForTimeout(120);
+sbSeq.push((await entriesOf('[data-test="pg-sibling"]'))[0]);
+await pageBtn(navIn('pg-sibling'), 3).click();
+await page.waitForTimeout(120);
+sbSeq.push((await entriesOf('[data-test="pg-sibling"]'))[0]);
+await pageBtn(navIn('pg-sibling'), 5).click();
+await page.waitForTimeout(120);
+sbSeq.push((await entriesOf('[data-test="pg-sibling"]'))[0]);
+await pageBtn(navIn('pg-sibling'), 10).click();
+await page.waitForTimeout(120);
+sbSeq.push((await entriesOf('[data-test="pg-sibling"]'))[0]);
+ok(
+	'PC5d: đầu (1) → [1, 2, …, 3, …, 9, 10]',
+	JSON.stringify(sbSeq[0]) === JSON.stringify(['1', '2', '…', '3', '…', '9', '10']),
+	JSON.stringify(sbSeq[0])
+);
+ok(
+	'PC5d: gần giữa (3) → [1, 2, …, 3, 4, 5, …, 9, 10]',
+	JSON.stringify(sbSeq[1]) === JSON.stringify(['1', '2', '…', '3', '4', '5', '…', '9', '10']),
+	JSON.stringify(sbSeq[1])
+);
+ok(
+	'PC5d: giữa (5) → đủ 1-10 (dải hẹp)',
+	JSON.stringify(sbSeq[2]) === JSON.stringify(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']),
+	JSON.stringify(sbSeq[2])
+);
+ok(
+	'PC5d: cuối (10) → [1, 2, …, 8, …, 9, 10]',
+	JSON.stringify(sbSeq[3]) === JSON.stringify(['1', '2', '…', '8', '…', '9', '10']),
+	JSON.stringify(sbSeq[3])
+);
+const dupInSeq = sbSeq.some((a) => {
+	const pages = a.filter((x) => x !== '…'); // 2 ellipsis ('…') là CHÍNH ĐÁNG — chỉ check trùng số TRANG
+	return new Set(pages).size !== pages.length;
+});
+ok('PC5d: cả 4 bước ĐẦU/GIỮA/CUỐI không trang lặp', !dupInSeq, JSON.stringify(sbSeq));
+
+console.log('\n=== PC5e: SIBLING FIX — MỌI NAV (default) KHÔNG TRANG LẶP ===');
+const allNavEntries = await page.evaluate(() => {
+	const out = [];
+	for (const nav of document.querySelectorAll('[data-test="pagination-demo"] .pagination-root')) {
+		const arr = [];
+		for (const el of nav.querySelectorAll('.pagination-item')) {
+			if (el.classList.contains('pagination-ellipsis')) arr.push('…');
+			else if (el.classList.contains('pagination-page')) arr.push(el.textContent?.trim());
+		}
+		out.push(arr);
+	}
+	return out;
+});
+const dupNavs = allNavEntries
+	.map((a, i) => {
+		const pages = a.filter((x) => x !== '…'); // 2 ellipsis chính đáng — chỉ check trùng SỐ TRANG
+		return { nav: i, entries: a, dup: new Set(pages).size !== pages.length };
+	})
+	.filter((x) => x.dup);
+ok('PC5e: mọi nav pagination không có trang lặp (global guard)', dupNavs.length === 0, JSON.stringify(dupNavs));
 
 console.log('\n=== PC6: TOTAL ITEMS 95/10 → 10 PAGES, NEXT DISABLED AT 10 ===');
 const iEntries = await entriesOf('[data-test="pg-items"]');
@@ -230,6 +327,69 @@ await page.waitForTimeout(150);
 const afterBlur = await page.locator('[data-test="pg-compact"] [data-test="counter-current"]').textContent();
 ok('PC14: blur (click chỗ khác) commit "7"', afterBlur?.trim() === '7', afterBlur);
 
+console.log('\n=== PC14b: XOÁ RỖNG + BLUR → TRẢ VỀ PAGE TRƯỚC KHI EDIT (KHÔNG SNAP 1) ===');
+// page đang là 7 (từ PC14). Vào edit (draft "7"), xoá rỗng, blur → phải trả về 7 (pageAtEditStart),
+// KHÔNG snap về 1 (bug cũ: safePage fallback đúng hướng nhưng không lưu page trước edit).
+await compactNav.locator('[data-test="counter"]').click();
+await page.waitForTimeout(100);
+await page.keyboard.press('Backspace');
+await page.waitForTimeout(50);
+await page.keyboard.press('Backspace');
+await page.waitForTimeout(50);
+const draftEmpty = await page.evaluate(() => {
+	const input = document.querySelector('[data-test="pg-compact"] .pagination-page-input');
+	return input?.value;
+});
+ok('PC14b: xoá hết → draft rỗng', draftEmpty === '', JSON.stringify(draftEmpty));
+await page.mouse.click(50, 50);
+await page.waitForTimeout(150);
+const afterEmptyBlur = await page.locator('[data-test="pg-compact"] [data-test="counter-current"]').textContent();
+ok(
+	'PC14b: blur với draft rỗng → page giữ 7 (pageAtEditStart, KHÔNG snap 1)',
+	afterEmptyBlur?.trim() === '7',
+	afterEmptyBlur
+);
+
+console.log('\n=== PC14c: XOÁ RỖNG → TRỞ VỀ PAGE TRƯỚC KHI XÓA (góc nhìn task: blur) ===');
+// Góc nhìn task 2: "xoá giá trị input rỗng + blur → trả về current page TRƯỚC thời điểm xóa".
+// page hiện là 7. Vào edit, xoá rỗng → blur → 7 (đã cover PC14b). Ở đây kiểm tra thêm biến thể:
+// xoá rỗng rồi NHẬP số không hợp lệ (0) rồi blur → vẫn trả về page trước thời điểm xóa (7).
+await compactNav.locator('[data-test="counter"]').click();
+await page.waitForTimeout(100);
+await page.keyboard.press('Backspace');
+await page.waitForTimeout(50);
+await page.keyboard.press('Backspace');
+await page.waitForTimeout(50);
+await page.keyboard.type('0');
+await page.waitForTimeout(50);
+await page.mouse.click(50, 50);
+await page.waitForTimeout(150);
+const afterZeroBlur = await page.locator('[data-test="pg-compact"] [data-test="counter-current"]').textContent();
+ok(
+	'PC14c: xoá rỗng + nhập "0" + blur → snap đầu 1 (giá trị ngoài range, không vô nghĩa)',
+	afterZeroBlur?.trim() === '1',
+	afterZeroBlur
+);
+
+console.log('\n=== PC14d: NHẬP > TOTALPAGES + BLUR → SNAP CUỐI; < 1 + BLUR → SNAP ĐẦU ===');
+// > totalPages (42): "999" + blur → snap 42. Sau đó "0" + blur → snap 1.
+await compactNav.locator('[data-test="counter"]').click();
+await page.waitForTimeout(100);
+await page.keyboard.type('999');
+await page.waitForTimeout(50);
+await page.mouse.click(50, 50);
+await page.waitForTimeout(150);
+const blur999 = await page.locator('[data-test="pg-compact"] [data-test="counter-current"]').textContent();
+ok('PC14d: "999" + blur → snap cuối "42"', blur999?.trim() === '42', blur999);
+await compactNav.locator('[data-test="counter"]').click();
+await page.waitForTimeout(100);
+await page.keyboard.type('0');
+await page.waitForTimeout(50);
+await page.mouse.click(50, 50);
+await page.waitForTimeout(150);
+const blur0 = await page.locator('[data-test="pg-compact"] [data-test="counter-current"]').textContent();
+ok('PC14d: "0" + blur → snap đầu "1"', blur0?.trim() === '1', blur0);
+
 console.log('\n=== PC15: LOADING → nav[aria-busy="true"] + COUNTER/PREV/NEXT DISABLED + CURSOR NOT-ALLOWED ===');
 const loadingState = await page.evaluate(() => {
 	const scope = document.querySelector('[data-test="pg-loading"] .pagination-root');
@@ -268,12 +428,27 @@ ok('PC17: active cursor → trang active = not-allowed (PC)', activeCursor === '
 
 // ── Screenshots cho ui-checker ──
 console.log('\n=== SCREENSHOTS ===');
-const shotDir = 'tests/screenshot/pagination';
+const shotDir = 'tests/screenshots/pagination';
 mkdirSync(shotDir, { recursive: true });
-await page.locator('[data-test="pg-compact"]').screenshot({ path: `${shotDir}/01-compact.png` });
-await page.locator('[data-test="pg-loading"]').screenshot({ path: `${shotDir}/02-loading.png` });
-await page.locator('[data-test="pg-icons"]').screenshot({ path: `${shotDir}/03-icons.png` });
-await page.locator('[data-test="pg-active"]').screenshot({ path: `${shotDir}/04-active-cursor.png` });
+// Sibling FIXED: pg-sibling đang ở page 10 (từ PC5d) → prev 1 lần → page 9
+// (đúng trạng thái user báo lỗi — cũ: 1,2,-1,7,8,9,9,10 LẶP; giờ: 1,2,…,7,8,…,9,10).
+await navIn('pg-sibling').locator('.pagination-prev').click();
+await page.waitForTimeout(150);
+await page.locator('[data-test="pg-sibling"]').screenshot({ path: `${shotDir}/01-sibling-fixed.png` });
+// Compact counter focus (đang edit, input focus + select-all)
+await compactNav.locator('[data-test="counter"]').click();
+await page.waitForTimeout(200);
+await page.locator('[data-test="pg-compact"]').screenshot({ path: `${shotDir}/02-compact-counter-focus.png` });
+// Compact edit (draft nhập "30")
+await page.keyboard.type('30');
+await page.waitForTimeout(100);
+await page.locator('[data-test="pg-compact"]').screenshot({ path: `${shotDir}/03-compact-edit.png` });
+// Thoát edit (Escape revert) + chụp các section còn lại
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+await page.locator('[data-test="pg-loading"]').screenshot({ path: `${shotDir}/04-loading.png` });
+await page.locator('[data-test="pg-icons"]').screenshot({ path: `${shotDir}/05-icons.png` });
+await page.locator('[data-test="pg-active"]').screenshot({ path: `${shotDir}/06-active-cursor.png` });
 
 await browser.close();
 
