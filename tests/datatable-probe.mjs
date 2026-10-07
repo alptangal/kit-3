@@ -49,7 +49,7 @@ const basic = page.locator('[data-test="dt-basic"]');
 const sortBtn = (label) => basic.locator(`button.datatable-sort[aria-label="${label} — sort"]`);
 // Header th theo label (substring — th còn chứa icon sort ↕/▲/▼ nên không exact).
 const thByLabel = (label) => basic.locator('th.datatable-th', { hasText: label });
-const rowChecks = basic.locator('input.datatable-checkbox:not(.datatable-checkbox--all)');
+const rowChecks = basic.locator('td.datatable-td--check [role="checkbox"]');
 const pageSizeSelect = basic.locator('select.datatable-pagesize-select');
 
 console.log('\n=== DT0: DEMO ROOT + A11Y CONTRACT §6 ===');
@@ -83,6 +83,8 @@ await page.waitForTimeout(250);
 await editSecShot.screenshot({ path: `${shotDirNew}/04-rowactions.png` });
 await lazySecShot.screenshot({ path: `${shotDirNew}/05-lazyload.png` });
 await visSecShot.screenshot({ path: `${shotDirNew}/06-visual.png` });
+// 07-checkbox: table basic trạng thái sạch — Checkbox component (cột đầu).
+await basic.locator('table.datatable').screenshot({ path: `${shotDirNew}/07-checkbox.png` });
 await page.waitForTimeout(100);
 
 console.log('\n=== DT2: FILTER (search mọi cột, nhạy dấu) + COUNT + CLEAR ===');
@@ -124,20 +126,42 @@ console.log('\n=== DT4: ROW SELECTION + SELECT-ALL + CALLBACK ===');
 await pageSizeSelect.selectOption('10'); // trở về 10 row / trang
 await page.waitForTimeout(150);
 ok('DT4: có 10 checkbox row (pageSize 10, không tính select-all)', (await rowChecks.count()) === 10);
-await rowChecks.nth(0).check();
-await page.waitForTimeout(120);
-await rowChecks.nth(1).check();
-await page.waitForTimeout(120);
+ok('DT4: checkbox row là Checkbox component (div[role=checkbox])', (await rowChecks.first().evaluate((el) => el.tagName === 'DIV' && el.getAttribute('role') === 'checkbox')));
+ok('DT4: checkbox row có tabindex=0 (focusable)', (await rowChecks.first().getAttribute('tabindex')) === '0');
+await rowChecks.nth(0).click();
+await page.waitForTimeout(150);
+await rowChecks.nth(1).click();
+await page.waitForTimeout(150);
 ok('DT4: chọn 2 row → debug dt-selected "Chọn 2"', (await page.locator('[data-test="dt-selected"]').textContent())?.includes('2'));
 ok('DT4: row đã chọn có class selected', (await basic.locator('tr.datatable-row.selected').count()) === 2);
-const selectAll = basic.locator('input.datatable-checkbox--all');
-ok('DT4: có select-all trong header', (await selectAll.count()) === 1);
-await selectAll.check();
-await page.waitForTimeout(150);
+ok('DT4: checkbox đã chọn có class has-value', (await rowChecks.nth(0).evaluate((el) => el.classList.contains('has-value'))));
+ok('DT4: checkbox đã chọn aria-checked="true"', (await rowChecks.nth(0).getAttribute('aria-checked')) === 'true');
+ok('DT4: checkmark indicator mount trong checkbox', (await rowChecks.nth(0).locator('.checkbox-indicator-root').count()) === 1);
+ok('DT4: checkbox chưa chọn aria-checked="false"', (await rowChecks.nth(2).getAttribute('aria-checked')) === 'false');
+// 08-selectall: 2 row đã chọn → select-all dash (indeterminate).
+await basic.locator('table.datatable').screenshot({ path: `${shotDirNew}/08-selectall.png` });
+// Select-all Checkbox component (indeterminate khi một phần chọn).
+const selectAll = basic.locator('th.datatable-th--check [role="checkbox"]');
+ok('DT4: có select-all trong header (Checkbox component)', (await selectAll.count()) === 1);
+ok('DT4: một phần chọn → select-all aria-checked="mixed" (indeterminate)', (await selectAll.getAttribute('aria-checked')) === 'mixed');
+await selectAll.click();
+await page.waitForTimeout(200);
 ok('DT4: select-all → chọn đủ 10 row trang (debug "Chọn 10")', (await page.locator('[data-test="dt-selected"]').textContent())?.includes('10'));
-await selectAll.uncheck();
-await page.waitForTimeout(150);
+ok('DT4: select-all sau check → aria-checked="true"', (await selectAll.getAttribute('aria-checked')) === 'true');
+// 09-selection: select-all → đủ 10 row selected (nền primary mix).
+await basic.locator('table.datatable').screenshot({ path: `${shotDirNew}/09-selection.png` });
+await selectAll.click();
+await page.waitForTimeout(200);
 ok('DT4: uncheck select-all → 0 row', (await basic.locator('tr.datatable-row.selected').count()) === 0);
+// Keyboard focus: Tab vào checkbox đầu → focus-visible (outline indigo).
+await rowChecks.nth(3).focus();
+await page.waitForTimeout(120);
+await page.keyboard.press('Space');
+await page.waitForTimeout(150);
+ok('DT4: keyboard Space → toggle row (Chọn 1)', (await page.locator('[data-test="dt-selected"]').textContent())?.includes('1'));
+ok('DT4: checkbox có focus (document.activeElement)', (await rowChecks.nth(3).evaluate((el) => document.activeElement === el)));
+await page.keyboard.press('Space');
+await page.waitForTimeout(150);
 
 console.log('\n=== DT1: SORT ASC/DESC + ARIA-SORT + RESET PAGE (chạy sau, đổi trạng thái) ===');
 await sortBtn('Price').click();

@@ -9,6 +9,8 @@
 	import { matchSegments, type TextSegment } from '$modules/highlight';
 	import { getDataTableContext } from './_context';
 	import type { DataTableColumn } from './_interface';
+	import Checkbox from '$components/form/checkbox/Main.svelte';
+	import type { MouseEvents } from '$components/interface';
 
 	const ctx = getDataTableContext();
 	const configs = ctx?.configs;
@@ -92,13 +94,30 @@
 		ctx.openCellEditor(rowId, col.id, value);
 	};
 
-	// ── Mobile: tap row → expand actions (không tap checkbox/input) ──
+	// ── Mobile: tap row → expand actions (không tap checkbox/control) ──
 	const onRowTap = (rowId: string, e: MouseEvent): void => {
 		if (!ctx?.rowActions || !ctx.isMobile) return;
 		const target = e.target as HTMLElement;
-		if (target.closest('input, button, a, [data-no-tap]')) return;
+		// Checkbox component render div[role="checkbox"] (không phải input thật).
+		if (target.closest('input, button, a, [role="checkbox"], [data-no-tap]')) return;
 		ctx.toggleRowActions(rowId);
 	};
+
+	// ── Row checkbox toggle: Checkbox component không có prop onChange —
+	// gọi ctx.toggleRow qua events (click + keydown Space/Enter; toggle nội bộ
+	// $bindable chỉ đổi hiển thị local, trạng thái thật nằm ở ctx.selected). ──
+	const rowCheckEvents = (rowId: string) => [
+		{
+			events: {
+				click: () => ctx?.toggleRow(rowId),
+				// Signature đúng EventCompact (MouseEvents là interface object).
+				keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => {
+					const key = (e as KeyboardEvent | undefined)?.key;
+					if (key === ' ' || key === 'Enter') ctx?.toggleRow(rowId);
+				}
+			}
+		}
+	];
 </script>
 
 {#if ctx}
@@ -139,12 +158,13 @@
 				>
 					{#if configs?.selectable}
 						<td class="datatable-td datatable-td--check">
-							<input
-								class="datatable-checkbox"
-								type="checkbox"
-								aria-label={configs.rowSelectText.replace('{index}', String(index + 1))}
+											<Checkbox
 								checked={ctx.isSelected(rowId)}
-								onchange={() => ctx.toggleRow(rowId)}
+								size={configs.size}
+								color="primary"
+								aria-label={configs.rowSelectText.replace('{index}', String(index + 1))}
+								class="datatable-row-checkbox"
+								events={rowCheckEvents(rowId)}
 							/>
 						</td>
 					{/if}
@@ -526,14 +546,10 @@
 		}
 	}
 
-	.datatable-checkbox {
-		width: 1rem;
-		height: 1rem;
-		margin: 0;
-		vertical-align: middle;
-		accent-color: var(--primary, var(--color-indigo-500));
-		cursor: var(--cursor-interactive);
-	}
+	// ── Checkbox component (thay native input — đồng bộ hệ thống) ──
+	// Class .datatable-row-checkbox nằm trên root Checkbox component (khác
+	// scope hash — scoped CSS ở đây không match; căn giữa từ td
+	// vertical-align: middle). Giữ class làm hook DOM.
 
 	// Highlight match search (nền amber nhạt, không đổi chữ).
 	.datatable-mark {
@@ -606,10 +622,10 @@
 		animation: datatable-shimmer 1.4s ease-in-out infinite;
 
 		&--check {
-			width: 1rem;
-			height: 1rem;
-			max-width: 1rem;
-			border-radius: 0.2rem;
+			width: 1.25rem;
+			height: 1.25rem;
+			max-width: 1.25rem;
+			border-radius: var(--border-radius-2xs, 0.2rem);
 			margin: 0;
 		}
 	}

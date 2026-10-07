@@ -4,23 +4,29 @@
 	import { releaseCheckboxIndicatorDefault, setCheckboxIndicatorContext } from '.';
 	import type { CheckboxIndicatorConfigs, CheckboxIndicatorProps } from '../_interface';
 	import { getCheckboxContext } from '..';
-	import { Checkbox } from '$components/form';
+	// Import trực tiếp file Checked (tránh circular import qua barrel $components/form —
+	// barrel re-export Checkbox root → "Cannot access 'CheckboxRoot' before initialization").
+	import CheckboxIndicatorChecked from '../Indicator/Checked/Main.svelte';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
 
-	let { children, checked = $bindable(), ...props }: CheckboxIndicatorProps = $props();
+	let { children, checked = $bindable(), indeterminate, ...props }: CheckboxIndicatorProps = $props();
 	let configs: CheckboxIndicatorConfigs = $state({
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
 				'checkbox-indicator-root',
 				`size-${this.size}`,
 				`color-${this.color}`,
-				`rounded-${this.rounded}`
+				`rounded-${this.rounded}`,
+				this.indeterminate ? 'indeterminate' : undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
 		get checked() {
 			return checked ?? checkboxContext?.checked;
+		},
+		get indeterminate() {
+			return indeterminate ?? checkboxContext?.indeterminate ?? false;
 		},
 		get size() {
 			return props.size ?? checkboxContext?.size ?? 'md';
@@ -68,8 +74,10 @@
 >
 	{#if children}
 		{@render children()}
+	{:else if configs.indeterminate}
+		<span class="checkbox-indeterminate-dash" aria-hidden="true"></span>
 	{:else if configs.checked}
-		<Checkbox.Indicator.Checked />
+		<CheckboxIndicatorChecked />
 	{/if}
 </svelte:element>
 
@@ -87,5 +95,15 @@
 		border-color: var(--color);
 		border-radius: var(--border-radius);
 		flex-shrink: 0;
+	}
+
+	/* ── Indeterminate dash (một phần chọn — select-all) ── */
+	.checkbox-indeterminate-dash {
+		display: block;
+		width: 0.625rem;
+		height: 0.125rem;
+		border-radius: 9999px;
+		background: var(--color);
+		pointer-events: none;
 	}
 </style>

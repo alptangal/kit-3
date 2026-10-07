@@ -10,7 +10,7 @@
 	import type { TranslateContent } from '$interfaces/basic';
 	import type { ValidationCompact, ValidationFull } from '../input/_interface';
 
-	let { children, checked = $bindable(), ...props }: CheckboxProps = $props();
+	let { children, checked = $bindable(), indeterminate = false, ...props }: CheckboxProps = $props();
 	const formContext = getFormContext();
 
 	function toggle() {
@@ -47,7 +47,8 @@ let configs: CheckboxConfigs = $state({
 				`size-${this.size}`,
 				`color-${this.color}`,
 				this.disabled ? 'disabled' : undefined,
-				checked ? 'has-value' : undefined
+				checked ? 'has-value' : undefined,
+				indeterminate ? 'indeterminate' : undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
@@ -66,6 +67,9 @@ let configs: CheckboxConfigs = $state({
 		},
 		get checked() {
 			return checked;
+		},
+		get indeterminate() {
+			return indeterminate;
 		},
 		get duration() {
 			return convertToMiliseconds(props.duration) ?? convertToMiliseconds(client.browser?.duration) ?? 300;
@@ -246,7 +250,7 @@ let configs: CheckboxConfigs = $state({
 	bind:this={configs.ref}
 	class={configs.style}
 	role="checkbox"
-	aria-checked={checked ? 'true' : 'false'}
+	aria-checked={indeterminate ? 'mixed' : checked ? 'true' : 'false'}
 	tabindex={0}
 	aria-label={props['aria-label']}
 	{@attach handleEvents(configs.event)}

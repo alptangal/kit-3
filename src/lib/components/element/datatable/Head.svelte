@@ -3,6 +3,10 @@
 	// DataTable.Head — thead: th scope="col" + aria-sort. Cột sort được
 	// render nút button (tránh th inside button = invalid HTML). Nền
 	// --content2 (token, không hardcode).
+	// Mới: select-all dùng Checkbox component (indeterminate khi một phần
+	// chọn — aria-checked="mixed" + dash indicator).
+	import Checkbox from '$components/form/checkbox/Main.svelte';
+	import type { MouseEvents } from '$components/interface';
 	import { getDataTableContext } from './_context';
 	import type { DataTableColumn } from './_interface';
 
@@ -13,6 +17,21 @@
 	const indeterminate = $derived.by(
 		() => !!ctx && !ctx.allPageSelected && ctx.pageRows.some(({ row, index }) => ctx.isSelected(ctx.getRowId(row, index)))
 	);
+
+	// ── Select-all toggle: Checkbox component không có prop onChange —
+	// gọi ctx.togglePageSelection qua events (click + keydown Space/Enter). ──
+	const selectAllEvents = () => [
+		{
+			events: {
+				click: () => ctx?.togglePageSelection(),
+				// Signature đúng EventCompact (MouseEvents là interface object).
+				keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => {
+					const key = (e as KeyboardEvent | undefined)?.key;
+					if (key === ' ' || key === 'Enter') ctx?.togglePageSelection();
+				}
+			}
+		}
+	];
 
 	// aria-sort: column đang sort → ascending/descending; không → undefined
 	// (cột không sortable). Nền: configs.sortable là có cơ chế sort hay không.
@@ -30,13 +49,14 @@
 		<tr>
 			{#if configs?.selectable}
 				<th class="datatable-th datatable-th--check" scope="col">
-					<input
-						class="datatable-checkbox datatable-checkbox--all"
-						type="checkbox"
-						aria-label={configs.selectAllText}
+					<Checkbox
 						checked={ctx.allPageSelected}
-						{indeterminate}
-						onchange={() => ctx.togglePageSelection()}
+						indeterminate={indeterminate}
+						size={configs.size}
+						color="primary"
+						aria-label={configs.selectAllText}
+						class="datatable-selectall-checkbox"
+						events={selectAllEvents()}
 					/>
 				</th>
 			{/if}
@@ -116,6 +136,10 @@
 	.datatable-th--check {
 		width: 2.5rem;
 	}
+
+	// Class .datatable-selectall-checkbox nằm trên root Checkbox component
+	// (khác scope hash — scoped CSS ở đây không match, căn giữa từ
+	// .datatable-th vertical-align: middle). Giữ class làm hook DOM.
 
 	.datatable-th-label {
 		display: block;

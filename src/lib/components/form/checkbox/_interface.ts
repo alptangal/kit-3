@@ -3,12 +3,16 @@ import type { TranslateContent } from '$interfaces/basic';
 
 export interface CheckboxIndicatorProps extends BasicProps {
 	checked?: boolean;
+	/** Trạng thái một phần chọn (dash) — override qua context nếu undefined. */
+	indeterminate?: boolean;
 	color?: Color;
 	duration?: TimeUnits;
 	rounded?: Size;
 }
 export interface CheckboxIndicatorConfigs extends BasicConfigs {
 	checked?: boolean;
+	/** Trạng thái một phần chọn (dash indicator). */
+	indeterminate?: boolean;
 	color: Color;
 	duration: number;
 	rounded: Size;
@@ -27,6 +31,8 @@ export interface CheckboxProps extends BasicProps {
 	size?: Size;
 	color?: Color;
 	checked?: boolean;
+	/** Trạng thái một phần chọn (aria-checked="mixed" + dash indicator). */
+	indeterminate?: boolean;
 	duration?: TimeUnits;
 	required?: boolean;
 	delay?: TimeUnits;
@@ -43,6 +49,8 @@ export interface CheckboxConfigs extends Omit<BasicConfigs, 'status' | 'value'> 
 	name?: string;
 	loading?: boolean;
 	checked?: boolean;
+	/** Trạng thái một phần chọn (select-all: một số row đã chọn). */
+	indeterminate?: boolean;
 	previousValue?: boolean;
 	color: Color;
 	duration: number;
