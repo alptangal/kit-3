@@ -27,6 +27,13 @@
 //  C18 pie đặc (innerRadius=0): wedge đỉnh ở tâm
 //  C19 donut lỗ giữa: path có inner arc
 //  C20 reduced-motion: slice animation none
+//  C21 toolbar: 4 nút export/copy/import + input file ẩn
+//  C22 export CSV: download filename + content (label,value + 6 rows)
+//  C23 export JSON: download shape { type, labels, series }
+//  C24 copy data: clipboard/localStorage CSV
+//  C25 import CSV: parse → thay data (4 bars A-D)
+//  C26 import JSON: parse mảng điểm → thay data (3 bars X,Y,Z)
+//  C27 import lỗi: error message + data giữ nguyên
 import { chromium } from '@playwright/test';
 
 const results = [];
@@ -560,6 +567,181 @@ ok(
 );
 await page.emulateMedia({ reducedMotion: null });
 await sleep(200);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C21+ — Data portability: export CSV/JSON (download), copy clipboard
+// (navigator.clipboard headless + localStorage fallback), import file → thay data.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// C21 — toolbar render: 4 nút (Export CSV/JSON + Copy + Import) + input file ẩn
+const c21 = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="chart-portability"]');
+	if (!scope) return null;
+	return {
+		toolbar: !!scope.querySelector('[data-test="chart-toolbar"]'),
+		btnCsv: !!scope.querySelector('[data-test="chart-export-csv"]'),
+		btnJson: !!scope.querySelector('[data-test="chart-export-json"]'),
+		btnCopy: !!scope.querySelector('[data-test="chart-copy"]'),
+		btnImport: !!scope.querySelector('[data-test="chart-import"]'),
+		inputHidden: (() => {
+			const input = scope.querySelector('input[type="file"]');
+			if (!input) return false;
+			const cs = getComputedStyle(input);
+			return cs.position === 'absolute' && (cs.clipPath?.includes('inset') || cs.clip?.includes('0px'));
+		})(),
+		// Chart khác (không portability) → KHÔNG toolbar
+		barNoToolbar: !document.querySelector('[data-test="chart-bar"] [data-test="chart-toolbar"]')
+	};
+});
+ok(
+	'C21 toolbar: 4 nút + input file ẩn + chart khác không toolbar',
+	c21?.toolbar === true && c21?.btnCsv === true && c21?.btnJson === true && c21?.btnCopy === true && c21?.btnImport === true && c21?.inputHidden === true && c21?.barNoToolbar === true,
+	JSON.stringify(c21)
+);
+
+// C22 — export CSV: click → download event với filename + content đúng (label,value header + 6 rows)
+{
+	let download = null;
+	const [dl] = await Promise.all([
+		page.waitForEvent('download', { timeout: 5000 }),
+		page.click('[data-test="chart-portability"] [data-test="chart-export-csv"]')
+	]);
+	download = dl;
+	const filename = download.suggestedFilename();
+	const path = await download.path();
+	const fs = await import('fs');
+	const content = fs.readFileSync(path, 'utf-8');
+	const lines = content.split('\n');
+	ok(
+		'C22 export CSV: filename chart-data.csv + header label,value + 6 rows',
+		filename === 'chart-data.csv' && lines[0] === 'label,value' && lines.length === 7 && lines[1] === 'T1,420' && lines[6] === 'T6,890',
+		`filename=${filename} | lines=${lines.length} | first=${lines[1]} | last=${lines[6]}`
+	);
+}
+
+// C23 — export JSON: click → download event với shape { type, labels, series }
+{
+	const [dl] = await Promise.all([
+		page.waitForEvent('download', { timeout: 5000 }),
+		page.click('[data-test="chart-portability"] [data-test="chart-export-json"]')
+	]);
+	const filename = dl.suggestedFilename();
+	const path = await dl.path();
+	const fs = await import('fs');
+	const parsed = JSON.parse(fs.readFileSync(path, 'utf-8'));
+	ok(
+		'C23 export JSON: filename chart-data.json + shape { type, labels, series }',
+		filename === 'chart-data.json' && parsed.type === 'bar' && Array.isArray(parsed.labels) && parsed.labels.length === 6 && Array.isArray(parsed.series) && parsed.series.length === 1 && parsed.series[0].data[0] === 420,
+		`filename=${filename} | type=${parsed.type} | labels=${parsed.labels?.length} | series=${parsed.series?.length}`
+	);
+}
+
+// C24 — copy data: click → clipboard ghi được (navigator.clipboard headless permission
+// granted qua context.grantPermissions) HOẶC fallback localStorage 'clipboard'.
+{
+	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://localhost:3000' }).catch(() => {});
+	await page.evaluate(() => localStorage.removeItem('clipboard'));
+	await page.click('[data-test="chart-portability"] [data-test="chart-copy"]');
+	await sleep(400);
+	const c24 = await page.evaluate(async () => {
+		let clip = '';
+		try {
+			clip = await navigator.clipboard.readText();
+		} catch {
+			// Headless clipboard rỗng → fallback localStorage
+		}
+		if (!clip) {
+			const raw = localStorage.getItem('clipboard');
+			if (raw) {
+				const parsed = JSON.parse(raw);
+				clip = Object.values(parsed)[0] ?? '';
+			}
+		}
+		const lines = clip.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+		return {
+			hasContent: !!clip,
+			header: lines[0],
+			rows: lines.length - 1,
+			firstRow: lines[1],
+			btnText: document.querySelector('[data-test="chart-portability"] [data-test="chart-copy"]')?.textContent.trim()
+		};
+	});
+	ok(
+		'C24 copy data: clipboard/localStorage có CSV (header label,value + 6 rows)',
+		c24?.hasContent === true && c24?.header === 'label,value' && c24?.rows === 6 && c24?.firstRow === 'T1,420',
+		JSON.stringify(c24)
+	);
+}
+
+// C25 — import file CSV: set input file → parse → thay data chart (bars = 4 từ file)
+{
+	const fs = await import('fs');
+	const csv = 'label,value\nA,100\nB,200\nC,150\nD,300\n';
+	const tmpPath = 'tests/_scratch/import-test.csv';
+	fs.writeFileSync(tmpPath, csv);
+	await page.setInputFiles('[data-test="chart-portability"] input[type="file"]', tmpPath);
+	await sleep(500);
+	const c25 = await page.evaluate(() => {
+		const scope = document.querySelector('[data-test="chart-portability"]');
+		const bars = scope.querySelectorAll('svg rect.chart-bar').length;
+		const xLabels = [...scope.querySelectorAll('text.chart-x-label')].map((t) => t.textContent.trim());
+		const tableRows = scope.querySelectorAll('table.chart-data-table tbody tr').length;
+		return { bars, xLabels, tableRows };
+	});
+	ok(
+		'C25 import CSV: parse → thay data (4 bars + labels A-D + table 4 rows)',
+		c25?.bars === 4 && c25?.xLabels.join(',') === 'A,B,C,D' && c25?.tableRows === 4,
+		JSON.stringify(c25)
+	);
+	fs.unlinkSync(tmpPath);
+}
+
+// C26 — import file JSON: shape mảng điểm [{ label, value }] → thay data (3 bars)
+{
+	const fs = await import('fs');
+	const json = JSON.stringify([
+		{ label: 'X', value: 500 },
+		{ label: 'Y', value: 250 },
+		{ label: 'Z', value: 750 }
+	]);
+	const tmpPath = 'tests/_scratch/import-test.json';
+	fs.writeFileSync(tmpPath, json);
+	await page.setInputFiles('[data-test="chart-portability"] input[type="file"]', tmpPath);
+	await sleep(500);
+	const c26 = await page.evaluate(() => {
+		const scope = document.querySelector('[data-test="chart-portability"]');
+		const bars = scope.querySelectorAll('svg rect.chart-bar').length;
+		const xLabels = [...scope.querySelectorAll('text.chart-x-label')].map((t) => t.textContent.trim());
+		return { bars, xLabels };
+	});
+	ok(
+		'C26 import JSON: parse mảng điểm → thay data (3 bars + labels X,Y,Z)',
+		c26?.bars === 3 && c26?.xLabels.join(',') === 'X,Y,Z',
+		JSON.stringify(c26)
+	);
+	fs.unlinkSync(tmpPath);
+}
+
+// C27 — import file SAI định dạng → error message + data giữ nguyên
+{
+	const fs = await import('fs');
+	const tmpPath = 'tests/_scratch/import-test-bad.csv';
+	fs.writeFileSync(tmpPath, 'no-valid-data-here');
+	await page.setInputFiles('[data-test="chart-portability"] input[type="file"]', tmpPath);
+	await sleep(500);
+	const c27 = await page.evaluate(() => {
+		const scope = document.querySelector('[data-test="chart-portability"]');
+		const error = scope.querySelector('.chart-toolbar__error')?.textContent.trim();
+		const bars = scope.querySelectorAll('svg rect.chart-bar').length;
+		return { error, bars };
+	});
+	ok(
+		'C27 import lỗi: error message + data giữ nguyên (3 bars từ JSON trước)',
+		typeof c27?.error === 'string' && c27.error.length > 0 && c27?.bars === 3,
+		JSON.stringify(c27)
+	);
+	fs.unlinkSync(tmpPath);
+}
 
 await browser.close();
 

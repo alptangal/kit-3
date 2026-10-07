@@ -8,6 +8,9 @@
 // Pie/donut: type="pie" + innerRadius (lỗ giữa, 0 = pie đặc) + startAngle +
 // padAngle — segments arc bằng pure JS, màu palette theo hệ thống (xoay vòng
 // 500/600 khi > 7 segment), legend tên + %, delta KHÔNG áp dụng cho pie.
+// Data portability: export CSV/JSON (download) + copy clipboard (navigator.clipboard
+// fallback localStorage 'clipboard' — pattern InputOTP) + import file (.csv/.json
+// parse → thay data) — cả ba TÙY CHỌN qua prop, không đổi hành vi mặc định.
 import type { Snippet } from 'svelte';
 import type { BasicConfigs, BasicProps, Color, TimeUnits } from '$components/interface';
 
@@ -121,6 +124,34 @@ export interface ChartLiveOptions {
 		| Promise<ChartDatum | ChartDatum[] | null | undefined>;
 }
 
+/** Options export data (CSV/JSON download). */
+export interface ChartExportOptions {
+	/** Định dạng export (default cả hai — 2 nút CSV + JSON). */
+	format?: 'csv' | 'json';
+	/** Tên file không đuôi (default 'chart-data' → chart-data.csv / chart-data.json). */
+	filename?: string;
+	/** Custom render nút/nhóm export — nhận handler export(format). */
+	trigger?: Snippet<[(format: 'csv' | 'json') => void]>;
+}
+
+/** Options copy data ra clipboard. */
+export interface ChartCopyOptions {
+	/** Định dạng copy (default 'csv' — spreadsheet-friendly). */
+	format?: 'csv' | 'json';
+	/** Custom render nút copy — nhận handler copy(). */
+	trigger?: Snippet<[() => void]>;
+}
+
+/** Options import data từ file (.csv/.json) — parse → thay data chart. */
+export interface ChartImportOptions {
+	/** Custom render nút import — nhận handler import(file). */
+	trigger?: Snippet<[(file: File | undefined) => void]>;
+	/** Callback sau import thành công (points mới đã validate). */
+	onImport?: (data: ChartDatum[]) => void;
+	/** Callback khi import lỗi (file rỗng/sai định dạng). */
+	onError?: (message: string) => void;
+}
+
 export interface ChartProps extends BasicProps {
 	/** Dữ liệu (single series) — required. Empty → placeholder "Không có dữ liệu". */
 	data: ChartDatum[];
@@ -156,6 +187,12 @@ export interface ChartProps extends BasicProps {
 	tooltip?: boolean | ChartTooltipOptions;
 	/** Live data — poll source hoặc mirror data prop, cửa sổ trượt max. TÙY CHỌN. */
 	live?: boolean | ChartLiveOptions;
+	/** Export data ra CSV/JSON (download). TÙY CHỌN — hàng nút nhỏ góc phải. */
+	export?: boolean | ChartExportOptions;
+	/** Copy toàn bộ data ra clipboard (navigator.clipboard, fallback localStorage). TÙY CHỌN. */
+	copyData?: boolean | ChartCopyOptions;
+	/** Import data từ file (.csv/.json) — parse → thay data. TÙY CHỌN (chart không live). */
+	importData?: boolean | ChartImportOptions;
 	/** Accessible label (aria-label). Không có → tự sinh "Biểu đồ {n} điểm". */
 	'aria-label'?: string;
 	/** Tiêu đề hiển thị trên chart. */
@@ -191,4 +228,10 @@ export interface ChartConfigs extends Omit<BasicConfigs, 'value' | 'status'> {
 	padAngle: number;
 	/** Segments pie đã tính (type="pie"); rỗng cho bar/line. */
 	slices: ChartSlice[];
+	/** Export data đang bật. */
+	exportOn: boolean;
+	/** Copy data đang bật. */
+	copyOn: boolean;
+	/** Import data đang bật. */
+	importOn: boolean;
 }

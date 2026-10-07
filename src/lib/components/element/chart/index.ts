@@ -12,7 +12,10 @@ export type {
 	ChartTooltipMeta,
 	ChartTooltipSeriesMeta,
 	ChartTooltipRow,
-	ChartSlice
+	ChartSlice,
+	ChartExportOptions,
+	ChartCopyOptions,
+	ChartImportOptions
 } from './_interface';
 export {
 	niceScale,
@@ -27,6 +30,11 @@ export {
 	polarToCartesian,
 	buildSlicePath,
 	buildPieSlices,
-	buildPiePalette
+	buildPiePalette,
+	csvEscape,
+	buildCsv,
+	parseCsv,
+	buildDataJson,
+	parseDataJson
 } from './_scale';
 export type { ChartScale, ChartPoint, PieSliceGeometry } from './_scale';

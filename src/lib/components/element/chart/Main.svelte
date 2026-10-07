@@ -9,10 +9,14 @@
 	import { styleSynced, convertToMiliseconds } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import type { Action } from 'svelte/action';
 	import type {
 		ChartConfigs,
 		ChartDatum,
+		ChartExportOptions,
+		ChartCopyOptions,
+		ChartImportOptions,
 		ChartLiveOptions,
 		ChartProps,
 		ChartSeries,
@@ -22,12 +26,16 @@
 	} from './_interface';
 	import {
 		buildAreaPath,
+		buildCsv,
+		buildDataJson,
 		buildLinePath,
 		buildPiePalette,
 		buildPieSlices,
 		buildTooltipRows,
 		defaultFormatter,
 		niceScale,
+		parseCsv,
+		parseDataJson,
 		polarToCartesian,
 		rnd,
 		truncate
@@ -51,6 +59,9 @@
 		padAngle = 0.02,
 		tooltip,
 		live,
+		export: exportProp,
+		copyData,
+		importData,
 		'aria-label': ariaLabelProp,
 		title,
 		...props
@@ -142,7 +153,12 @@
 	});
 
 	// ── Validate dữ liệu: bỏ value không phải số, clamp value âm về 0 ──
-	const effectiveData = $derived(liveOn ? liveBuffer : (Array.isArray(data) ? data : []));
+	// Import file (không live): importedData ưu tiên trên data prop (chart tự giữ data mới).
+	const effectiveData = $derived.by(() => {
+		if (liveOn) return liveBuffer;
+		if (importedData) return importedData;
+		return Array.isArray(data) ? data : [];
+	});
 	const points: ChartDatum[] = $derived.by(() => {
 		return effectiveData
 			.filter((d): d is ChartDatum => !!d && typeof d.value === 'number' && Number.isFinite(d.value))
@@ -445,6 +461,132 @@
 		};
 	};
 
+	// ── Data portability: export CSV/JSON + copy clipboard + import file ──
+	// Data từ import (chart không live) — points ưu tiên importedData khi có.
+	let importedData = $state<ChartDatum[] | undefined>(undefined);
+	// Options normalize (TÙY CHỐN — không có → không render nút).
+	const exportOpts = $derived.by((): (ChartExportOptions & { on: boolean }) | undefined => {
+		const e = exportProp;
+		if (!e) return undefined;
+		if (e === true) return { on: true };
+		return { on: true, ...e };
+	});
+	const exportOn = $derived(!!exportOpts);
+	const copyOpts = $derived.by((): (ChartCopyOptions & { on: boolean }) | undefined => {
+		const c = copyData;
+		if (!c) return undefined;
+		if (c === true) return { on: true };
+		return { on: true, ...c };
+	});
+	const copyOn = $derived(!!copyOpts);
+	const importOpts = $derived.by((): (ChartImportOptions & { on: boolean }) | undefined => {
+		const i = importData;
+		if (!i) return undefined;
+		if (i === true) return { on: true };
+		return { on: true, ...i };
+	});
+	const importOn = $derived(!!importOpts);
+
+	// Series list cho export/copy: single = data points; multi = effectiveSeries
+	// (data prop chỉ dùng lấy label). Labels line up 1:1.
+	// Labels line up 1:1 với points (multi cũng cùng label của data prop).
+	const exportLabels = $derived(points.map((p) => p.label));
+	const exportSeriesList = $derived(
+		isMulti
+			? effectiveSeries.map((s) => ({ name: s.name, data: s.data }))
+			: [{ name: 'value', data: points.map((p) => p.value) }]
+	);
+
+	// Download blob (pattern chuẩn: Blob + URL.createObjectURL + a[download] click).
+	const downloadFile = (content: string, mime: string, filename: string) => {
+		if (typeof document === 'undefined') return;
+		const blob = new Blob([content], { type: mime });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	};
+
+	// Export theo format: CSV hoặc JSON (filename prop → chart-data.<ext>).
+	const handleExport = (format: 'csv' | 'json') => {
+		const base = exportOpts?.filename ?? 'chart-data';
+		if (format === 'json') {
+			downloadFile(buildDataJson(type, exportLabels, exportSeriesList), 'application/json', `${base}.json`);
+			return;
+		}
+		downloadFile(buildCsv(exportLabels, exportSeriesList), 'text/csv;charset=utf-8', `${base}.csv`);
+	};
+
+	// Copy data ra clipboard: navigator.clipboard.writeText (headless/permission
+	// denied → fallback localStorage 'clipboard' — mirror pattern InputOTP).
+	let copiedAt = $state<number | undefined>(undefined);
+	const handleCopy = async () => {
+		const format = copyOpts?.format ?? 'csv';
+		const content =
+			format === 'json'
+				? buildDataJson(type, exportLabels, exportSeriesList)
+				: buildCsv(exportLabels, exportSeriesList);
+		if (!content) return;
+		let wrote = false;
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(content);
+				wrote = true;
+			}
+		} catch {
+			// Headless/permission denied → fallback localStorage bên dưới
+		}
+		if (!wrote) {
+			const date = new Date();
+			localStorage.setItem('clipboard', JSON.stringify({ [`${date.getTime()}`]: content }));
+			if (!client.browser) client.browser = {};
+			if (!client.browser.clipboard) {
+				client.browser.clipboard = new SvelteMap<number, string>();
+			}
+			client.browser.clipboard.set(date.getTime(), content);
+		}
+		copiedAt = Date.now();
+		setTimeout(() => {
+			if (copiedAt && Date.now() - copiedAt >= 2000) copiedAt = undefined;
+		}, 2100);
+	};
+
+	// Import từ file (.csv/.json): parse → thay data (onImport callback). Chỉ chấp
+	// nhận chart KHÔNG live — live đang bật → buffer mirror data prop mới qua $effect.
+	let fileInputRef = $state<HTMLInputElement | undefined>(undefined);
+	let importError = $state<string | undefined>(undefined);
+	const handleImportFile = async (file: File | undefined) => {
+		if (!file) return;
+		const ext = file.name.split('.').pop()?.toLowerCase();
+		const text = await file.text();
+		let parsed: { label: string; value: number }[] = [];
+		if (ext === 'json') {
+			parsed = parseDataJson(text);
+		} else if (ext === 'csv' || ext === 'txt') {
+			parsed = parseCsv(text);
+		}
+		if (!parsed.length) {
+			importError = 'Không đọc được dữ liệu từ file (CSV/JSON không hợp lệ)';
+			importOpts?.onError?.(importError);
+			setTimeout(() => (importError = undefined), 3000);
+			return;
+		}
+		importError = undefined;
+		if (liveOn) {
+			// Live bật → ghi buffer trực tiếp (mirror data prop sẽ ghi đè khi data đổi).
+			liveBuffer = parsed;
+		} else {
+			// Không live → dispatch custom event 'chartimport' với points mới (demo/App
+			// lắng nghe qua handleEvents hoặc bind — mirror pattern Input actionButtons).
+			importedData = parsed;
+		}
+		importOpts?.onImport?.(parsed);
+	};
+
 	let configs: ChartConfigs = $state({
 		get type() {
 			return type;
@@ -497,6 +639,15 @@
 		get slices() {
 			return slices;
 		},
+		get exportOn() {
+			return exportOn;
+		},
+		get copyOn() {
+			return copyOn;
+		},
+		get importOn() {
+			return importOn;
+		},
 		get size() {
 			return props.size ?? client.browser?.size ?? 'md';
 		},
@@ -533,6 +684,80 @@
 	{/if}
 	{#if liveOn}
 		<span class="chart-live-badge" aria-hidden="true"><i class="chart-live-dot"></i>LIVE</span>
+	{/if}
+
+	<!-- Toolbar data portability (export/copy/import): hàng nút nhỏ, KHÔNG đè chart.
+	     TÙY CHỐN qua prop — không có → không render. -->
+	{#if exportOn || copyOn || importOn}
+		<div class="chart-toolbar" data-test="chart-toolbar">
+			{#if exportOn}
+				{#if exportOpts?.trigger}
+					{@render exportOpts.trigger(handleExport)}
+				{:else}
+					<div class="chart-toolbar__group">
+						<button
+							class="chart-toolbar__btn"
+							type="button"
+							data-test="chart-export-csv"
+							onclick={() => handleExport('csv')}
+						>
+							Export CSV
+						</button>
+						<button
+							class="chart-toolbar__btn"
+							type="button"
+							data-test="chart-export-json"
+							onclick={() => handleExport('json')}
+						>
+							Export JSON
+						</button>
+					</div>
+				{/if}
+			{/if}
+			{#if copyOn}
+				{#if copyOpts?.trigger}
+					{@render copyOpts.trigger(handleCopy)}
+				{:else}
+					<button
+						class="chart-toolbar__btn"
+						type="button"
+						data-test="chart-copy"
+						onclick={handleCopy}
+					>
+						{copiedAt ? 'Copied' : 'Copy data'}
+					</button>
+				{/if}
+			{/if}
+			{#if importOn}
+				{#if importOpts?.trigger}
+					{@render importOpts.trigger(() => fileInputRef?.click())}
+				{:else}
+					<button
+						class="chart-toolbar__btn"
+						type="button"
+						data-test="chart-import"
+						onclick={() => fileInputRef?.click()}
+					>
+						Import file
+					</button>
+				{/if}
+				<input
+					class="chart-import-input"
+					type="file"
+					accept=".csv,.json,.txt"
+					aria-label="Import dữ liệu từ file CSV hoặc JSON"
+					bind:this={fileInputRef}
+					onchange={(e) => {
+						const f = (e.currentTarget as HTMLInputElement).files?.[0];
+						handleImportFile(f);
+						e.currentTarget.value = '';
+					}}
+				/>
+			{/if}
+			{#if importError}
+				<span class="chart-toolbar__error" role="alert">{importError}</span>
+			{/if}
+		</div>
 	{/if}
 
 	<!-- Legend (multi-series): kênh nhận dạng, KHÔNG chỉ dựa màu. Single series = không legend (title tên nó).

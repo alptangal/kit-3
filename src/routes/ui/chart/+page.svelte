@@ -190,6 +190,20 @@
 		<p class="demo-hint">9 segment → palette xoay vòng qua bậc 500/600 (token raw --color-&lt;ref&gt;-N, KHÔNG đảo theme). Part-to-whole ≤ 6 segment là chuẩn — 9 chỉ để test palette.</p>
 		<Chart type="pie" data={nineSegments} innerRadius={0.5} title="9 segment (test palette)" aria-label="Biểu đồ 9 segment test palette" />
 	</section>
+
+	<section class="demo" data-test="chart-portability">
+		<h2>Export / Copy / Import data</h2>
+		<p class="demo-hint">export (CSV + JSON download), copyData (clipboard — headless fallback localStorage), importData (file .csv/.json parse → thay data). Import thay dữ liệu chart trực tiếp.</p>
+		<Chart
+			type="bar"
+			data={revenue}
+			export
+			copyData
+			importData
+			title="Doanh thu (portability)"
+			aria-label="Biểu đồ doanh thu với export copy import"
+		/>
+	</section>
 </div>
 
 <style lang="scss">

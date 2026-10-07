@@ -1,7 +1,8 @@
 // $components/element/chart/_scale.ts
 // Pure JS helpers cho Chart — KHÔNG phụ thuộc DOM/Svelte (test được, SSR-safe).
 // Nội dung: nice-scale (1/2/5 × 10^n), formatter mặc định (k/M/B), truncate label,
-// path-builder (bar rounded-top / line / area), pie/donut slices + palette.
+// path-builder (bar rounded-top / line / area), pie/donut slices + palette,
+// data portability (buildCsv/parseCsv/buildDataJson/parseDataJson).
 
 export interface ChartPoint {
 	/** Pixel x (đã gom về tọa độ viewBox). */
@@ -321,4 +322,154 @@ export function buildPiePalette(count: number): string[] {
 		out.push(i % 2 === 0 ? base[i % base.length] : dark[i % dark.length]);
 	}
 	return out;
+}
+
+// ── Data portability (CSV/JSON) — build/parse PURE (test được, SSR-safe);
+// copy là side-effect (clipboard) — nằm ở Main.svelte. ──
+
+/** Escape 1 ô CSV: có dấu phẩy/nháy/xuống dòng → bọc nháy kép, nháy nội lặp đôi. */
+export function csvEscape(cell: string): string {
+	if (/[",\n\r]/.test(cell)) return `"${cell.replace(/"/g, '""')}"`;
+	return cell;
+}
+
+/**
+ * Build CSV từ data (single hoặc multi-series).
+ * - Header: "label,value" (single) hoặc "label,<name1>,<name2>..." (multi).
+ * - Dòng: label + giá trị (multi: data line up 1:1 với label của data prop).
+ * - Dòng phân cách "\n" (RFC 4180 dùng \r\n — nhưng \n đủ cho spreadsheet + gọn).
+ */
+export function buildCsv(
+	labels: string[],
+	seriesList: { name: string; data: number[] }[]
+): string {
+	const names = seriesList.map((s) => s.name);
+	const header = ['label', ...names].map(csvEscape).join(',');
+	const rows = labels.map((label, i) => {
+		const cells = [label, ...seriesList.map((s) => String(s.data[i] ?? 0))];
+		return cells.map(csvEscape).join(',');
+	});
+	return [header, ...rows].join('\n');
+}
+
+/**
+ * Parse CSV → data chart. Dòng đầu = header (bỏ); mỗi dòng sau = 1 điểm.
+ * Chỉ lấy cột label (cột 0) + value (cột 1) — CSV multi-series import ngoài scope
+ * (chart tự import chỉ single-series `data` prop). Value không hợp lệ → bỏ dòng.
+ * Hỗ trợ CSV có BOM + bọc nháy kép (csvEscape).
+ */
+export function parseCsv(text: string): { label: string; value: number }[] {
+	const clean = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+	const lines = clean.split('\n').filter((l) => l.trim());
+	if (lines.length < 2) return [];
+	// Parse từng dòng tôn trọng nháy kép (ô bọc nháy có thể chứa dấu phẩy).
+	const parseLine = (line: string): string[] => {
+		const cells: string[] = [];
+		let cur = '';
+		let inQuotes = false;
+		for (let i = 0; i < line.length; i++) {
+			const ch = line[i];
+			if (inQuotes) {
+				if (ch === '"' && line[i + 1] === '"') {
+					cur += '"';
+					i++;
+				} else if (ch === '"') {
+					inQuotes = false;
+				} else {
+					cur += ch;
+				}
+			} else if (ch === '"') {
+				inQuotes = true;
+			} else if (ch === ',') {
+				cells.push(cur);
+				cur = '';
+			} else {
+				cur += ch;
+			}
+		}
+		cells.push(cur);
+		return cells;
+	};
+	const out: { label: string; value: number }[] = [];
+	for (let i = 1; i < lines.length; i++) {
+		const cells = parseLine(lines[i]);
+		if (cells.length < 2) continue;
+		const value = Number.parseFloat(cells[1]);
+		if (!Number.isFinite(value)) continue;
+		out.push({ label: cells[0].trim(), value });
+	}
+	return out;
+}
+
+/**
+ * Build JSON payload từ data (single hoặc multi-series).
+ * Shape: { type, labels, series: [{ name, data }] } — round-trip với parseDataJson.
+ */
+export function buildDataJson(
+	type: string,
+	labels: string[],
+	seriesList: { name: string; data: number[] }[]
+): string {
+	return JSON.stringify({ type, labels, series: seriesList });
+}
+
+/**
+ * Parse JSON payload → data chart. Chấp nhận:
+ * - { labels, series: [...] } (buildDataJson round-trip)
+ * - { labels, data: [...] } (single-series shorthand)
+ * - [{ label, value }, ...] (mảng điểm trực tiếp)
+ * Value không hợp lệ → bỏ điểm. Không đúng shape → [] (onError caller).
+ */
+export function parseDataJson(text: string): { label: string; value: number }[] {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		return [];
+	}
+	// Shape 1: mảng điểm trực tiếp
+	if (Array.isArray(parsed)) {
+		return parsed
+			.filter((d): d is { label: string; value: number } => {
+				return (
+					!!d &&
+					typeof d === 'object' &&
+					typeof (d as { value?: unknown }).value === 'number' &&
+					Number.isFinite((d as { value?: unknown }).value)
+				);
+			})
+			.map((d) => ({
+				label: String((d as { label?: unknown }).label ?? ''),
+				value: Math.max(0, d.value)
+			}));
+	}
+	if (!parsed || typeof parsed !== 'object') return [];
+	const obj = parsed as { labels?: unknown; series?: unknown; data?: unknown };
+	// Shape 2: { labels, series: [{ name, data }] } — data series[0] là nguồn value
+	if (Array.isArray(obj.labels) && Array.isArray(obj.series) && obj.series.length) {
+		const s0 = obj.series[0] as { data?: unknown };
+		if (!Array.isArray(s0?.data)) return [];
+		const seriesData = s0.data as unknown[];
+		return (obj.labels as unknown[])
+			.map((label, i) => {
+				const v = seriesData[i];
+				return {
+					label: String(label ?? ''),
+					value: typeof v === 'number' && Number.isFinite(v) ? Math.max(0, v) : NaN
+				};
+			})
+			.filter((d) => Number.isFinite(d.value));
+	}
+	// Shape 3: { labels, data: [...] } — single-series shorthand
+	if (Array.isArray(obj.labels) && Array.isArray(obj.data)) {
+		return (obj.labels as unknown[])
+			.map((label, i) => ({
+				label: String(label ?? ''),
+				value: Number.isFinite((obj.data as unknown[])[i])
+					? Math.max(0, (obj.data as unknown[])[i] as number)
+					: NaN
+			}))
+			.filter((d) => Number.isFinite(d.value));
+	}
+	return [];
 }
