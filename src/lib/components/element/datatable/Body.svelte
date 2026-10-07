@@ -260,6 +260,26 @@
 								</button>
 								<button
 									type="button"
+									class="datatable-action-btn datatable-action-btn--copy"
+									aria-label={ctx.configs.copyText}
+									title={ctx.configs.copyText}
+									data-test="datatable-row-copy"
+									onclick={() => ctx.copyRow(rowId)}
+								>
+									<span aria-hidden="true">⧉</span>
+								</button>
+								<button
+									type="button"
+									class="datatable-action-btn datatable-action-btn--clone"
+									aria-label={ctx.configs.cloneText}
+									title={ctx.configs.cloneText}
+									data-test="datatable-row-clone"
+									onclick={() => ctx.cloneRow(rowId)}
+								>
+									<span aria-hidden="true">⎘</span>
+								</button>
+								<button
+									type="button"
 									class="datatable-action-btn datatable-action-btn--delete"
 									aria-label={ctx.configs.deleteText}
 									title={ctx.configs.deleteText}
@@ -301,7 +321,21 @@
 			{/each}
 		{:else}
 			<tr class="datatable-empty-row">
-				<td class="datatable-empty" colspan={colCount}>{configs?.emptyText}</td>
+				<td class="datatable-empty" colspan={colCount}>
+					<span class="datatable-empty-text">{configs?.emptyText}</span>
+					{#if configs?.creatable}
+						<!-- Nút create khi không có data / không có kết quả khớp filter. -->
+						<button
+							type="button"
+							class="datatable-empty-create"
+							data-test="datatable-empty-create"
+							aria-label={configs.createText}
+							onclick={() => ctx?.createRow()}
+						>
+							<span aria-hidden="true">＋</span>{configs.createText}
+						</button>
+					{/if}
+				</td>
 			</tr>
 		{/if}
 	</tbody>
@@ -470,6 +504,22 @@
 			}
 		}
 
+		&--copy {
+			color: var(--content1-foreground, #18181b);
+
+			&:hover {
+				background: var(--content2, hsl(240 4.76% 95.88%));
+			}
+		}
+
+		&--clone {
+			color: var(--primary, var(--color-indigo-500));
+
+			&:hover {
+				background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 10%, transparent);
+			}
+		}
+
 		&--delete {
 			color: var(--danger, var(--color-red-500));
 
@@ -599,6 +649,38 @@
 			font-size: 0.875rem;
 			text-align: center;
 			border-bottom: 0;
+		}
+
+		.datatable-empty-text {
+			display: block;
+			margin-bottom: 0.75rem;
+		}
+
+		// ── Nút create khi không có data / không có kết quả khớp filter ──
+		.datatable-empty-create {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.35rem;
+			min-height: 2rem;
+			padding: 0 0.875rem;
+			font-size: 0.8125rem;
+			font-weight: 500;
+			color: hsl(0 0% 100%);
+			background: var(--primary, var(--color-indigo-500));
+			border: 0;
+			border-radius: var(--border-radius-sm, 0.375rem);
+			cursor: var(--cursor-interactive);
+			transition: background-color 150ms ease;
+
+			@media (hover: hover) and (pointer: fine) {
+				&:hover {
+					background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 85%, black);
+				}
+			}
+			&:focus-visible {
+				outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+				outline-offset: 2px;
+			}
 		}
 	}
 

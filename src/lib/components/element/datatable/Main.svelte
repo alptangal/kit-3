@@ -60,6 +60,12 @@
 		editable,
 		lazyLoad: lazyLoadProp,
 		visual,
+		creatable,
+		exportable,
+		onRowCreate,
+		onRowClone,
+		onCopy,
+		onImport,
 		onCellUpdate,
 		onRowUpdate,
 		onRowDelete,
@@ -115,6 +121,52 @@
 	const lazyOnLoadMore = $derived(lazyLoadProp?.onLoadMore);
 	// Nút load more (mặc định true; false = chỉ infinite scroll).
 	const lazyShowButton: boolean = $derived(lazyLoadProp?.loadMoreButton ?? true);
+
+	// ── Creatable / Exportable config (wave 7) ──
+	const creatableCfg = $derived.by(() => {
+		if (creatable === true) return { enabled: true, label: undefined as TranslateContent | string | undefined };
+		if (typeof creatable === 'object' && creatable !== null) {
+			return { enabled: creatable.enabled ?? true, label: creatable.label };
+		}
+		return { enabled: false, label: undefined as TranslateContent | string | undefined };
+	});
+	const creatableDerived: boolean = $derived(creatableCfg.enabled);
+
+	const exportCfg = $derived.by(() => {
+		if (exportable === true) {
+			return {
+				enabled: true,
+				formats: undefined as ('csv' | 'json')[] | undefined,
+				import: false,
+				exportLabel: undefined as TranslateContent | string | undefined,
+				importLabel: undefined as TranslateContent | string | undefined
+			};
+		}
+		if (typeof exportable === 'object' && exportable !== null) {
+			return {
+				enabled: exportable.enabled ?? true,
+				formats: exportable.formats,
+				import: exportable.import ?? false,
+				exportLabel: exportable.exportLabel,
+				importLabel: exportable.importLabel
+			};
+		}
+		return {
+			enabled: false,
+			formats: undefined as ('csv' | 'json')[] | undefined,
+			import: false,
+			exportLabel: undefined as TranslateContent | string | undefined,
+			importLabel: undefined as TranslateContent | string | undefined
+		};
+	});
+	const exportableDerived: boolean = $derived(exportCfg.enabled);
+	const exportFormats: ('csv' | 'json')[] = $derived(
+		exportCfg.formats && exportCfg.formats.length > 0 ? exportCfg.formats : ['csv']
+	);
+	const importableDerived: boolean = $derived(exportCfg.enabled && exportCfg.import);
+	// Copy row(s) luôn có (toolbar selection tools + row action) — toggle qua
+	// config `exportable`/`rowActions`; toolbar copy-selected dùng biến này.
+	const copyableDerived: boolean = $derived(true);
 
 	// Resolve TranslateContent | string theo language (fallback en → vi)
 	const getText = (content?: TranslateContent | string, fallback?: { en: string; vi: string }): string => {
@@ -425,6 +477,195 @@
 		if (expandedRowId === rowId) expandedRowId = undefined;
 	};
 
+	// ── CREATE ROW (wave 7 — nút create: toolbar + empty + no-results) ──
+	// Placeholder row rỗng theo columns (accessor key → '') — id mới tăng dần.
+	let createCounter = $state<number>(0);
+	const createRow = (): void => {
+		createCounter += 1;
+		const newRow: Record<string, unknown> = {};
+		for (const col of columns) {
+			if (typeof col.accessor === 'string') newRow[col.accessor] = '';
+		}
+		const rowId = `__new-${createCounter}`;
+		// Create từ no-results/empty: xóa search đang lọc (row mới rỗng không
+		// khớp query → mất dấu ngay sau khi tạo).
+		if (query) query = '';
+		rows.push(newRow);
+		onRowCreate?.(newRow as never, rowId);
+		// Nhảy trang tới vị trí row mới: tìm trong `sorted` (TRƯỚC paginate —
+		// pageRows chỉ chứa row trang hiện tại, row mới ở trang sau → không
+		// thấy). So qua rowId (reference khác bản local do $state deep proxy).
+		const newRowId = idOf(newRow, rows.length - 1);
+		const sortedIdx = sorted.findIndex(({ row, index }) => idOf(row, index) === newRowId);
+		if (sortedIdx >= 0) {
+			const targetPage = Math.floor(sortedIdx / effectivePageSize) + 1;
+			if (targetPage !== page) page = targetPage;
+		}
+		// Mở row editor cho row mới ngay (điền giá trị).
+		openRowEditor(idOf(newRow, rows.length - 1));
+	};
+
+	// ── COPY ROW(S) (TSV — header col khi nhiều row; paste vào Excel được) ──
+	const rowToText = (row: Record<string, unknown>): string =>
+		columns.map((col) => String(getCellValue(row, col) ?? '')).join('\t');
+
+	const writeClipboard = (text: string): void => {
+		if (typeof navigator !== 'undefined' && navigator.clipboard) {
+			navigator.clipboard.writeText(text).catch(() => {});
+		}
+		onCopy?.(text);
+	};
+
+	const copyRow = (rowId: string): void => {
+		const found = findRowById(rowId);
+		if (found) writeClipboard(rowToText(found.row));
+	};
+
+	const copySelected = (): void => {
+		const selectedRows = pageRows.filter(({ row, index }) => selected.has(idOf(row, index)));
+		if (selectedRows.length === 0) return;
+		const header = columns.map((col) => col.label).join('\t');
+		const body = selectedRows.map(({ row }) => rowToText(row)).join('\n');
+		writeClipboard(selectedRows.length > 1 ? `${header}\n${body}` : body);
+	};
+
+	// ── CLONE ROW (thêm bản sao ngay dưới row gốc — id mới) ──
+	const cloneRow = (rowId: string): void => {
+		const found = findRowById(rowId);
+		if (!found) return;
+		const clone: Record<string, unknown> = { ...found.row };
+		// id mới (tránh trùng getRowId) + đánh dấu row clone.
+		if ('id' in clone) clone.id = `${String(clone.id)}-copy-${Date.now()}`;
+		clone.__cloned = true;
+		rows.splice(found.index + 1, 0, clone);
+		onRowClone?.(found.row as never, clone as never);
+	};
+
+	// ── EXPORT (CSV/JSON — data ĐÃ FILTER, không phải toàn bộ data) ──
+	const exportData = (format: 'csv' | 'json'): void => {
+		const rowsOut = sorted.map(({ row }) => {
+			const out: Record<string, unknown> = {};
+			for (const col of columns) {
+				if (typeof col.accessor === 'string') out[col.accessor] = getCellValue(row, col);
+			}
+			return out;
+		});
+		let content = '';
+		let mime = 'text/csv';
+		let ext = 'csv';
+		if (format === 'json') {
+			content = JSON.stringify(rowsOut, null, 2);
+			mime = 'application/json';
+			ext = 'json';
+		} else {
+			const header = columns
+				.filter((col) => typeof col.accessor === 'string')
+				.map((col) => `"${col.label.replace(/"/g, '""')}"`)
+				.join(',');
+			const body = rowsOut
+				.map((r) =>
+					columns
+						.filter((col) => typeof col.accessor === 'string')
+						.map((col) => {
+							const v = r[col.accessor as string];
+							return `"${String(v ?? '').replace(/"/g, '""')}"`;
+						})
+						.join(',')
+				)
+				.join('\n');
+			content = `${header}\n${body}`;
+		}
+		if (typeof document === 'undefined') return;
+		const blob = new Blob([`﻿${content}`], { type: `${mime};charset=utf-8` });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `datatable-export.${ext}`;
+		a.click();
+		URL.revokeObjectURL(url);
+	};
+
+	// ── IMPORT (file CSV/JSON → parse → onImport) ──
+	const importData = (file: File): void => {
+		if (typeof FileReader === 'undefined') return;
+		const reader = new FileReader();
+		reader.onload = () => {
+			const text = String(reader.result ?? '');
+			try {
+				if (file.name.toLowerCase().endsWith('.json')) {
+					const parsed = JSON.parse(text);
+					if (Array.isArray(parsed)) onImport?.(parsed as Record<string, unknown>[]);
+				} else {
+					// CSV đơn giản: dòng đầu = header, giá trị trong "..." ("" = escape).
+					const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
+					if (lines.length < 2) return;
+					const parseLine = (line: string): string[] => {
+						const cells: string[] = [];
+						let cur = '';
+						let inQuotes = false;
+						for (let i = 0; i < line.length; i++) {
+							const ch = line[i];
+							if (inQuotes) {
+								if (ch === '"' && line[i + 1] === '"') {
+									cur += '"';
+									i++;
+								} else if (ch === '"') {
+									inQuotes = false;
+								} else {
+									cur += ch;
+								}
+							} else if (ch === '"') {
+								inQuotes = true;
+							} else if (ch === ',') {
+								cells.push(cur);
+								cur = '';
+							} else {
+								cur += ch;
+							}
+						}
+						cells.push(cur);
+						return cells;
+					};
+					const headers = parseLine(lines[0]);
+					const out = lines.slice(1).map((line) => {
+						const cells = parseLine(line);
+						const obj: Record<string, unknown> = {};
+						headers.forEach((h, i) => {
+							obj[h] = cells[i] ?? '';
+						});
+						return obj;
+					});
+					onImport?.(out);
+				}
+			} catch {
+				// file lỗi định dạng → bỏ qua (user tự xử lý qua onImport không gọi).
+			}
+		};
+		reader.readAsText(file);
+	};
+
+	// ── SELECTION TOOLS (toolbar: delete-selected + clear-selection) ──
+	const deleteSelected = (): void => {
+		if (selected.size === 0) return;
+		// Xóa từ cuối lên (index không dịch khi splice từng row).
+		for (let i = rows.length - 1; i >= 0; i--) {
+			if (selected.has(idOf(rows[i], i))) {
+				onRowDelete?.(rows[i] as never, idOf(rows[i], i));
+				rows.splice(i, 1);
+			}
+		}
+		selected.clear();
+		onSelectionChange?.([]);
+	};
+
+	const clearSelection = (): void => {
+		if (selected.size === 0) return;
+		selected.clear();
+		onSelectionChange?.([]);
+	};
+
+	const selectedCount: number = $derived(selected.size);
+
 	// ── LAZY LOAD ──
 	const hasMoreLazy: boolean = $derived(lazyHasMoreProp ?? hasMoreLazyState ?? true);
 	const isLoadingMore: boolean = $derived(loadingMore);
@@ -496,6 +737,15 @@
 	const loadMoreText = $derived(getText(lazyLoadProp?.loadMoreLabel, { en: 'Load more', vi: 'Tải thêm' }));
 	const loadingMoreText = $derived(getText(lazyLoadProp?.loadingMoreLabel, { en: 'Loading…', vi: 'Đang tải…' }));
 	const rowActionsText = $derived(getText(undefined, { en: 'Row actions', vi: 'Thao tác row' }));
+
+	// ── LABELS wave 7 (create/export/import/copy/clone/selection tools) ──
+	const createText = $derived(getText(creatableCfg.label, { en: 'Create new row', vi: 'Tạo row mới' }));
+	const exportText = $derived(getText(exportCfg.exportLabel, { en: 'Export', vi: 'Xuất' }));
+	const importText = $derived(getText(exportCfg.importLabel, { en: 'Import', vi: 'Nhập' }));
+	const copyText = $derived(getText(undefined, { en: 'Copy', vi: 'Sao chép' }));
+	const cloneText = $derived(getText(undefined, { en: 'Duplicate', vi: 'Nhân đôi' }));
+	const deleteSelectedText = $derived(getText(undefined, { en: 'Delete selected', vi: 'Xóa đã chọn' }));
+	const clearSelectionText = $derived(getText(undefined, { en: 'Clear selection', vi: 'Bỏ chọn' }));
 
 	const resultsText = $derived(resultsTemplate.replace('{n}', String(filtered.length)));
 	const showSearch = $derived(!!searchable);
@@ -624,6 +874,39 @@
 		get rowActionsLabel() {
 			return rowActionsText;
 		},
+		get creatable() {
+			return creatableDerived;
+		},
+		get createText() {
+			return createText;
+		},
+		get exportable() {
+			return exportableDerived;
+		},
+		get exportFormats() {
+			return exportFormats;
+		},
+		get importable() {
+			return importableDerived;
+		},
+		get exportText() {
+			return exportText;
+		},
+		get importText() {
+			return importText;
+		},
+		get copyText() {
+			return copyText;
+		},
+		get cloneText() {
+			return cloneText;
+		},
+		get deleteSelectedText() {
+			return deleteSelectedText;
+		},
+		get clearSelectionText() {
+			return clearSelectionText;
+		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
 				'datatable-root',
@@ -729,7 +1012,18 @@
 		get isLoadingMore() {
 			return isLoadingMore;
 		},
-		loadMore
+		loadMore,
+		createRow,
+		copyRow,
+		copySelected,
+		cloneRow,
+		exportData,
+		importData,
+		deleteSelected,
+		clearSelection,
+		get selectedCount() {
+			return selected.size;
+		}
 	};
 	setDataTableContext(shared);
 
@@ -737,29 +1031,109 @@
 </script>
 
 <div class={configs.style} {...props} {@attach handleEvents(configs.event)}>
-	{#if showSearch}
+	{#if showSearch || creatableDerived || exportableDerived}
 		<div class="datatable-toolbar">
-			<div class="datatable-search-wrap">
-				<input
-					class="datatable-search"
-					type="search"
-					aria-label={configs.searchText}
-					placeholder={configs.searchPlaceholderText}
-					value={query}
-					oninput={(e) => (query = (e.target as HTMLInputElement).value)}
-				/>
-				{#if query}
+			{#if showSearch}
+				<div class="datatable-search-wrap">
+					<input
+						class="datatable-search"
+						type="search"
+						aria-label={configs.searchText}
+						placeholder={configs.searchPlaceholderText}
+						value={query}
+						oninput={(e) => (query = (e.target as HTMLInputElement).value)}
+					/>
+					{#if query}
+						<button
+							type="button"
+							class="datatable-search-clear"
+							aria-label={configs.clearText}
+							onclick={() => (query = '')}
+						>
+							<span aria-hidden="true">✕</span>
+						</button>
+					{/if}
+				</div>
+				<span class="datatable-results" data-role="results">{configs.resultsText}</span>
+			{/if}
+
+			{#if creatableDerived}
+				<button
+					type="button"
+					class="datatable-btn datatable-btn--create"
+					data-test="datatable-create"
+					aria-label={configs.createText}
+					onclick={() => createRow()}
+				>
+					<span aria-hidden="true">＋</span>{configs.createText}
+				</button>
+			{/if}
+
+			{#if exportableDerived}
+				<span class="datatable-export-group" data-role="export-group">
+					{#each exportFormats as fmt, fi (fmt)}
+						<button
+							type="button"
+							class="datatable-btn datatable-btn--export"
+							data-test={`datatable-export-${fmt}`}
+							aria-label={`${configs.exportText} ${fmt.toUpperCase()}`}
+							onclick={() => exportData(fmt)}
+						>
+							{configs.exportText} {fmt.toUpperCase()}
+						</button>
+					{/each}
+					{#if importableDerived}
+						<label class="datatable-btn datatable-btn--import" data-test="datatable-import">
+							<span aria-hidden="true">{configs.importText}</span>
+							<input
+								type="file"
+								accept=".csv,.json"
+								aria-label={configs.importText}
+								onchange={(e) => {
+									const file = (e.target as HTMLInputElement).files?.[0];
+									if (file) importData(file);
+									(e.target as HTMLInputElement).value = '';
+								}}
+							/>
+						</label>
+					{/if}
+				</span>
+			{/if}
+
+			{#if configs.selectable && selectedCount > 0}
+				<span class="datatable-selection-tools" data-role="selection-tools">
+					<span class="datatable-selection-count">{selectedCount}</span>
+					{#if copyableDerived}
+						<button
+							type="button"
+							class="datatable-btn datatable-btn--tool"
+							data-test="datatable-copy-selected"
+							aria-label={configs.copyText}
+							onclick={() => copySelected()}
+						>
+							{configs.copyText}
+						</button>
+					{/if}
 					<button
 						type="button"
-						class="datatable-search-clear"
-						aria-label={configs.clearText}
-						onclick={() => (query = '')}
+						class="datatable-btn datatable-btn--tool datatable-btn--danger"
+						data-test="datatable-delete-selected"
+						aria-label={configs.deleteSelectedText}
+						onclick={() => deleteSelected()}
 					>
-						<span aria-hidden="true">✕</span>
+						{configs.deleteSelectedText}
 					</button>
-				{/if}
-			</div>
-			<span class="datatable-results" data-role="results">{configs.resultsText}</span>
+					<button
+						type="button"
+						class="datatable-btn datatable-btn--tool"
+						data-test="datatable-clear-selection"
+						aria-label={configs.clearSelectionText}
+						onclick={() => clearSelection()}
+					>
+						{configs.clearSelectionText}
+					</button>
+				</span>
+			{/if}
 		</div>
 	{/if}
 
@@ -919,6 +1293,103 @@
 		font-size: 0.8125rem;
 		color: var(--muted, #71717a);
 		white-space: nowrap;
+	}
+
+	// ── Toolbar buttons (create / export / import / selection tools) ──
+	.datatable-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 2rem;
+		padding: 0 0.75rem;
+		font: inherit;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--content1-foreground, #18181b);
+		background: var(--content1, #fff);
+		border: 1px solid var(--content3, hsl(240 5.88% 90%));
+		border-radius: var(--border-radius-sm, 0.375rem);
+		cursor: var(--cursor-interactive);
+		transition: background-color 150ms ease, color 150ms ease;
+		white-space: nowrap;
+
+		&--create {
+			color: hsl(0 0% 100%);
+			background: var(--primary, var(--color-indigo-500));
+			border-color: transparent;
+
+			&:hover {
+				background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 85%, black);
+			}
+		}
+
+		&--import {
+			position: relative;
+			overflow: hidden;
+
+			input[type='file'] {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+				opacity: 0;
+				cursor: var(--cursor-interactive);
+			}
+		}
+
+		&--tool {
+			min-height: 1.75rem;
+			padding: 0 0.625rem;
+			font-size: 0.75rem;
+
+			&.datatable-btn--danger {
+				color: var(--danger, var(--color-red-500));
+				border-color: color-mix(in srgb, var(--danger, var(--color-red-500)) 30%, transparent);
+
+				&:hover {
+					background: color-mix(in srgb, var(--danger, var(--color-red-500)) 8%, transparent);
+				}
+			}
+		}
+
+		@media (hover: hover) and (pointer: fine) {
+			&:hover:not(.datatable-btn--create):not(.datatable-btn--danger) {
+				background: var(--content2, hsl(240 4.76% 95.88%));
+			}
+		}
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+			outline-offset: 2px;
+		}
+	}
+
+	.datatable-export-group {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.datatable-selection-tools {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 8%, transparent);
+		border-radius: var(--border-radius-sm, 0.375rem);
+	}
+
+	.datatable-selection-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.25rem;
+		height: 1.25rem;
+		padding: 0 0.25rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		color: hsl(0 0% 100%);
+		background: var(--primary, var(--color-indigo-500));
+		border-radius: 9999px;
 	}
 
 	// ── Density: compact thu hẹp padding cell (set var trên root) ──

@@ -14,10 +14,14 @@
 // - DT11 row actions (nút ✎ row editor + 🗑 delete qua AlertDialog confirm)
 // - DT12 lazy load (IntersectionObserver scroll + nút load more → hết data ẩn)
 // - DT13 visual (striped bg khác nhau, bordered border-right, hover highlight)
+// - DT14 toolbar (create → row editor, copy/clone row TSV clipboard, export
+//   CSV/JSON download, selection tools copy/delete/clear selected)
+// - DT15 no-results + empty create (search không khớp / data=[] → nút create)
 //
 // Trình tự: DT0 (chỉ đọc) → screenshots (trạng thái sạch) → DT2 filter →
 // DT3 pagination → DT4 selection (trở về size 10) → DT1 sort (đổi trạng thái
-// cuối, không ảnh hưởng các check phía trên) → DT5/6/7 (các section độc lập).
+// cuối, không ảnh hưởng các check phía trên) → DT5/6/7 (các section độc lập)
+// → DT8-13 (live/edit/actions/lazy/visual) → DT14/15 (toolbar + create).
 // Chạy: node tests/datatable-probe.mjs (dev server phải chạy ở https://localhost:3000)
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -85,6 +89,10 @@ await lazySecShot.screenshot({ path: `${shotDirNew}/05-lazyload.png` });
 await visSecShot.screenshot({ path: `${shotDirNew}/06-visual.png` });
 // 07-checkbox: table basic trạng thái sạch — Checkbox component (cột đầu).
 await basic.locator('table.datatable').screenshot({ path: `${shotDirNew}/07-checkbox.png` });
+// 10-toolbar: section toolbar — create + export/import + (chưa chọn).
+await page.locator('[data-test="dt-toolbar"]').screenshot({ path: `${shotDirNew}/10-toolbar.png` });
+// 11-empty-create: section empty + creatable — nút create giữa empty row.
+await page.locator('[data-test="dt-empty"]').screenshot({ path: `${shotDirNew}/11-empty-create.png` });
 await page.waitForTimeout(100);
 
 console.log('\n=== DT2: FILTER (search mọi cột, nhạy dấu) + COUNT + CLEAR ===');
@@ -383,6 +391,134 @@ const hoverBg = await page.evaluate(() => {
 	return td ? getComputedStyle(td).backgroundColor : '';
 });
 ok('DT13: hover row → nền đổi (highlight)', hoverBg !== bgVis.even && hoverBg !== '', hoverBg);
+
+console.log('\n=== DT14: TOOLBAR (create + export/import + copy/clone + selection tools) ===');
+const tb = page.locator('[data-test="dt-toolbar"]');
+// (a) Nút create + export/import hiển thị.
+ok('DT14: nút create hiện (data-test)', (await tb.locator('[data-test="datatable-create"]').count()) === 1);
+ok('DT14: nút export CSV + JSON hiện', (await tb.locator('[data-test="datatable-export-csv"]').count()) === 1 && (await tb.locator('[data-test="datatable-export-json"]').count()) === 1);
+ok('DT14: nút import hiện (label file)', (await tb.locator('[data-test="datatable-import"]').count()) === 1);
+// (b) Create → nhảy trang tới row mới + row editor mở + onRowCreate fired.
+await tb.locator('[data-test="datatable-create"]').click();
+await page.waitForTimeout(250);
+ok('DT14: create → row editor mở ngay (input row)', (await tb.locator('input.datatable-row-input').count()) >= 1);
+ok('DT14: create → onRowCreate fired (debug __new)', ((await page.locator('[data-test="dt-created"]').textContent()) ?? '').startsWith('__new'));
+ok(
+	'DT14: create → nhảy trang cuối (page info "4")',
+	((await tb.locator('.datatable-pageinfo').textContent()) ?? '').includes('4'),
+	(await tb.locator('.datatable-pageinfo').textContent()) ?? ''
+);
+ok(
+	'DT14: create → trang chứa row mới (≤2 row, data đã thêm từ DT8)',
+	(await tb.locator('tr.datatable-row').count()) <= 2,
+	String(await tb.locator('tr.datatable-row').count())
+);
+// Commit row editor (Escape — giữ placeholder).
+await tb.locator('input.datatable-row-input').first().press('Escape');
+await page.waitForTimeout(150);
+// (c) Copy row: click nút ⧉ row đầu → clipboard + onCopy fired.
+await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+const tbRow0 = tb.locator('tr.datatable-row').nth(0);
+await tbRow0.hover();
+await page.waitForTimeout(150);
+await tb.locator('[data-test="datatable-row-copy"]').first().click();
+await page.waitForTimeout(200);
+ok('DT14: copy row → onCopy fired (debug ký tự)', /ký tự|chars/i.test((await page.locator('[data-test="dt-copied"]').textContent()) ?? ''));
+const clipText = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''));
+ok('DT14: copy row → clipboard có TSV (≥2 cột)', typeof clipText === 'string' && clipText.includes('\t'), String(clipText).slice(0, 40));
+// (d) Clone row: click ⎘ row đầu → thêm bản sao ngay dưới + onRowClone fired.
+const cloneAnchor = ((await tbRow0.locator('td.datatable-td').nth(1).textContent()) ?? '').trim();
+const rowsBeforeClone = await tb.locator('tr.datatable-row').count();
+await tb.locator('[data-test="datatable-row-clone"]').first().click();
+await page.waitForTimeout(250);
+ok('DT14: clone → onRowClone fired (debug "→")', /→/.test((await page.locator('[data-test="dt-cloned"]').textContent()) ?? ''));
+ok(
+	'DT14: clone → bản sao ngay dưới row gốc (tên giống)',
+	((await tb.locator('tr.datatable-row').nth(1).textContent()) ?? '').includes(cloneAnchor.slice(0, 6))
+);
+ok(
+	'DT14: clone → đếm tăng +1 row trên trang',
+	(await tb.locator('tr.datatable-row').count()) === rowsBeforeClone + 1,
+	`${rowsBeforeClone} → ${await tb.locator('tr.datatable-row').count()}`
+);
+// (e) Selection tools: chọn 2 row → toolbar hiện tools (copy/delete/clear).
+await tb.locator('td.datatable-td--check [role="checkbox"]').nth(0).click();
+await page.waitForTimeout(120);
+await tb.locator('td.datatable-td--check [role="checkbox"]').nth(1).click();
+await page.waitForTimeout(150);
+ok('DT14: chọn 2 row → selection tools hiện', (await tb.locator('[data-role="selection-tools"]').count()) === 1);
+ok('DT14: selection count = 2 (badge)', ((await tb.locator('.datatable-selection-count').textContent()) ?? '').trim() === '2');
+// 12-selection-tools: 2 row đã chọn → badge count + copy/delete/clear.
+await tb.screenshot({ path: `${shotDirNew}/12-selection-tools.png` });
+// Copy selected (2 row → TSV có header + 2 dòng).
+await tb.locator('[data-test="datatable-copy-selected"]').click();
+await page.waitForTimeout(200);
+const clipSel = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''));
+ok(
+	'DT14: copy selected → clipboard header + 2 dòng',
+	typeof clipSel === 'string' && clipSel.split('\n').length >= 3 && clipSel.includes('\t'),
+	String(clipSel).split('\n').length
+);
+// (f) Export CSV/JSON: click → tải file (verify qua download event).
+const dlCsv = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+await tb.locator('[data-test="datatable-export-csv"]').click();
+const csvDl = await dlCsv;
+ok('DT14: export CSV → download fired', !!csvDl);
+if (csvDl) {
+	const path = await csvDl.path();
+	const content = (await import('node:fs')).readFileSync(path, 'utf8');
+	ok('DT14: export CSV → nội dung header + row (5+)', content.split('\n').length >= 6 && content.includes('Product'), content.split('\n').length);
+}
+const dlJson = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+await tb.locator('[data-test="datatable-export-json"]').click();
+const jsonDl = await dlJson;
+ok('DT14: export JSON → download fired', !!jsonDl);
+if (jsonDl) {
+	const path = await jsonDl.path();
+	const content = (await import('node:fs')).readFileSync(path, 'utf8');
+	ok('DT14: export JSON → nội dung mảng JSON (5+)', content.trim().startsWith('[') && content.includes('"name"'), content.slice(0, 30));
+}
+// (g) Delete selected: click → 2 row bị xóa.
+const rowsBeforeDelSel = await tb.locator('tr.datatable-row').count();
+await tb.locator('[data-test="datatable-delete-selected"]').click();
+await page.waitForTimeout(250);
+ok(
+	'DT14: delete selected → 2 row mất',
+	(await tb.locator('tr.datatable-row').count()) === rowsBeforeDelSel - 2,
+	`${rowsBeforeDelSel} → ${await tb.locator('tr.datatable-row').count()}`
+);
+ok('DT14: delete selected → selection tools ẩn (count 0)', (await tb.locator('[data-role="selection-tools"]').count()) === 0);
+ok('DT14: callback onRowDelete fired 2 lần (debug)', /p\d/.test((await page.locator('[data-test="dt-row-delete"]').textContent()) ?? ''));
+// (h) Clear selection.
+await tb.locator('td.datatable-td--check [role="checkbox"]').nth(0).click();
+await page.waitForTimeout(150);
+await tb.locator('[data-test="datatable-clear-selection"]').click();
+await page.waitForTimeout(150);
+ok('DT14: clear selection → tools ẩn, không row selected', (await tb.locator('[data-role="selection-tools"]').count()) === 0 && (await tb.locator('tr.datatable-row.selected').count()) === 0);
+
+console.log('\n=== DT15: NO-RESULTS + EMPTY CREATE ===');
+const nr = page.locator('[data-test="dt-noresults"]');
+await nr.locator('input.datatable-search').fill('zzz-không-có');
+await page.waitForTimeout(250);
+ok('DT15: search không khớp → 0 row', (await nr.locator('tr.datatable-row').count()) === 0);
+ok('DT15: no-results → nút create hiện (empty row)', (await nr.locator('[data-test="datatable-empty-create"]').count()) === 1);
+// 13-noresults: search không khớp → empty row + nút create.
+await nr.screenshot({ path: `${shotDirNew}/13-noresults.png` });
+ok('DT15: empty text "Không có dữ liệu"/"No data" + nút', /không có dữ liệu|no data/i.test((await nr.locator('td.datatable-empty').textContent()) ?? ''));
+// Click create từ no-results → row editor mở (n row tăng từ 0 → 1).
+await nr.locator('[data-test="datatable-empty-create"]').click();
+await page.waitForTimeout(250);
+ok('DT15: create từ no-results → row editor mở', (await nr.locator('input.datatable-row-input').count()) >= 1);
+await nr.locator('input.datatable-row-input').first().press('Escape');
+await page.waitForTimeout(150);
+// Empty section (data=[] + creatable).
+const emp = page.locator('[data-test="dt-empty"]');
+ok('DT15: empty → nút create hiện', (await emp.locator('[data-test="datatable-empty-create"]').count()) === 1);
+await emp.locator('[data-test="datatable-empty-create"]').click();
+await page.waitForTimeout(250);
+ok('DT15: create từ empty → 1 row xuất hiện', (await emp.locator('tr.datatable-row').count()) === 1, String(await emp.locator('tr.datatable-row').count()));
+await emp.locator('input.datatable-row-input').first().press('Escape');
+await page.waitForTimeout(150);
 
 await browser.close();
 

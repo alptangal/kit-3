@@ -78,6 +78,28 @@ export interface DataTableVisual {
 	bordered?: boolean;
 }
 
+/** Config tạo row mới (nút create: toolbar + empty + no-results). */
+export interface DataTableCreatable {
+	/** Bật create (default true khi truyền object). */
+	enabled?: boolean;
+	/** Nhãn nút create (i18n). */
+	label?: TranslateContent | string;
+}
+
+/** Config xuất/nhập data (CSV/JSON). */
+export interface DataTableExport {
+	/** Bật export (default true khi truyền object). */
+	enabled?: boolean;
+	/** Định dạng xuất ('csv' mặc định; 'json'). */
+	formats?: ('csv' | 'json')[];
+	/** Cho phép nhập file CSV/JSON (nút import). */
+	import?: boolean;
+	/** Nhãn nút export (i18n). */
+	exportLabel?: TranslateContent | string;
+	/** Nhãn nút import (i18n). */
+	importLabel?: TranslateContent | string;
+}
+
 export interface DataTableRootProps<T = Record<string, unknown>> extends BasicProps {
 	/** Dữ liệu row. */
 	data?: T[];
@@ -137,6 +159,18 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	lazyLoad?: DataTableLazyLoad;
 	/** Visual row/cột (zebra/hover/border). */
 	visual?: DataTableVisual;
+	/** Tạo row mới (nút create: toolbar + empty + no-results). */
+	creatable?: boolean | DataTableCreatable;
+	/** Xuất/nhập data (CSV/JSON). */
+	exportable?: boolean | DataTableExport;
+	/** Callback khi tạo row mới (row + rowId). */
+	onRowCreate?: (row: T, rowId: string) => void | Promise<void>;
+	/** Callback khi clone row (row gốc + row clone). */
+	onRowClone?: (row: T, clone: T) => void | Promise<void>;
+	/** Callback khi copy row(s) ra clipboard (text đã copy). */
+	onCopy?: (text: string) => void | Promise<void>;
+	/** Callback khi import data (rows đã nhập). */
+	onImport?: (rows: Record<string, unknown>[]) => void | Promise<void>;
 	/** Callback khi cell update (row, column id, oldValue, newValue). */
 	onCellUpdate?: (row: T, columnId: string, oldValue: unknown, newValue: unknown) => void | Promise<void>;
 	/** Callback khi row update (row, rowId). */
@@ -216,6 +250,28 @@ export interface DataTableConfigs extends BasicConfigs {
 	loadingMoreText: string;
 	/** Nhãn action bar mobile (i18n). */
 	rowActionsLabel: string;
+	/** Create row mới bật? (cho toolbar + empty + no-results). */
+	creatable: boolean;
+	/** Nhãn nút create (i18n). */
+	createText: string;
+	/** Export bật? (cho toolbar). */
+	exportable: boolean;
+	/** Định dạng export (đã resolve). */
+	exportFormats: ('csv' | 'json')[];
+	/** Cho phép import file? */
+	importable: boolean;
+	/** Nhãn nút export (i18n). */
+	exportText: string;
+	/** Nhãn nút import (i18n). */
+	importText: string;
+	/** Nhãn nút copy row(s) (i18n). */
+	copyText: string;
+	/** Nhãn nút clone row (i18n). */
+	cloneText: string;
+	/** Nhãn nút delete-selected (toolbar selection tools, i18n). */
+	deleteSelectedText: string;
+	/** Nhãn nút clear-selection (toolbar selection tools, i18n). */
+	clearSelectionText: string;
 }
 
 /** Shared state root → sub (Head/Body/Pagination), bỏ writable store của v1. */
@@ -313,4 +369,22 @@ export interface DataTableSharedState {
 	loadMore: () => void;
 	/** Lazy load: đang loading? */
 	isLoadingMore: boolean;
+	/** Tạo row mới (nút create) — push placeholder vào data + gọi onRowCreate. */
+	createRow: () => void;
+	/** Copy 1 row (text TSV) ra clipboard + gọi onCopy. */
+	copyRow: (rowId: string) => void;
+	/** Copy các row đã chọn (TSV) ra clipboard + gọi onCopy. */
+	copySelected: () => void;
+	/** Clone row (thêm bản sao ngay dưới + id mới) + gọi onRowClone. */
+	cloneRow: (rowId: string) => void;
+	/** Export data (đã filter) theo format ra file tải về. */
+	exportData: (format: 'csv' | 'json') => void;
+	/** Nhập file CSV/JSON (input file) → parse → gọi onImport. */
+	importData: (file: File) => void;
+	/** Xóa tất cả row đã chọn (toolbar selection tools). */
+	deleteSelected: () => void;
+	/** Bỏ chọn tất cả (toolbar selection tools). */
+	clearSelection: () => void;
+	/** Số row đã chọn (toolbar selection tools hiển thị). */
+	selectedCount: number;
 }

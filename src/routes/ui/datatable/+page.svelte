@@ -60,8 +60,9 @@
 		}
 	];
 
-	// (4) empty + loading cases dùng dataset riêng.
-	const emptyProducts: Product[] = [];
+	// (4) empty + loading cases dùng dataset riêng ($state — create từ empty
+	// push vào data phải re-render).
+	let emptyProducts = $state<Product[]>([]);
 
 	// DataTable root type (Record<string, unknown>) — cast demo Product[]/columns
 	// để khớp prop mà không mất type trong code demo.
@@ -79,6 +80,25 @@
 	let lastCellUpdate = $state<string>('');
 	let lastRowUpdate = $state<string>('');
 	let lastRowDelete = $state<string>('');
+
+	// ── Wave 7 debug: create / clone / copy / import ──
+	let lastCreate = $state<string>('');
+	let lastClone = $state<string>('');
+	let lastCopy = $state<string>('');
+	let lastImport = $state<string>('');
+
+	const handleRowCreate = (row: Record<string, unknown>, rowId: string): void => {
+		lastCreate = rowId;
+	};
+	const handleRowClone = (row: Record<string, unknown>, clone: Record<string, unknown>): void => {
+		lastClone = `${String(row.name ?? '?')}→${String(clone.name ?? '?')}`;
+	};
+	const handleCopy = (text: string): void => {
+		lastCopy = `${text.length} ký tự`;
+	};
+	const handleImport = (rows: Record<string, unknown>[]): void => {
+		lastImport = `${rows.length} row`;
+	};
 
 	// ── (1a) LIVE DATA: nút "thêm row" + interval tự động ──
 	let autoAdd = $state<boolean>(false);
@@ -305,11 +325,60 @@
 		/>
 	</section>
 
+	<!-- (7) TOOLBAR: create + export/import + selection tools -->
+	<section class="demo" data-test="dt-toolbar">
+		<h2>Toolbar (create + export/import + copy/clone + selection tools)</h2>
+		<p class="demo-hint">creatable + exportable — nút create, export CSV/JSON, import file; chọn row → copy selected / delete selected / clear.</p>
+		<DataTable
+			data={productsAny}
+			columns={columnsAny}
+			pageSize={5}
+			searchable
+			selectable
+			rowActions
+			sortable
+			creatable
+			exportable={ { formats: ['csv', 'json'], import: true } }
+			caption={ { vi: 'Toolbar', en: 'Toolbar' } }
+			getRowId={(r, i) => (r as unknown as Product).id ?? String(i)}
+			onRowCreate={handleRowCreate}
+			onRowClone={handleRowClone}
+			onCopy={handleCopy}
+			onImport={handleImport}
+		/>
+		<div class="state" data-test="dt-toolbar-state">
+			<span data-test="dt-created">{lastCreate || 'none'}</span>
+			<span data-test="dt-cloned">{lastClone || 'none'}</span>
+			<span data-test="dt-copied">{lastCopy || 'none'}</span>
+			<span data-test="dt-imported">{lastImport || 'none'}</span>
+		</div>
+	</section>
+
+	<!-- (8) NO-RESULTS: search không khớp → nút create -->
+	<section class="demo" data-test="dt-noresults">
+		<h2>No results (search không khớp → create)</h2>
+		<p class="demo-hint">Search text không có kết quả → empty row + nút create (creatable).</p>
+		<DataTable
+			data={productsAny}
+			columns={columnsAny}
+			pageSize={5}
+			searchable
+			creatable
+			caption={ { vi: 'Không có kết quả', en: 'No results' } }
+		/>
+	</section>
+
 	<!-- (5) Empty data -->
 	<section class="demo" data-test="dt-empty">
-		<h2>Empty (data=[])</h2>
-		<p class="demo-hint">data rỗng → row empty full-span muted "Không có dữ liệu".</p>
-		<DataTable data={emptyProductsAny} columns={columnsAny} pageSize={5} caption={ { vi: 'Rỗng', en: 'Empty' } } />
+		<h2>Empty (data=[] + creatable)</h2>
+		<p class="demo-hint">data rỗng → row empty full-span muted + nút create (creatable).</p>
+		<DataTable
+			data={emptyProductsAny}
+			columns={columnsAny}
+			pageSize={5}
+			creatable
+			caption={ { vi: 'Rỗng', en: 'Empty' } }
+		/>
 	</section>
 
 	<!-- (6) Loading state -->
