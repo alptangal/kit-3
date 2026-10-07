@@ -5,10 +5,13 @@
 // Nâng cấp: tooltip hover đa thông tin (label/value/%/delta/custom render) +
 // live data (poll source hoặc mirror prop, cửa sổ trượt max) — cả hai TÙY CHỌN
 // qua prop, KHÔNG đổi hành vi mặc định khi không truyền.
+// Pie/donut: type="pie" + innerRadius (lỗ giữa, 0 = pie đặc) + startAngle +
+// padAngle — segments arc bằng pure JS, màu palette theo hệ thống (xoay vòng
+// 500/600 khi > 7 segment), legend tên + %, delta KHÔNG áp dụng cho pie.
 import type { Snippet } from 'svelte';
 import type { BasicConfigs, BasicProps, Color, TimeUnits } from '$components/interface';
 
-export type ChartType = 'bar' | 'line';
+export type ChartType = 'bar' | 'line' | 'pie';
 
 /** 1 điểm dữ liệu (single series). */
 export interface ChartDatum {
@@ -56,9 +59,24 @@ export interface ChartTooltipMeta {
 	series: ChartTooltipSeriesMeta[];
 }
 
+/** 1 segment pie/donut — geometry đã tính (pure, render bằng <path>). */
+export interface ChartSlice {
+	/** Path arc (donut ring hoặc pie wedge) đã format 2 số thập phân. */
+	path: string;
+	/** Màu segment (đã resolve token var). */
+	color: string;
+	/** Giá trị raw. */
+	value: number;
+	/** Tỉ trọng 0..1 so tổng (legend + tooltip). */
+	percent: number;
+	/** Nhãn segment. */
+	label: string;
+	/** Góc giữa mép sau pad (mid-arc, độ) — anchor tooltip pie. */
+	midAngle: number;
+}
+
 /** 1 dòng trong tooltip mặc định (đã format). */
-export interface ChartTooltipRow {
-	/** Tên series (single series = không tên — header đã là label). */
+export interface ChartTooltipRow {	/** Tên series (single series = không tên — header đã là label). */
 	name?: string;
 	/** Màu swatch (token var). */
 	color?: string;
@@ -106,7 +124,7 @@ export interface ChartLiveOptions {
 export interface ChartProps extends BasicProps {
 	/** Dữ liệu (single series) — required. Empty → placeholder "Không có dữ liệu". */
 	data: ChartDatum[];
-	/** Kiểu chart (default 'bar'). */
+	/** Kiểu chart (default 'bar'). 'pie' = donut (vòng tròn có lỗ giữa; innerRadius=0 → pie đặc). */
 	type?: ChartType;
 	/** Đa series (line multi). Stretch — khi có, `data` chỉ dùng lấy label. */
 	series?: ChartSeries[];
@@ -128,6 +146,12 @@ export interface ChartProps extends BasicProps {
 	showPoints?: boolean;
 	/** Hiện nền area dưới đường (line) (default false). */
 	showArea?: boolean;
+	/** Tỉ lệ lỗ giữa donut (0..1, default 0.6). 0 → pie đặc. Chỉ dùng cho type="pie". */
+	innerRadius?: number | string;
+	/** Góc bắt đầu (độ, default -90 = đỉnh 12h, chiều kim đồng hồ). Chỉ dùng cho type="pie". */
+	startAngle?: number;
+	/** Gap giữa segments (rad, default 0.02 ≈ 1.15deg). 0 → segments sát nhau. Chỉ dùng cho type="pie". */
+	padAngle?: number;
 	/** Tooltip hover đa thông tin (label/value/%/delta/custom render). TÙY CHỌN — không có → giữ native <title>. */
 	tooltip?: boolean | ChartTooltipOptions;
 	/** Live data — poll source hoặc mirror data prop, cửa sổ trượt max. TÙY CHỌN. */
@@ -159,4 +183,12 @@ export interface ChartConfigs extends Omit<BasicConfigs, 'value' | 'status'> {
 	tooltipOpen: boolean;
 	/** Live data đang bật. */
 	live: boolean;
+	/** Tỉ lệ lỗ giữa donut đã clamp (0..1, default 0.6). */
+	innerRadius: number;
+	/** Góc bắt đầu (độ, default -90). */
+	startAngle: number;
+	/** Gap giữa segments (rad, default 0.02). */
+	padAngle: number;
+	/** Segments pie đã tính (type="pie"); rỗng cho bar/line. */
+	slices: ChartSlice[];
 }

@@ -64,6 +64,12 @@
 	.chart-legend__name {
 		font-weight: 500;
 	}
+	/* Legend pie: thêm % từng segment (tabular-nums — cột số align). */
+	.chart-legend--pie .chart-legend__percent {
+		color: var(--chart-label);
+		font-variant-numeric: tabular-nums;
+		opacity: 0.75;
+	}
 
 	.chart-svg {
 		display: block;
@@ -94,6 +100,23 @@
 		animation: chart-bar-grow var(--chart-duration) var(--chart-ease) both;
 		transition: opacity var(--chart-duration) var(--chart-ease);
 	}
+	/* Pie/donut slice: grow từ tâm (scale từ 0), origin = tâm pie (cx,cy viewBox).
+	   transform-box: view-box + origin theo % → scale cả ring quanh tâm. */
+	.chart-slice {
+		transform-box: view-box;
+		transform-origin: center;
+		animation: chart-slice-grow var(--chart-duration) var(--chart-ease) both;
+		transition: opacity var(--chart-duration) var(--chart-ease);
+	}
+	&.is-pie:hover .chart-slice {
+		/* Hover segment: mờ các segment khác, segment hover giữ nguyên (emphasis). */
+		opacity: 0.35;
+		transition: opacity 120ms ease;
+	}
+	&.is-pie:hover .chart-slice:hover {
+		opacity: 1;
+		transition: opacity 120ms ease;
+	}
 	/* Live: marks update in-place (không {#key} remount) → transition geometry mượt,
 	   không nhảy layout (x/y/width/height bằng attribute — transition áp SVG geometry
 	   attribute qua CSS chỉ hoạt động với CSS-able properties; dùng transition x/y
@@ -119,6 +142,10 @@
 			transition:
 				cx var(--chart-duration) var(--chart-ease),
 				cy var(--chart-duration) var(--chart-ease);
+		}
+		.chart-slice {
+			animation: none;
+			transition: d var(--chart-duration) var(--chart-ease), opacity var(--chart-duration) var(--chart-ease);
 		}
 	}
 	.chart-line {
@@ -286,6 +313,10 @@
 	from { transform: scaleY(0); }
 	to { transform: scaleY(1); }
 }
+@keyframes chart-slice-grow {
+	from { transform: scale(0); }
+	to { transform: scale(1); }
+}
 @keyframes chart-line-draw {
 	from { stroke-dashoffset: 1; }
 	to { stroke-dashoffset: 0; }
@@ -301,6 +332,7 @@
 		.chart-bar { animation: none; }
 		.chart-line { animation: none; stroke-dashoffset: 0; }
 		.chart-point { animation: none; opacity: 1; }
+		.chart-slice { animation: none; }
 		&.is-live {
 			.chart-bar, .chart-line, .chart-point { transition: none; }
 		}

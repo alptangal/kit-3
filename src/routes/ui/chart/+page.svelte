@@ -66,6 +66,27 @@
 		sourceTick += 1;
 		return { label: `n${sourceTick}`, value: 200 + Math.round(Math.random() * 400) };
 	};
+
+	// (7) Pie donut — market share 4 segment (innerRadius 0.6, padAngle gap).
+	const marketShare = [
+		{ label: 'Chrome', value: 48 },
+		{ label: 'Safari', value: 22 },
+		{ label: 'Firefox', value: 18 },
+		{ label: 'Khác', value: 12 }
+	];
+
+	// (8) Pie đặc (innerRadius=0) — budget 3 segment, startAngle mặc định 12h.
+	const budget = [
+		{ label: 'Infra', value: 40 },
+		{ label: 'Nhân sự', value: 35 },
+		{ label: 'Marketing', value: 25 }
+	];
+
+	// (9) Pie > 7 segment — palette xoay vòng 500/600.
+	const nineSegments = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map((label, i) => ({
+		label,
+		value: 10 + i * 2
+	}));
 </script>
 
 <div class="page" data-test="chart-demo">
@@ -137,6 +158,37 @@
 		<p class="demo-hint">viewBox theo width/height prop; CSS co giãn width:100%. Low-height (sparkline-like) + default.</p>
 		<Chart type="line" data={visitors} height={160} showPoints />
 		<Chart type="bar" data={revenue} width={480} height={220} />
+	</section>
+
+	<section class="demo" data-test="chart-pie">
+		<h2>Pie donut (market share, innerRadius 0.6)</h2>
+		<p class="demo-hint">type="pie" + innerRadius (lỗ giữa 0..1, default 0.6) + padAngle (gap giữa segments). Legend tên + % từng segment. Hover segment → tooltip label + value + % (KHÔNG delta); segment khác mờ (emphasis).</p>
+		<Chart
+			type="pie"
+			data={marketShare}
+			tooltip
+			title="Thị phần trình duyệt"
+			aria-label="Biểu đồ thị phần trình duyệt"
+		/>
+	</section>
+
+	<section class="demo" data-test="chart-pie-solid">
+		<h2>Pie đặc (innerRadius=0, budget 3 segment)</h2>
+		<p class="demo-hint">innerRadius={'{'}0{'}'} → pie đặc (không lỗ giữa). startAngle mặc định -90deg = đỉnh 12h, chiều kim đồng hồ.</p>
+		<Chart
+			type="pie"
+			data={budget}
+			innerRadius={0}
+			tooltip
+			title="Ngân sách theo hạng mục"
+			aria-label="Biểu đồ ngân sách theo hạng mục"
+		/>
+	</section>
+
+	<section class="demo" data-test="chart-pie-nine">
+		<h2>Pie > 7 segment (palette xoay vòng 500/600)</h2>
+		<p class="demo-hint">9 segment → palette xoay vòng qua bậc 500/600 (token raw --color-&lt;ref&gt;-N, KHÔNG đảo theme). Part-to-whole ≤ 6 segment là chuẩn — 9 chỉ để test palette.</p>
+		<Chart type="pie" data={nineSegments} innerRadius={0.5} title="9 segment (test palette)" aria-label="Biểu đồ 9 segment test palette" />
 	</section>
 </div>
 

@@ -11,7 +11,8 @@ export type {
 	ChartLiveOptions,
 	ChartTooltipMeta,
 	ChartTooltipSeriesMeta,
-	ChartTooltipRow
+	ChartTooltipRow,
+	ChartSlice
 } from './_interface';
 export {
 	niceScale,
@@ -22,6 +23,10 @@ export {
 	buildAreaPath,
 	buildTooltipRows,
 	deltaDir,
-	rnd
+	rnd,
+	polarToCartesian,
+	buildSlicePath,
+	buildPieSlices,
+	buildPiePalette
 } from './_scale';
-export type { ChartScale, ChartPoint } from './_scale';
+export type { ChartScale, ChartPoint, PieSliceGeometry } from './_scale';

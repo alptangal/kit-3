@@ -1,7 +1,7 @@
 // $components/element/chart/_scale.ts
 // Pure JS helpers cho Chart — KHÔNG phụ thuộc DOM/Svelte (test được, SSR-safe).
 // Nội dung: nice-scale (1/2/5 × 10^n), formatter mặc định (k/M/B), truncate label,
-// và path-builder (bar rounded-top / line / area).
+// path-builder (bar rounded-top / line / area), pie/donut slices + palette.
 
 export interface ChartPoint {
 	/** Pixel x (đã gom về tọa độ viewBox). */
@@ -172,4 +172,153 @@ export function buildTooltipRows(
 			deltaDir: showDelta && s.delta !== undefined ? dir : undefined
 		};
 	});
+}
+
+// ── Pie / donut (pure JS, KHÔNG library) ──
+
+/** Tọa độ cartesian từ góc cực (độ 0 = 3h, tăng theo chiều kim đồng hồ trong hệ SVG). */
+export function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number): { x: number; y: number } {
+	const rad = (angleDeg * Math.PI) / 180;
+	return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+/**
+ * Path 1 slice donut (annular sector): ring giữa innerR → outerR, từ a0 → a1 (độ).
+ * innerR <= 0 → pie wedge (tam giác cung, đỉnh ở tâm). Arc lớn >= 180deg → large-arc=1.
+ * padAngle đã trừ sẵn bởi caller (a1 đã là mép sau pad).
+ */
+export function buildSlicePath(cx: number, cy: number, outerR: number, innerR: number, a0: number, a1: number): string {
+	const sweep = a1 - a0;
+	if (sweep <= 0) return '';
+	// Full circle (360deg): path arc đôi không khép → vẽ 2 vòng tròn riêng.
+	if (sweep >= 359.999) {
+		if (innerR > 0) {
+			return (
+				`M ${rnd(cx + outerR)} ${rnd(cy)} ` +
+				`A ${rnd(outerR)} ${rnd(outerR)} 0 1 1 ${rnd(cx - outerR)} ${rnd(cy)} ` +
+				`A ${rnd(outerR)} ${rnd(outerR)} 0 1 1 ${rnd(cx + outerR)} ${rnd(cy)} Z ` +
+				`M ${rnd(cx + innerR)} ${rnd(cy)} ` +
+				`A ${rnd(innerR)} ${rnd(innerR)} 0 1 0 ${rnd(cx - innerR)} ${rnd(cy)} ` +
+				`A ${rnd(innerR)} ${rnd(innerR)} 0 1 0 ${rnd(cx + innerR)} ${rnd(cy)} Z`
+			);
+		}
+		return (
+			`M ${rnd(cx + outerR)} ${rnd(cy)} ` +
+			`A ${rnd(outerR)} ${rnd(outerR)} 0 1 1 ${rnd(cx - outerR)} ${rnd(cy)} ` +
+			`A ${rnd(outerR)} ${rnd(outerR)} 0 1 1 ${rnd(cx + outerR)} ${rnd(cy)} Z`
+		);
+	}
+	const large = sweep > 180 ? 1 : 0;
+	const p0 = polarToCartesian(cx, cy, outerR, a0);
+	const p1 = polarToCartesian(cx, cy, outerR, a1);
+	if (innerR > 0) {
+		const q1 = polarToCartesian(cx, cy, innerR, a1);
+		const q0 = polarToCartesian(cx, cy, innerR, a0);
+		return [
+			`M ${rnd(p0.x)} ${rnd(p0.y)}`,
+			`A ${rnd(outerR)} ${rnd(outerR)} 0 ${large} 1 ${rnd(p1.x)} ${rnd(p1.y)}`,
+			`L ${rnd(q1.x)} ${rnd(q1.y)}`,
+			`A ${rnd(innerR)} ${rnd(innerR)} 0 ${large} 0 ${rnd(q0.x)} ${rnd(q0.y)}`,
+			'Z'
+		].join(' ');
+	}
+	return [
+		`M ${rnd(cx)} ${rnd(cy)}`,
+		`L ${rnd(p0.x)} ${rnd(p0.y)}`,
+		`A ${rnd(outerR)} ${rnd(outerR)} 0 ${large} 1 ${rnd(p1.x)} ${rnd(p1.y)}`,
+		'Z'
+	].join(' ');
+}
+
+export interface PieSliceGeometry {
+	path: string;
+	value: number;
+	percent: number;
+	label: string;
+	/** Góc giữa mép sau pad (mid-arc) — anchor label/tooltip. */
+	midAngle: number;
+	/** Total sweep của segment (độ, trước pad) — test/legend. */
+	sweep: number;
+}
+
+/**
+ * Tính slices pie/donut từ data (pure, test được).
+ * - Bỏ value <= 0 (segment 0° rỗng); tổng = tổng value hợp lệ → % từng slice.
+ * - startAngle (độ, default -90 = đỉnh 12h), chiều kim đồng hồ (hệ SVG y-down).
+ * - padAngle (rad) → gap giữa segments: mỗi mép segment thu vào pad/2 (đối xứng,
+ *   giữ tâm segment không dịch); sát nhau khi 0.
+ * - innerR là RADIUS (caller tính từ tỉ lệ innerRadius × outerR); 0 → pie đặc.
+ */
+export function buildPieSlices(
+	data: { label: string; value: number }[],
+	cx: number,
+	cy: number,
+	outerR: number,
+	innerR: number,
+	opts?: { startAngle?: number; padAngle?: number }
+): PieSliceGeometry[] {
+	const valid = data
+		.map((d) => ({ label: String(d?.label ?? ''), value: Number.isFinite(d?.value) ? Math.max(0, d.value) : 0 }))
+		.filter((d) => d.value > 0);
+	if (!valid.length || outerR <= 0) return [];
+	const total = valid.reduce((sum, d) => sum + d.value, 0);
+	const startAngle = opts?.startAngle ?? -90;
+	const padRad = Math.max(0, opts?.padAngle ?? 0.02);
+	// pad per slice (độ): trừ MỖI mép pad/2 → gap pad giữa 2 segments kề nhau.
+	const padPerEdge = Math.min(((padRad * 180) / Math.PI) / 2, 180 / valid.length);
+	const slices: PieSliceGeometry[] = [];
+	let angle = startAngle;
+	for (const d of valid) {
+		const sweepDeg = (d.value / total) * 360;
+		// Mép thu vào padPerEdge, KHÔNG vượt quá giữa segment (sweep nhỏ → tránh mép đảo).
+		const edge = Math.min(padPerEdge, sweepDeg / 2);
+		const a0 = angle + edge;
+		const a1 = angle + sweepDeg - edge;
+		const path = buildSlicePath(cx, cy, outerR, innerR, a0, a1);
+		slices.push({
+			path,
+			value: d.value,
+			percent: total > 0 ? d.value / total : 0,
+			label: d.label,
+			midAngle: angle + sweepDeg / 2,
+			sweep: sweepDeg
+		});
+		angle += sweepDeg;
+	}
+	return slices;
+}
+
+/**
+ * Palette pie theo hệ thống — token raw `--color-<ref>-N` (KHÔNG đảo theme).
+ * Thứ tự màu: default→gray, secondary→cyan, success→green, info→sky,
+ * warning→amber, error→red, primary→indigo.
+ * <= 7 segment → bậc 500; > 7 → xoay vòng xen kẽ bậc 500/600 (mở rộng capacity,
+ * segment kề nhau vẫn phân biệt sáng/tối).
+ */
+export function buildPiePalette(count: number): string[] {
+	const base = [
+		'var(--color-gray-500)',
+		'var(--color-cyan-500)',
+		'var(--color-green-500)',
+		'var(--color-sky-500)',
+		'var(--color-amber-500)',
+		'var(--color-red-500)',
+		'var(--color-indigo-500)'
+	];
+	if (count <= 7) return base.slice(0, Math.max(1, count));
+	// > 7 segment: xoay vòng — xen kẽ bậc 500 (base) / 600 (dark) cùng ref.
+	const dark = [
+		'var(--color-gray-600)',
+		'var(--color-cyan-600)',
+		'var(--color-green-600)',
+		'var(--color-sky-600)',
+		'var(--color-amber-600)',
+		'var(--color-red-600)',
+		'var(--color-indigo-600)'
+	];
+	const out: string[] = [];
+	for (let i = 0; i < count; i++) {
+		out.push(i % 2 === 0 ? base[i % base.length] : dark[i % dark.length]);
+	}
+	return out;
 }

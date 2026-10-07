@@ -1,7 +1,7 @@
 // tests/chart-probe.mjs
 // Verify Chart (element) — self-written SVG, KHÔNG chart library.
 // Trang demo: /ui/chart (bar / line area+points / multi-series / formatter / live /
-// live-source / empty / sizes + tooltip hover đa thông tin).
+// live-source / empty / sizes + pie donut + pie đặc + pie 9 segment + tooltip hover).
 //
 // Kiểm tra:
 //  C0 page .chart-root + svg[role=img]
@@ -19,6 +19,14 @@
 //  C10b không có prop tooltip → 0 tooltip + giữ native <title>
 //  C11 live (mirror): badge LIVE + điểm tăng → max 10 + cửa sổ trượt
 //  C12 live (source poll): bars 0→8 (max) + cửa sổ trượt dịch
+//  C13 pie donut: 4 path.chart-slice + legend pie + không rect/line
+//  C14 pie legend: tên + % từng segment + tổng = 100%
+//  C15 pie màu đúng token (tokenToRgb)
+//  C16 hover pie segment: tooltip label/value/% + KHÔNG delta
+//  C17 pie emphasis: slice hover opacity 1, còn lại 0.35
+//  C18 pie đặc (innerRadius=0): wedge đỉnh ở tâm
+//  C19 donut lỗ giữa: path có inner arc
+//  C20 reduced-motion: slice animation none
 import { chromium } from '@playwright/test';
 
 const results = [];
@@ -353,6 +361,205 @@ ok(
 	c12c?.bars === 8 && c12c.count === 8 && c12c.first !== c12FirstAtMax,
 	`atMax=${c12FirstAtMax} | after=${JSON.stringify(c12c)}`
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C13+ — Pie / donut: render svg + segment paths, màu đúng token (tokenToRgb),
+// legend % tổng = 100%, hover segment → tooltip đúng label/value/% (không delta),
+// innerRadius lỗ giữa đúng, reduced-motion.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// C13 — pie donut: có path.chart-slice = số segment (4) + không rect/line
+const c13 = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="chart-pie"]');
+	if (!scope) return null;
+	const svg = scope.querySelector('svg');
+	const slices = svg.querySelectorAll('path.chart-slice');
+	const hasLegend = !!scope.querySelector('.chart-legend--pie');
+	return {
+		slices: slices.length,
+		hasLegend,
+		rects: svg.querySelectorAll('rect').length,
+		lines: svg.querySelectorAll('line').length
+	};
+});
+ok(
+	'C13 pie donut: 4 path.chart-slice + legend pie + không rect/line',
+	c13?.slices === 4 && c13?.hasLegend === true && c13?.rects === 0 && c13?.lines === 0,
+	JSON.stringify(c13)
+);
+
+// C14 — pie legend: tên + % từng segment, tổng % = 100%
+const c14 = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="chart-pie"]');
+	if (!scope) return null;
+	const items = [...scope.querySelectorAll('.chart-legend__item')].map((li) => {
+		const name = li.querySelector('.chart-legend__name')?.textContent.trim();
+		const percent = li.querySelector('.chart-legend__percent')?.textContent.trim();
+		return { name, percent };
+	});
+	const totalPercent = items.reduce((sum, it) => sum + (Number.parseFloat(it.percent) || 0), 0);
+	return { items, totalPercent };
+});
+ok(
+	'C14 pie legend: 4 tên + % từng segment + tổng = 100%',
+	c14?.items.length === 4 &&
+		c14.items.every((it) => it.name && it.percent?.endsWith('%')) &&
+		Math.abs(c14?.totalPercent - 100) < 0.5,
+	JSON.stringify(c14)
+);
+
+// C15 — pie màu đúng token: slice[0] = var(--color-gray-500), slice[1] = var(--secondary)
+{
+	// tokenToRgb helper: resolve var(--color-x) → rgb() để so màu (không so string hsl).
+	const rgbOf = async (css) => {
+		return page.evaluate((c) => {
+			const el = document.createElement('span');
+			el.style.color = c;
+			document.body.appendChild(el);
+			const rgb = getComputedStyle(el).color;
+			el.remove();
+			return rgb;
+		}, css);
+	};
+	const fills = await page.evaluate(() =>
+		[...document.querySelectorAll('[data-test="chart-pie"] path.chart-slice')].map((p) => p.style.fill)
+	);
+	const e0 = await rgbOf('var(--color-gray-500)');
+	const e1 = await rgbOf('var(--color-cyan-500)');
+	const e2 = await rgbOf('var(--color-green-500)');
+	const e3 = await rgbOf('var(--color-sky-500)');
+	const match =
+		fills.length === 4 &&
+		[fills[0] === 'var(--color-gray-500)' || (await rgbOf(fills[0])) === e0,
+		 fills[1] === 'var(--color-cyan-500)' || (await rgbOf(fills[1])) === e1,
+		 fills[2] === 'var(--color-green-500)' || (await rgbOf(fills[2])) === e2,
+		 fills[3] === 'var(--color-sky-500)' || (await rgbOf(fills[3])) === e3].every(Boolean);
+	ok('C15 pie màu đúng token: gray-500/cyan-500/green-500/sky-500 (tokenToRgb)', match, JSON.stringify(fills));
+}
+
+// C16 — hover segment pie → tooltip đúng label/value/% (không delta)
+{
+	await page.evaluate(() => {
+		document.querySelector('[data-test="chart-pie"] svg')?.scrollIntoView({ block: 'center' });
+	});
+	await sleep(300);
+	const box = await page.locator('[data-test="chart-pie"] svg').first().boundingBox();
+	// Slice "Chrome" (48%): startAngle -90 (12h), sweep = 0.48*360 = 172.8 → mid ≈ -90+86.4 = -3.6deg
+	// → điểm mid-arc r=(outerR+innerR)/2. viewBox 600x300 → cx=300, cy=150, outerR=142, innerR=85.2
+	// → r=113.6 → x = 300+113.6*cos(-3.6°) ≈ 413.4, y = 150+113.6*sin(-3.6°) ≈ 142.9
+	const deg = (-90 + (0.48 * 360) / 2) * (Math.PI / 180);
+	const r = (142 + 85.2) / 2;
+	const vx = 300 + r * Math.cos(deg);
+	const vy = 150 + r * Math.sin(deg);
+	const x = box.x + box.width * (vx / 600);
+	const y = box.y + box.height * (vy / 300);
+	await page.mouse.move(x, y, { steps: 4 });
+	await sleep(400);
+}
+const c16 = await page.evaluate(() => {
+	const tip = document.body.querySelector('.chart-tooltip[data-test="chart-tooltip"]');
+	if (!tip) return null;
+	const cs = getComputedStyle(tip);
+	const text = tip.textContent.replace(/\s+/g, ' ').trim();
+	const rows = [...tip.querySelectorAll('.chart-tooltip__row')].map((r) => r.textContent.replace(/\s+/g, ' ').trim());
+	return {
+		inBody: tip.parentElement === document.body,
+		text,
+		rows,
+		hasLabel: text.includes('Chrome'),
+		hasValue: /\b48\b/.test(text),
+		// % đúng = 48% (Chrome 48/100 tổng) — KHÔNG phải 100% (bug slice hover = tổng)
+		hasCorrectPercent: /48%/.test(text) && !/\b100%/.test(text),
+		hasDelta: /\+\d|-\d/.test(text),
+		visible: tip.offsetWidth > 0 && tip.offsetHeight > 0
+	};
+});
+ok(
+	'C16 hover pie segment: tooltip label Chrome + value 48 + % đúng 48% + KHÔNG delta',
+	c16?.inBody === true && c16?.hasLabel === true && c16?.hasValue === true && c16?.hasCorrectPercent === true && c16?.hasDelta === false && c16?.visible === true,
+	JSON.stringify(c16)
+);
+await page.mouse.move(5, 5, { steps: 3 });
+await sleep(250);
+
+// C17 — hover segment khác mờ (emphasis): segment hover opacity 1, còn lại 0.35
+{
+	const box = await page.locator('[data-test="chart-pie"] svg').first().boundingBox();
+	const deg = (-90 + (0.48 * 360) / 2) * (Math.PI / 180);
+	const r = (142 + 85.2) / 2;
+	const vx = 300 + r * Math.cos(deg);
+	const vy = 150 + r * Math.sin(deg);
+	await page.mouse.move(box.x + box.width * (vx / 600), box.y + box.height * (vy / 300), { steps: 4 });
+	await sleep(300);
+}
+const c17 = await page.evaluate(() => {
+	const slices = [...document.querySelectorAll('[data-test="chart-pie"] path.chart-slice')];
+	const opacities = slices.map((s) => getComputedStyle(s).opacity);
+	return { opacities, count: slices.length };
+});
+ok(
+	'C17 pie emphasis: 1 slice opacity 1 + còn lại mờ 0.35',
+	c17?.count === 4 && c17.opacities.filter((o) => Number(o) === 1).length === 1 && c17.opacities.filter((o) => Math.abs(Number(o) - 0.35) < 0.02).length === 3,
+	JSON.stringify(c17)
+);
+await page.mouse.move(5, 5, { steps: 3 });
+await sleep(250);
+
+// C18 — pie đặc (innerRadius=0): slice path KHÔNG có lỗ giữa (wedge: đỉnh ở tâm)
+const c18 = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="chart-pie-solid"]');
+	if (!scope) return null;
+	const svg = scope.querySelector('svg');
+	const slices = svg.querySelectorAll('path.chart-slice');
+	const d = slices[0]?.getAttribute('d') ?? '';
+	// Wedge pie: path bắt đầu M cx cy (đỉnh ở tâm = 300,150)
+	const isWedge = d.startsWith('M 300 150');
+	return {
+		slices: slices.length,
+		isWedge,
+		dPrefix: d.slice(0, 20)
+	};
+});
+ok(
+	'C18 pie đặc (innerRadius=0): 3 slice wedge đỉnh ở tâm (M 300 150)',
+	c18?.slices === 3 && c18?.isWedge === true,
+	JSON.stringify(c18)
+);
+
+// C19 — donut lỗ giữa đúng: slice donut path có inner arc (innerR = 0.6*outerR)
+const c19 = await page.evaluate(() => {
+	const scope = document.querySelector('[data-test="chart-pie"]');
+	if (!scope) return null;
+	const d = scope.querySelector('path.chart-slice')?.getAttribute('d') ?? '';
+	// Donut: path KHÔNG bắt đầu bằng M cx cy (wedge) — bắt đầu M (điểm ngoài arc).
+	const isDonut = !d.startsWith('M 300 150') && d.includes('A');
+	// innerR = 0.6 * 142 = 85.2 — arc inner radius trong path ≈ 85.2
+	const arcMatch = d.match(/A ([\d.]+) ([\d.]+)/);
+	const innerArcR = arcMatch ? Number.parseFloat(arcMatch[arcMatch.length - 2]) : 0;
+	return { isDonut, dPrefix: d.slice(0, 30), arcRs: (d.match(/A [\d.]+ [\d.]+/g) ?? []).length };
+});
+ok(
+	'C19 donut lỗ giữa: path không wedge + có arc (innerR=0.6 outerR)',
+	c19?.isDonut === true && (c19?.arcRs ?? 0) >= 2,
+	JSON.stringify(c19)
+);
+
+// C20 — reduced-motion: slice không animation (render trạng thái cuối)
+const c20 = await page.emulateMedia({ reducedMotion: 'reduce' });
+await sleep(300);
+const c20r = await page.evaluate(() => {
+	const s = document.querySelector('[data-test="chart-pie"] path.chart-slice');
+	if (!s) return null;
+	const cs = getComputedStyle(s);
+	return { animation: cs.animationName, transform: cs.transform };
+});
+ok(
+	'C20 reduced-motion: slice animation none',
+	c20r?.animation === 'none',
+	JSON.stringify(c20r)
+);
+await page.emulateMedia({ reducedMotion: null });
+await sleep(200);
 
 await browser.close();
 

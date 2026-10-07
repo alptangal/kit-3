@@ -16,15 +16,19 @@
 		ChartLiveOptions,
 		ChartProps,
 		ChartSeries,
+		ChartSlice,
 		ChartTooltipMeta,
 		ChartTooltipOptions
 	} from './_interface';
 	import {
 		buildAreaPath,
 		buildLinePath,
+		buildPiePalette,
+		buildPieSlices,
 		buildTooltipRows,
 		defaultFormatter,
 		niceScale,
+		polarToCartesian,
 		rnd,
 		truncate
 	} from './_scale';
@@ -42,6 +46,9 @@
 		color,
 		showPoints = false,
 		showArea = false,
+		innerRadius = 0.6,
+		startAngle = -90,
+		padAngle = 0.02,
 		tooltip,
 		live,
 		'aria-label': ariaLabelProp,
@@ -79,8 +86,10 @@
 	});
 	const tooltipOn = $derived(!!tooltipOpts);
 	// Delta so điểm kề: mặc định tự bật cho line (giá trị biến thiên theo thời gian),
-	// tắt cho bar (so sánh hạng mục, delta kém nghĩa).
-	const deltaShown = $derived(tooltipOpts ? (tooltipOpts.showDelta ?? type === 'line') : false);
+	// tắt cho bar (so sánh hạng mục, delta kém nghĩa) + pie (part-to-whole, không thời gian).
+	const deltaShown = $derived(
+		tooltipOpts ? (tooltipOpts.showDelta ?? (type === 'line' ? true : false)) : false
+	);
 	const fmtValue = $derived(tooltipOpts?.formatValue ?? valueFormatter ?? defaultFormatter);
 
 	// ── Live options (normalize) — TÙY CHỐN. Có source → chart tự poll theo interval;
@@ -221,13 +230,54 @@
 		return { n, band, bw, xFor, yFor, bars, lineGeoms, rotateX };
 	});
 
+	// ── Pie / donut geometry (type="pie") — dùng `data` prop chính, KHÔNG series[] ──
+	const isPie = $derived(type === 'pie');
+	// innerRadius: tỉ lệ lỗ giữa 0..1 (clamp 0..0.9; 0 = pie đặc). "0.6" string → số.
+	const innerRadiusNum = $derived.by(() => {
+		const raw = typeof innerRadius === 'string' ? Number.parseFloat(innerRadius) : innerRadius;
+		if (!Number.isFinite(raw)) return 0.6;
+		return Math.min(0.9, Math.max(0, raw));
+	});
+	// Pie center theo viewBox: căn giữa khung (không margin trục — pie không có axis).
+	const pieCx = $derived(width / 2);
+	const pieCy = $derived(height / 2);
+	// Bán kính ngoài: min(width,height)/2 − padding nhỏ (không đụng mép viewBox).
+	const pieOuterR = $derived(Math.max(0, Math.min(width, height) / 2 - 8));
+	const pieInnerR = $derived(pieOuterR * innerRadiusNum);
+	const slices: ChartSlice[] = $derived.by(() => {
+		if (!isPie) return [];
+		const geoms = buildPieSlices(points, pieCx, pieCy, pieOuterR, pieInnerR, { startAngle, padAngle });
+		if (!geoms.length) return [];
+		const palette = color
+			? geoms.map(() => (resolveColor(color as string) ?? 'var(--primary)'))
+			: buildPiePalette(geoms.length);
+		return geoms.map((g, i) => ({
+			path: g.path,
+			color: palette[i],
+			value: g.value,
+			percent: g.percent,
+			label: g.label,
+			midAngle: g.midAngle
+		}));
+	});
+
+	// Legend pie: tên + % từng segment (kênh nhận dạng — KHÔNG chỉ dựa màu).
+	const pieTotal = $derived(points.reduce((sum, p) => sum + p.value, 0));
+
 	// Key remount → replay animation khi data/type đổi. Live bật → KHÔNG include values
 	// (marks update in-place + CSS transition geometry — mượt, không replay nhảy).
-	const animKey = $derived(
-		liveOn
-			? `live-${type}-${isMulti ? 'm' : 's'}-${layout.bars.length}-${effectiveSeries.map((s) => s.name).join('|')}`
-			: `${type}-${isMulti ? 'm' : 's'}-${layout.bars.length}-${points.map((p) => p.value).join(',')}-${effectiveSeries.map((s) => s.name).join('|')}`
-	);
+	// Pie: key riêng theo slices (đếm + values) — KHÔNG theo bars/points của bar/line.
+	const animKey = $derived.by(() => {
+		const seriesNames = effectiveSeries.map((s) => s.name).join('|');
+		if (isPie) {
+			const sliceSig = `${slices.length}-${slices.map((s) => s.value).join(',')}-${innerRadiusNum}-${startAngle}-${padAngle}`;
+			return liveOn ? `pie-live-${sliceSig}` : `pie-${sliceSig}`;
+		}
+		if (liveOn) {
+			return `live-${type}-${isMulti ? 'm' : 's'}-${layout.bars.length}-${seriesNames}`;
+		}
+		return `${type}-${isMulti ? 'm' : 's'}-${layout.bars.length}-${points.map((p) => p.value).join(',')}-${seriesNames}`;
+	});
 
 	// ── A11y label ──
 	const ariaLabel = $derived(ariaLabelProp ?? `Biểu đồ ${points.length} điểm`);
@@ -256,10 +306,64 @@
 		hoverIndex = undefined;
 	};
 
+	// ── Pie hover: segment dưới chuột theo GÓC (atan2 quanh tâm pie) — KHÔNG theo band X.
+	// hoverIndex dùng chung state với bar/line (index slice = index points).
+	const onPieMouseMove = (e: MouseEvent) => {
+		if (!tooltipOn) return;
+		const svg = svgRef;
+		if (!svg) return;
+		const rect = svg.getBoundingClientRect();
+		if (!rect.width || !rect.height) return;
+		const n = points.length;
+		if (!n) {
+			hoverIndex = undefined;
+			return;
+		}
+		// Tọa độ viewBox của chuột.
+		const vx = ((e.clientX - rect.left) / rect.width) * width;
+		const vy = ((e.clientY - rect.top) / rect.height) * height;
+		const dx = vx - pieCx;
+		const dy = vy - pieCy;
+		const dist = Math.sqrt(dx * dx + dy * dy);
+		// Ngoài bán kính (kể cả pad ring) → không hover.
+		if (dist > pieOuterR || dist < pieInnerR) {
+			hoverIndex = undefined;
+			return;
+		}
+		// Góc 0 = 3h, tăng chiều kim đồng hồ (hệ SVG y-down: atan2(dy,dx) đã đúng hướng).
+		let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+		// Chuẩn hóa về [0, 360) rồi dịch theo startAngle (mặc định -90 → 12h = 0).
+		deg = ((deg - startAngle) % 360 + 360) % 360;
+		const total = pieTotal > 0 ? pieTotal : 1;
+		let acc = 0;
+		let found: number | undefined = undefined;
+		for (let i = 0; i < n; i++) {
+			const v = Math.max(0, Number.isFinite(points[i].value) ? points[i].value : 0);
+			const sweep = (v / total) * 360;
+			if (deg >= acc && deg < acc + sweep) {
+				found = i;
+				break;
+			}
+			acc += sweep;
+		}
+		hoverIndex = found;
+	};
+
 	// Meta tooltip tại điểm hover (label/value/%/delta từng series) — payload snippet.
+	// Pie: 1 series = slice đang hover (KHÔNG delta, % so tổng toàn pie).
 	const tooltipMeta = $derived.by((): ChartTooltipMeta | undefined => {
 		if (hoverIndex === undefined || !tooltipOn || !points.length) return undefined;
 		const i = Math.min(hoverIndex, points.length - 1);
+		if (isPie) {
+			const s = slices[i];
+			if (!s) return undefined;
+			return {
+				label: s.label,
+				index: i,
+				total: points.length,
+				series: [{ name: 'value', color: s.color, value: s.value, percent: s.percent }]
+			};
+		}
 		const seriesAt = effectiveSeries.map((s) => {
 			const v = s.data[i] ?? 0;
 			const prev = i > 0 ? s.data[i - 1] : undefined;
@@ -280,17 +384,31 @@
 	});
 
 	// Rows tooltip mặc định (value/percent/delta đã format qua _scale helper).
+	// Pie: % so tổng toàn pie (CHƯNGỊ slice hover = 100% là SAI — truyền percentTotal tường minh).
 	const tooltipRows = $derived.by(() => {
 		const meta = tooltipMeta;
 		if (!meta) return [];
 		return buildTooltipRows(meta.series, fmtValue, {
 			showPercent: tooltipOpts?.showPercent ?? true,
 			showDelta: deltaShown,
-			// single series → % so tổng toàn chart (không phải giá trị tại điểm = 100%)
-			percentTotal: isMulti
-				? undefined
-				: points.reduce((sum, p) => sum + p.value, 0)
+			// multi → tổng series tại điểm; single/pie → % so tổng toàn chart
+			percentTotal: isMulti ? undefined : points.reduce((sum, p) => sum + p.value, 0)
 		});
+	});
+
+	// Anchor tooltip pie = điểm mid-arc của slice trên màn hình (giữa segment).
+	const pieTooltipAnchor = $derived.by(() => {
+		if (!isPie || hoverIndex === undefined) return undefined;
+		const s = slices[Math.min(hoverIndex, slices.length - 1)];
+		if (!s) return undefined;
+		const svg = svgRef;
+		if (!svg) return undefined;
+		const rect = svg.getBoundingClientRect();
+		if (!rect.width || !rect.height) return undefined;
+		// Điểm giữa outerR và innerR trên mid-arc (anchor ở giữa ring donut).
+		const r = (pieOuterR + pieInnerR) / 2;
+		const p = polarToCartesian(pieCx, pieCy, r, s.midAngle);
+		return { x: rect.left + (rect.width / width) * p.x, y: rect.top + (rect.height / height) * p.y };
 	});
 
 	// Anchor tooltip = điểm data trên màn hình (đỉnh giá trị lớn nhất tại index đó).
@@ -309,7 +427,7 @@
 
 	// Vị trí tooltip (clamp ngang vào viewport; dọc = phía trên anchor qua CSS translate).
 	const tooltipPos = $derived.by(() => {
-		const a = tooltipAnchor;
+		const a = isPie ? pieTooltipAnchor : tooltipAnchor;
 		if (!a) return undefined;
 		const vw = client.browser?.width ?? 1200;
 		return { x: Math.min(Math.max(a.x, 90), Math.max(90, vw - 90)), y: a.y };
@@ -367,6 +485,18 @@
 		get live() {
 			return liveOn;
 		},
+		get innerRadius() {
+			return innerRadiusNum;
+		},
+		get startAngle() {
+			return startAngle;
+		},
+		get padAngle() {
+			return padAngle;
+		},
+		get slices() {
+			return slices;
+		},
 		get size() {
 			return props.size ?? client.browser?.size ?? 'md';
 		},
@@ -376,6 +506,7 @@
 				`chart-${type}`,
 				`size-${this.size}`,
 				isMulti ? 'is-multi' : undefined,
+				isPie ? 'is-pie' : undefined,
 				points.length === 0 ? 'is-empty' : undefined,
 				liveOn ? 'is-live' : undefined
 			];
@@ -404,8 +535,19 @@
 		<span class="chart-live-badge" aria-hidden="true"><i class="chart-live-dot"></i>LIVE</span>
 	{/if}
 
-	<!-- Legend (multi-series): kênh nhận dạng, KHÔNG chỉ dựa màu. Single series = không legend (title tên nó). -->
-	{#if isMulti && effectiveSeries.length}
+	<!-- Legend (multi-series): kênh nhận dạng, KHÔNG chỉ dựa màu. Single series = không legend (title tên nó).
+	     Legend pie: tên + % từng segment (kênh nhận dạng — % là định lượng, không chỉ màu). -->
+	{#if isPie && slices.length}
+		<ul class="chart-legend chart-legend--pie" aria-hidden="true">
+			{#each slices as s}
+				<li class="chart-legend__item">
+					<span class="chart-legend__swatch" style:background={s.color}></span>
+					<span class="chart-legend__name">{s.label}</span>
+					<span class="chart-legend__percent">{pieTotal > 0 ? Math.round((s.value / pieTotal) * 1000) / 10 : 0}%</span>
+				</li>
+			{/each}
+		</ul>
+	{:else if isMulti && effectiveSeries.length}
 		<ul class="chart-legend" aria-hidden="true">
 			{#each effectiveSeries as s}
 				<li class="chart-legend__item">
@@ -423,12 +565,12 @@
 		role="img"
 		aria-label={ariaLabel}
 		bind:this={svgRef}
-		onmousemove={onSvgMouseMove}
+		onmousemove={isPie ? onPieMouseMove : onSvgMouseMove}
 		onmouseleave={onSvgMouseLeave}
 	>
 		{#if points.length}
-			<!-- Gridlines (trừ tick=0 — trùng baseline X, tránh vẽ chồng) -->
-			{#if showGrid}
+			<!-- Gridlines (trừ tick=0 — trùng baseline X, tránh vẽ chồng). Pie: không grid/axis. -->
+			{#if showGrid && !isPie}
 				{#each scale.ticks as tick}
 					{#if tick > 0}
 						<line
@@ -442,8 +584,8 @@
 				{/each}
 			{/if}
 
-			<!-- Axis lines (baseline X + trục Y) — content3 -->
-			{#if showYAxis}
+			<!-- Axis lines (baseline X + trục Y) — content3. Pie: không axis. -->
+			{#if showYAxis && !isPie}
 				<line class="chart-axis" x1={M.left} y1={M.top} x2={M.left} y2={baseline}></line>
 				<!-- Y tick labels (format value, vd 2k/2.5M) -->
 				{#each scale.ticks as tick}
@@ -457,7 +599,7 @@
 					</text>
 				{/each}
 			{/if}
-			{#if showXAxis}
+			{#if showXAxis && !isPie}
 				<line class="chart-axis" x1={M.left} y1={baseline} x2={M.left + plotW} y2={baseline}></line>
 			{/if}
 
@@ -465,7 +607,21 @@
 			     Bar = single-series; multi-series = line (grouped bar ngoài scope). -->
 			{#key animKey}
 				<g class="chart-marks">
-					{#if type === 'bar' && !isMulti}
+					{#if isPie}
+						{#each slices as s}
+							{#if s.path}
+								<path
+									class="chart-slice"
+									d={s.path}
+									style:fill={s.color}
+								>
+									{#if !tooltipOn}
+										<title>{s.label}: {fmt(s.value)} ({Math.round((s.value / (pieTotal || 1)) * 1000) / 10}%)</title>
+									{/if}
+								</path>
+							{/if}
+						{/each}
+					{:else if type === 'bar' && !isMulti}
 						{#each layout.bars as bar}
 							<rect
 								class="chart-bar"
@@ -512,8 +668,8 @@
 					{/if}
 				</g>
 
-				<!-- X labels -->
-				{#if showXAxis}
+				<!-- X labels (pie: không có trục X — label nằm trong legend) -->
+				{#if showXAxis && !isPie}
 					{#each points as p, i}
 						<text
 							class="chart-x-label"
