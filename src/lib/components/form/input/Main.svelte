@@ -26,6 +26,7 @@
 	import { browser } from '$app/environment';
 	import { getFormContext } from '../form';
 	import { getTextFieldContext } from '../textField';
+	import { Modal } from '$components/modal';
 	import type { FullAutoFill } from 'svelte/elements';
 
 	let {
@@ -1671,8 +1672,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	// ── type='file': build filePreviews + ObjectURL lifecycle ──
 	// Ảnh → URL.createObjectURL (revoke trong effect cleanup + onDestroy).
 	// Text/CSV/JSON → đọc slice(0, 512KB).text() (file lớn hơn → chỉ name+size).
-	type FilePreview = { file: File; kind: 'image' | 'csv' | 'json' | 'text' | 'other'; url?: string; preview?: string };
+	type FilePreview = { id: number; file: File; kind: 'image' | 'csv' | 'json' | 'text' | 'other'; url?: string; preview?: string };
 	let filePreviews: FilePreview[] = $state([]);
+	// Counter id preview — each key duy nhất (key theo name+size trùng khi chọn lại
+	// cùng tệp → Svelte 5 throw each_key_duplicate, trang trắng).
+	let previewSeq = 0;
 	const MAX_TEXT_PREVIEW = 512 * 1024; // 512KB — tránh OOM file lớn
 	function detectKind(file: File): FilePreview['kind'] {
 		const name = file.name.toLowerCase();
@@ -1691,7 +1695,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		(async () => {
 			for (const file of list) {
 				const kind = detectKind(file);
-				const item: FilePreview = { file, kind };
+				const item: FilePreview = { id: ++previewSeq, file, kind };
 				try {
 					if (kind === 'image') {
 						item.url = URL.createObjectURL(file);
@@ -1825,6 +1829,92 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		`Chọn tệp.${fileHint ? ` Yêu cầu: ${fileHint}.` : ''}${files?.length ? ` Đã chọn ${files.length} tệp.` : ''}`
 	);
 
+	// ── type='file': file details modal (opt-in props.fileDetails) ──
+	// Click 1 card preview → mở Modal chi tiết: ảnh size gốc (object-contain,
+	// max-height lớn) + kích thước/mime/lastModified/path. File API KHÔNG có
+	// full path → chỉ có `name` (+ webkitRelativePath nếu upload folder).
+	let detailFile: FilePreview | undefined = $state(undefined);
+	// Display riêng cho Modal (Modal render {#if display} — bind:display là
+	// bắt buộc, KHÔNG có giá trị mặc định; pattern select fullscreen reuse).
+	let detailDisplay = $state(false);
+	// FilePreview KHÔNG có lastModified top-level — đọc qua f.file.lastModified
+	// (f.lastModified = undefined → new Date(undefined) = "Invalid Date").
+	const detailModified = $derived.by(() => {
+		const f = detailFile?.file;
+		if (!f) return undefined;
+		try {
+			return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'medium' }).format(
+				new Date(f.lastModified)
+			);
+		} catch {
+			return new Date(f.lastModified).toString();
+		}
+	});
+	const detailRelativePath = $derived.by(() => {
+		const rel = (detailFile?.file as File & { webkitRelativePath?: string })?.webkitRelativePath;
+		return rel ? rel : undefined;
+	});
+	// Copy reference của preview đang mở — khi modal đóng → trả focus về card.
+	let detailCardEl: HTMLElement | undefined;
+	function openFileDetails(p: FilePreview, cardEl?: HTMLElement) {
+		if (configs.disabled) return;
+		detailFile = p;
+		detailCardEl = cardEl;
+		detailDisplay = true;
+	}
+	function closeFileDetails() {
+		detailDisplay = false;
+		detailFile = undefined;
+		// Modal tự restore focus về trigger (nó lưu trigger khi mở) — đây là
+		// phòng thủ khi autoFocus=false (card vẫn giữ focus qua click).
+		detailCardEl?.focus?.();
+		detailCardEl = undefined;
+	}
+
+	// ── type='file': quick delete (opt-in props.quickDelete) ──
+	// Ô tick trên mỗi card → tick ≥1 tệp → hiện thanh hành động "Xóa N tệp
+	// đã chọn" → removeFile hàng loạt (gán array MỚI, kỷ discipline $bindable).
+	let selectedFiles: File[] = $state([]);
+	const hasSelection = $derived(selectedFiles.length > 0);
+	function toggleFileSelected(f: File) {
+		if (configs.disabled) return;
+		_filesJustReset = false;
+		// Gán array MỚI (không mutation tại chỗ) — kỷ luật $state/$bindable
+		selectedFiles = selectedFiles.includes(f)
+			? selectedFiles.filter((x) => x !== f)
+			: [...selectedFiles, f];
+	}
+	function removeSelectedFiles() {
+		if (configs.disabled || !hasSelection) return;
+		_filesJustReset = false;
+		const removed = selectedFiles;
+		selectedFiles = [];
+		// Duy nhất 1 lần gán files mới — 1 run validation (không burst)
+		files = (files ?? []).filter((x) => !removed.includes(x));
+	}
+	// files đổi (chọn mới/reset/xóa) → dọn selection rác (file không còn trong list)
+	$effect(() => {
+		if (configs.type !== 'file') return;
+		const list = files ?? [];
+		if (selectedFiles.length && !list.some((f) => selectedFiles.includes(f))) {
+			selectedFiles = [];
+		} else if (selectedFiles.length) {
+			const kept = list.filter((f) => selectedFiles.includes(f));
+			if (kept.length !== selectedFiles.length) selectedFiles = kept;
+		}
+	});
+
+	// ── type='file': clear all (opt-in props.clearable) ──
+	// Nút "Xóa tất cả" ở header row previews — hiện khi ≥1 file.
+	// files = [] + _filesJustReset đúng discipline (KHÔNG bung validation).
+	const clearableDisplay = $derived(props.clearable === true && (files?.length ?? 0) > 0);
+	function clearAllFiles() {
+		if (configs.disabled) return;
+		_filesJustReset = false;
+		selectedFiles = [];
+		files = []; // gán array MỚI — files effect trigger validation 1 lần (discipline)
+	}
+
 	onMount(() => {
 		if (textFieldContext) {
 			if (!textFieldContext.children) textFieldContext.children = {};
@@ -1924,9 +2014,58 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			{/if}
 		</div>
 		{#if filePreviews.length}
+			<div class="input-file-previews-head" data-test="input-file-previews-head">
+				{#if hasSelection}
+					<span class="input-file-selected-count" aria-live="polite">
+						Đã chọn {selectedFiles.length}/{filePreviews.length} tệp
+					</span>
+				{:else}
+					<span class="input-file-count" aria-live="polite">{filePreviews.length} tệp</span>
+				{/if}
+				{#if clearableDisplay && !hasSelection}
+					<button
+						type="button"
+						class="input-file-clear-all"
+						data-test="input-file-clear-all"
+						aria-label="Xóa tất cả tệp đã chọn"
+						onclick={clearAllFiles}
+					>
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M6 6l12 12M18 6L6 18"
+								stroke="currentColor"
+								stroke-width="1.75"
+								stroke-linecap="round"
+							/>
+						</svg>
+						<span>Xóa tất cả</span>
+					</button>
+				{/if}
+			</div>
+			{#if hasSelection}
+				<div class="input-file-quickbar" data-test="input-file-quickbar" role="toolbar" aria-label="Hành động tệp đã chọn">
+					<button
+						type="button"
+						class="input-file-quickbar-delete"
+						data-test="input-file-quickbar-delete"
+						onclick={removeSelectedFiles}
+					>
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"
+								stroke="currentColor"
+								stroke-width="1.75"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						Xóa {selectedFiles.length} tệp đã chọn
+					</button>
+				</div>
+			{/if}
 			<ul class="input-file-previews">
-				{#each filePreviews as p (p.file.name + '-' + p.file.size)}
-					<li class="input-file-card" aria-label={`${p.file.name}, ${formatBytes(p.file.size)}`}>
+				{#each filePreviews as p (p.id)}
+					{#snippet previewBody()}
 						{#if p.kind == 'image' && p.url}
 							<img class="input-file-thumb" src={p.url} alt={p.file.name} />
 						{:else if p.kind == 'csv' || p.kind == 'json' || p.kind == 'text'}
@@ -1948,6 +2087,56 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 							<span class="input-file-name" title={p.file.name}>{p.file.name}</span>
 							<span class="input-file-size">{formatBytes(p.file.size)}</span>
 						</div>
+					{/snippet}
+					<li
+						class="input-file-card"
+						class:input-file-selected={selectedFiles.includes(p.file)}
+						aria-label={`${p.file.name}, ${formatBytes(p.file.size)}`}
+					>
+						{#if props.quickDelete && !configs.disabled}
+							<button
+								type="button"
+								class="input-file-check"
+								data-test="input-file-check"
+								class:input-file-checked={selectedFiles.includes(p.file)}
+								role="checkbox"
+								aria-checked={selectedFiles.includes(p.file) ? 'true' : 'false'}
+								aria-label={`Chọn ${p.file.name} để xóa`}
+								onclick={(e) => {
+									e.stopPropagation();
+									toggleFileSelected(p.file);
+								}}
+							>
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<path
+										d="M5 12.5l4.5 4.5L19 7.5"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</button>
+						{/if}
+						{#if props.fileDetails && !configs.disabled}
+							<button
+								type="button"
+								class="input-file-detail-trigger"
+								data-test="input-file-detail-trigger"
+								aria-haspopup="dialog"
+								aria-label={`Xem chi tiết ${p.file.name}`}
+								onclick={(e) => {
+									e.stopPropagation();
+									openFileDetails(p, e.currentTarget);
+								}}
+							>
+								{@render previewBody()}
+							</button>
+						{:else}
+							<div class="input-file-detail-body">
+								{@render previewBody()}
+							</div>
+						{/if}
 						{#if !configs.disabled}
 							<button
 								type="button"
@@ -1971,6 +2160,82 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					</li>
 				{/each}
 			</ul>
+		{/if}
+		{#if detailDisplay}
+			<!-- type='file': file details modal (opt-in) — Modal sync hệ thống
+			     (focus trap, ARIA, scroll lock, ESC, nút close error).
+			     Children snippet là TRẺ TRỰC TIẾP của Modal.Container (bẫy #5).
+			     bind:display BẮT BUỘC — Modal render {#if display} (không có
+			     bind → display=undefined → không bao giờ render). -->
+			<Modal
+				bind:display={detailDisplay}
+				size="md"
+				variant="blur"
+				transitionType={client.browser?.isMobile ? 'fly' : 'fade'}
+				onClose={closeFileDetails}
+				data-test="input-file-details-modal"
+			>
+				<Modal.Container class="input-file-detail-modal">
+					<Modal.Container.Header class="input-file-detail-header">
+						{detailFile?.file.name}
+					</Modal.Container.Header>
+					<Modal.Container.Body class="input-file-detail-body-modal">
+						<div class="input-file-detail-grid" data-test="input-file-details-modal">
+							{#if detailFile?.kind == 'image' && detailFile.url}
+								<div class="input-file-detail-media">
+									<img class="input-file-detail-image" src={detailFile.url} alt={detailFile.file.name} />
+								</div>
+							{:else if detailFile?.preview}
+								<div class="input-file-detail-media">
+									<pre class="input-file-detail-preview-text">{detailFile.preview}</pre>
+								</div>
+							{:else if detailFile}
+								<div class="input-file-detail-media input-file-detail-media-empty">
+									<span class="input-file-glyph" aria-hidden="true">
+										<svg viewBox="0 0 24 24" fill="none">
+											<path
+												d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"
+												stroke="currentColor"
+												stroke-width="1.75"
+												stroke-linejoin="round"
+											/>
+											<path d="M14 3v5h5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+										</svg>
+									</span>
+								</div>
+							{/if}
+							{#if detailFile}
+								<dl class="input-file-detail-list">
+									<div class="input-file-detail-row">
+										<dt>Tên tệp</dt>
+										<dd title={detailFile.file.name}>{detailFile.file.name}</dd>
+									</div>
+									{#if detailRelativePath}
+										<div class="input-file-detail-row">
+											<dt>Đường dẫn tương đối</dt>
+											<dd title={detailRelativePath}>{detailRelativePath}</dd>
+										</div>
+									{/if}
+									<div class="input-file-detail-row">
+										<dt>Kích thước</dt>
+										<dd>{formatBytes(detailFile.file.size)} ({detailFile.file.size.toLocaleString('vi-VN')} bytes)</dd>
+									</div>
+									<div class="input-file-detail-row">
+										<dt>Loại tệp</dt>
+										<dd>{detailFile.file.type || detailFile.kind}</dd>
+									</div>
+									{#if detailModified}
+										<div class="input-file-detail-row">
+											<dt>Sửa lần cuối</dt>
+											<dd>{detailModified}</dd>
+										</div>
+									{/if}
+								</dl>
+							{/if}
+						</div>
+					</Modal.Container.Body>
+				</Modal.Container>
+			</Modal>
 		{/if}
 	{:else if configs.type == 'number'}
 		<div class={configs.input.number.style}>

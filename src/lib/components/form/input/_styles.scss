@@ -768,7 +768,9 @@
 		border: none;
 		border-radius: 50%;
 		cursor: pointer;
-		color: var(--color-gray-500);
+		/* Yêu cầu (5): nút xóa LUÔN color error — icon error-500, hover nền
+		   error tint (100 light / 950 dark), token error tự đổi theo theme. */
+		color: var(--error, var(--color-red-500));
 		transition: background-color 0.15s ease, color 0.15s ease;
 		svg {
 			width: 0.875rem;
@@ -776,18 +778,181 @@
 		}
 		&:hover {
 			@media (prefers-color-scheme: dark) {
-				background: rgba(30, 41, 59, 0.8);
-				color: var(--color-gray-200);
+				background: var(--error-100, rgba(239, 68, 68, 0.15));
+				color: var(--error-400, var(--color-red-400));
 			}
 			@media (prefers-color-scheme: light) {
-				background: rgba(255, 255, 255, 0.95);
-				color: var(--color-gray-700);
+				background: var(--error-100, rgba(239, 68, 68, 0.12));
+				color: var(--error-600);
 			}
 		}
 		&:focus-visible {
 			outline: 2px solid var(--color-indigo-500);
 			outline-offset: 1px;
 		}
+	}
+
+	/* ── Previews header row (clear all + count) ── */
+	.input-file-previews-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.5rem 0 0;
+		min-height: 1.5rem;
+	}
+	.input-file-count,
+	.input-file-selected-count {
+		font-size: calc(var(--font-size) * 0.75);
+		opacity: 0.7;
+		color: var(--color);
+	}
+	.input-file-selected-count {
+		opacity: 1;
+		font-weight: 500;
+	}
+	.input-file-clear-all {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		border: none;
+		background: transparent;
+		border-radius: calc(var(--border-radius, 0.5rem) - 4px);
+		cursor: pointer;
+		/* Yêu cầu (5): color error token (icon + text) — hover nền error tint */
+		color: var(--error, var(--color-red-500));
+		font-size: calc(var(--font-size) * 0.75);
+		font-weight: 500;
+		transition: background-color 0.15s ease, color 0.15s ease;
+		svg {
+			width: 0.75rem;
+			height: 0.75rem;
+		}
+		&:hover {
+			@media (prefers-color-scheme: dark) {
+				background: var(--error-100, rgba(239, 68, 68, 0.15));
+				color: var(--error-400, var(--color-red-400));
+			}
+			@media (prefers-color-scheme: light) {
+				background: var(--error-100, rgba(239, 68, 68, 0.12));
+				color: var(--error-600);
+			}
+		}
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 1px;
+		}
+	}
+
+	/* ── Quick delete bar (opt-in quickDelete) ── */
+	.input-file-quickbar {
+		display: flex;
+		align-items: center;
+		padding: 0.5rem 0 0;
+	}
+	.input-file-quickbar-delete {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.75rem;
+		border: 1px solid var(--error, var(--color-red-500));
+		border-radius: calc(var(--border-radius, 0.5rem) - 2px);
+		background: transparent;
+		cursor: pointer;
+		/* Yêu cầu (5): color error token toàn bộ (icon + text + border) */
+		color: var(--error, var(--color-red-500));
+		font-size: calc(var(--font-size) * 0.8);
+		font-weight: 500;
+		transition: background-color 0.15s ease, color 0.15s ease;
+		svg {
+			width: 0.875rem;
+			height: 0.875rem;
+		}
+		&:hover {
+			@media (prefers-color-scheme: dark) {
+				background: var(--error-100, rgba(239, 68, 68, 0.15));
+				color: var(--error-400, var(--color-red-400));
+			}
+			@media (prefers-color-scheme: light) {
+				background: var(--error-100, rgba(239, 68, 68, 0.12));
+				color: var(--error-600);
+			}
+		}
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 1px;
+		}
+	}
+
+	/* ── Card chọn nhanh (opt-in quickDelete): ô tick góc trái trên ── */
+	.input-file-check {
+		position: absolute;
+		top: 0.25rem;
+		left: 0.25rem;
+		width: 1.25rem;
+		height: 1.25rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: 1.5px solid var(--border-color-file, var(--color-gray-400));
+		border-radius: calc(var(--border-radius, 0.5rem) - 6px);
+		background: var(--background, rgba(148, 163, 184, 0.08));
+		cursor: pointer;
+		color: transparent;
+		z-index: 1;
+		transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+		svg {
+			width: 0.75rem;
+			height: 0.75rem;
+		}
+		&.input-file-checked {
+			background: var(--error, var(--color-red-500));
+			border-color: var(--error, var(--color-red-500));
+			color: white;
+		}
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 1px;
+		}
+	}
+	.input-file-card.input-file-selected {
+		border-color: var(--error, var(--color-red-500));
+		@media (prefers-color-scheme: dark) {
+			background: color-mix(in srgb, var(--error, var(--color-red-500)) 8%, transparent);
+		}
+		@media (prefers-color-scheme: light) {
+			background: color-mix(in srgb, var(--error, var(--color-red-500)) 6%, transparent);
+		}
+	}
+
+	/* ── File details (opt-in fileDetails): card click mở modal ──
+	   .input-file-detail-trigger bọc thumb/preview + meta (trừ nút remove),
+	   modal detail qua Modal.Container (portal — CSS không scoped theo
+	   component input vì portal nằm ngoài root; class nằm trong Modal.Body). */
+	.input-file-detail-trigger {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		padding: 0;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		text-align: left;
+		font: inherit;
+		color: inherit;
+		width: 100%;
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500);
+			outline-offset: 2px;
+		}
+	}
+	.input-file-detail-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		width: 100%;
 	}
 }
 
@@ -815,6 +980,108 @@
 	}
 	to {
 		width: 100%;
+	}
+}
+
+/* ══ File details modal (opt-in fileDetails) ══
+   Modal portal nằm NGOÀI .input-root → CSS scoped của _styles.scss
+   (được @use vào Main.svelte, hash theo component) vẫn match được các class
+   này vì _styles.scss là CSS PLAIN (không scope selector — toàn bộ là global
+   style sheet dùng chung). Modal.Container/Header/Body render class trên
+   DOM portal → selector phải là global (không bọc trong .input-root). */
+.input-file-detail-modal {
+	--padding: 1rem;
+}
+.input-file-detail-header {
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+	flex: 1;
+}
+.input-file-detail-body-modal {
+	padding-inline: 1rem;
+	padding-block: 0.75rem 1rem;
+}
+.input-file-detail-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	min-width: 0;
+}
+.input-file-detail-media {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	border-radius: calc(var(--border-radius, 0.5rem) - 2px);
+	overflow: hidden;
+	background: rgba(148, 163, 184, 0.15);
+	@media (prefers-color-scheme: dark) {
+		background: rgba(30, 41, 59, 0.6);
+	}
+	@media (prefers-color-scheme: light) {
+		background: rgba(241, 245, 249, 0.7);
+	}
+}
+.input-file-detail-image {
+	/* Ảnh size gốc: object-contain + max-height lớn (không crop) */
+	max-width: 100%;
+	max-height: 22rem;
+	object-fit: contain;
+	display: block;
+}
+.input-file-detail-preview-text {
+	width: 100%;
+	margin: 0;
+	padding: 0.75rem;
+	max-height: 22rem;
+	overflow: auto;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.75rem;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-word;
+	@media (prefers-color-scheme: dark) {
+		color: var(--color-gray-300);
+	}
+	@media (prefers-color-scheme: light) {
+		color: var(--color-gray-600);
+	}
+}
+.input-file-detail-media-empty {
+	aspect-ratio: 16 / 9;
+}
+.input-file-detail-list {
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.375rem;
+	min-width: 0;
+}
+.input-file-detail-row {
+	display: grid;
+	grid-template-columns: 9rem 1fr;
+	gap: 0.75rem;
+	align-items: baseline;
+	@media (hover: none) and (pointer: coarse) {
+		grid-template-columns: 7.5rem 1fr;
+	}
+	dt {
+		font-size: calc(var(--font-size) * 0.75);
+		opacity: 0.7;
+		color: var(--placeholder-color, var(--color-gray-400));
+	}
+	dd {
+		margin: 0;
+		font-size: calc(var(--font-size) * 0.8);
+		color: var(--color);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
 	}
 }
 

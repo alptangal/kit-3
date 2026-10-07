@@ -14,6 +14,10 @@
 	let requiredFiles = $state<File[]>([]);
 	let previewFiles = $state<File[]>([]);
 	let disabledFiles = $state<File[]>([]);
+	// Tùy chọn mới: details modal + quick delete + clear all
+	let detailsFiles = $state<File[]>([]);
+	let quickDeleteFiles = $state<File[]>([]);
+	let clearableFiles = $state<File[]>([]);
 
 	// if-form: gate submit theo page state (Form không export configs → page tự quản).
 	// File input required → phải có ≥1 tệp. Form KHÔNG serialize file (configs không
@@ -113,6 +117,49 @@
 		<p class="demo-hint">
 			Ảnh → thumbnail; CSV/JSON/TEXT → nội dung vài dòng đầu; khác → tên + size.
 			Đã chọn: <code>{previewFiles.length ? previewFiles.map((f) => f.name).join(', ') : 'chưa có'}</code>
+		</p>
+	</section>
+
+	<!-- File details: click card → modal chi tiết (ảnh size gốc + meta) -->
+	<section class="demo" data-test="if-details">
+		<h2>type=file · fileDetails (modal chi tiết)</h2>
+		<TextField name="if-details">
+			<Input
+				type="file"
+				bind:files={detailsFiles}
+				multiple
+				fileDetails
+				accept="image/*,.csv,.json,.txt,.md"
+			/>
+		</TextField>
+		<p class="demo-hint">
+			Click vào 1 card → modal hiện ảnh size gốc + tên/kích thước (bytes)/loại (mime)/sửa lần cuối.
+			<!-- File API KHÔNG có full path → chi tiết chỉ có name (+ webkitRelativePath nếu upload folder). -->
+		</p>
+	</section>
+
+	<!-- Quick delete: tick card → thanh hành động xóa hàng loạt -->
+	<section class="demo" data-test="if-quick-delete">
+		<h2>type=file · quickDelete (tick + xóa hàng loạt)</h2>
+		<TextField name="if-quick-delete">
+			<Input type="file" bind:files={quickDeleteFiles} multiple quickDelete accept="image/*,.txt" />
+		</TextField>
+		<p class="demo-hint">
+			Tick ô góc trái trên nhiều card → thanh "Xóa N tệp đã chọn" hiện → xóa hàng loạt.
+			Còn: <code>{quickDeleteFiles.length}</code>
+		</p>
+	</section>
+
+	<!-- Clearable: nút Xóa tất cả ở header previews -->
+	<section class="demo" data-test="if-clearable">
+		<h2>type=file · clearable (Xóa tất cả)</h2>
+		<TextField name="if-clearable">
+			<Input type="file" bind:files={clearableFiles} multiple clearable required accept="image/*,.txt" />
+		</TextField>
+		<p class="demo-hint">
+			Nút "Xóa tất cả" hiện khi ≥1 tệp (bên phải header previews) — click → danh sách rỗng,
+			validation required về đúng nhịp (không bung).
+			Còn: <code>{clearableFiles.length}</code>
 		</p>
 	</section>
 

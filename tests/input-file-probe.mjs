@@ -1,6 +1,6 @@
 // input-file-probe.mjs
 // Functional probe cho task "hoàn thiện #input (thêm type='file')":
-// - FI0  page render (data-test=input-demo, 6 sections file)
+// - FI0  page render (data-test=input-demo, 9 sections file)
 // - FI1  single-select: setInputFiles → 1 card preview (ảnh blob:)
 // - FI2  single replace: set file khác → vẫn 1 card, name mới
 // - FI3  multiple: 3 files (png+txt+csv) → 3 cards, kind đúng (thumb/text/csv)
@@ -11,11 +11,16 @@
 // - FI8  disabled: dropzone không focusable, không mở dialog
 // - FI9  preview text: <pre> csv/json/txt khớp head fixture
 // - FI10 native input hidden + accept/multiple đúng
+// ── Mới (tùy chọn type='file') ──
+// - FI11 remove button color error (tokenToRgb so --error-500)
+// - FI12 clearable: nút "Xóa tất cả" hiện khi ≥1 file → click → rỗng + validation đúng
+// - FI13 quickDelete: tick 2 card → quickbar "Xóa N tệp đã chọn" → xóa hàng loạt
+// - FI14 fileDetails: click card → modal hiện tên/size/mime/lastModified + ảnh
+// - FI15 single replace vẫn hoạt động (lặp lại với tùy chọn mới bật)
 // Chạy: node tests/input-file-probe.mjs (dev server phải chạy ở https://localhost:3000)
 import { chromium } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-
 const BASE = 'https://localhost:3000/ui/input';
 const results = [];
 const ok = (name, cond, extra = '') => {
@@ -43,6 +48,8 @@ writeFileSync(join(FIX, 'a.txt'), 'a');
 writeFileSync(join(FIX, 'b.txt'), 'b');
 
 const p = (n) => join(FIX, n);
+// Size thật của fixture (logo.png base64 decode = 70 bytes, KHÔNG hardcode "1 B")
+const logoSize = statSync(p('logo.png')).size;
 
 const browser = await chromium.launch({ args: ['--ignore-certificate-errors'] });
 const context = await browser.newContext({
@@ -78,11 +85,21 @@ const cardNames = (t) => cards(t).locator('.input-file-name').allTextContents();
 
 console.log('\n=== FI0: PAGE RENDER ===');
 ok('FI0: demo root render', (await page.locator('[data-test="input-demo"]').count()) === 1);
-const fileSections = ['if-single', 'if-multiple', 'if-required', 'if-preview', 'if-form', 'if-disabled'];
+const fileSections = [
+	'if-single',
+	'if-multiple',
+	'if-required',
+	'if-preview',
+	'if-details',
+	'if-quick-delete',
+	'if-clearable',
+	'if-form',
+	'if-disabled'
+];
 const sectionCount = await Promise.all(fileSections.map((s) => section(s).count()));
-ok('FI0: 6 sections file render', sectionCount.every((c) => c === 1), JSON.stringify(sectionCount));
+ok('FI0: 9 sections file render', sectionCount.every((c) => c === 1), JSON.stringify(sectionCount));
 const dropzones = await page.locator('.input-file-dropzone').count();
-ok('FI0: 6 dropzone render', dropzones === 6, String(dropzones));
+ok('FI0: 9 dropzone render', dropzones === 9, String(dropzones));
 
 console.log('\n=== FI1: SINGLE SELECT → 1 CARD (ảnh blob:) ===');
 await fileInput('if-single').setInputFiles([p('logo.png')]);
@@ -227,11 +244,168 @@ ok(
 	JSON.stringify({ s: nativeAttrs['if-single']?.hidden, m: nativeAttrs['if-multiple']?.hidden })
 );
 
+console.log('\n=== FI11: REMOVE BUTTON COLOR ERROR (tokenToRgb) ===');
+// So màu icon nút remove qua computed style: icon dùng currentColor → màu
+// computed của svg = màu icon thực tế. Token raw là hsl() → helper tokenToRgb.
+async function tokenToRgb(cssVarName) {
+	return page.evaluate((name) => {
+		const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+		if (!raw) return null;
+		const el = document.createElement('span');
+		el.style.color = raw;
+		document.body.appendChild(el);
+		const rgb = getComputedStyle(el).color;
+		el.remove();
+		return rgb;
+	}, cssVarName);
+}
+const errToken = await tokenToRgb('--error');
+// remove button trong if-preview (đang có 3 cards sau FI9)
+const removeBtn = section('if-preview').locator('.input-file-remove').first();
+const removeColor = await removeBtn.evaluate((el) => getComputedStyle(el).color);
+ok(
+	'FI11: remove button color = token --error (rgb)',
+	removeColor === errToken,
+	`color=${removeColor} expect=${errToken}`
+);
+// nút remove KHÔNG màu gray cũ (--color-gray-500 sẽ là màu trung tính khác)
+ok('FI11: remove color KHÔNG gray-500 cũ', removeColor !== (await tokenToRgb('--color-gray-500')));
+
+console.log('\n=== FI12: CLEARABLE (nút Xóa tất cả) ===');
+const clearSection = section('if-clearable');
+const clearBtn = clearSection.locator('[data-test="input-file-clear-all"]');
+ok('FI12: ban đầu KHÔNG có nút Xóa tất cả (chưa chọn file)', (await clearBtn.count()) === 0, String(await clearBtn.count()));
+await fileInput('if-clearable').setInputFiles([p('logo.png'), p('notes.txt')]);
+await sleep(400);
+ok('FI12: chọn 2 file → nút Xóa tất cả hiện', (await clearBtn.count()) === 1, String(await clearBtn.count()));
+ok('FI12: header previews hiện "2 tệp"', (await clearSection.locator('.input-file-count').textContent())?.trim() === '2 tệp');
+// required + showValid: chọn file → valid → clear hết → error (validation đúng discipline)
+const clearRoot = clearSection.locator('.input-root');
+await sleep(700); // debounce validation
+ok(
+	'FI12: sau chọn file required → color-success (validation không bị nuốt)',
+	((await clearRoot.getAttribute('class')) ?? '').includes('color-success'),
+	(await clearRoot.getAttribute('class')) ?? ''
+);
+await clearBtn.click();
+await sleep(800);
+ok('FI12: click Xóa tất cả → 0 cards', (await cards('if-clearable').count()) === 0, String(await cards('if-clearable').count()));
+ok('FI12: nút Xóa tất cả ẨN khi 0 file', (await clearBtn.count()) === 0);
+await sleep(600); // debounce validation sau clear
+ok(
+	'FI12: clear hết (required) → color-error (validation bung ĐÚNG nhịp, không bị kẹt success)',
+	((await clearRoot.getAttribute('class')) ?? '').includes('color-error'),
+	(await clearRoot.getAttribute('class')) ?? ''
+);
+
+console.log('\n=== FI13: QUICK DELETE (tick + xóa hàng loạt) ===');
+const qdSection = section('if-quick-delete');
+const qdChecks = qdSection.locator('[data-test="input-file-check"]');
+const qdBar = qdSection.locator('[data-test="input-file-quickbar"]');
+const qdDelete = qdSection.locator('[data-test="input-file-quickbar-delete"]');
+ok('FI13: ban đầu KHÔNG có quickbar', (await qdBar.count()) === 0);
+await fileInput('if-quick-delete').setInputFiles([p('logo.png'), p('notes.txt'), p('cover.png')]);
+await sleep(400);
+ok('FI13: 3 cards, mỗi card có ô tick', (await cards('if-quick-delete').count()) === 3 && (await qdChecks.count()) === 3, `cards=${await cards('if-quick-delete').count()} checks=${await qdChecks.count()}`);
+await qdChecks.nth(0).click();
+await qdChecks.nth(1).click();
+await sleep(250);
+ok('FI13: tick 2 card → card có class input-file-selected', (await qdSection.locator('.input-file-card.input-file-selected').count()) === 2);
+ok('FI13: tick 2 → quickbar hiện', (await qdBar.count()) === 1, String(await qdBar.count()));
+ok('FI13: quickbar label "Xóa 2 tệp đã chọn"', (await qdDelete.textContent())?.includes('Xóa 2 tệp đã chọn'), (await qdDelete.textContent())?.trim());
+ok('FI13: header "Đã chọn 2/3 tệp"', (await qdSection.locator('.input-file-selected-count').textContent())?.trim() === 'Đã chọn 2/3 tệp');
+await qdDelete.click();
+await sleep(400);
+ok('FI13: xóa hàng loạt → còn 1 card', (await cards('if-quick-delete').count()) === 1, String(await cards('if-quick-delete').count()));
+ok('FI13: quickbar ẨN sau khi xóa (selection rác được dọn)', (await qdBar.count()) === 0);
+ok('FI13: card còn lại là cover.png (không bị tick)', (await cardNames('if-quick-delete'))[0] === 'cover.png', JSON.stringify(await cardNames('if-quick-delete')));
+// untick: click lại ô đã tick → bỏ chọn
+await qdChecks.nth(0).click();
+await qdChecks.nth(0).click();
+await sleep(200);
+ok('FI13: tick rồi untick → KHÔNG có quickbar', (await qdBar.count()) === 0);
+
+console.log('\n=== FI14: FILE DETAILS MODAL (click card → chi tiết) ===');
+const dtSection = section('if-details');
+const dtTrigger = dtSection.locator('[data-test="input-file-detail-trigger"]');
+// Modal portal nằm ngoài section → scope page; chỉ 1 modal mở tại 1 thời điểm.
+// Modal KHÔNG render prop data-test lên modal-root → role/đóng check qua .modal-root;
+// data-test nằm ở grid trong Body (verify riêng).
+const dtModal = page.locator('.modal-root');
+const dtModalGrid = page.locator('[data-test="input-file-details-modal"]');
+ok('FI14: ban đầu KHÔNG có modal chi tiết', (await dtModal.count()) === 0);
+await fileInput('if-details').setInputFiles([p('logo.png'), p('notes.txt')]);
+await sleep(450);
+ok('FI14: 2 cards, mỗi card có nút mở chi tiết', (await cards('if-details').count()) === 2 && (await dtTrigger.count()) === 2, `cards=${await cards('if-details').count()} triggers=${await dtTrigger.count()}`);
+await dtTrigger.first().click();
+await sleep(450); // modal transition + portal mount
+ok('FI14: click card ảnh → modal chi tiết mở (role=dialog)', (await dtModal.count()) === 1 && (await dtModal.getAttribute('role')) === 'dialog');
+ok('FI14: grid Body có data-test (Modal không render data-test lên root)', (await dtModalGrid.count()) === 1);
+const modalTitle = await dtModal.locator('.modal-header-root').textContent();
+ok('FI14: modal title = tên file', modalTitle?.includes('logo.png'), modalTitle?.trim());
+const detailRows = await dtModal.locator('.input-file-detail-row').allTextContents();
+const detailText = detailRows.join('\n');
+ok(
+	'FI14: chi tiết có Kích thước (bytes format + số bytes)',
+	/Kích thước/.test(detailText) && detailText.includes(`${logoSize} B`) && detailText.includes(`${logoSize} bytes`),
+	detailRows.find((r) => r.includes('Kích thước'))?.trim()
+);
+ok(
+	'FI14: chi tiết có Loại tệp (mime image/png)',
+	/Loại tệp/.test(detailText) && /image\/png/.test(detailText),
+	detailRows.find((r) => r.includes('Loại tệp'))?.trim()
+);
+ok(
+	'FI14: chi tiết có Sửa lần cuối (định dạng ngày giờ)',
+	/Sửa lần cuối/.test(detailText) && /\d{4}/.test(detailText),
+	detailRows.find((r) => r.includes('Sửa lần cuối'))?.trim()
+);
+ok(
+	'FI14: chi tiết KHÔNG có đường dẫn full (File API chỉ có name — webkitRelativePath trống thì ẩn)',
+	!/Đường dẫn tương đối/.test(detailText),
+	'(webkitRelativePath = "" → row ẩn đúng)'
+);
+const detailImg = await dtModal.locator('.input-file-detail-image').getAttribute('src').catch(() => null);
+ok('FI14: ảnh size gốc trong modal (src blob:, object-contain)', !!detailImg && detailImg.startsWith('blob:'));
+const imgFit = await dtModal.locator('.input-file-detail-image').evaluate((el) => getComputedStyle(el).objectFit);
+ok('FI14: ảnh object-fit contain (không crop)', imgFit === 'contain', imgFit);
+// Đóng modal (nút × trong Header) → modal đóng
+await dtModal.locator('.modal-close-button').click();
+await sleep(400);
+ok('FI14: nút × đóng modal', (await dtModal.count()) === 0, String(await dtModal.count()));
+// Mở chi tiết file text → preview text (không ảnh)
+await dtTrigger.nth(1).click();
+await sleep(450);
+const detailPre = await dtModal.locator('.input-file-detail-preview-text').textContent().catch(() => null);
+ok('FI14: card text → modal hiện preview text (không ảnh)', detailPre?.includes('file notes line 1') === true, detailPre?.slice(0, 30));
+await dtModal.locator('.modal-close-button').click();
+await sleep(300);
+// ESC đóng modal
+await dtTrigger.first().click();
+await sleep(350);
+await page.keyboard.press('Escape');
+await sleep(350);
+ok('FI14: ESC đóng modal chi tiết', (await dtModal.count()) === 0, String(await dtModal.count()));
+
+console.log('\n=== FI15: MULTIPLE append với fileDetails bật (vẫn hoạt động) ===');
+const dtInput = fileInput('if-details');
+// FI14 để lại 2 cards (logo.png + notes.txt) → set thêm cover.png → append → 3
+await dtInput.setInputFiles([p('cover.png')]);
+await sleep(350);
+ok('FI15: fileDetails + multiple → chọn thêm appends (3 cards)', (await cards('if-details').count()) === 3, String(await cards('if-details').count()));
+
+console.log('\n=== FI15b: SINGLE thay thế vẫn hoạt động (if-single lặp lại) ===');
+await fileInput('if-single').setInputFiles([p('logo.png')]);
+await sleep(350);
+ok('FI15b: single → chọn mới thay thế (1 card, logo.png)', (await cards('if-single').count()) === 1 && (await cardNames('if-single'))[0] === 'logo.png', JSON.stringify(await cardNames('if-single')));
+
 // ── Screenshots cho ui-checker ──
 console.log('\n=== SCREENSHOTS ===');
-const shotDir = 'tests/screenshot/input-file';
+// Số nhiều (mkdir mới) — đúng quy trình (5+ ảnh: previews + modal chi tiết +
+// quick delete bar + clear button + error color).
+const shotDir = 'tests/screenshots/input-file';
 mkdirSync(shotDir, { recursive: true });
-// 01: single (đang có cover.png card sau FI2 replace)
+// 01: single (đang có logo.png card sau FI15b)
 await section('if-single').screenshot({ path: `${shotDir}/01-single.png` });
 // 02: multiple (đang có 2 cards + dropzone)
 await section('if-multiple').screenshot({ path: `${shotDir}/02-multiple.png` });
@@ -243,6 +417,36 @@ await section('if-preview').screenshot({ path: `${shotDir}/04-preview.png` });
 await section('if-form').screenshot({ path: `${shotDir}/05-form.png` });
 // 06: disabled
 await section('if-disabled').screenshot({ path: `${shotDir}/06-disabled.png` });
+
+// ── Screenshots mới (tùy chọn type='file') ──
+// 07: clearable (chọn lại 2 file sau FI12 — nút Xóa tất cả hiện ở header)
+await fileInput('if-clearable').setInputFiles([p('logo.png'), p('notes.txt')]);
+await sleep(400);
+await section('if-clearable').screenshot({ path: `${shotDir}/07-clearable.png` });
+await clearBtn.click(); // dọn lại cho các screenshot sau không lệch state
+await sleep(400);
+// 08: quick delete (tick 2 card → quickbar hiện)
+await fileInput('if-quick-delete').setInputFiles([p('logo.png'), p('notes.txt'), p('cover.png')]);
+await sleep(400);
+await qdChecks.nth(0).click();
+await qdChecks.nth(1).click();
+await sleep(300);
+await section('if-quick-delete').screenshot({ path: `${shotDir}/08-quick-delete.png` });
+// dọn selection
+await qdDelete.click();
+await sleep(300);
+// 09: file details modal (click card ảnh → modal)
+await fileInput('if-details').setInputFiles([p('logo.png'), p('cover.png')]);
+await sleep(400);
+await dtTrigger.first().click();
+await sleep(500);
+await page.screenshot({ path: `${shotDir}/09-details-modal.png` });
+await dtModal.locator('.modal-close-button').click();
+await sleep(300);
+// 10: details section (2 cards với nút chi tiết)
+await section('if-details').screenshot({ path: `${shotDir}/10-details-cards.png` });
+// 11: error color remove button (hover state khó chụp — chụp card remove + preview error)
+await section('if-preview').screenshot({ path: `${shotDir}/11-remove-error.png` });
 
 await browser.close();
 

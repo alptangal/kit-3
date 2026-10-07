@@ -118,6 +118,21 @@ export interface InputProps extends BasicProps {
 	maxFiles?: number;
 	/** Giới hạn kích thước mỗi tệp (bytes) — tệp vượt quá bị loại khi chọn */
 	maxSize?: number;
+	/**
+	 * Bật xem chi tiết tệp (type='file' only, mặc định `false`): click 1 card
+	 * preview → mở Modal chi tiết (ảnh size gốc + size/mime/lastModified/path).
+	 */
+	fileDetails?: boolean;
+	/**
+	 * Bật chọn nhanh để xóa (type='file' only, mặc định `false`): mỗi card có
+	 * ô tick góc trái trên → tick ≥1 tệp → hiện thanh hành động "Xóa N tệp".
+	 */
+	quickDelete?: boolean;
+	/**
+	 * Bật nút "Xóa tất cả" (type='file' only, mặc định `false`): hiện khi
+	 * ≥1 tệp, nằm ở header row của previews list. Click → files = [].
+	 */
+	clearable?: boolean;
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;
@@ -214,6 +229,12 @@ export interface InputConfigs extends BasicConfigs {
 	multiple?: boolean;
 	maxFiles?: number;
 	maxSize?: number;
+	/** Xem chi tiết tệp khi click card (type='file') — mặc định false */
+	fileDetails?: boolean;
+	/** Ô tick chọn nhanh để xóa hàng loạt (type='file') — mặc định false */
+	quickDelete?: boolean;
+	/** Nút "Xóa tất cả" ở header previews (type='file') — mặc định false */
+	clearable?: boolean;
 	focus: () => void;
 	loading?: boolean;
 	reset: () => void;
