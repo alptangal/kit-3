@@ -131,4 +131,58 @@
 		opacity: var(--disabled-opacity, 0.6);
 		pointer-events: none;
 	}
+
+	// ── Clear button (props.clearable) — bên phải các ô, kích thước theo size ──
+	.otp-clear {
+		// Vuông, đồng bộ --box-size của size-* hiện hành (scale nhẹ so ô)
+		width: calc(var(--box-size) * 0.64);
+		height: calc(var(--box-size) * 0.64);
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		margin: 0;
+		padding: 0;
+		box-sizing: border-box;
+		border: 1px solid var(--border-color);
+		border-radius: var(--border-radius, 0.5rem);
+		background: var(--background);
+		color: var(--muted, inherit);
+		cursor: pointer;
+		transition:
+			border-color var(--transition-duration) ease,
+			background-color var(--transition-duration) ease,
+			color var(--transition-duration) ease,
+			box-shadow var(--transition-duration) ease;
+
+		svg {
+			width: calc(var(--box-size) * 0.36);
+			height: calc(var(--box-size) * 0.36);
+			display: block;
+		}
+
+		&:hover {
+			border-color: var(--error);
+			color: var(--error);
+			background: rgba(239, 68, 68, 0.08);
+			@media (prefers-color-scheme: dark) {
+				background: rgba(239, 68, 68, 0.14);
+			}
+		}
+
+		&:focus {
+			outline: none;
+			border-color: var(--color-indigo-500);
+			@media (prefers-color-scheme: dark) {
+				box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+			}
+			@media (prefers-color-scheme: light) {
+				box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+			}
+		}
+
+		&:active {
+			transform: scale(0.94);
+		}
+	}
 }

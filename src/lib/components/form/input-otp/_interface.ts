@@ -17,6 +17,8 @@ export interface InputOtpProps extends BasicProps {
 	type?: OtpType;
 	/** Bắt buộc → validation "đủ `length` ký tự" + màu validation tự động. */
 	required?: boolean;
+	/** Hiện nút xóa nhanh toàn bộ (bên phải các ô) khi ≥ 1 ô chứa dữ liệu. Default false. */
+	clearable?: boolean;
 	size?: Size;
 	color?: Color;
 	duration?: TimeUnits;
@@ -31,6 +33,7 @@ export interface InputOtpConfigs extends Omit<BasicConfigs, 'status' | 'value'> 
 	name?: string;
 	loading?: boolean;
 	required?: boolean;
+	clearable?: boolean;
 	length?: number;
 	type?: OtpType;
 	size: Size;

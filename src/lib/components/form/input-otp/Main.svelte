@@ -39,6 +39,10 @@
 	// boxes = nội dung từng ô (array literal trong $state → mỗi phần tử reactive)
 	let boxes = $state(Array.from({ length }, () => ''));
 
+	// Clear button (props.clearable): hiện khi ≥ 1 ô chứa dữ liệu — value compact
+	// khác rỗng (giống pattern Input clear button: ẩn khi toàn bộ rỗng)
+	const hasValue = $derived((value ?? '').length > 0);
+
 	// Lọc ký tự: numeric → chỉ 0-9; text → bỏ whitespace
 	function filterChar(ch: string): string {
 		if (otpType === 'numeric') return ch.replace(/\D/g, '');
@@ -96,7 +100,7 @@
 				`size-${this.size}`,
 				`color-${this.color}`,
 				this.disabled ? 'disabled' : undefined,
-				(value ?? '').length > 0 ? 'has-value' : undefined,
+				hasValue ? 'has-value' : undefined,
 				this.status.focus ? 'focus' : undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
@@ -131,6 +135,9 @@
 		},
 		get required() {
 			return props.required;
+		},
+		get clearable() {
+			return props.clearable;
 		},
 		get length() {
 			return length;
@@ -255,11 +262,24 @@
 
 	// Keydown scoped trên root (bubbles từ native inputs):
 	// Arrow di chuyển, Overwrite trên ô có giá trị, Backspace trên ô rỗng →
-	// về ô trước + xóa ô trước
+	// về ô trước + xóa ô trước, Ctrl/Cmd+A → select-all nội dung ô focus
 	function handleKeydown(e: KeyboardEvent) {
 		if (configs.disabled) return;
 		const idx = activeIndex;
 
+		// ── Select-all (Ctrl/Cmd+A) — chừa khỏi guard overwrite/paste ──
+		if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+			handleRootSelectAll(e);
+			return;
+		}
+		// ── Copy (Ctrl/Cmd+C) — intercept + preventDefault: native `copy` event
+		// chỉ fire khi có selection (auto-advance làm selection thường rỗng) →
+		// intercept keydown đảm bảo copy luôn hoạt động. Copy qua context-menu
+		// (mouse) không qua keydown → vẫn bắt bằng `copy` event (oncopy giữ).
+		if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+			handleRootCopy(e);
+			return;
+		}
 		if (e.key === 'ArrowRight') {
 			e.preventDefault();
 			focusBox(idx + 1);
@@ -335,6 +355,59 @@
 		focusBox(firstEmpty);
 	}
 
+	// Copy: toàn bộ boxes → clipboard. Ctrl/Cmd+C intercept trong keydown (luôn
+	// chạy — không phụ thuộc selection) + copy qua context-menu mouse bắt bằng
+	// `copy` event (oncopy trên root giữ). Headless/synthetic clipboard không
+	// ghi được qua navigator.clipboard (permission) → fallback ghi localStorage
+	// 'clipboard' (nguồn 'clipboard' demo — mirror pattern Input actionButtons.copy).
+	// e có thể là KeyboardEvent (keydown intercept) HOẶC ClipboardEvent (oncopy)
+	// → chỉ preventDefault khi có (synthetic dispatch luôn cancelable).
+	async function handleRootCopy(e?: ClipboardEvent | KeyboardEvent) {
+		if (configs.disabled) return;
+		const current = boxes.join('');
+		if (!current) return;
+		e?.preventDefault();
+		let wrote = false;
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(current);
+				wrote = true;
+			}
+		} catch {
+			// Headless/permission denied → fallback localStorage bên dưới
+		}
+		if (!wrote) {
+			const date = new Date();
+			localStorage.setItem('clipboard', JSON.stringify({ [`${date.getTime()}`]: current }));
+			if (!client.browser) client.browser = {};
+			if (!client.browser.clipboard) client.browser.clipboard = new SvelteMap();
+			client.browser.clipboard.set(date.getTime(), current);
+		}
+	}
+
+	// Select-all: Ctrl/Cmd+A khi focus trong component → chọn toàn bộ nội dung
+	// ô đang focus (chọn hết value hiện tại; native selection per-input — ô
+	// maxlength=1 chỉ có 1 ký tự → select-all = chọn ký tự ô đang focus).
+	function handleRootSelectAll(e: KeyboardEvent) {
+		if (configs.disabled) return;
+		const el = document.activeElement;
+		if (!(el instanceof HTMLInputElement) || !boxRefs.includes(el)) return;
+		if (!el.value) return;
+		e.preventDefault();
+		el.select();
+	}
+
+	// Clear nhanh toàn bộ dữ liệu (props.clearable): xoá toàn bộ boxes + sync
+	// value + focus ô đầu. _justReset = true → validation không trigger (giống
+	// reset programmatic; user tương tác lại → handleFocus bật cờ).
+	function handleClearClick() {
+		if (configs.disabled) return;
+		boxes = Array.from({ length }, () => '');
+		_justReset = true;
+		syncValue();
+		focusBox(0);
+	}
+
 	onMount(() => {
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
@@ -357,6 +430,7 @@
 	aria-disabled={configs.disabled ? 'true' : undefined}
 	aria-invalid={configs.validation.isValid === false ? 'true' : undefined}
 	onkeydown={handleKeydown}
+	oncopy={handleRootCopy}
 >
 	{#each boxes as box, i}
 		<input
@@ -378,6 +452,23 @@
 			onpaste={(e) => handleBoxPaste(i, e)}
 		/>
 	{/each}
+	{#if configs.clearable && hasValue && !configs.disabled}
+		<button
+			type="button"
+			class="otp-clear"
+			aria-label="Xóa toàn bộ"
+			onclick={handleClearClick}
+		>
+			<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<path
+					d="M6 6l12 12M18 6L6 18"
+					stroke="currentColor"
+					stroke-width="1.75"
+					stroke-linecap="round"
+				/>
+			</svg>
+		</button>
+	{/if}
 	{@render children?.()}
 </div>
 

@@ -10,6 +10,9 @@
 //  I6  form gate: submit disabled khi chưa đủ 6 → enabled khi đủ 6 → submit payload
 //  I7  a11y: 6 ô, ô đầu focusable, root aria-label, autocomplete="one-time-code"
 //  I8  controlled: parent set bind:value "777777" → 6 ô hiện 7
+//  I9  overwrite ô đã có giá trị + advance; Ctrl+A native select không bị intercept
+//  I10 copy: Ctrl+C → clipboard/localStorage 'clipboard' có value; ô đích không đổi
+//  I11 clearable: nút .otp-clear hiện khi có giá trị → click → rỗng + nút ẩn
 // Chạy: node tests/input-otp-probe.mjs (dev server phải chạy ở https://localhost:3000)
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -43,7 +46,8 @@ const root = (dataTest) => page.locator(`[data-test="${dataTest}"] .input-otp-ro
 console.log('\n=== I0: ROOT RENDER ===');
 ok('I0: demo root render', (await page.locator('[data-test="input-otp-demo"]').count()) === 1);
 const rootCount = await page.locator('.input-otp-root').count();
-ok('I0: 4 instance .input-otp-root (basic/required/disabled/form)', rootCount === 4, `count=${rootCount}`);
+// 5 instance: basic / required / disabled / clearable (clear button) / form
+ok('I0: 5 instance .input-otp-root (basic/required/disabled/clearable/form)', rootCount === 5, `count=${rootCount}`);
 ok('I0: basic có 6 ô .otp-box', (await boxes('otp-basic').count()) === 6);
 
 // ============ I1 — AUTO-ADVANCE ============
@@ -253,8 +257,137 @@ const selectedI9 = await page.evaluate(() => {
 });
 ok('I9: Ctrl+A trên ô có giá trị → native select (không ghi đè)', selectedI9 === 1, `selLength=${selectedI9}`);
 
+// ============ I10 — COPY (Ctrl+C → clipboard / localStorage fallback) ============
+console.log('\n=== I10: COPY (Ctrl+C → clipboard/localStorage có value) ===');
+// Reset: xóa sạch 6 ô rồi gõ "1357" (4 ô đầu)
+for (let i = 0; i < 6; i++) await boxes('otp-basic').nth(i).fill('');
+await page.waitForTimeout(150);
+await boxes('otp-basic').first().click();
+await page.keyboard.type('1357');
+await page.waitForTimeout(150);
+// Mock navigator.clipboard.writeText (spy) + luôn reject → force fallback
+// localStorage (headless không có permission ghi thật). Spy cho biết keydown
+// intercept có GỌI handleRootCopy hay không (native copy event không fire khi
+// selection rỗng → spy bị gọi = do intercept).
+await page.evaluate(() => {
+	window.__copySpyCalled = false;
+	Object.defineProperty(navigator, 'clipboard', {
+		value: {
+			writeText: async () => {
+				window.__copySpyCalled = true;
+				throw new Error('headless-no-perm');
+			},
+			readText: () => Promise.reject(new Error('headless-no-perm'))
+		},
+		configurable: true
+	});
+});
+// Mốc trước khi copy — dọn entry cũ
+await page.evaluate(() => localStorage.removeItem('clipboard'));
+await boxes('otp-basic').first().focus();
+await page.keyboard.press('Control+c');
+await page.waitForTimeout(250);
+const clipAfter = await page.evaluate(() => {
+	const raw = localStorage.getItem('clipboard');
+	if (!raw) return null;
+	try {
+		const entries = Object.entries(JSON.parse(raw));
+		const last = entries[entries.length - 1];
+		return { key: last[0], value: last[1] };
+	} catch {
+		return null;
+	}
+});
+ok('I10: Ctrl+C → handleRootCopy chạy (spy writeText được gọi)', (await page.evaluate(() => window.__copySpyCalled)) === true, `spyCalled=${await page.evaluate(() => window.__copySpyCalled)}`);
+ok(
+	'I10: Ctrl+C → localStorage clipboard có entry value "1357"',
+	clipAfter && clipAfter.value === '1357',
+	clipAfter ? `${clipAfter.key}=${clipAfter.value}` : 'null'
+);
+ok('I10: copy không đổi boxes (ô đích nguyên vẹn)', (await boxes('otp-basic').first().inputValue()) === '1');
+// C2: Ctrl+C trên component RỖNG → handleRootCopy return sớm (không ghi entry mới)
+await page.evaluate(() => localStorage.removeItem('clipboard'));
+for (let i = 0; i < 6; i++) await boxes('otp-basic').nth(i).fill('');
+await page.waitForTimeout(150);
+await boxes('otp-basic').first().focus();
+await page.keyboard.press('Control+c');
+await page.waitForTimeout(200);
+const clipEmpty = await page.evaluate(() => localStorage.getItem('clipboard'));
+ok('I10: Ctrl+C trên OTP rỗng → không ghi clipboard', clipEmpty === null, clipEmpty ?? 'null');
+// C3: copy qua synthetic ClipboardEvent (oncopy path — context-menu mouse) →
+// cùng ghi localStorage (fallback). Chứng minh 2 đường (keydown + oncopy) cùng chạy.
+// Gõ "88" trước (copy từ boxes.join → entry mới mang "88").
+await boxes('otp-basic').first().click();
+await page.keyboard.type('88');
+await page.waitForTimeout(150);
+await page.evaluate(() => localStorage.removeItem('clipboard'));
+await page.evaluate(() => {
+	const el = document.querySelector('[data-test="otp-basic"] .otp-box');
+	const dt = new DataTransfer();
+	dt.setData('text/plain', 'IGNORED');
+	el.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData: dt }));
+});
+await page.waitForTimeout(200);
+const clipEvt = await page.evaluate(() => {
+	const raw = localStorage.getItem('clipboard');
+	if (!raw) return null;
+	try {
+		const entries = Object.entries(JSON.parse(raw));
+		const last = entries[entries.length - 1];
+		return last[1];
+	} catch {
+		return null;
+	}
+});
+ok('I10: copy event (oncopy path, có giá trị "88") → localStorage ghi value', clipEvt === '88', clipEvt ?? 'null');
+// Gõ lại "246" cho I10 xong (I11 dùng otp-clearable riêng — không đụng basic)
+await boxes('otp-basic').first().click();
+await page.keyboard.type('246');
+await page.waitForTimeout(150);
+
+// ============ I11 — CLEAR BUTTON (clearable) ============
+console.log('\n=== I11: CLEAR BUTTON (clearable — hiện khi có giá trị → click → rỗng) ===');
+// Ban đầu rỗng → nút ẩn
+const clearBtnBefore = await page.locator('[data-test="otp-clearable"] .otp-clear').count();
+ok('I11: OTP rỗng → nút .otp-clear ẨN', clearBtnBefore === 0, `count=${clearBtnBefore}`);
+// Gõ 1 số → nút hiện
+const clrBoxes = boxes('otp-clearable');
+await clrBoxes.first().click();
+await page.keyboard.type('9');
+await page.waitForTimeout(200);
+const clearBtnShown = await page.locator('[data-test="otp-clearable"] .otp-clear').count();
+ok('I11: gõ "9" → nút .otp-clear HIỆN', clearBtnShown === 1, `count=${clearBtnShown}`);
+ok(
+	'I11: nút có aria-label "Xóa toàn bộ"',
+	(await page.locator('[data-test="otp-clearable"] .otp-clear').getAttribute('aria-label')) === 'Xóa toàn bộ'
+);
+// Click → toàn bộ rỗng + nút ẩn + focus ô đầu
+await page.locator('[data-test="otp-clearable"] .otp-clear').click();
+await page.waitForTimeout(200);
+const clearVals = [];
+for (let i = 0; i < 6; i++) clearVals.push(await clrBoxes.nth(i).inputValue());
+ok('I11: click clear → 6 ô rỗng', clearVals.every((v) => v === ''), clearVals.join('|'));
+const clrHint = await page.locator('[data-test="otp-clearable-value"]').textContent();
+ok('I11: hint page state đồng bộ "(trống)"', clrHint?.includes('(trống)'), clrHint?.trim());
+const activeIdxClr = await page.evaluate(() => {
+	const all = [...document.querySelectorAll('[data-test="otp-clearable"] .otp-box')];
+	return all.indexOf(document.activeElement);
+});
+ok('I11: click clear → focus về ô đầu (index 0)', activeIdxClr === 0, `activeIndex=${activeIdxClr}`);
+ok('I11: clear xong → nút ẨN lại', (await page.locator('[data-test="otp-clearable"] .otp-clear').count()) === 0);
+// Multi-fill (gõ 2 số) → nút hiện → click → rỗng (case nhiều ô)
+await clrBoxes.first().click();
+await page.keyboard.type('45');
+await page.waitForTimeout(200);
+ok('I11: gõ 2 số → nút HIỆN lại', (await page.locator('[data-test="otp-clearable"] .otp-clear').count()) === 1);
+await page.locator('[data-test="otp-clearable"] .otp-clear').click();
+await page.waitForTimeout(200);
+ok(
+	'I11: click clear lần 2 → 6 ô rỗng + nút ẩn',
+	(await clrBoxes.nth(0).inputValue()) === '' && (await page.locator('[data-test="otp-clearable"] .otp-clear').count()) === 0
+);
+
 // ── Screenshots cho ui-checker ──
-console.log('\n=== SCREENSHOTS ===');
 const shotDir = 'tests/screenshots/input-otp';
 mkdirSync(shotDir, { recursive: true });
 // Restore "777777" (I9 đã ghi đè ô 0 = "9") để 01-basic hiện đủ 6 ô filled
@@ -276,6 +409,19 @@ await page.waitForTimeout(450);
 await page.locator('[data-test="otp-required"]').screenshot({ path: `${shotDir}/02-error.png` });
 // 03-form: form case đang có payload (submitted)
 await page.locator('[data-test="otp-form"]').screenshot({ path: `${shotDir}/03-form.png` });
+
+// 04-clear-shown: clearable — gõ "12" → nút xóa hiện bên phải các ô (focus ô 1
+// — selection rỗng → ô 0 không hiện caret; nút clear vẫn hiện)
+await clrBoxes.first().click();
+await page.keyboard.type('12');
+await page.waitForTimeout(250);
+await page.locator('[data-test="otp-clearable"]').screenshot({ path: `${shotDir}/04-clear-shown.png` });
+// 05-clear-hidden: click clear → rỗng → nút ẩn (trước khi chụp dọn focus — blur
+// để không chụp focus ring)
+await page.locator('[data-test="otp-clearable"] .otp-clear').click();
+await page.waitForTimeout(250);
+await page.evaluate(() => document.activeElement?.blur());
+await page.locator('[data-test="otp-clearable"]').screenshot({ path: `${shotDir}/05-clear-hidden.png` });
 
 await browser.close();
 

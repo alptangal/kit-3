@@ -25,6 +25,9 @@
 	function setSeventySeven() {
 		basicValue = '777777';
 	}
+
+	// Clearable case: state riêng (chống shared giữa các case)
+	let clearableValue = $state('');
 </script>
 
 <div class="page" data-test="input-otp-demo">
@@ -65,6 +68,16 @@
 		<p class="demo-hint">Disabled: opacity 0.5 + not-allowed + không focusable (native disabled).</p>
 	</section>
 
+	<!-- 3b. Clearable (clear button khi ≥ 1 ô có dữ liệu) -->
+	<section class="demo" data-test="otp-clearable">
+		<h2>Clearable (nút xóa nhanh toàn bộ)</h2>
+		<InputOtp clearable bind:value={clearableValue} aria-label="Mã OTP xóa nhanh" />
+		<p class="demo-hint">
+			Gõ ít nhất 1 số → nút xóa hiện bên phải các ô; click xóa toàn bộ + focus ô đầu.
+			Toàn bộ rỗng → nút ẩn. Giá trị: <code data-test="otp-clearable-value">{clearableValue || '(trống)'}</code>
+		</p>
+	</section>
+
 	<!-- 4. In Form — submit gate -->
 	<section class="demo" data-test="otp-form">
 		<h2>Trong Form (submit gate theo đủ 6 số)</h2>
@@ -102,6 +115,18 @@
 			</li>
 			<li>
 				Paste chuỗi "123456" vào ô 0 → phân tán đầy 6 ô.
+			</li>
+			<li>
+				<code>Ctrl/Cmd+C</code> khi focus trong component → copy value hiện tại vào
+				clipboard; <code>Ctrl/Cmd+A</code> → select-all nội dung ô đang focus.
+			</li>
+			<li>
+				Paste khi có ô đã có giá trị → ghi đè từ ô focus; paste chuỗi ngắn hơn số ô
+				→ chỉ fill các ô tương ứng; ký tự không hợp lệ bị lọc bỏ.
+			</li>
+			<li>
+				Prop <code>clearable</code> → nút xóa nhanh toàn bộ bên phải các ô (hiện khi
+				≥ 1 ô chứa dữ liệu, ẩn khi toàn bộ rỗng).
 			</li>
 			<li>
 				Native <code>autocomplete="one-time-code"</code> + <code>inputmode="numeric"</code>
