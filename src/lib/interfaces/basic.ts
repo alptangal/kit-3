@@ -103,6 +103,11 @@ export interface MetaBrowser {
 				ref?: HTMLElement;
 				offset?: number;
 				position?: ToastProps['position'];
+				// Hover-expand group: layout size nguyên bản (offsetWidth/offsetHeight — không
+				// bị transform scale ảnh hưởng) do Toast item đo khi load → Wrapper tính bước
+				// dịch khi xếp hàng (mỗi toast full nguyên bản + gap).
+				width?: number;
+				height?: number;
 			}
 		>;
 		create: (data: {
