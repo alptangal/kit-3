@@ -367,6 +367,15 @@
 				width: 100%;
 			}
 
+			/* Wave10: content không còn padding-inline → root inline-flex
+			   shrink-to-fit 48px khiến avatar lệch trái (tâm 24 thay vì 36).
+			   Ép display flex (block-level) + width 100% → root full-width rail,
+			   trigger 100% căn giữa (tâm ≈ 36, thẳng trục Y icon menu). */
+			:global(.dropdown-menu-root) {
+				display: flex;
+				width: 100%;
+			}
+
 			:global(.dropdown-menu-trigger) {
 				width: 100%;
 				justify-content: center;

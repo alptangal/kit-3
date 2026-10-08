@@ -96,6 +96,72 @@ const disabled = await page.evaluate(() => {
 });
 ok('SB4 disabled item has .disabled + not-allowed', disabled.found && disabled.pointerEvents === 'none', JSON.stringify(disabled));
 
+// SB16 — Wave10: header/content/footer KHÔNG còn padding-inline (expanded mode).
+// Bỏ padding inline để tối ưu hiển thị — nội dung con tự mang spacing riêng.
+const wave10Padding = await page.evaluate(() => {
+	const pick = (sel) => {
+		const el = document.querySelector(sel);
+		if (!el) return null;
+		const cs = getComputedStyle(el);
+		return { pl: cs.paddingLeft, pr: cs.paddingRight, pt: cs.paddingTop, pb: cs.paddingBottom };
+	};
+	return {
+		header: pick('.sidebar-header'),
+		content: pick('.sidebar-content'),
+		footer: pick('.sidebar-footer')
+	};
+});
+ok(
+	'SB16 header padding-inline = 0px (padding-block giữ 1rem)',
+	wave10Padding.header?.pl === '0px' && wave10Padding.header?.pr === '0px' && wave10Padding.header?.pt === '16px',
+	JSON.stringify(wave10Padding.header)
+);
+ok(
+	'SB16 content padding-inline = 0px (padding-block giữ 0.25rem 1rem)',
+	wave10Padding.content?.pl === '0px' && wave10Padding.content?.pr === '0px' && wave10Padding.content?.pt === '4px' && wave10Padding.content?.pb === '16px',
+	JSON.stringify(wave10Padding.content)
+);
+ok(
+	'SB16 footer padding-inline = 0px (padding-block giữ 0.75rem)',
+	wave10Padding.footer?.pl === '0px' && wave10Padding.footer?.pr === '0px' && wave10Padding.footer?.pt === '12px' && wave10Padding.footer?.pb === '12px',
+	JSON.stringify(wave10Padding.footer)
+);
+
+// SB17 — Wave10: collapsed (icon rail) — item square 48×48 căn giữa trục rail
+// (width 3rem + margin-inline auto, bù vì header/content không còn padding).
+await page.click('.sidebar-trigger');
+await page.mouse.move(600, 400);
+await sleep(450);
+const wave10Square = await page.evaluate(() => {
+	const btn = document.querySelector('.sidebar-menu-button');
+	if (!btn) return null;
+	const cs = getComputedStyle(btn);
+	const r = btn.getBoundingClientRect();
+	const aside = document.querySelector('.sidebar-aside');
+	const ar = aside.getBoundingClientRect();
+	return {
+		pl: cs.paddingLeft,
+		pr: cs.paddingRight,
+		w: Math.round(r.width),
+		h: Math.round(r.height),
+		btnCenterX: Math.round((r.left + r.width / 2) * 10) / 10,
+		railCenterX: Math.round((ar.left + ar.width / 2) * 10) / 10
+	};
+});
+ok(
+	'SB17 collapsed item square 48×48 (padding-inline 0)',
+	wave10Square?.w === 48 && wave10Square?.h === 48 && wave10Square?.pl === '0px' && wave10Square?.pr === '0px',
+	JSON.stringify(wave10Square)
+);
+ok(
+	'SB17 item square căn giữa trục rail',
+	Math.abs(wave10Square.btnCenterX - wave10Square.railCenterX) < 1,
+	JSON.stringify({ btnCenterX: wave10Square.btnCenterX, railCenterX: wave10Square.railCenterX })
+);
+// expand lại để các probe tiếp theo chạy đúng trạng thái mở
+await page.click('.sidebar-trigger');
+await sleep(450);
+
 // SB5/6 — trigger toggle (desktop icon collapsible)
 const widthBefore = await page.evaluate(() => document.querySelector('.sidebar-aside').getBoundingClientRect().width);
 const triggerBtn = await page.$('.sidebar-trigger');
