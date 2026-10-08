@@ -242,6 +242,7 @@
 			class:editing={editing}
 		>
 			{#if editing}
+				<!-- Edit: CHỈ currentPage thành input — sep "/N" (separator + total) VẪN HIỆN bên cạnh -->
 				<input
 					class="pagination-page-input"
 					type="text"
@@ -254,6 +255,8 @@
 					onblur={onInputBlur}
 					aria-label="{counterAria} — nhập số trang"
 				/>
+				<span class="counter-sep" aria-hidden="true">/</span>
+				<span class="counter-total" data-test="counter-total">{totalPages}</span>
 			{:else}
 				<span class="counter-current" data-test="counter-current">{safePage}</span>
 				<span class="counter-sep" aria-hidden="true">/</span>
