@@ -16,7 +16,7 @@ export const defaultValidation: {
 } = {
 	required: (fieldName) => {
 		return {
-			isValid(input?: string | boolean | File[]) {
+			isValid(input?: string | boolean | string[] | File[]) {
 				// boolean field: on = valid, off/undefined = invalid
 				return Boolean(input);
 			},
