@@ -1,11 +1,15 @@
-<!-- src/routes/ui/toggle/+page.svelte -->
+<!-- src/routes/ui/switch/+page.svelte -->
 <script lang="ts">
+	import { iconify } from '$assets/icons/iconify';
 	import { Button } from '$components/element';
-	import { FieldMessages, Form, Input, TextField, Toggle } from '$components/form';
+	import { FieldMessages, Form, Input, TextField, Switch } from '$components/form';
 
-	// ── State (probe locate qua data-test + .toggle-root) ──
+	// ── State (probe locate qua data-test + .switch-root) ──
 	let defaultA = $state(false);
 	let defaultB = $state(true);
+
+	let iconFixed = $state(true);
+	let iconPair = $state(false);
 
 	let sizeValues = $state({ xs: false, sm: false, md: true, lg: false, xl: false });
 
@@ -30,15 +34,15 @@
 
 	let requiredValue = $state(false);
 
-	// tg-reset: test configs.reset() THẬT của component — đặt Toggle trong <Form>
+	// sw-reset: test configs.reset() THẬT của component — đặt Switch trong <Form>
 	// + button type="reset" → native `reset` event → Form handleEvents →
 	// configs.reset() → childrens.child.reset() → checked = _initialChecked →
 	// binding propagate về page `resetValue`. (configs.reset là method form-field,
 	// Svelte 5 bind:this trên component bind root element nên không gọi trực tiếp.)
 	let resetValue = $state(false);
 
-	// tg-form: gate submit theo page state (Form không export configs → page tự
-	// quản — mirror radiogroup/slider form demo). Toggle required (boolean on)
+	// sw-form: gate submit theo page state (Form không export configs → page tự
+	// quản — mirror radiogroup/slider form demo). Switch required (boolean on)
 	// + email → submit.
 	let formConsent = $state(false);
 	let formEmail = $state('');
@@ -54,72 +58,95 @@
 	}
 </script>
 
-<div class="page" data-test="toggle-demo">
-	<h1 class="page-title">Toggle · switch (native button role=switch + form field)</h1>
+<div class="page" data-test="switch-demo">
+	<h1 class="page-title">Switch · form field (native button role=switch + icon trên thumb)</h1>
 
 	<!-- 1) Default (bind:checked + label) -->
-	<section class="demo" data-test="tg-default">
+	<section class="demo" data-test="sw-default">
 		<h2>Default (bind:checked + label)</h2>
-		<Toggle label="Dark mode" bind:checked={defaultA} aria-label="Dark mode" />
-		<Toggle label={{ en: 'Email notifications', vi: 'Thông báo email' }} bind:checked={defaultB} />
+		<Switch label="Dark mode" bind:checked={defaultA} aria-label="Dark mode" />
+		<Switch label={{ en: 'Email notifications', vi: 'Thông báo email' }} bind:checked={defaultB} />
 		<p class="demo-hint">
-			Đang: <code data-test="tg-default-value">{defaultA ? 'on' : 'off'} / {defaultB ? 'on' : 'off'}</code>
+			Đang: <code data-test="sw-default-value">{defaultA ? 'on' : 'off'} / {defaultB ? 'on' : 'off'}</code>
 			— click switch hoặc click label đều toggle.
 		</p>
 	</section>
 
-	<!-- 2) Sizes (xs/sm/md/lg/xl) -->
-	<section class="demo" data-test="tg-sizes">
+	<!-- 2) Icon trên thumb (icon cố định / iconOn+iconOff đổi theo state) -->
+	<section class="demo" data-test="sw-icon">
+		<h2>Icon trên thumb (icon / iconOn + iconOff đổi theo state)</h2>
+		<Switch
+			label="Icon cố định"
+			icon={iconify['info-i-rounded']}
+			bind:checked={iconFixed}
+			aria-label="Icon cố định"
+		/>
+		<Switch
+			label="Cặp icon đổi state"
+			iconOn={iconify['check-rounded']}
+			iconOff={iconify['close-rounded']}
+			bind:checked={iconPair}
+			aria-label="Cặp icon đổi state"
+		/>
+		<p class="demo-hint">
+			Icon nằm trên thumb (iconify, aria-hidden) — icon cố định hiển thị cả on/off;
+			cặp iconOn/iconOff đổi khi bật/tắt. Đang:
+			<code data-test="sw-icon-pair">{iconPair ? 'on' : 'off'}</code>
+		</p>
+	</section>
+
+	<!-- 3) Sizes (xs/sm/md/lg/xl) -->
+	<section class="demo" data-test="sw-sizes">
 		<h2>Sizes (xs / sm / md / lg / xl)</h2>
 		<div class="sizes-row">
-			<Toggle size="xs" label="XS" bind:checked={sizeValues.xs} />
-			<Toggle size="sm" label="SM" bind:checked={sizeValues.sm} />
-			<Toggle size="md" label="MD" bind:checked={sizeValues.md} />
-			<Toggle size="lg" label="LG" bind:checked={sizeValues.lg} />
-			<Toggle size="xl" label="XL" bind:checked={sizeValues.xl} />
+			<Switch size="xs" label="XS" bind:checked={sizeValues.xs} />
+			<Switch size="sm" label="SM" bind:checked={sizeValues.sm} />
+			<Switch size="md" label="MD" bind:checked={sizeValues.md} />
+			<Switch size="lg" label="LG" bind:checked={sizeValues.lg} />
+			<Switch size="xl" label="XL" bind:checked={sizeValues.xl} />
 		</div>
 		<p class="demo-hint">Mọi đo lường nằm trên token size-* (track ≈ --min-height, width ≈ 1.75×).</p>
 	</section>
 
-	<!-- 3) Colors / on-state -->
-	<section class="demo" data-test="tg-colors">
+	<!-- 4) Colors / on-state -->
+	<section class="demo" data-test="sw-colors">
 		<h2>Colors / on-state (default / primary / success / warning / error)</h2>
-		<Toggle color="default" label="Default (primary)" bind:checked={colorDefault} />
-		<Toggle color="primary" label="Primary" bind:checked={colorPrimary} />
-		<Toggle color="success" label="Success" bind:checked={colorSuccess} />
-		<Toggle color="warning" label="Warning" bind:checked={colorWarning} />
-		<Toggle color="error" label="Error" bind:checked={colorError} />
+		<Switch color="default" label="Default (primary)" bind:checked={colorDefault} />
+		<Switch color="primary" label="Primary" bind:checked={colorPrimary} />
+		<Switch color="success" label="Success" bind:checked={colorSuccess} />
+		<Switch color="warning" label="Warning" bind:checked={colorWarning} />
+		<Switch color="error" label="Error" bind:checked={colorError} />
 		<p class="demo-hint">On-track lấy màu semantic (var(--color) theo .color-*), off-track = token neutral.</p>
 	</section>
 
-	<!-- 4) Disabled + Loading -->
-	<section class="demo" data-test="tg-disabled">
+	<!-- 5) Disabled + Loading -->
+	<section class="demo" data-test="sw-disabled">
 		<h2>Disabled</h2>
-		<Toggle checked={disabledOn} disabled label="Disabled (on)" />
-		<Toggle checked={disabledOff} disabled label="Disabled (off)" />
+		<Switch checked={disabledOn} disabled label="Disabled (on)" />
+		<Switch checked={disabledOff} disabled label="Disabled (off)" />
 		<p class="demo-hint">Disabled: opacity token + not-allowed + không toggle được.</p>
 	</section>
-	<section class="demo" data-test="tg-loading">
+	<section class="demo" data-test="sw-loading">
 		<h2>Loading</h2>
-		<Toggle label="Push notifications" bind:checked={loadingValue} loading={isLoading} onchange={handleLoadingToggle} />
+		<Switch label="Push notifications" bind:checked={loadingValue} loading={isLoading} onchange={handleLoadingToggle} />
 		<p class="demo-hint">
 			Loading (800ms mock API): opacity 0.7 + block click — sau đó giá trị commit.
 			Đang: <code>{loadingValue ? 'on' : 'off'}</code>
 		</p>
 	</section>
 
-	<!-- 5) Required + FieldMessages (showValid) -->
-	<section class="demo" data-test="tg-required">
+	<!-- 6) Required + FieldMessages (showValid) -->
+	<section class="demo" data-test="sw-required">
 		<h2>Required + FieldMessages (showValid)</h2>
 		<div class="field">
-			<Toggle
+			<Switch
 				name="required-optin"
 				label="Bật tính năng (required)"
 				required
 				bind:checked={requiredValue}
 			>
 				<FieldMessages showValid />
-			</Toggle>
+			</Switch>
 		</div>
 		<p class="demo-hint">
 			Chưa bật (chưa đổi) → message invalid; bật lên → sau ~300ms debounce message valid;
@@ -127,11 +154,11 @@
 		</p>
 	</section>
 
-	<!-- 6) In Form (required + Input email + submit gate + payload boolean) -->
-	<section class="demo" data-test="tg-form">
+	<!-- 7) In Form (required + Input email + submit gate + payload boolean) -->
+	<section class="demo" data-test="sw-form">
 		<h2>Trong Form (required + submit gate + payload boolean)</h2>
 		<Form onSubmit={handleSubmit}>
-			<Toggle
+			<Switch
 				name="consent"
 				label="Tôi đồng ý (required)"
 				required
@@ -139,9 +166,9 @@
 				delay={150}
 			>
 				<FieldMessages showValid />
-			</Toggle>
+			</Switch>
 
-			<TextField name="tg-form-email" required>
+			<TextField name="sw-form-email" required>
 				<Input type="email" bind:value={formEmail} placeholder="you@example.com" />
 				<FieldMessages />
 			</TextField>
@@ -151,32 +178,32 @@
 			</Button>
 		</Form>
 		{#if formPayload}
-			<pre class="payload" data-test="tg-payload">{formPayload}</pre>
+			<pre class="payload" data-test="sw-payload">{formPayload}</pre>
 		{/if}
 		<p class="demo-hint">
-			Nút Submit disabled tới khi: toggle bật + email đúng định dạng. Payload JSON hiện sau
+			Nút Submit disabled tới khi: switch bật + email đúng định dạng. Payload JSON hiện sau
 			submit — <code>consent</code> serialize dạng <b>boolean</b> (Form đọc 'checked' in children).
 		</p>
 	</section>
 
-	<!-- 7) Reset (configs.reset — form-field, Form gọi qua native `reset` event) -->
-	<section class="demo" data-test="tg-reset">
+	<!-- 8) Reset (configs.reset — form-field, Form gọi qua native `reset` event) -->
+	<section class="demo" data-test="sw-reset">
 		<h2>Reset (configs.reset)</h2>
 		<Form>
-			<Toggle bind:checked={resetValue} label="Phím tắt minh họa" />
-			<button class="demo-btn" type="reset" data-test="tg-reset-btn">
+			<Switch bind:checked={resetValue} label="Phím tắt minh họa" />
+			<button class="demo-btn" type="reset" data-test="sw-reset-btn">
 				Reset
 			</button>
 		</Form>
 		<p class="demo-hint">
-			Bật toggle rồi bấm Reset → Form native reset event → configs.reset() → về giá trị
+			Bật switch rồi bấm Reset → Form native reset event → configs.reset() → về giá trị
 			ban đầu (off) + bỏ suppression validation.
-			Đang: <code data-test="tg-reset-value">{resetValue ? 'on' : 'off'}</code>
+			Đang: <code data-test="sw-reset-value">{resetValue ? 'on' : 'off'}</code>
 		</p>
 	</section>
 
-	<!-- 8) Keyboard guide (native button: Space/Enter native) -->
-	<section class="demo" data-test="tg-keyboard">
+	<!-- 9) Keyboard guide (native button: Space/Enter native) -->
+	<section class="demo" data-test="sw-keyboard">
 		<h2>Keyboard guide</h2>
 		<div class="keyboard-guide">
 			<ul>
@@ -185,7 +212,7 @@
 				<li>Click — toggle (switch hoặc label đều toggle)</li>
 			</ul>
 		</div>
-		<Toggle label="Keyboard demo" aria-label="Keyboard demo" />
+		<Switch label="Keyboard demo" aria-label="Keyboard demo" />
 		<p class="demo-hint">Switch là <code>&lt;button role="switch"&gt;</code> — không cần keydown handler riêng.</p>
 	</section>
 </div>

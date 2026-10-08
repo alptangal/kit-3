@@ -193,3 +193,6 @@ export type {
 } from './datatable/_interface';
 export { default as Alert } from './alert/Main.svelte';
 export type { AlertConfigs, AlertProps } from './alert/_interface';
+
+export { Toggle } from './toggle/index.ts';
+export type { ToggleProps, ToggleConfigs, ToggleVariant, ToggleSize } from './toggle/index.ts';

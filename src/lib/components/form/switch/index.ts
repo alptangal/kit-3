@@ -1,16 +1,16 @@
-// src/lib/components/form/toggle/index.ts
-// Export Toggle + setToggleContext/getToggleContext (leaf _context.ts) +
+// src/lib/components/form/switch/index.ts
+// Export Switch + setSwitchContext/getSwitchContext (leaf _context.ts) +
 // defaultValidation.required — mirror checkbox/index.ts + slider/index.ts
 // (defaultValidation message vi/en).
-import type { ToggleConfigs, ToggleProps } from './_interface';
+import type { SwitchConfigs, SwitchProps } from './_interface';
 import type { ValidationCompact, ValidationFull } from '../input/_interface';
-import { setToggleContext } from './_context';
+import { setSwitchContext } from './_context';
 
-export { default as Toggle } from './Main.svelte';
-export { setToggleContext, getToggleContext } from './_context';
-export type { ToggleProps, ToggleConfigs } from './_interface';
+export { default as Switch } from './Main.svelte';
+export { setSwitchContext, getSwitchContext } from './_context';
+export type { SwitchProps, SwitchConfigs } from './_interface';
 
-// Toggle value là BOOLEAN — required = checked truthy (form field on/off).
+// Switch value là BOOLEAN — required = checked truthy (form field on/off).
 export const defaultValidation: {
 	required: (fieldName?: string) => ValidationCompact | ValidationFull;
 } = {

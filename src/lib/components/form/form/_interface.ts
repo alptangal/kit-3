@@ -5,7 +5,7 @@ import type { SelectConfigs } from '../select/_interface';
 import type { RadioGroupConfigs } from '../radiogroup/_interface';
 import type { SliderConfigs } from '../slider/_interface';
 import type { InputOtpConfigs } from '../input-otp/_interface';
-import type { ToggleConfigs } from '../toggle/_interface';
+import type { SwitchConfigs } from '../switch/_interface';
 
 export interface FormProps extends BasicProps {
 	method?: 'post' | 'get' | 'dialog';
@@ -39,7 +39,7 @@ export interface FormConfigs extends Omit<BasicConfigs, 'childrens' | 'status'> 
 		| RadioGroupConfigs
 		| SliderConfigs
 		| InputOtpConfigs
-		| ToggleConfigs
+		| SwitchConfigs
 	>;
 	validation: {
 		isValid?: boolean;

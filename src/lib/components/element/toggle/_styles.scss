@@ -1,0 +1,202 @@
+// src/lib/components/element/toggle/_styles.scss
+// Toggle (element) — nút nhấn 2 trạng thái pressed/unpressed (shadcn base/toggle):
+// variant default (nền trong suốt, pressed → nền nhạt + màu semantic) / outline
+// (viền + nền trong suốt, pressed → nền nhạt). Size sm/default/lg map token
+// min-height (--min-height-xs ≈ sm, --min-height-md ≈ default, --min-height-lg ≈ lg).
+// Mọi đo lường NẰM TRÊN token size-* / palette (KHÔNG hardcode px chết / hex):
+//   pressed nền → var(--color-*-{ref}-200) light / -950 dark (bảng colorRefs
+//   copy button/alert), màu pressed → -600 light / -400 dark.
+//   off-state màu → var(--foreground) (default) / var(--color-*-{ref}-500).
+// Focus ring: native button :focus-visible = indigo-500 offset 2px (CONTRACT §6).
+@use '$styles/sizes.scss';
+
+// semantic → palette (đồng bộ bảng button/alert)
+$colorRefs: (
+	'default': 'gray',
+	'secondary': 'cyan',
+	'success': 'green',
+	'info': 'sky',
+	'warning': 'amber',
+	'error': 'red',
+	'primary': 'indigo'
+);
+
+.toggle-root {
+	--toggle-transition: var(--transition-duration, 200ms);
+	--toggle-ease: ease-in-out;
+	// Màu off-state MẶC ĐỊNH (neutral / .color-default): foreground (contract) —
+	// .color-* semantic ghi đè xuống --toggle-color bằng var(--color-...-500).
+	--toggle-color: var(--foreground);
+
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--gap, 0.5rem);
+	// min-height/font/padding/radius theo size-* (sizes.scss global)
+	min-height: var(--min-height, 2.5rem);
+	padding-inline: var(--padding, 1rem);
+	border: var(--border-width, 1px) solid transparent;
+	border-radius: var(--border-radius, 0.375rem);
+	background: transparent;
+	color: var(--toggle-color);
+	font-size: var(--font-size, 1rem);
+	line-height: var(--line-height, 1.5);
+	font-weight: 500;
+	cursor: var(--cursor-interactive, pointer);
+	user-select: none;
+	touch-action: manipulation;
+	transition:
+		background var(--toggle-transition) var(--toggle-ease),
+		color var(--toggle-transition) var(--toggle-ease),
+		border-color var(--toggle-transition) var(--toggle-ease);
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+
+	// ── Icon (iconify): svg inline 1em → điều khiển bằng font-size em (mẫu alert/badge) ──
+	.toggle-icon {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		font-size: 1.125em;
+		line-height: 1;
+		color: inherit;
+	}
+
+	.toggle-label {
+		line-height: 1;
+	}
+
+	// ── Variant × color (pressed đổi nền + màu semantic — bảng colorRefs) ──
+	&.variant-default {
+		@each $color, $ref in $colorRefs {
+			&.color-#{$color} {
+				@if $color == 'default' {
+					--toggle-color: var(--foreground);
+				} @else {
+					--toggle-color: var(--color-#{$ref}-500);
+				}
+			}
+		}
+		&.pressed {
+			@each $color, $ref in $colorRefs {
+				@if $color == 'default' {
+					&.color-default {
+						@media (prefers-color-scheme: dark) {
+							background: var(--color-gray-950);
+							color: var(--foreground);
+						}
+						@media (prefers-color-scheme: light) {
+							background: var(--color-gray-200);
+							color: var(--foreground);
+						}
+					}
+				} @else {
+					&.color-#{$color} {
+						@media (prefers-color-scheme: dark) {
+							background: var(--color-#{$ref}-950);
+							color: var(--color-#{$ref}-400);
+						}
+						@media (prefers-color-scheme: light) {
+							background: var(--color-#{$ref}-200);
+							color: var(--color-#{$ref}-600);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// ── Outline (viền + nền trong suốt; pressed → nền nhạt) ──
+	&.variant-outline {
+		@each $color, $ref in $colorRefs {
+			@if $color == 'default' {
+				&.color-default {
+					--toggle-color: var(--foreground);
+					border-color: var(--foreground);
+				}
+			} @else {
+				&.color-#{$color} {
+					--toggle-color: var(--color-#{$ref}-500);
+					border-color: var(--color-#{$ref}-500);
+				}
+			}
+		}
+		&.pressed {
+			@each $color, $ref in $colorRefs {
+				@if $color == 'default' {
+					&.color-default {
+						@media (prefers-color-scheme: dark) {
+							background: var(--color-gray-950);
+						}
+						@media (prefers-color-scheme: light) {
+							background: var(--color-gray-200);
+						}
+					}
+				} @else {
+					&.color-#{$color} {
+						@media (prefers-color-scheme: dark) {
+							background: var(--color-#{$ref}-950);
+							color: var(--color-#{$ref}-400);
+						}
+						@media (prefers-color-scheme: light) {
+							background: var(--color-#{$ref}-200);
+							color: var(--color-#{$ref}-600);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// ── Hover (PC-only, không pressed): nền nhạt nhẹ (token, mirror button ghost) ──
+	@media (hover: hover) and (pointer: fine) {
+		&:hover:not(.disabled):not(.pressed) {
+			@media (prefers-color-scheme: dark) {
+				background: var(--default-800, hsl(217.28, 36.07%, 17.54%));
+			}
+			@media (prefers-color-scheme: light) {
+				background: var(--default-100, hsl(210, 40.55%, 96.05%));
+			}
+		}
+	}
+
+	// ── Active press (PC-only): scale nhẹ (mirror button) ──
+	&:active:not(.disabled) {
+		transform: scale(0.97);
+	}
+
+	// ── Focus ring chuẩn CONTRACT §6 (native button :focus-visible) ──
+	&:focus-visible:not(.disabled) {
+		outline: 2px solid var(--color-indigo-500);
+		outline-offset: 2px;
+	}
+
+	// ── Disabled (token opacity + not-allowed + pointer-events block) ──
+	&.disabled {
+		--cursor: not-allowed;
+		opacity: var(--disabled-opacity, 0.5);
+		pointer-events: none;
+	}
+
+	// ── Sizes (shadcn sm/default/lg → token min-height hệ thống) ──
+	&.size-sm {
+		--min-height: var(--min-height-xs, 2rem);
+		--padding: var(--padding-2xs, 0.375rem);
+		--font-size: var(--font-size-xs, 0.75rem);
+		--gap: var(--gap-2xs, 0.25rem);
+	}
+	&.size-default {
+		--min-height: var(--min-height-md, 2.5rem);
+		--padding: var(--padding-sm, 0.5rem);
+		--font-size: var(--font-size-sm, 0.875rem);
+		--gap: var(--gap-xs, 0.375rem);
+	}
+	&.size-lg {
+		--min-height: var(--min-height-lg, 3rem);
+		--padding: var(--padding-md, 0.75rem);
+		--font-size: var(--font-size-md, 1rem);
+		--gap: var(--gap-sm, 0.5rem);
+	}
+}

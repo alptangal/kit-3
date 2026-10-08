@@ -1,10 +1,10 @@
-// src/lib/components/form/toggle/_styles.scss
+// src/lib/components/form/switch/_styles.scss
 // FORM FIELD — mọi đo lường NẰM TRÊN token size-* (KHÔNG hardcode 56×32px / #3b82f6):
-//   .toggle-root.size-* (sizes.scss global) set --min-height/--gap/--padding →
+//   .switch-root.size-* (sizes.scss global) set --min-height/--gap/--padding →
 //   track height ≈ --min-height, width ≈ 1.75×, thumb ≈ 87.5%, on-translate ≈
 //   width - thumb - 2×gap-inset (mọi size-* tự co giãn qua calc + var).
 // On-state màu SEMANTIC qua `--color` (colors.scss global set theo .color-*):
-//   .toggle-root.color-success .toggle-track.on { background: var(--color) }
+//   .switch-root.color-success .switch-track.on { background: var(--color) }
 //   (analog cho error/warning/primary/secondary/info). color-default/on mặc định
 //   (khi chưa validation hoặc neutral) → var(--primary, var(--color-indigo-500))
 //   (vì .color-default set --color: var(--default) = near-black, sai màu switch).
@@ -12,24 +12,27 @@
 // Thumb → var(--background). KHÔNG :has() (es2020 + safari15) — state = class
 // JS gán (has-value/loading/disabled). Focus ring: native button :focus-visible
 // = indigo-500 offset 2px (CONTRACT §6).
+// Icon trên thumb (wave 11): svg iconify inline 1em → điều khiển BẰNG font-size
+// cha (precedent select-option-icon — KHÔNG set width/height trên svg). Icon
+// nằm trong .switch-thumb-icon, màu theo state (on → track-color, off → muted).
 @use '$styles/sizes.scss';
 @use '$styles/colors.scss';
 
-.toggle-root {
+.switch-root {
 	// ── Geometric tokens (derive 100% từ --min-height — mỗi size-* tự co giãn) ──
-	--toggle-inset: calc(var(--min-height, 2.5rem) * 0.08333); // ≈ 1/12 track height
-	--toggle-track-height: var(--min-height, 2.5rem);
-	--toggle-track-width: calc(var(--toggle-track-height) * 1.75);
-	--toggle-thumb: calc(var(--toggle-track-height) - var(--toggle-track-height) * 0.125);
-	--toggle-thumb-stretch: 0.15; // % giãn width khi active (press)
+	--switch-inset: calc(var(--min-height, 2.5rem) * 0.08333); // ≈ 1/12 track height
+	--switch-track-height: var(--min-height, 2.5rem);
+	--switch-track-width: calc(var(--switch-track-height) * 1.75);
+	--switch-thumb: calc(var(--switch-track-height) - var(--switch-track-height) * 0.125);
+	--switch-thumb-stretch: 0.15; // % giãn width khi active (press)
 	// On-state color MẶC ĐỊNH (neutral / .color-default): primary (contract) —
-	// .color-* semantic ghi đè xuống --toggle-on-color bằng var(--color).
-	--toggle-on-color: var(--primary, var(--color-indigo-500));
-	--toggle-off-color: var(--content2, #e4e4e7);
+	// .color-* semantic ghi đè xuống --switch-on-color bằng var(--color).
+	--switch-on-color: var(--primary, var(--color-indigo-500));
+	--switch-off-color: var(--content2, #e4e4e7);
 	// Thumb: token background (light #fff / dark nền tối — tự đảo theme)
-	--toggle-thumb-color: var(--background, #fff);
-	--toggle-duration: var(--duration, 300ms);
-	--toggle-ease: cubic-bezier(0.65, 0, 0.35, 1);
+	--switch-thumb-color: var(--background, #fff);
+	--switch-duration: var(--duration, 300ms);
+	--switch-ease: cubic-bezier(0.65, 0, 0.35, 1);
 
 	display: inline-flex;
 	align-items: center;
@@ -40,34 +43,34 @@
 	user-select: none;
 
 	// ── Semantic on-color (colors.scss set --color theo .color-* — analog:
-	//    .toggle-root.color-success .toggle-track.on { background: var(--color) }) ──
+	//    .switch-root.color-success .switch-track.on { background: var(--color) }) ──
 	&.color-primary {
-		--toggle-on-color: var(--color, var(--primary, var(--color-indigo-500)));
+		--switch-on-color: var(--color, var(--primary, var(--color-indigo-500)));
 	}
 	&.color-info {
-		--toggle-on-color: var(--color, var(--primary, var(--color-indigo-500)));
+		--switch-on-color: var(--color, var(--primary, var(--color-indigo-500)));
 	}
 	&.color-success {
-		--toggle-on-color: var(--color, var(--success));
+		--switch-on-color: var(--color, var(--success));
 	}
 	&.color-warning {
-		--toggle-on-color: var(--color, var(--warning));
+		--switch-on-color: var(--color, var(--warning));
 	}
 	&.color-error {
-		--toggle-on-color: var(--color, var(--danger));
+		--switch-on-color: var(--color, var(--danger));
 	}
 	&.color-secondary {
-		--toggle-on-color: var(--color, var(--secondary));
+		--switch-on-color: var(--color, var(--secondary));
 	}
-	// .color-default (khi neutral/chưa đổi): --toggle-on-color giữ primary fallback.
+	// .color-default (khi neutral/chưa đổi): --switch-on-color giữ primary fallback.
 
 	// ── Native switch button (a11y: role=switch + aria-checked, Space/Enter native) ──
-	.toggle-switch {
+	.switch-switch {
 		--cursor: pointer;
 		position: relative;
 		flex: none;
-		width: var(--toggle-track-width);
-		height: var(--toggle-track-height);
+		width: var(--switch-track-width);
+		height: var(--switch-track-height);
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -80,64 +83,88 @@
 		}
 	}
 
-	.toggle-track {
+	.switch-track {
 		position: absolute;
 		inset: 0;
-		background: var(--toggle-off-color);
+		background: var(--switch-off-color);
 		border-radius: 9999999px;
-		transition: background-color var(--toggle-duration) var(--toggle-ease);
+		transition: background-color var(--switch-duration) var(--switch-ease);
 
 		@media (prefers-reduced-motion: reduce) {
 			transition: none;
 		}
 	}
 
-	.toggle-thumb {
+	.switch-thumb {
 		position: absolute;
 		top: 50%;
-		left: var(--toggle-inset);
-		width: var(--toggle-thumb);
-		height: var(--toggle-thumb);
+		left: var(--switch-inset);
+		width: var(--switch-thumb);
+		height: var(--switch-thumb);
 		transform: translateY(-50%);
-		background: var(--toggle-thumb-color);
+		background: var(--switch-thumb-color);
 		border-radius: 9999999px;
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 		transition:
-			transform var(--toggle-duration) var(--toggle-ease),
-			width var(--toggle-duration) var(--toggle-ease);
+			transform var(--switch-duration) var(--switch-ease),
+			width var(--switch-duration) var(--switch-ease);
 
 		@media (prefers-reduced-motion: reduce) {
 			transition: none;
 		}
+
+		// Icon trên thumb (iconify svg inline 1em → điều khiển bằng font-size cha,
+		// không set width/height trên svg — precedent select-option-icon).
+		// Icon fill phần trong thumb: font-size ≈ 62.5% thumb → icon ≈ 0.625×thumb
+		// (căn giữa flex + line-height 1). Màu: on → track-color (đảo nổi trên nền
+		// thumb), off → muted (foreground-500 token).
+		.switch-thumb-icon {
+			position: absolute;
+			inset: 0;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			font-size: calc(var(--switch-thumb) * 0.625);
+			line-height: 1;
+			color: var(--foreground-500, hsl(240, 3.83%, 46.08%));
+			transition: color var(--switch-duration) var(--switch-ease);
+
+			@media (prefers-reduced-motion: reduce) {
+				transition: none;
+			}
+		}
 	}
 
-	// On-state: track màu semantic + thumb trượt phải
+	// On-state: track màu semantic + thumb trượt phải + icon đảo màu nổi
 	// (translate = width - thumb - 2×inset, all calc + var → không hardcode 24px)
-	.toggle-switch.has-value {
-		.toggle-track {
-			background: var(--toggle-on-color);
+	.switch-switch.has-value {
+		.switch-track {
+			background: var(--switch-on-color);
 		}
-		.toggle-thumb {
+		.switch-thumb {
 			transform: translate(
-				calc(var(--toggle-track-width) - var(--toggle-thumb) - var(--toggle-inset) * 2),
+				calc(var(--switch-track-width) - var(--switch-thumb) - var(--switch-inset) * 2),
 				-50%
 			);
+		}
+		.switch-thumb-icon {
+			color: var(--switch-on-color);
 		}
 	}
 
 	// Micro-interaction (PC-only — mirror checkbox/button): press → thumb giãn nhẹ
 	// (width +15% off-state / +10% on-state), translate tự bù vì calc theo width.
 	@media (hover: hover) and (pointer: fine) {
-		.toggle-switch:not(:disabled):active .toggle-thumb {
-			width: calc(var(--toggle-thumb) * (1 + var(--toggle-thumb-stretch)));
+		.switch-switch:not(:disabled):active .switch-thumb {
+			width: calc(var(--switch-thumb) * (1 + var(--switch-thumb-stretch)));
 		}
-		.toggle-switch.has-value:not(:disabled):active .toggle-thumb {
-			width: calc(var(--toggle-thumb) * (1 + var(--toggle-thumb-stretch) * 0.6667));
+		.switch-switch.has-value:not(:disabled):active .switch-thumb {
+			width: calc(var(--switch-thumb) * (1 + var(--switch-thumb-stretch) * 0.6667));
 			transform: translate(
 				calc(
-					var(--toggle-track-width) -
-						var(--toggle-thumb) * (1 + var(--toggle-thumb-stretch) * 0.6667) -
-						var(--toggle-inset) * 2
+					var(--switch-track-width) -
+						var(--switch-thumb) * (1 + var(--switch-thumb-stretch) * 0.6667) -
+						var(--switch-inset) * 2
 				),
 				-50%
 			);
@@ -146,7 +173,7 @@
 
 	// Hover (PC-only): track off-state nhả nhẹ sang default-100 (token)
 	@media (hover: hover) and (pointer: fine) {
-		.toggle-switch:not(:disabled):hover:not(.has-value) .toggle-track {
+		.switch-switch:not(:disabled):hover:not(.has-value) .switch-track {
 			background: var(--default-100, var(--content2, #e4e4e7));
 		}
 	}
@@ -164,7 +191,7 @@
 	}
 
 	// ── Label (click → toggle; EM của switch, không natively associated) ──
-	.toggle-label {
+	.switch-label {
 		cursor: var(--cursor-interactive, pointer);
 		font-size: var(--font-size, 1rem);
 		line-height: var(--line-height, 1.5);

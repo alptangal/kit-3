@@ -1,6 +1,6 @@
-// src/lib/components/form/toggle/_interface.ts
-// FORM FIELD — mirror mẫu checkbox/_interface.ts: ToggleProps extends BasicProps;
-// ToggleConfigs extends Omit<BasicConfigs,'status'|'value'> (Toggle chỉ có
+// src/lib/components/form/switch/_interface.ts
+// FORM FIELD — mirror mẫu checkbox/_interface.ts: SwitchProps extends BasicProps;
+// SwitchConfigs extends Omit<BasicConfigs,'status'|'value'> (Switch chỉ có
 // `checked` boolean — Form serialize đọc `'checked' in children` → boolean payload).
 //
 // A11y (khác checkbox): render native <button type="button" role="switch">
@@ -10,20 +10,26 @@ import type { BasicConfigs, BasicProps, Color, Size, TimeUnits } from '$componen
 import type { TranslateContent } from '$interfaces/basic';
 
 /**
- * Toggle (switch) — form field boolean (native `<button role="switch">`).
+ * Switch — form field boolean (native `<button role="switch">`).
  *
  * `checked` bindable (boolean) — source of truth. `name` dùng cho Form
  * serialize (boolean vào payload JSON) + validation field name.
  * `label` (TranslateContent | string) hoặc `children` snippet — text cạnh
  * switch; click label → toggle. Không có label/children → `aria-label` bắt buộc.
  */
-export interface ToggleProps extends BasicProps {
+export interface SwitchProps extends BasicProps {
 	/** Giá trị on/off — BINDABLE (source of truth). */
 	checked?: boolean;
 	/** Tên field (Form serialize boolean + validation message). */
 	name?: string;
 	/** Text cạnh switch (click → toggle). Rich hơn → dùng `children`. */
 	label?: TranslateContent | string;
+	/** Icon iconify hiển thị trên thumb (cố định cả on/off nếu không truyền iconOn/iconOff). */
+	icon?: string;
+	/** Icon iconify khi ON (ưu tiên hơn `icon`) — ghép với iconOff thành cặp đổi state. */
+	iconOn?: string;
+	/** Icon iconify khi OFF (ưu tiên hơn `icon`) — ghép với iconOn thành cặp đổi state. */
+	iconOff?: string;
 	/** Màu semantic on-state (default/primary/success/warning/error...). */
 	color?: Color;
 	/** Kích thước (cascade props → form → browser → 'md'). */
@@ -44,7 +50,7 @@ export interface ToggleProps extends BasicProps {
 	onchange?: (checked: boolean) => void;
 }
 
-export interface ToggleConfigs extends Omit<BasicConfigs, 'status' | 'value'> {
+export interface SwitchConfigs extends Omit<BasicConfigs, 'status' | 'value'> {
 	status: {
 		/** dirty so với mốc ban đầu (khi mount / formContext.data) — form status đọc. */
 		changed?: boolean;

@@ -15,9 +15,9 @@ export const defaultValidation: {
 } = {
 	required: (fieldName, expectedLength = 6) => {
 		return {
-			// ValidationFull input là union `string | boolean | File[]` (form-wide) —
+			// ValidationFull input là union `string | boolean | string[] | File[]` (form-wide) —
 			// OTP chỉ nhận STRING (compact value); non-string → invalid.
-			isValid(input?: string | boolean | File[]) {
+			isValid(input?: string | boolean | string[] | File[]) {
 				return typeof input === 'string' && input.length === expectedLength;
 			},
 			message: {

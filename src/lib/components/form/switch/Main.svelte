@@ -1,5 +1,5 @@
 <script lang="ts">
-	// src/lib/components/form/toggle/Main.svelte
+	// src/lib/components/form/switch/Main.svelte
 	// FORM FIELD — mirror mẫu checkbox/Main.svelte: configs $state + Symbol context
 	// (leaf _context.ts) + form registration (childrens) + validation debounce + _justReset.
 	//
@@ -16,17 +16,24 @@
 	// formContext.data[name]) → `status.changed` = "khác giá trị ban đầu" (stable
 	// dirty indicator, mirror checkbox `previousValue` + `status.changed`). Form
 	// submit gate + required color (success/error khi đã đổi) đọc `status.changed`.
+	//
+	// Icon trên thumb (wave 11): prop `icon` (iconify) render BÊN TRONG thumb
+	// (span.switch-thumb-icon → Icon component, aria-hidden). Icon đổi theo state
+	// khi truyền `iconOn`/`iconOff` (on → iconOn, off → iconOff); chỉ `icon` →
+	// 1 icon cố định. Iconify svg inline 1em → điều khiển bằng font-size thumb
+	// (precedent select-option-icon: chỉ chỉnh qua font-size cha, không width/height).
 	import { convertToMiliseconds, styleSynced } from '$modules';
 	import { client } from '$store/basic.svelte';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { getFormContext } from '../form';
-	import { setToggleContext, defaultValidation } from './index';
-	import type { ToggleConfigs, ToggleProps } from './_interface';
+	import { Icon } from '$components/element';
+	import { setSwitchContext, defaultValidation } from './index';
+	import type { SwitchConfigs, SwitchProps } from './_interface';
 	import type { TranslateContent } from '$interfaces/basic';
 	import type { ValidationCompact, ValidationFull } from '../input/_interface';
 
-	let { label, children, checked = $bindable(), ...props }: ToggleProps = $props();
+	let { label, children, checked = $bindable(), icon, iconOn, iconOff, ...props }: SwitchProps = $props();
 	const formContext = getFormContext();
 
 	// Initial value (hỗ trợ formContext.data[name] — mirror checkbox capture).
@@ -64,13 +71,18 @@
 		return props.required ? `${base} (required)` : base;
 	});
 
+	// Icon trên thumb (đổi theo state): on → iconOn ?? icon, off → iconOff ?? icon.
+	// Truyền cả iconOn+iconOff → icon đổi khi bật/tắt; chỉ `icon` → 1 icon cố định.
+	// Không truyền gì → không icon (thumb trống). iconOn/iconOff ưu tiên hơn `icon`.
+	const thumbIconDerived = $derived(checked ? (iconOn ?? icon) : (iconOff ?? icon));
+
 	function toggle() {
 		if (configs.disabled || configs.loading) return;
 		checked = !checked;
 		props.onchange?.(checked);
 	}
 
-	let configs: ToggleConfigs = $state({
+	let configs: SwitchConfigs = $state({
 		// Mốc ban đầu (initial capture) — baseline so sánh `status.changed` (stable
 		// dirty indicator: "khác giá trị ban đầu"), không phải giá trị tick trước.
 		// Mirror checkbox `previousValue` getter + `status.changed` baseline.
@@ -82,7 +94,7 @@
 		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
-				'toggle-root',
+				'switch-root',
 				`size-${this.size}`,
 				`color-${this.color}`,
 				this.disabled ? 'disabled' : undefined,
@@ -155,7 +167,7 @@
 			(configs.ref as HTMLButtonElement | undefined)?.focus();
 		}
 	});
-	setToggleContext(configs);
+	setSwitchContext(configs);
 
 	// ── Validation pipeline (mirror checkbox) ──
 	// Theo checked: changed && !_justReset → debounce `configs.delay ?? 300` →
@@ -278,20 +290,28 @@
 		aria-checked={checked ? 'true' : 'false'}
 		aria-label={ariaLabel}
 		disabled={configs.disabled || configs.loading ? true : undefined}
-		class="toggle-switch"
+		class="switch-switch"
 		class:has-value={checked}
-		data-test="toggle-switch"
+		data-test="switch-switch"
 		onclick={toggle}
 	>
-		<span class="toggle-track" aria-hidden="true">
-			<span class="toggle-thumb" />
+		<span class="switch-track" aria-hidden="true">
+			<span class="switch-thumb">
+				{#if thumbIconDerived}
+					<span class="switch-thumb-icon" aria-hidden="true">
+						<Icon icon={thumbIconDerived} />
+					</span>
+				{/if}
+			</span>
 		</span>
 	</button>
 
 	{#if children}
-		<label class="toggle-label" onclick={toggle}>{@render children?.()}</label>
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+		<label class="switch-label" onclick={toggle}>{@render children?.()}</label>
 	{:else if labelText}
-		<label class="toggle-label" onclick={toggle}>{labelText}</label>
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions, a11y_label_has_associated_control -->
+		<label class="switch-label" onclick={toggle}>{labelText}</label>
 	{/if}
 </svelte:element>
 
