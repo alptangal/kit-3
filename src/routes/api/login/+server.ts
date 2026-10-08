@@ -67,14 +67,19 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 
 		// ── 5. Tính blind index để tra cứu trong DB (hỗ trợ login bằng username hoặc email) ──
 		// normalizedInput được chuẩn hoá về chữ thường + trim để đồng nhất với lúc tạo index
+		// (createUser cũng .trim().toLowerCase() cho cả username lẫn email).
+		// FIX: chỉ tính DUY NHẤT blind index tương ứng loại input. Trước đây cả hai
+		// index đều tính từ cùng normalizedInput → khi login bằng EMAIL, getBy chọn
+		// field 'usernameBlindIndex' (first-truthy-wins) so index của email với giá trị
+		// username trong DB → không bao giờ match → "invalid credentials".
 		const normalizedInput = username.trim().toLowerCase();
-		const usernameBlindIndex = await encryption.hmacBlindIndex(
-			systemVault.indexKey,
-			normalizedInput
-		);
-		// Vì user có thể nhập username hoặc email nên tính blind index cho cả hai
-		// (users.login sẽ thử tìm theo cả hai blind index)
-		const emailBlindIndex = await encryption.hmacBlindIndex(systemVault.indexKey, normalizedInput);
+		const isEmailInput = normalizedInput.includes('@');
+		const usernameBlindIndex = isEmailInput
+			? undefined
+			: await encryption.hmacBlindIndex(systemVault.indexKey, normalizedInput);
+		const emailBlindIndex = isEmailInput
+			? await encryption.hmacBlindIndex(systemVault.indexKey, normalizedInput)
+			: undefined;
 
 		// ── 6. Lấy IP client (optional, dùng cho audit log) ──
 		let clientIp: string | undefined;

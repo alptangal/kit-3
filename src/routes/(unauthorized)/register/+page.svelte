@@ -741,7 +741,7 @@
 	headline={pageContents.welcomeHeadline[lang] ?? 'Join us today!'}
 	description={pageContents.welcomeDesc[lang] ??
 		'Start your journey with a professional, securely encrypted management platform.'}
-	features={pageContents.features.map((feat) => feat[lang] ?? feat.en)}
+	features={pageContents.features.map((feat: { en?: string; vi?: string; [k: string]: string | undefined }) => feat[lang] ?? feat.en)}
 	{formError}
 >
 	<!-- Register Form -->
@@ -995,22 +995,55 @@
 		<!-- Terms & Conditions Checkbox -->
 		<div class="terms-row">
 			<Checkbox bind:checked={agreeTerms} disabled={loading}>
-				<Label class="terms-label">
-					<span class="terms-text">
-						{pageContents.terms.agreeLabel[lang] ?? 'I agree to the'}
-						<button
-							type="button"
-							class="terms-link-btn"
-							disabled={loading}
-							onclick={(e) => {
+				<Label>
+					<!-- FIX labelable-forwarding: click phần CHỮ "I agree to the"
+					     (không phải button) → trình duyệt forward click sang button
+					     labelable ĐẦU TIÊN bên trong label (behavior label: click
+					     activates first labelable descendant) → modal mở ngoài ý
+					     muốn. preventDefault + stopPropagation trên click của span
+					     khi target là chính nó chặn forward; click thẳng button
+					     vẫn mở modal bình thường. -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<span
+						class="terms-text"
+						onclick={(e) => {
+							if (e.target === e.currentTarget) {
 								e.preventDefault();
 								e.stopPropagation();
-								if (loading) return;
-								showTermsModal = true;
+							}
+						}}
+					>
+						{pageContents.terms.agreeLabel[lang] ?? 'I agree to the'}
+						<!-- FIX toggle-qua-mousedown: Checkbox toggle theo mousedown
+						     gắn bằng @attach (addEventListener native) trên
+						     .checkbox-root; mousedown trên button con BUBBLE lên
+						     checkbox-root → click link Terms vô tình TOGGLE checkbox.
+						     onmousedown của Svelte 5 là event DELEGATION ở root nên
+						     chạy SAU listener @attach — không chặn được. Dùng @attach
+						     (listener native trên element) → chặn đúng phase bubble
+						     trước khi tới checkbox-root. -->
+						<span
+							class="terms-link-scope"
+							{@attach (node) => {
+								const stop = (e: Event) => e.stopPropagation();
+								node.addEventListener('mousedown', stop);
+								return () => node.removeEventListener('mousedown', stop);
 							}}
 						>
-							{pageContents.terms.linkText[lang] ?? 'Terms of Service'}
-						</button>
+							<button
+								type="button"
+								class="terms-link-btn"
+								disabled={loading}
+								onclick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									if (loading) return;
+									showTermsModal = true;
+								}}
+							>
+								{pageContents.terms.linkText[lang] ?? 'Terms of Service'}
+							</button>
+						</span>
 					</span>
 				</Label>
 			</Checkbox>
@@ -1064,7 +1097,9 @@
 	{/snippet}
 </AuthLayout>
 
-<!-- Modal Terms of Service -->
+<!-- Modal Terms of Service — hiện đại: radius lớn, header flush nổi khối,
+     body scroll riêng, footer nút rõ, backdrop blur (variant mặc định Modal)
+     + scale-in (multi-layer has-motion). Chức năng Accept/Decline giữ nguyên. -->
 <Modal bind:display={showTermsModal} size="md" isDimissable>
 	<Modal.Container class="terms-modal-box">
 		<Modal.Container.Header class="terms-modal-header">
@@ -1273,9 +1308,15 @@
 		color: var(--foreground-400, #a1a1aa);
 	}
 
-	.terms-label {
-		/* Ensure label uses proper size-sm line-height */
-		line-height: var(--line-height-sm);
+	/* .terms-label (Label component) — scoped CSS hash → dùng :global Selector
+	   khi cần style từ page scope. Đơn giản hóa: bỏ class chết (Label đã có
+	   line-height riêng từ size token). */
+
+	.terms-link-scope {
+		/* Wrapper chặn mousedown bubble tới checkbox-root (FIX toggle-qua-
+		   mousedown). display:contents không dùng — listener cần element thực
+		   (display:contents vẫn nhận event nhưng giữ inline cho an toàn). */
+		display: inline;
 	}
 
 	.terms-link-btn {
@@ -1301,70 +1342,86 @@
 		}
 	}
 
-	/* ══ Terms Modal - Glassmorphism ══ */
+	/* ══ Terms Modal — hiện đại (kiến trúc flush mới của Modal.Container) ══
+	   Container: flex column + flush-top/flush-bottom khi có Header/Footer
+	   → KHÔNG ghi đè padding 1.5rem (xung đột flush, lộ dải nền khi body cuộn).
+	   Header/Footer tự có nền + border + padding nội tại; scroll nằm ở Body
+	   (flex 1 1 0% + min-height 0). Bo góc lớn hơn (--radius * 2.5 = 1.25rem)
+	   theo xu hướng hiện nay; nền glass giữ nguyên. Màu literal (target
+	   safari15 không hỗ trợ color-mix). */
 	:global(.terms-modal-box) {
-		background: rgba(24, 24, 27, 0.8) !important;
-		backdrop-filter: blur(12px) saturate(180%) !important;
-		-webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+		background: rgba(24, 24, 27, 0.82) !important;
+		backdrop-filter: blur(16px) saturate(180%) !important;
+		-webkit-backdrop-filter: blur(16px) saturate(180%) !important;
 		border: 1px solid rgba(255, 255, 255, 0.1) !important;
-		border-radius: 1.25rem !important;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
-		max-width: min(34rem, calc(100vw - 2rem)) !important;
-		max-height: calc(100dvh - 3rem) !important;
-		display: flex !important;
-		flex-direction: column !important;
+		border-radius: calc(var(--radius, 0.5rem) * 2.5) !important;
+		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
 		overflow: hidden !important;
-		padding: 1.5rem !important;
+	}
+
+	:global(.terms-modal-box .modal-header-root) {
+		background: rgba(255, 255, 255, 0.05) !important;
 	}
 
 	:global(.terms-modal-header) {
 		font-weight: 700 !important;
-		font-size: 1.2rem !important;
-		color: var(--foreground-50, #f4f4f5) !important;
-		padding-bottom: 0.85rem !important;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-		flex-shrink: 0 !important;
+		font-size: var(--font-size-lg, 1.125rem) !important;
+		letter-spacing: -0.01em !important;
+		/* Nền modal glass LUÔN tối (hardcode) → chữ literal sáng cả 2 mode
+		   (--foreground-50 đảo chiều theo dark mode → tối trên nền tối). */
+		color: #f4f4f5 !important;
 	}
 
 	:global(.terms-modal-body) {
-		color: var(--foreground-400, #a1a1aa) !important;
+		color: #a1a1aa !important;
 		font-size: 0.875rem !important;
-		line-height: 1.6 !important;
-		overflow-y: auto !important;
-		padding: 1rem 0.25rem !important;
-		max-height: calc(100dvh - 13rem) !important;
+		line-height: 1.7 !important;
+		scrollbar-width: thin;
+		scrollbar-gutter: stable;
+		padding-block: 1.25rem !important;
 	}
 
 	.modal-intro {
-		margin-bottom: 0.85rem;
-		font-weight: 500;
-		color: var(--foreground-100, #e4e4e7);
+		margin: 0 0 1.1rem;
+		font-weight: 600;
+		font-size: 0.95rem;
+		letter-spacing: -0.005em;
+		color: #e4e4e7;
 	}
 
 	.modal-clauses {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.7rem;
 
 		.clause-item {
-			padding: 0.75rem 0.95rem;
+			padding: 0.85rem 1rem;
 			background: rgba(255, 255, 255, 0.04);
-			border-radius: 0.6rem;
+			border-radius: 0.75rem;
+			/* primary giữ var (đủ tương phản trên nền glass tối cả 2 mode) */
 			border-left: 3px solid var(--primary, #6366f1);
+			transition:
+				background 0.2s ease,
+				border-color 0.2s ease;
+
+			&:hover {
+				background: rgba(255, 255, 255, 0.07);
+			}
 
 			p {
 				margin: 0;
+				color: #d4d4d8;
 			}
 		}
 	}
 
 	:global(.terms-modal-footer) {
-		display: flex !important;
-		justify-content: flex-end !important;
-		gap: 0.75rem !important;
-		padding-top: 0.85rem !important;
-		border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-		flex-shrink: 0 !important;
+		gap: 0.625rem !important;
+	}
+
+	:global(.terms-modal-footer button) {
+		font-weight: 600 !important;
+		min-width: 6.5rem;
 	}
 
 	.auth-input-icon {

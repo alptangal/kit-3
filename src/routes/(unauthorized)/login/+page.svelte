@@ -128,6 +128,47 @@ $effect(() => {
 		capsLockOn = false;
 	}
 
+	// Custom validation cho field "Username or email" (type="text" — KHÔNG dùng
+	// type="email" vì Input tự gắn validator isEmail mặc định, làm hỏng nghiệp vụ
+	// đăng nhập bằng username). 2 validator dưới chạy operator 'and' trên blur:
+	// chỉ validator FAIL mới hiện message (FieldMessages ưu tiên invalid); giá trị
+	// có '@' → phải là email hợp lệ, không '@' → phải là username 3-30 ký tự.
+	const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,30}$/;
+	const usernameOrEmailValidation = {
+		blur: {
+			operator: 'and' as const,
+			handles: [
+				{
+					isValid: (v?: string | boolean | string[] | File[]) => {
+						const raw = (typeof v === 'string' ? v : '').trim();
+						if (!raw.includes('@')) return true;
+						return EMAIL_RE.test(raw);
+					},
+					message: {
+						invalid: {
+							vi: 'Định dạng email không hợp lệ',
+							en: 'Invalid email format'
+						}
+					}
+				},
+				{
+					isValid: (v?: string | boolean | string[] | File[]) => {
+						const raw = (typeof v === 'string' ? v : '').trim();
+						if (raw.includes('@')) return true;
+						return USERNAME_RE.test(raw);
+					},
+					message: {
+						invalid: {
+							vi: 'Tên đăng nhập từ 3-30 ký tự (chữ cái, số, gạch dưới, gạch ngang, dấu chấm)',
+							en: 'Username must be 3-30 characters (letters, numbers, _, ., -)'
+						}
+					}
+				}
+			]
+		}
+	};
+
 	// Validation
 	function validateForm(): string | undefined {
 		const raw = configs.username.value?.trim() ?? '';
@@ -176,8 +217,10 @@ $effect(() => {
 		loading = true;
 
 		const requestBody: LoginRequestBody = {
-			username: configs.username.value.trim(),
-			password: configs.password.value,
+			// validateForm đã return sớm khi username/password rỗng hoặc sai format
+			// → non-null assertion an toàn tại đây (giá trị chắc chắn có).
+			username: configs.username.value!.trim(),
+			password: configs.password.value!,
 			remember: configs.remember.checked,
 			publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki')
 		};
@@ -300,12 +343,14 @@ $effect(() => {
 			<Label>{pageContents.username[lang] ?? 'Username / Email'}</Label>
 			<div class="auth-input-wrapper">
 				<Input
-					type="email"
+					type="text"
 					bind:value={configs.username.value}
 					placeholder={{ vi: 'Nhập tên đăng nhập hoặc email', en: 'Enter username or email' }}
 					autocomplete="username"
+					inputmode="email"
 					class="auth-input"
 					emailSuggest={true}
+					validation={usernameOrEmailValidation}
 				/>
 				<!-- Icon đứng SAU <Input> trong DOM: để AuthLayout dùng
 				     general-sibling `~` (không cần `:has()`, Safari 15-safe)
