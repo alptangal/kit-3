@@ -66,7 +66,9 @@
 						class="datatable-th"
 						scope="col"
 						aria-sort={ariaSort(col)}
-						style:width={col.width ?? undefined}
+						style:width={ctx.columnWidth(col.id) !== undefined
+							? `${ctx.columnWidth(col.id)}px`
+							: (col.width ?? undefined)}
 					>
 						<button
 							type="button"
@@ -87,6 +89,19 @@
 								{/if}
 							</span>
 						</button>
+						{#if configs?.resizable}
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+							<!-- Handle resize mép phải th: mousedown drag + dblclick reset -->
+							<span
+								class="datatable-resize-handle"
+								role="separator"
+								aria-orientation="vertical"
+								aria-label={`Resize ${col.label}`}
+								data-test={`datatable-resize-${col.id}`}
+								onmousedown={(e) => ctx.startResize(col.id, e)}
+								ondblclick={() => ctx.resetColumnWidth(col.id)}
+							></span>
+						{/if}
 					</th>
 				{:else}
 					<th
@@ -96,9 +111,23 @@
 						class:align-left={col.align === 'left' || !col.align}
 						class:align-center={col.align === 'center'}
 						class:align-right={col.align === 'right'}
-						style:width={col.width ?? undefined}
+						style:width={ctx.columnWidth(col.id) !== undefined
+							? `${ctx.columnWidth(col.id)}px`
+							: (col.width ?? undefined)}
 					>
 						<span class="datatable-th-label">{col.label}</span>
+						{#if configs?.resizable}
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+							<span
+								class="datatable-resize-handle"
+								role="separator"
+								aria-orientation="vertical"
+								aria-label={`Resize ${col.label}`}
+								data-test={`datatable-resize-${col.id}`}
+								onmousedown={(e) => ctx.startResize(col.id, e)}
+								ondblclick={() => ctx.resetColumnWidth(col.id)}
+							></span>
+						{/if}
 					</th>
 				{/if}
 			{/each}
@@ -115,6 +144,7 @@
 
 	.datatable-th {
 		@include dt.cell-tokens;
+		position: relative;
 		padding: var(--cell-pad-y, 0.75rem) var(--cell-pad-x, 0.75rem);
 		background: var(--content2, hsl(240 4.76% 95.88%));
 		color: var(--content1-foreground, #18181b);
@@ -189,6 +219,43 @@
 		.datatable-sort-idle {
 			color: var(--muted, #71717a);
 			opacity: 0.55;
+		}
+	}
+
+	// ── Resize handle (mép phải th: drag đổi width, dblclick reset) ──
+	.datatable-resize-handle {
+		position: absolute;
+		top: 0;
+		right: 0;
+		width: 8px;
+		height: 100%;
+		cursor: col-resize;
+		user-select: none;
+		touch-action: none;
+		z-index: 2;
+
+		// Visual cue 1px line giữa (nền trong suốt — hover hiện rõ hơn).
+		&::after {
+			content: '';
+			position: absolute;
+			top: 25%;
+			right: 3px;
+			width: 2px;
+			height: 50%;
+			background: transparent;
+			border-radius: 9999px;
+			transition: background-color 150ms ease;
+		}
+
+		@media (hover: hover) and (pointer: fine) {
+			&:hover::after {
+				background: var(--primary, var(--color-indigo-500));
+			}
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+			outline-offset: -2px;
 		}
 	}
 </style>

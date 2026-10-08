@@ -34,6 +34,32 @@ export interface DataTableColumn<T> {
 	status?: (value: unknown, row: T) => DataTableStatus | undefined;
 	/** Tắt highlight match của search trên cột này (vd số). */
 	noHighlight?: boolean;
+	/** Editor kiểu giá trị cho edit cell/row (mặc định: text, số tự nhận theo oldValue). */
+	editor?: 'text' | 'number' | 'boolean' | 'date' | 'select';
+	/** Options cho editor 'select'. */
+	options?: string[];
+}
+
+/** Config resize column (kéo mép th + auto-fit width khởi tạo). */
+export interface DataTableResizable {
+	/** Bật resize (default true khi truyền object). */
+	enabled?: boolean;
+	/** Đo content khởi tạo (canvas measureText) → width vừa đủ + ellipsis text tràn. Mặc định true. */
+	fit?: boolean;
+	/** Width tối thiểu khi resize/auto-fit (px, mặc định 60). */
+	minWidth?: number;
+	/** Width tối đa khi auto-fit (px, mặc định 400 — text dài hơn → ellipsis). */
+	maxWidth?: number;
+}
+
+/** Config modal chi tiết row (click row/cell → Modal, update/delete từ modal). */
+export interface DataTableRowDetail {
+	/** Bật row detail (default true khi truyền object). */
+	enabled?: boolean;
+	/** Tiêu đề modal (i18n). */
+	title?: TranslateContent | string;
+	/** Modal cho phép sửa field (mặc định true). */
+	editable?: boolean;
 }
 
 /** Config inline edit cell (PC): click cell → input + confirm/cancel. */
@@ -163,6 +189,12 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	creatable?: boolean | DataTableCreatable;
 	/** Xuất/nhập data (CSV/JSON). */
 	exportable?: boolean | DataTableExport;
+	/** Resize column (kéo mép th + auto-fit). */
+	resizable?: boolean | DataTableResizable;
+	/** Opt-in click row → modal chi tiết (update/delete từ modal). */
+	rowDetail?: boolean | DataTableRowDetail;
+	/** Opt-in click cell → modal chi tiết + focus đúng field (đè rowDetail click). */
+	cellDetail?: boolean;
 	/** Callback khi tạo row mới (row + rowId). */
 	onRowCreate?: (row: T, rowId: string) => void | Promise<void>;
 	/** Callback khi clone row (row gốc + row clone). */
@@ -171,6 +203,8 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	onCopy?: (text: string) => void | Promise<void>;
 	/** Callback khi import data (rows đã nhập). */
 	onImport?: (rows: Record<string, unknown>[]) => void | Promise<void>;
+	/** Callback khi mở modal chi tiết row (row + rowId). */
+	onRowDetail?: (row: T, rowId: string) => void | Promise<void>;
 	/** Callback khi cell update (row, column id, oldValue, newValue). */
 	onCellUpdate?: (row: T, columnId: string, oldValue: unknown, newValue: unknown) => void | Promise<void>;
 	/** Callback khi row update (row, rowId). */
@@ -272,6 +306,26 @@ export interface DataTableConfigs extends BasicConfigs {
 	deleteSelectedText: string;
 	/** Nhãn nút clear-selection (toolbar selection tools, i18n). */
 	clearSelectionText: string;
+	/** Nhãn nút close modal (i18n). */
+	rowDetailCloseText: string;
+	/** Nhãn nút save modal (i18n). */
+	rowDetailSaveText: string;
+	/** Resize column bật? (cho handle drag ở mép th). */
+	resizable: boolean;
+	/** Auto-fit width khởi tạo (đo content)? */
+	resizeFit: boolean;
+	/** Width tối thiểu khi resize/auto-fit (px). */
+	resizeMinWidth: number;
+	/** Width tối đa khi auto-fit (px). */
+	resizeMaxWidth: number;
+	/** Row detail (modal) bật? */
+	rowDetail: boolean;
+	/** Tiêu đề modal row detail (i18n). */
+	rowDetailTitle: string;
+	/** Modal row detail cho phép sửa field? */
+	rowDetailEditable: boolean;
+	/** Click cell → modal chi tiết (đè edit cell khi bật). */
+	cellDetail: boolean;
 }
 
 /** Shared state root → sub (Head/Body/Pagination), bỏ writable store của v1. */
@@ -387,4 +441,31 @@ export interface DataTableSharedState {
 	clearSelection: () => void;
 	/** Số row đã chọn (toolbar selection tools hiển thị). */
 	selectedCount: number;
+	/** Bắt đầu resize cột (kéo mép th, startX px + widthStart px). */
+	startResize: (columnId: string, e: MouseEvent) => void;
+	/** Reset width cột về auto (double-click handle — fit-content). */
+	resetColumnWidth: (columnId: string) => void;
+	/** Width hiện tại của cột (px hoặc undefined = auto). */
+	columnWidth: (columnId: string) => number | undefined;
+	/** Mở modal chi tiết row (click row/cell; focusColumn = field cần focus). */
+	openRowDetail: (rowId: string, focusColumn?: string) => void;
+	/** Đóng modal chi tiết row (commit=true: gọi onRowUpdate sau khi sửa). */
+	closeRowDetail: (commit: boolean) => void;
+	/** Modal chi tiết row đang mở cho rowId này (undefined nếu không). */
+	detailRowId: string | undefined;
+	/** Modal chi tiết row đang mở? (bind:display Modal) */
+	detailOpen: boolean;
+	/** Row detail (modal) bật? (cho row click → modal). */
+	rowDetail: boolean;
+	/** Click cell → modal chi tiết (đè edit cell khi bật). */
+	cellDetail: boolean;
+	/** Cell (columnId) cần focus khi mở modal chi tiết từ cell click. */
+	detailFocusColumn: string | undefined;
+	/** Xác định editor type cho cell (col.editor > oldValue number → number). */
+	getEditorType: (
+		col: DataTableColumn<Record<string, unknown>>,
+		value: unknown
+	) => 'text' | 'number' | 'boolean' | 'date' | 'select';
+	/** Parse yyyy-mm-dd → Date (giờ địa phương). */
+	parseDateValue: (value: string) => Date | null;
 }

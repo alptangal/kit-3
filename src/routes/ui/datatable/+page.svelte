@@ -12,6 +12,8 @@
 		price: number;
 		stock: number;
 		status: 'active' | 'inactive' | 'out';
+		/** Ngày tạo (editor date — yyyy-mm-dd; demo dùng string). */
+		created?: string;
 	}
 
 	let products = $state<Product[]>([
@@ -99,6 +101,53 @@
 	const handleImport = (rows: Record<string, unknown>[]): void => {
 		lastImport = `${rows.length} row`;
 	};
+
+	// ── Wave 8 debug: row detail / cell detail ──
+	let lastRowDetail = $state<string>('');
+	let lastEditorUpdate = $state<string>('');
+	let lastDetailUpdated = $state<string>('');
+	let detailTableProducts = $state<Product[]>([
+		{ id: 'd1', name: 'Detail Item 1', category: 'Detail', price: 10, stock: 5, status: 'active', created: '2026-02-11' },
+		{ id: 'd2', name: 'Detail Item 2', category: 'Detail', price: 20, stock: 10, status: 'inactive', created: '2026-03-12' },
+		{ id: 'd3', name: 'Detail Item 3', category: 'Detail', price: 30, stock: 15, status: 'active', created: '2026-01-13' }
+	]);
+	const detailTableProductsAny = $derived(detailTableProducts as unknown as Record<string, unknown>[]);
+	const handleRowDetail = (row: Record<string, unknown>, rowId: string): void => {
+		lastRowDetail = String((row as unknown as Product).id ?? rowId);
+	};
+	const handleDetailUpdate = (row: Record<string, unknown>, rowId: string): void => {
+		lastDetailUpdated = String((row as unknown as Product).id ?? rowId);
+	};
+
+	// Cột demo editor đa dạng: editor types map theo cột — name (text),
+	// price/stock (number), status (select + options), flag (boolean qua
+	// accessor function), created (date qua accessor key string — editor date
+	// ghi Date vào row, accessor key đọc trực tiếp).
+	const diverseColumns: DataTableColumn<Product>[] = [
+		{ id: 'name', label: 'Product', accessor: 'name', sortable: true },
+		{ id: 'price', label: 'Price', accessor: 'price', align: 'right', noHighlight: true, editor: 'number' },
+		{ id: 'stock', label: 'Stock', accessor: 'stock', align: 'right', noHighlight: true, editor: 'number' },
+		{
+			id: 'status',
+			label: 'Status',
+			accessor: 'status',
+			editor: 'select',
+			options: ['active', 'inactive', 'out']
+		},
+		{
+			id: 'flag',
+			label: 'Active',
+			accessor: (r) => (r as Product).status === 'active',
+			editor: 'boolean'
+		},
+		{
+			id: 'created',
+			label: 'Created',
+			accessor: 'created',
+			editor: 'date'
+		}
+	];
+	const diverseColumnsAny = diverseColumns as unknown as DataTableColumn<Record<string, unknown>>[];
 
 	// ── (1a) LIVE DATA: nút "thêm row" + interval tự động ──
 	let autoAdd = $state<boolean>(false);
@@ -191,7 +240,7 @@
 </script>
 
 <div class="page" data-test="datatable-demo">
-	<h1 class="page-title">DataTable · Svelte 5 (live data + edit + row actions + lazy load + visual)</h1>
+	<h1 class="page-title">DataTable · Svelte 5 (live data + edit + row actions + lazy + visual + resize + detail modal)</h1>
 
 	<!-- (1) Full: sortable + searchable + selectable + status pill + pageSize 10 -->
 	<section class="demo" data-test="dt-basic">
@@ -386,6 +435,76 @@
 		<h2>Loading (placeholder)</h2>
 		<p class="demo-hint">loading → row skeleton muted (reduced-motion: không blink).</p>
 		<DataTable data={productsAny} columns={columnsAny} pageSize={5} loading caption={ { vi: 'Đang tải', en: 'Loading' } } />
+	</section>
+
+	<!-- (W8-1) RESIZE: kéo mép th đổi width + dblclick reset + auto-fit -->
+	<section class="demo" data-test="dt-resize">
+		<h2>Resize column (kéo mép th + dblclick reset + auto-fit)</h2>
+		<p class="demo-hint">resizable — handle col-resize ở mép phải th (drag đổi width, double-click reset về auto-fit). Cột khởi tạo đo content (canvas) → width vừa đủ + ellipsis text tràn (title đầy đủ).</p>
+		<DataTable
+			data={detailTableProductsAny}
+			columns={columnsAny}
+			pageSize={5}
+			sortable
+			resizable
+			caption={ { vi: 'Resize', en: 'Resizable' } }
+		/>
+	</section>
+
+	<!-- (W8-2+W8-3) EDITOR ĐA DẠNG: number/boolean/date/select + auto focus -->
+	<section class="demo" data-test="dt-editor-diverse">
+		<h2>Edit đa dạng (number/boolean/date/select + auto focus)</h2>
+		<p class="demo-hint">editor types theo cột — click cell: number → input number, date → input date, select → dropdown, boolean → checkbox (role=switch). Input focus ngay khi mở, caret cuối text.</p>
+		<DataTable
+			data={detailTableProductsAny}
+			columns={diverseColumnsAny}
+			pageSize={5}
+			editable
+			caption={ { vi: 'Editor đa dạng', en: 'Diverse editors' } }
+			getRowId={(r, i) => (r as unknown as Product).id ?? String(i)}
+			onCellUpdate={(row, columnId, oldValue, newValue) => {
+				lastEditorUpdate = `${(row as unknown as Product).id}:${columnId}:${String(oldValue)}→${String(newValue)}`;
+			}}
+		/>
+		<div class="state" data-test="dt-editor-diverse-state">
+			<span data-test="dt-editor-update">{lastEditorUpdate || 'none'}</span>
+		</div>
+	</section>
+
+	<!-- (W8-5) ROW DETAIL: click row → modal chi tiết (update từ modal) -->
+	<section class="demo" data-test="dt-row-detail">
+		<h2>Row detail modal (click row → modal + update)</h2>
+		<p class="demo-hint">rowDetail — click row (không đụng control) → Modal chi tiết: field theo editor type, Save gọi onRowUpdate ghi data, Close bỏ qua.</p>
+		<DataTable
+			data={detailTableProductsAny}
+			columns={columnsAny}
+			pageSize={5}
+			rowDetail
+			caption={ { vi: 'Row detail', en: 'Row detail' } }
+			getRowId={(r, i) => (r as unknown as Product).id ?? String(i)}
+			onRowDetail={handleRowDetail}
+			onRowUpdate={handleDetailUpdate}
+		/>
+		<div class="state" data-test="dt-row-detail-state">
+			<span data-test="dt-row-detail-opened">{lastRowDetail || 'none'}</span>
+			<span data-test="dt-row-detail-updated">{lastDetailUpdated || 'none'}</span>
+			<span data-test="dt-row-detail-price">{detailTableProducts[0]?.price ?? '-'}</span>
+		</div>
+	</section>
+
+	<!-- (W8-6) CELL DETAIL: click giá trị → modal + focus đúng field -->
+	<section class="demo" data-test="dt-cell-detail">
+		<h2>Cell detail modal (click giá trị → modal focus field đó)</h2>
+		<p class="demo-hint">cellDetail — click cell giá trị → Modal chi tiết + auto focus đúng field dữ liệu đó (đè edit cell).</p>
+		<DataTable
+			data={detailTableProductsAny}
+			columns={columnsAny}
+			pageSize={5}
+			rowDetail
+			cellDetail
+			caption={ { vi: 'Cell detail', en: 'Cell detail' } }
+			getRowId={(r, i) => (r as unknown as Product).id ?? String(i)}
+		/>
 	</section>
 </div>
 

@@ -22,7 +22,18 @@
 		col: DataTableColumn<Record<string, unknown>>,
 		row: Record<string, unknown>,
 		rowIndex: number
-	): string => (col.render ? String(col.render(value, row as never, rowIndex)) : String(value ?? ''));
+	): string => {
+		if (col.render) return String(col.render(value, row as never, rowIndex));
+		// Date object (editor date ghi Date vào data) → yyyy-mm-dd GIỜ ĐỊA
+		// PHƯƠNG (toISOString là UTC — nửa đêm GMT+7 lùi 1 ngày).
+		if (value instanceof Date) {
+			const y = value.getFullYear();
+			const m = String(value.getMonth() + 1).padStart(2, '0');
+			const d = String(value.getDate()).padStart(2, '0');
+			return `${y}-${m}-${d}`;
+		}
+		return String(value ?? '');
+	};
 
 	// segments highlight: chỉ khi có query + cột filterable (không noHighlight).
 	const segmentsFor = (
@@ -87,20 +98,50 @@
 		value: unknown,
 		e: MouseEvent
 	): void => {
-		if (!ctx?.editable || ctx.isMobile) return;
+		if (ctx?.isMobile) return;
+		// cellDetail bật → click cell mở modal chi tiết + focus đúng field (đè edit cell).
+		if (ctx?.cellDetail) {
+			e.stopPropagation();
+			ctx.openRowDetail(rowId, col.id);
+			return;
+		}
+		if (!ctx?.editable) return;
 		if (!isCellEditable(col)) return;
 		// Đang edit cell/row khác → click cell này chỉ chuyển editor.
 		e.stopPropagation();
 		ctx.openCellEditor(rowId, col.id, value);
 	};
 
-	// ── Mobile: tap row → expand actions (không tap checkbox/control) ──
+	// ── Row click → modal chi tiết (rowDetail opt-in; không tap control/button/
+	// cell editor đang mở) ──
 	const onRowTap = (rowId: string, e: MouseEvent): void => {
-		if (!ctx?.rowActions || !ctx.isMobile) return;
-		const target = e.target as HTMLElement;
-		// Checkbox component render div[role="checkbox"] (không phải input thật).
-		if (target.closest('input, button, a, [role="checkbox"], [data-no-tap]')) return;
-		ctx.toggleRowActions(rowId);
+		// Mobile: tap row → expand actions (ưu tiên cũ).
+		if (ctx?.rowActions && ctx.isMobile) {
+			const target = e.target as HTMLElement;
+			// Checkbox component render div[role="checkbox"] (không phải input thật).
+			if (target.closest('input, button, a, [role="checkbox"], [data-no-tap]')) return;
+			ctx.toggleRowActions(rowId);
+			return;
+		}
+		// PC: rowDetail bật → click row mở modal (không click checkbox/button/cell editor).
+		if (ctx?.rowDetail && !ctx.isMobile) {
+			const target = e.target as HTMLElement;
+			if (target.closest('input, button, a, [role="checkbox"], [data-no-tap], .datatable-cell-editor')) return;
+			ctx.openRowDetail(rowId);
+		}
+	};
+
+	// ── Auto focus input editor ngay khi mount (rAF — caret cuối text) ──
+	// Svelte action: chạy khi element mount (input mới render → focus).
+	// setSelectionRange THROWS trên input date/number (không hỗ trợ selection)
+	// → chỉ set khi selectionStart !== null (text/search/tel/password).
+	const autoFocusEditor = (el: HTMLInputElement): void => {
+		requestAnimationFrame(() => {
+			el.focus();
+			if (el.selectionStart === null) return;
+			const len = el.value.length;
+			el.setSelectionRange(len, len);
+		});
 	};
 
 	// ── Row checkbox toggle: Checkbox component không có prop onChange —
@@ -182,19 +223,64 @@
 							class:cell-editing={cellEditing}
 							class:cell-editable={isCellEditable(col) && !cellEditing && !rowEditing}
 							data-cell-id={`${rowId}:${col.id}`}
+							title={segments.length > 0 ? segments.map((seg) => seg.text).join('') : undefined}
 							onclick={(e) => onCellClick(rowId, col, value, e)}
 						>
 							{#if cellEditing}
-								<!-- Inline cell editor: input + confirm/cancel button -->
+								<!-- Inline cell editor: theo kiểu giá trị (wave 8) + auto focus caret cuối -->
+								{@const editorType = ctx.getEditorType(col, value)}
 								<div class="datatable-cell-editor">
-									<input
-										class="datatable-cell-input"
-										type="text"
-										aria-label={ctx.configs.editText}
-										value={ctx.getEditValue() ?? ''}
-										oninput={(e) => ctx.setEditValue((e.target as HTMLInputElement).value)}
-										onkeydown={onEditorKeydown}
-									/>
+									{#if editorType === 'boolean'}
+										<!-- Checkbox nhỏ (role=switch — value 2-way qua setEditValue) -->
+										<input
+											class="datatable-cell-check"
+											type="checkbox"
+											role="switch"
+											aria-label={ctx.configs.editText}
+											checked={ctx.getEditValue() === 'true'}
+											onchange={(e) =>
+												ctx.setEditValue((e.target as HTMLInputElement).checked ? 'true' : 'false')}
+											onkeydown={onEditorKeydown}
+										/>
+									{:else if editorType === 'date'}
+										<!-- Native input[type=date] (panel DatePicker composite bị clip
+										     trong td overflow:hidden — modal detail dùng DatePicker) -->
+										<input
+											use:autoFocusEditor
+											class="datatable-cell-input"
+											type="date"
+											aria-label={ctx.configs.editText}
+											value={ctx.getEditValue() ?? ''}
+											oninput={(e) => ctx.setEditValue((e.target as HTMLInputElement).value)}
+											onkeydown={onEditorKeydown}
+											data-test="datatable-cell-input-date"
+										/>
+									{:else if editorType === 'select'}
+										<!-- Select options (col.options) -->
+										<select
+											class="datatable-cell-input datatable-cell-select"
+											aria-label={ctx.configs.editText}
+											value={ctx.getEditValue() ?? ''}
+											onchange={(e) => ctx.setEditValue((e.target as HTMLSelectElement).value)}
+											onkeydown={onEditorKeydown}
+										>
+											{#each col.options ?? [] as opt (opt)}
+												<option value={opt}>{opt}</option>
+											{/each}
+										</select>
+									{:else}
+										<!-- text | number (oldValue number → input type=number) -->
+										<input
+											use:autoFocusEditor
+											class="datatable-cell-input"
+											type={editorType === 'number' ? 'number' : 'text'}
+											aria-label={ctx.configs.editText}
+											value={ctx.getEditValue() ?? ''}
+											oninput={(e) => ctx.setEditValue((e.target as HTMLInputElement).value)}
+											onkeydown={onEditorKeydown}
+											data-test="datatable-cell-input"
+										/>
+									{/if}
 									<button
 										type="button"
 										class="datatable-cell-btn datatable-cell-btn--confirm"
@@ -357,6 +443,13 @@
 			color: var(--content1-foreground, #18181b);
 			border-bottom: 1px solid var(--content3, hsl(240 5.88% 90%));
 			vertical-align: middle;
+			// ── Ellipsis text tràn (auto-fit width — title attr đầy đủ) ──
+			// Chỉ khi cột có width (auto-fit/resize) — table-layout auto không
+			// tràn khi không có width cố định.
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			max-width: 0; // force td co theo width khi table-layout auto
 		}
 
 		&.alt .datatable-td {
@@ -412,6 +505,30 @@
 
 		&::placeholder {
 			color: var(--muted, #71717a);
+		}
+
+		// ── Editor number: không spinner lớn, giữ font mono nhẹ ──
+		&[type='number'] {
+			font-variant-numeric: tabular-nums;
+		}
+
+		// ── Editor select: cursor pointer + appearance giữ native (đơn giản) ──
+		&.datatable-cell-select {
+			cursor: var(--cursor-interactive);
+			padding-right: 0.5rem;
+		}
+	}
+
+	// ── Editor boolean (Checkbox nhỏ trong cell) ──
+	.datatable-cell-check {
+		width: 1.125rem;
+		height: 1.125rem;
+		margin: 0;
+		cursor: var(--cursor-interactive);
+		accent-color: var(--primary, var(--color-indigo-500));
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+			outline-offset: 2px;
 		}
 	}
 

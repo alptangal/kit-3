@@ -17,6 +17,11 @@
 // - DT14 toolbar (create → row editor, copy/clone row TSV clipboard, export
 //   CSV/JSON download, selection tools copy/delete/clear selected)
 // - DT15 no-results + empty create (search không khớp / data=[] → nút create)
+// - DT16 resize column (drag handle đổi width, dblclick reset, auto-fit đo
+//   content khởi tạo + ellipsis title)
+// - DT17 editor đa dạng (number/boolean/date/select + auto focus caret cuối)
+// - DT18 row detail modal (click row → Modal, Save → onRowUpdate + data ghi)
+// - DT19 cell detail (click cell → modal + focus đúng field)
 //
 // Trình tự: DT0 (chỉ đọc) → screenshots (trạng thái sạch) → DT2 filter →
 // DT3 pagination → DT4 selection (trở về size 10) → DT1 sort (đổi trạng thái
@@ -519,6 +524,220 @@ await page.waitForTimeout(250);
 ok('DT15: create từ empty → 1 row xuất hiện', (await emp.locator('tr.datatable-row').count()) === 1, String(await emp.locator('tr.datatable-row').count()));
 await emp.locator('input.datatable-row-input').first().press('Escape');
 await page.waitForTimeout(150);
+
+console.log('\n=== DT16: RESIZE (drag handle + dblclick reset + auto-fit) ===');
+const rzSec = page.locator('[data-test="dt-resize"]');
+const rzTable = rzSec.locator('table.datatable');
+// (a) Auto-fit: cột "Product" có col.width prop (180px) — giữ nguyên (check
+// style attr, rect bị flex co dãn theo container).
+const rzWidthName = await rzSec.locator('th', { hasText: 'Product' }).getAttribute('style');
+ok('DT16: cột có width prop giữ nguyên (Product style 180px)', rzWidthName?.includes('180px'), rzWidthName ?? '');
+// Cột không width prop → auto-fit theo content (Category: "Detail" + header).
+const rzWidthCat = await rzSec.locator('th', { hasText: 'Category' }).getAttribute('style');
+ok('DT16: auto-fit width khởi tạo (Category style px)', /width:\s*\d+px/.test(rzWidthCat ?? ''), rzWidthCat ?? '');
+// (b) Handle resize tồn tại + data-test.
+const rzHandle = rzSec.locator('[data-test="datatable-resize-category"]');
+ok('DT16: handle resize hiện (data-test)', (await rzHandle.count()) === 1);
+ok('DT16: handle cursor col-resize', (await rzHandle.evaluate((el) => getComputedStyle(el).cursor)) === 'col-resize');
+// (c) Drag handle → width tăng (mouse down/move/up qua Playwright).
+// BẪY: handle y có thể âm (ngoài viewport — page dài) → scrollIntoViewIfNeeded.
+const handleBox = await rzHandle.boundingBox();
+const widthBeforeDrag = await rzSec.locator('th', { hasText: 'Category' }).evaluate((el) => el.getBoundingClientRect().width);
+await rzHandle.scrollIntoViewIfNeeded();
+await page.waitForTimeout(150);
+const handleBox2Pre = await rzHandle.boundingBox();
+if (handleBox2Pre) {
+	await page.mouse.move(handleBox2Pre.x + handleBox2Pre.width / 2, handleBox2Pre.y + handleBox2Pre.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(handleBox2Pre.x + handleBox2Pre.width / 2 + 60, handleBox2Pre.y + handleBox2Pre.height / 2, { steps: 8 });
+	await page.mouse.up();
+	await page.waitForTimeout(400);
+}
+const widthAfterDrag = await rzSec.locator('th', { hasText: 'Category' }).evaluate((el) => el.getBoundingClientRect().width);
+ok('DT16: drag handle → width tăng ~60px', widthAfterDrag >= widthBeforeDrag + 40, `${widthBeforeDrag} → ${widthAfterDrag}`);
+// (d) Drag ngược → width giảm (min-width guard 60).
+await rzHandle.scrollIntoViewIfNeeded();
+await page.waitForTimeout(150);
+const handleBox2 = await rzHandle.boundingBox();
+if (handleBox2) {
+	await page.mouse.move(handleBox2.x + handleBox2.width / 2, handleBox2.y + handleBox2.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(handleBox2.x + handleBox2.width / 2 - 500, handleBox2.y + handleBox2.height / 2, { steps: 8 });
+	await page.mouse.up();
+	await page.waitForTimeout(400);
+}
+const widthAfterShrink = await rzSec.locator('th', { hasText: 'Category' }).evaluate((el) => el.getBoundingClientRect().width);
+ok('DT16: drag ngược → width >= min-width 60', widthAfterShrink >= 60 && widthAfterShrink < widthAfterDrag, `${widthAfterDrag} → ${widthAfterShrink}`);
+// (e) Dblclick handle → reset về auto-fit (width thay đổi từ giá trị thu nhỏ).
+const widthBeforeReset = await rzSec.locator('th', { hasText: 'Category' }).evaluate((el) => el.getBoundingClientRect().width);
+await rzHandle.dblclick();
+await page.waitForTimeout(400);
+const widthAfterReset = await rzSec.locator('th', { hasText: 'Category' }).evaluate((el) => el.getBoundingClientRect().width);
+ok('DT16: dblclick → reset về auto-fit (width khác giá trị min)', Math.abs(widthAfterReset - widthAfterShrink) > 5 && widthAfterReset >= widthAfterShrink, `${widthAfterShrink} → ${widthAfterReset}`);
+// (f) Cell text tràn → ellipsis + title đầy đủ.
+const ellip = await rzSec.locator('td.datatable-td').first().evaluate((el) => {
+	const cs = getComputedStyle(el);
+	return { overflow: cs.textOverflow, title: el.getAttribute('title') !== null };
+});
+ok('DT16: td text-overflow ellipsis', ellip.overflow === 'ellipsis' || ellip.overflow === 'clip' || ellip.overflow === '-webkit-ellipsis', ellip.overflow);
+
+console.log('\n=== DT17: EDITOR ĐA DẠNG (number/boolean/date/select + auto focus) ===');
+const edSec = page.locator('[data-test="dt-editor-diverse"]');
+// (a) Number editor: click cell price → input[type=number] + auto focus + caret cuối.
+const edPrice = edSec.locator('td[data-cell-id$=":price"]').first();
+await edPrice.click();
+await page.waitForTimeout(250);
+const numInput = edSec.locator('input.datatable-cell-input[type="number"]');
+ok('DT17: click price → input[type=number]', (await numInput.count()) === 1);
+ok('DT17: number editor auto focus (activeElement)', (await numInput.evaluate((el) => document.activeElement === el)));
+ok('DT17: input number giữ giá trị cũ "10"', (await numInput.inputValue()) === '10');
+await numInput.fill('55');
+await numInput.press('Enter');
+await page.waitForTimeout(250);
+ok('DT17: confirm number → cell hiển thị 55', ((await edPrice.textContent()) ?? '').includes('55'));
+const edUpd = await page.locator('[data-test="dt-editor-update"]').textContent();
+ok('DT17: callback fired number (oldValue→55)', edUpd?.includes('→55'), edUpd ?? '');
+// Coerce: data ghi là number (oldValue number → newValue number).
+ok('DT17: number coerce đúng (giá trị cũ 10/20/30 → 55)', edUpd?.includes(':price:'), edUpd ?? '');
+// (b) Boolean editor: click cell flag → checkbox role=switch.
+const edFlag = edSec.locator('td[data-cell-id$=":flag"]').first();
+await edFlag.click();
+await page.waitForTimeout(250);
+const boolInput = edSec.locator('input.datatable-cell-check[type="checkbox"]');
+ok('DT17: click flag → checkbox editor (role=switch)', (await boolInput.count()) === 1);
+ok('DT17: checkbox editor checked đúng (row 1 active → true)', (await boolInput.evaluate((el) => el.checked)) === true);
+await boolInput.click();
+await page.waitForTimeout(150);
+await boolInput.press('Enter');
+await page.waitForTimeout(250);
+ok('DT17: toggle boolean → cell đổi (flag false → icon khác)', (await edFlag.textContent())?.trim() !== '' );
+const edUpd2 = await page.locator('[data-test="dt-editor-update"]').textContent();
+ok('DT17: callback fired boolean (→false)', edUpd2?.includes('→false'), edUpd2 ?? '');
+// (c) Date editor: click cell created → input[type=date] + value iso.
+const edCreated = edSec.locator('td[data-cell-id$=":created"]').first();
+await edCreated.click();
+await page.waitForTimeout(250);
+const dateInput = edSec.locator('input.datatable-cell-input[type="date"]');
+ok('DT17: click created → input[type=date]', (await dateInput.count()) === 1);
+const dateVal = await dateInput.inputValue();
+ok('DT17: date editor value iso yyyy-mm-dd', /^\d{4}-\d{2}-\d{2}$/.test(dateVal), dateVal);
+ok('DT17: date editor auto focus', (await dateInput.evaluate((el) => document.activeElement === el)));
+await dateInput.fill('2026-06-15');
+await dateInput.press('Enter');
+await page.waitForTimeout(250);
+ok('DT17: confirm date → cell hiển thị 2026-06-15', ((await edCreated.textContent()) ?? '').includes('2026-06-15'));
+// (d) Select editor: click cell status → select dropdown.
+const edStatus = edSec.locator('td[data-cell-id$=":status"]').first();
+await edStatus.click();
+await page.waitForTimeout(250);
+const selInput = edSec.locator('select.datatable-cell-select');
+ok('DT17: click status → select editor', (await selInput.count()) === 1);
+ok('DT17: select editor có 3 options (active/inactive/out)', (await selInput.locator('option').count()) === 3);
+await selInput.selectOption('out');
+await page.waitForTimeout(150);
+await selInput.press('Enter');
+await page.waitForTimeout(250);
+ok('DT17: confirm select → cell hiển thị "out"', ((await edStatus.textContent()) ?? '').includes('out'));
+// (e) Auto focus: click cell name (text) → activeElement + caret cuối.
+const edName = edSec.locator('td[data-cell-id$=":name"]').first();
+await edName.click();
+await page.waitForTimeout(250);
+const txtInput = edSec.locator('input.datatable-cell-input[type="text"]');
+ok('DT17: click name → input text auto focus', (await txtInput.count()) === 1 && (await txtInput.evaluate((el) => document.activeElement === el)));
+ok('DT17: caret cuối text (selectionStart = length)', (await txtInput.evaluate((el) => el.selectionStart === el.value.length)));
+await txtInput.press('Escape');
+await page.waitForTimeout(150);
+
+console.log('\n=== DT18: ROW DETAIL MODAL (click row → Modal + Save → onRowUpdate) ===');
+const rdSec = page.locator('[data-test="dt-row-detail"]');
+// (a) Click row (cell name) → modal mở.
+await rdSec.locator('tr.datatable-row').nth(0).locator('td.datatable-td').nth(0).click();
+await page.waitForTimeout(350);
+const rdOverlay = page.locator('.modal-root, [data-ad-overlay], [role="dialog"]');
+ok('DT18: click row → modal mở (overlay/dialog)', (await rdOverlay.count()) >= 1);
+ok('DT18: modal title "Row details"/"Chi tiết row"', /row details|chi tiết row/i.test((await page.locator('[data-test="datatable-detail-title"]').textContent()) ?? ''));
+ok('DT18: callback onRowDetail fired (d1)', ((await page.locator('[data-test="dt-row-detail-opened"]').textContent()) ?? '').includes('d1'));
+// (b) Modal có field inputs theo editor type (cột price có render → static
+// value — guard isCellEditable; còn Product/Category/Stock input + Status static).
+ok('DT18: modal có ≥3 field input (price render → static)', (await page.locator('.datatable-detail-field input, .datatable-detail-field select').count()) >= 3);
+// (c) Sửa field name + stock (price có render → static, đúng guard) → Save.
+const detailName = page.locator('.datatable-detail-field input[type="text"], .datatable-detail-field input:not([type])').first();
+await detailName.fill('Detail Renamed');
+await page.waitForTimeout(120);
+const detailStock = page.locator('.datatable-detail-field input[type="number"]').first();
+await detailStock.fill('77');
+await page.waitForTimeout(120);
+await page.locator('[data-test="datatable-detail-save"]').click();
+await page.waitForTimeout(350);
+ok('DT18: Save → modal đóng', (await page.locator('[data-test="datatable-detail-title"]').count()) === 0);
+ok('DT18: Save → data ghi (cell name "Detail Renamed")', ((await rdSec.locator('td[data-cell-id="d1:name"]').textContent()) ?? '').includes('Detail Renamed'));
+ok('DT18: Save → data ghi (cell stock "77")', ((await rdSec.locator('td[data-cell-id="d1:stock"]').textContent()) ?? '').includes('77'));
+ok('DT18: Save → onRowUpdate fired (d1)', ((await page.locator('[data-test="dt-row-detail-updated"]').textContent()) ?? '').includes('d1'));
+ok('DT18: Save → price static giữ nguyên (không chứa stock 77)', !((await rdSec.locator('td[data-cell-id="d1:price"]').textContent()) ?? '').includes('77'));
+// (d) Close (bỏ qua): click row 2 → sửa → Close → giữ nguyên.
+await rdSec.locator('tr.datatable-row').nth(1).locator('td.datatable-td').nth(0).click();
+await page.waitForTimeout(350);
+const detailName2 = page.locator('.datatable-detail-field input:not([type="number"]):not([type="date"])').first();
+await detailName2.fill('SHOULD NOT SAVE');
+await page.waitForTimeout(120);
+await page.locator('[data-test="datatable-detail-close"]').click();
+await page.waitForTimeout(350);
+ok('DT18: Close → modal đóng, cell giữ nguyên', ((await rdSec.locator('td[data-cell-id$=":name"]').nth(1).textContent()) ?? '').trim() === 'Detail Item 2');
+
+console.log('\n=== DT19: CELL DETAIL (click cell → modal + focus đúng field) ===');
+const cdSec = page.locator('[data-test="dt-cell-detail"]');
+// Click cell stock (cột 4, input number) → modal + focus đúng field stock
+// (price có render → static không focusable).
+await cdSec.locator('tr.datatable-row').nth(0).locator('td.datatable-td').nth(3).click();
+await page.waitForTimeout(350);
+ok('DT19: click cell → modal mở', (await page.locator('[data-test="datatable-detail-title"]').count()) === 1);
+ok(
+	'DT19: focus đúng field stock (activeElement qua initialFocus)',
+	(await page.evaluate(() => document.activeElement?.closest('[data-detail-field]')?.getAttribute('data-detail-field'))) === 'stock'
+);
+// Escape → đóng.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+ok('DT19: Escape → modal đóng', (await page.locator('[data-test="datatable-detail-title"]').count()) === 0);
+// Click cell name (cột 1) → focus field name.
+await cdSec.locator('tr.datatable-row').nth(0).locator('td.datatable-td').nth(0).click();
+await page.waitForTimeout(350);
+ok(
+	'DT19: click name → focus field name',
+	(await page.evaluate(() => document.activeElement?.closest('[data-detail-field]')?.getAttribute('data-detail-field'))) === 'name'
+);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+
+// Screenshots wave 8 (8 ảnh).
+console.log('\n=== SCREENSHOTS WAVE 8 ===');
+const shotDirW8 = 'tests/screenshots/datatable';
+mkdirSync(shotDirW8, { recursive: true });
+await page.locator('[data-test="dt-resize"]').screenshot({ path: `${shotDirW8}/14-resize.png` });
+// 15-editor-number: editor number đang mở (click price row 1).
+await edSec.locator('td[data-cell-id$=":price"]').first().click();
+await page.waitForTimeout(300);
+await edSec.screenshot({ path: `${shotDirW8}/15-editor-number.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+// 16-editor-select: select editor đang mở.
+await edSec.locator('td[data-cell-id$=":status"]').first().click();
+await page.waitForTimeout(300);
+await edSec.screenshot({ path: `${shotDirW8}/16-editor-select.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+// 17-editor-boolean: checkbox editor đang mở.
+await edSec.locator('td[data-cell-id$=":flag"]').first().click();
+await page.waitForTimeout(300);
+await edSec.screenshot({ path: `${shotDirW8}/17-editor-boolean.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+// 18-row-detail: modal chi tiết row đang mở.
+await rdSec.locator('tr.datatable-row').nth(0).locator('td.datatable-td').nth(0).click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${shotDirW8}/18-row-detail.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
 
 await browser.close();
 

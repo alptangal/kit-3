@@ -17,6 +17,10 @@
 	import { client } from '$store/basic.svelte';
 	import { setDataTableContext } from './_context';
 	import { AlertDialog } from '../alert-dialog/index.ts';
+	import { Modal } from '../../modal/index.ts';
+	// KHÔNG import DatePicker trong Main (cell/modal detail dùng native
+	// input[type=date] — panel composite bị clip trong overflow:hidden);
+	// Body import trực tiếp file (tránh circular barrel).
 	import Head from './Head.svelte';
 	import Body from './Body.svelte';
 	import Pagination from './Pagination.svelte';
@@ -62,10 +66,14 @@
 		visual,
 		creatable,
 		exportable,
+		resizable,
+		rowDetail,
+		cellDetail,
 		onRowCreate,
 		onRowClone,
 		onCopy,
 		onImport,
+		onRowDetail,
 		onCellUpdate,
 		onRowUpdate,
 		onRowDelete,
@@ -168,6 +176,41 @@
 	// config `exportable`/`rowActions`; toolbar copy-selected dùng biến này.
 	const copyableDerived: boolean = $derived(true);
 
+	// ── Resizable / RowDetail config (wave 8) ──
+	const resizableCfg = $derived.by(() => {
+		if (resizable === true) return { enabled: true, fit: true, minWidth: 60, maxWidth: 400 };
+		if (typeof resizable === 'object' && resizable !== null) {
+			return {
+				enabled: resizable.enabled ?? true,
+				fit: resizable.fit ?? true,
+				minWidth: resizable.minWidth ?? 60,
+				maxWidth: resizable.maxWidth ?? 400
+			};
+		}
+		return { enabled: false, fit: false, minWidth: 60, maxWidth: 400 };
+	});
+	const resizableDerived: boolean = $derived(resizableCfg.enabled);
+
+	const rowDetailCfg = $derived.by(() => {
+		if (rowDetail === true) {
+			return {
+				enabled: true,
+				title: undefined as TranslateContent | string | undefined,
+				editable: true
+			};
+		}
+		if (typeof rowDetail === 'object' && rowDetail !== null) {
+			return {
+				enabled: rowDetail.enabled ?? true,
+				title: rowDetail.title,
+				editable: rowDetail.editable ?? true
+			};
+		}
+		return { enabled: false, title: undefined as TranslateContent | string | undefined, editable: true };
+	});
+	const rowDetailDerived: boolean = $derived(rowDetailCfg.enabled);
+	const cellDetailDerived: boolean = $derived(!!cellDetail && rowDetailCfg.enabled);
+
 	// Resolve TranslateContent | string theo language (fallback en → vi)
 	const getText = (content?: TranslateContent | string, fallback?: { en: string; vi: string }): string => {
 		const lang = client.browser?.language ?? 'en';
@@ -204,6 +247,17 @@
 	let loadingMore: boolean = $state(false);
 	// hasMoreLazy: còn data để load (prop override, hoặc tự đo bằng lần load trước).
 	let hasMoreLazyState = $state<boolean | undefined>(undefined);
+
+	// ── STATE resize column (wave 8) — width px theo columnId ──
+	let columnWidths: Record<string, number | undefined> = $state({});
+	// Row đang drag (đóng guard khi re-render) — không reactive (chỉ dùng trong handler).
+	// ── STATE modal row detail (wave 8) ──
+	let detailRowId: string | undefined = $state(undefined);
+	let detailOpen: boolean = $state(false);
+	// Cell (columnId) cần focus khi mở modal từ cell click.
+	let detailFocusColumn: string | undefined = $state(undefined);
+	// Values đang sửa trong modal (theo columnId, coerce khi commit).
+	let detailValues: Record<string, string | boolean> = $state({});
 
 	// row id theo getRowId (default: index)
 	const idOf = (row: Record<string, unknown>, index: number): string =>
@@ -342,7 +396,16 @@
 
 	const openCellEditor = (rowId: string, columnId: string, value: unknown): void => {
 		// Chỉ 1 editor mở tại 1 thời điểm (click cell khác → chuyển editor).
-		editCell = { rowId, columnId, value: value == null ? '' : String(value) };
+		// input[type=date] cần yyyy-mm-dd (Date object → iso giờ địa phương;
+		// string giữ nguyên — đã là yyyy-mm-dd).
+		let editValue = value == null ? '' : String(value);
+		if (value instanceof Date) {
+			const y = value.getFullYear();
+			const m = String(value.getMonth() + 1).padStart(2, '0');
+			const d = String(value.getDate()).padStart(2, '0');
+			editValue = `${y}-${m}-${d}`;
+		}
+		editCell = { rowId, columnId, value: editValue };
 	};
 
 	const setEditValue = (value: string): void => {
@@ -359,9 +422,18 @@
 		const col = columns.find((c) => c.id === columnId);
 		if (indexedRow && col) {
 			const oldValue = getCellValue(indexedRow, col);
-			// Coerce về kiểu accessor (số → number) — tránh "5" !== 5 khi so sánh.
+			// Coerce theo editor type (wave 8): number → Number, boolean → Boolean,
+			// date → Date (yyyy-mm-dd), còn lại string.
+			const editorType = getEditorType(col, oldValue);
 			let newValue: unknown = value;
-			if (typeof oldValue === 'number' && value.trim() !== '' && !Number.isNaN(Number(value))) {
+			if (editorType === 'number') {
+				if (value.trim() !== '' && !Number.isNaN(Number(value))) newValue = Number(value);
+			} else if (editorType === 'boolean') {
+				newValue = value === 'true';
+			} else if (editorType === 'date') {
+				const parsed = parseDateValue(value);
+				newValue = parsed ?? oldValue;
+			} else if (typeof oldValue === 'number' && value.trim() !== '' && !Number.isNaN(Number(value))) {
 				newValue = Number(value);
 			}
 			if (newValue !== oldValue) {
@@ -390,7 +462,15 @@
 		for (const col of columns) {
 			if (col.status || col.render) continue; // cột pill/render không edit trực tiếp
 			const v = getCellValue(found.row, col);
-			values[col.id] = v == null ? '' : String(v);
+			if (getEditorType(col, v) === 'date' && v instanceof Date) {
+				// input[type=date] cần yyyy-mm-dd (giờ địa phương).
+				const y = v.getFullYear();
+				const m = String(v.getMonth() + 1).padStart(2, '0');
+				const d = String(v.getDate()).padStart(2, '0');
+				values[col.id] = `${y}-${m}-${d}`;
+			} else {
+				values[col.id] = v == null ? '' : String(v);
+			}
 		}
 		rowEdit = { rowId, values };
 		// Đóng cell editor nếu đang mở (chỉ 1 chế độ edit tại 1 thời điểm).
@@ -407,8 +487,19 @@
 					if (!(col.id in values)) continue;
 					if (col.status || col.render) continue;
 					const oldValue = getCellValue(found.row, col);
+					// Coerce theo editor type (wave 8).
+					const editorType = getEditorType(col, oldValue);
 					let newValue: unknown = values[col.id];
-					if (typeof oldValue === 'number' && String(newValue).trim() !== '' && !Number.isNaN(Number(newValue))) {
+					if (editorType === 'number') {
+						if (String(newValue).trim() !== '' && !Number.isNaN(Number(newValue))) {
+							newValue = Number(newValue);
+						}
+					} else if (editorType === 'boolean') {
+						newValue = values[col.id] === 'true';
+					} else if (editorType === 'date') {
+						const parsed = parseDateValue(String(newValue));
+						newValue = parsed ?? oldValue;
+					} else if (typeof oldValue === 'number' && String(newValue).trim() !== '' && !Number.isNaN(Number(newValue))) {
 						newValue = Number(newValue);
 					}
 					if (newValue !== oldValue) {
@@ -666,6 +757,194 @@
 
 	const selectedCount: number = $derived(selected.size);
 
+	// ── RESIZE COLUMN (wave 8) — drag mép th + auto-fit + reset dblclick ──
+	// Width hiện tại của cột (px hoặc undefined = auto — CSS table-layout: auto).
+	const columnWidth = (columnId: string): number | undefined => columnWidths[columnId];
+
+	// Canvas cache (1 lần — measureText tốn kém nếu tạo mới mỗi lần đo).
+	let measureCanvas: HTMLCanvasElement | undefined = $state(undefined);
+
+	// Đo text bằng canvas (không cần DOM probe) — font 14px ≈ cell text.
+	const measureTextWidth = (text: string): number => {
+		if (typeof document === 'undefined') return 0;
+		if (!measureCanvas) measureCanvas = document.createElement('canvas');
+		const context = measureCanvas.getContext('2d');
+		if (!context) return 0;
+		context.font = '14px sans-serif';
+		return context.measureText(text).width;
+	};
+
+	// Auto-fit width khởi tạo: đo content (header + mọi row ĐÃ LOAD) → set width
+	// vừa đủ + maxWidth (text dài hơn → ellipsis + title đầy đủ).
+	const fitColumnWidths = (): void => {
+		if (!resizableCfg.fit || typeof document === 'undefined') return;
+		const next: Record<string, number | undefined> = {};
+		for (const col of columns) {
+			// Cột đã có width prop (user khai báo) → giữ nguyên (không auto-fit đè).
+			if (col.width) continue;
+			const headerW = measureTextWidth(col.label) + 40; // padding + sort icon
+			let maxW = headerW;
+			for (const { row } of pageRows) {
+				const value = getCellValue(row, col);
+				const text = col.render ? String(col.render(value, row as never, 0)) : String(value ?? '');
+				const w = measureTextWidth(text) + 34; // padding cell x2 + border
+				if (w > maxW) maxW = w;
+			}
+			next[col.id] = Math.round(Math.min(resizableCfg.maxWidth, Math.max(resizableCfg.minWidth, maxW)));
+		}
+		columnWidths = next;
+	};
+
+	// Đo 1 lần sau mount (SSR không có document; data prop đồng bộ lúc mount).
+	$effect(() => {
+		if (typeof document === 'undefined') return;
+		// Đọc pageRows + columns (reactive) — data đổi (live add) → re-fit.
+		const cols = columns;
+		const current = pageRows;
+		if (cols.length === 0) return;
+		// Chỉ re-fit khi danh sách columnId đổi (không re-fit khi resize tay).
+		const ids = cols.map((c) => c.id).join(',');
+		if (ids === lastFitIds) return;
+		lastFitIds = ids;
+		fitColumnWidths();
+		void current;
+	});
+	let lastFitIds = $state<string | undefined>(undefined);
+
+	// Bắt đầu resize: mousedown trên handle mép phải th → theo dõi mousemove
+	// trên document (mouseleave/up dừng). Width = widthStart + (dx).
+	const startResize = (columnId: string, e: MouseEvent): void => {
+		if (!resizableDerived || typeof document === 'undefined') return;
+		e.preventDefault();
+		e.stopPropagation();
+		const th = (e.currentTarget as HTMLElement).closest('th');
+		const widthStart = columnWidths[columnId] ?? (th ? th.getBoundingClientRect().width : 100);
+		const startX = e.clientX;
+		const onMouseMove = (ev: MouseEvent): void => {
+			const dx = ev.clientX - startX;
+			const next = Math.max(resizableCfg.minWidth, Math.round(widthStart + dx));
+			columnWidths[columnId] = next;
+		};
+		const stop = (): void => {
+			document.removeEventListener('mousemove', onMouseMove);
+			document.removeEventListener('mouseup', stop);
+		};
+		document.addEventListener('mousemove', onMouseMove);
+		document.addEventListener('mouseup', stop);
+	};
+
+	// Double-click handle → reset width về auto (fit-content đo lại).
+	const resetColumnWidth = (columnId: string): void => {
+		if (!resizableDerived) return;
+		columnWidths[columnId] = undefined;
+		// Fit lại chỉ cột này (đo header + row).
+		const col = columns.find((c) => c.id === columnId);
+		if (!col || col.width) return;
+		const headerW = measureTextWidth(col.label) + 40;
+		let maxW = headerW;
+		for (const { row } of pageRows) {
+			const value = getCellValue(row, col);
+			const text = col.render ? String(col.render(value, row as never, 0)) : String(value ?? '');
+			const w = measureTextWidth(text) + 34;
+			if (w > maxW) maxW = w;
+		}
+		columnWidths[columnId] = Math.round(Math.min(resizableCfg.maxWidth, Math.max(resizableCfg.minWidth, maxW)));
+	};
+
+	// ── EDITOR TYPE (wave 8) — editor theo kiểu giá trị ──
+	// Xác định editor type cho cell: col.editor > oldValue number → number.
+	const getEditorType = (col: DataTableColumn<Record<string, unknown>>, value: unknown): 'text' | 'number' | 'boolean' | 'date' | 'select' => {
+		if (col.editor) return col.editor;
+		if (typeof value === 'number') return 'number';
+		return 'text';
+	};
+
+	// Parse value kiểu Date (input date trả yyyy-mm-dd) — so oldValue Date.
+	const parseDateValue = (value: string): Date | null => {
+		if (!value) return null;
+		const [y, m, d] = value.split('-').map(Number);
+		if (!y || !m || !d) return null;
+		return new Date(y, m - 1, d);
+	};
+
+	// ── ROW DETAIL MODAL (wave 8) — click row/cell → Modal chi tiết ──
+	const openRowDetail = (rowId: string, focusColumn?: string): void => {
+		const found = findRowById(rowId);
+		if (!found) return;
+		detailRowId = rowId;
+		detailFocusColumn = focusColumn;
+		// Values khởi tạo theo columns (string — coerce khi commit; boolean editor
+		// giữ boolean thật).
+		const values: Record<string, string | boolean> = {};
+		for (const col of columns) {
+			if (col.status || col.render) continue;
+			const v = getCellValue(found.row, col);
+			if (getEditorType(col, v) === 'boolean') {
+				values[col.id] = Boolean(v);
+			} else if (v instanceof Date) {
+				// input[type=date] cần yyyy-mm-dd (giờ địa phương).
+				const y = v.getFullYear();
+				const m = String(v.getMonth() + 1).padStart(2, '0');
+				const d = String(v.getDate()).padStart(2, '0');
+				values[col.id] = `${y}-${m}-${d}`;
+			} else {
+				values[col.id] = v == null ? '' : String(v);
+			}
+		}
+		detailValues = values;
+		// Đóng cell/row editor đang mở (chỉ 1 chế độ edit tại 1 thời điểm).
+		editCell = undefined;
+		rowEdit = undefined;
+		detailOpen = true;
+		onRowDetail?.(found.row as never, rowId);
+	};
+
+	const closeRowDetail = (commit: boolean): void => {
+		if (!detailRowId) {
+			detailOpen = false;
+			return;
+		}
+		if (commit && rowDetailCfg.editable) {
+			const found = findRowById(detailRowId);
+			if (found) {
+				let anyChanged = false;
+				for (const col of columns) {
+					if (!(col.id in detailValues)) continue;
+					if (col.status || col.render) continue;
+					const oldValue = getCellValue(found.row, col);
+					let raw = detailValues[col.id];
+					let newValue: unknown = raw;
+					if (getEditorType(col, oldValue) === 'number') {
+						// Coerce number (input type=number trả string).
+						if (typeof raw === 'string' && raw.trim() !== '' && !Number.isNaN(Number(raw))) {
+							newValue = Number(raw);
+						}
+					} else if (getEditorType(col, oldValue) === 'boolean') {
+						newValue = Boolean(raw);
+					} else if (oldValue instanceof Date) {
+						// Date oldValue → coerce từ yyyy-mm-dd.
+						const parsed = parseDateValue(String(raw));
+						newValue = parsed ?? oldValue;
+					}
+					if (newValue !== oldValue) {
+						onCellUpdate?.(found.row as never, col.id, oldValue, newValue);
+						if (typeof col.accessor === 'string') {
+							(found.row as Record<string, unknown>)[col.accessor] = newValue;
+						}
+						anyChanged = true;
+						// Sửa trong modal → gọi onRowUpdate 1 lần (không fire per-cell).
+					}
+				}
+				// onRowUpdate chỉ khi có ít nhất 1 field đổi (flag ghi trong loop —
+				// old sau khi ghi là giá trị mới → so luôn false).
+				if (anyChanged) onRowUpdate?.(found.row as never, detailRowId);
+			}
+		}
+		detailRowId = undefined;
+		detailFocusColumn = undefined;
+		detailOpen = false;
+	};
+
 	// ── LAZY LOAD ──
 	const hasMoreLazy: boolean = $derived(lazyHasMoreProp ?? hasMoreLazyState ?? true);
 	const isLoadingMore: boolean = $derived(loadingMore);
@@ -746,6 +1025,12 @@
 	const cloneText = $derived(getText(undefined, { en: 'Duplicate', vi: 'Nhân đôi' }));
 	const deleteSelectedText = $derived(getText(undefined, { en: 'Delete selected', vi: 'Xóa đã chọn' }));
 	const clearSelectionText = $derived(getText(undefined, { en: 'Clear selection', vi: 'Bỏ chọn' }));
+
+	// ── LABELS wave 8 (row detail modal) ──
+	const rowDetailTitleText = $derived(getText(rowDetailCfg.title, { en: 'Row details', vi: 'Chi tiết row' }));
+	const rowDetailSaveText = $derived(getText(undefined, { en: 'Save', vi: 'Lưu' }));
+	const rowDetailCloseText = $derived(getText(undefined, { en: 'Close', vi: 'Đóng' }));
+	const rowDetailEditText = $derived(getText(undefined, { en: 'Edit in detail', vi: 'Chi tiết' }));
 
 	const resultsText = $derived(resultsTemplate.replace('{n}', String(filtered.length)));
 	const showSearch = $derived(!!searchable);
@@ -907,6 +1192,36 @@
 		get clearSelectionText() {
 			return clearSelectionText;
 		},
+		get resizable() {
+			return resizableDerived;
+		},
+		get resizeFit() {
+			return resizableCfg.fit;
+		},
+		get resizeMinWidth() {
+			return resizableCfg.minWidth;
+		},
+		get resizeMaxWidth() {
+			return resizableCfg.maxWidth;
+		},
+		get rowDetail() {
+			return rowDetailDerived;
+		},
+		get rowDetailTitle() {
+			return rowDetailTitleText;
+		},
+		get rowDetailEditable() {
+			return rowDetailCfg.editable;
+		},
+		get cellDetail() {
+			return cellDetailDerived;
+		},
+		get rowDetailSaveText() {
+			return rowDetailSaveText;
+		},
+		get rowDetailCloseText() {
+			return rowDetailCloseText;
+		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = [
 				'datatable-root',
@@ -1023,6 +1338,28 @@
 		clearSelection,
 		get selectedCount() {
 			return selected.size;
+		},
+		startResize,
+		resetColumnWidth,
+		columnWidth,
+		getEditorType,
+		parseDateValue,
+		openRowDetail,
+		closeRowDetail,
+		get detailRowId() {
+			return detailRowId;
+		},
+		get detailFocusColumn() {
+			return detailFocusColumn;
+		},
+		get detailOpen() {
+			return detailOpen;
+		},
+		get rowDetail() {
+			return rowDetailDerived;
+		},
+		get cellDetail() {
+			return cellDetailDerived;
 		}
 	};
 	setDataTableContext(shared);
@@ -1186,6 +1523,109 @@
 				</AlertDialog.Footer>
 			</AlertDialog.Content>
 		</AlertDialog>
+	{/if}
+
+	{#if rowDetailDerived && detailOpen && detailRowId}
+		{@const detailRow = findRowById(detailRowId)}
+		{#if detailRow}
+			<!-- Modal chi tiết row (wave 8): form field theo editor type + Save/Close -->
+			<Modal
+				bind:display={detailOpen}
+				size="md"
+				placement="center"
+				onClose={() => closeRowDetail(false)}
+				// initialFocus trỏ input/select bên trong field (div không
+				// focusable — focus() no-op nếu không tabindex).
+				initialFocus={`[data-detail-field="${detailFocusColumn ?? ''}"] :is(input, select)`}
+			>
+				<Modal.Container>
+					<Modal.Container.Header class="justify-between">
+						<span class="datatable-detail-title" data-test="datatable-detail-title">
+							{configs.rowDetailTitle}
+						</span>
+					</Modal.Container.Header>
+					<Modal.Container.Body>
+						<div class="datatable-detail-body">
+							{#each columns as col (col.id)}
+								{@const value = getCellValue(detailRow.row, col)}
+								{@const editableCol = rowDetailCfg.editable && !col.status && !col.render}
+								{@const editorType = getEditorType(col, value)}
+								{@const rawValue = detailValues[col.id]}
+								<div class="datatable-detail-field" data-detail-field={col.id}>
+									<label class="datatable-detail-label" for={`detail-${col.id}`}>{col.label}</label>
+									{#if !editableCol}
+										<span class="datatable-detail-value">
+											{col.render ? String(col.render(value, detailRow.row as never, 0)) : String(value ?? '')}
+										</span>
+									{:else if editorType === 'boolean'}
+										<input
+											id={`detail-${col.id}`}
+											class="datatable-detail-check"
+											type="checkbox"
+											role="switch"
+											aria-label={col.label}
+											checked={rawValue === true || rawValue === 'true'}
+											onchange={(e) =>
+												(detailValues[col.id] = (e.target as HTMLInputElement).checked)}
+										/>
+									{:else if editorType === 'date'}
+										<!-- Native input[type=date] (panel DatePicker composite bị clip
+										     trong modal-body overflow-y:auto — an toàn hơn) -->
+										<input
+											id={`detail-${col.id}`}
+											class="datatable-detail-input"
+											type="date"
+											aria-label={col.label}
+											value={String(rawValue ?? '')}
+											oninput={(e) => (detailValues[col.id] = (e.target as HTMLInputElement).value)}
+										/>
+									{:else if editorType === 'select'}
+										<select
+											id={`detail-${col.id}`}
+											class="datatable-detail-input"
+											aria-label={col.label}
+											value={String(rawValue ?? '')}
+											onchange={(e) => (detailValues[col.id] = (e.target as HTMLSelectElement).value)}
+										>
+											{#each col.options ?? [] as opt (opt)}
+												<option value={opt}>{opt}</option>
+											{/each}
+										</select>
+									{:else}
+										<input
+											id={`detail-${col.id}`}
+											class="datatable-detail-input"
+											type={editorType === 'number' ? 'number' : 'text'}
+											aria-label={col.label}
+											value={String(rawValue ?? '')}
+											oninput={(e) => (detailValues[col.id] = (e.target as HTMLInputElement).value)}
+										/>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</Modal.Container.Body>
+					<Modal.Container.Footer>
+						<button
+							type="button"
+							class="datatable-btn datatable-btn--create"
+							data-test="datatable-detail-save"
+							onclick={() => closeRowDetail(true)}
+						>
+							{configs.rowDetailSaveText}
+						</button>
+						<button
+							type="button"
+							class="datatable-btn"
+							data-test="datatable-detail-close"
+							onclick={() => closeRowDetail(false)}
+						>
+							{configs.rowDetailCloseText}
+						</button>
+					</Modal.Container.Footer>
+				</Modal.Container>
+			</Modal>
+		{/if}
 	{/if}
 </div>
 
@@ -1446,5 +1886,61 @@
 		width: 1px;
 		height: 1px;
 		overflow: hidden;
+	}
+
+	// ── Modal row detail (wave 8) ──
+	.datatable-detail-title {
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--foreground, #18181b);
+	}
+	.datatable-detail-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.875rem;
+		padding: 0.25rem 0;
+	}
+	.datatable-detail-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+	.datatable-detail-label {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--muted, #71717a);
+	}
+	.datatable-detail-value {
+		font-size: 0.9375rem;
+		color: var(--foreground, #18181b);
+		padding: 0.375rem 0;
+	}
+	.datatable-detail-input {
+		height: 2.25rem;
+		padding: 0 0.625rem;
+		font: inherit;
+		font-size: 0.9375rem;
+		color: var(--foreground, #18181b);
+		background: var(--background, #fff);
+		border: 1px solid var(--border, hsl(240 5.9% 90%));
+		border-radius: var(--border-radius-sm, 0.375rem);
+		&[type='number'] {
+			font-variant-numeric: tabular-nums;
+		}
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+			outline-offset: 2px;
+		}
+	}
+	.datatable-detail-check {
+		width: 1.25rem;
+		height: 1.25rem;
+		margin: 0;
+		cursor: var(--cursor-interactive);
+		accent-color: var(--primary, var(--color-indigo-500));
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+			outline-offset: 2px;
+		}
 	}
 </style>
