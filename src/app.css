@@ -2,6 +2,41 @@
 @import '$styles/theme.scss';
 
 /* ══════════════════════════════════════════════════════
+   THEME — Circle reveal transition (Wave 11)
+   Đổi theme (data-theme trên html) lan dần từ tâm vị trí
+   click/tap nút theme toggle. JS module theme.svelte.ts
+   startViewTransition + set --thx/--thy (tâm circle) +
+   --thr (bán kính max tới góc xa nhất viewport, Math.hypot)
+   + class 'theme-transitioning' lên html. Pseudo-element
+   ::view-transition-* KHÔNG inline style / Element.animate
+   được → keyframes + CSS custom properties là cách chuẩn.
+   old giữ nguyên (opacity 1), new mở rộng circle che dần.
+   ══════════════════════════════════════════════════════ */
+
+@keyframes theme-clip-expand {
+	from {
+		clip-path: circle(0px at var(--thx, 50%) var(--thy, 50%));
+	}
+	to {
+		clip-path: circle(var(--thr, 150%) at var(--thx, 50%) var(--thy, 50%));
+	}
+}
+
+/* Chỉ scope khi class 'theme-transitioning' có trên html — không ăn đè
+   page-fade-out/in mặc định của page navigation (onNavigate). */
+:root.theme-transitioning::view-transition-old(root) {
+	animation: none;
+	mix-blend-mode: normal;
+}
+
+:root.theme-transitioning::view-transition-new(root) {
+	animation-name: theme-clip-expand;
+	animation-duration: 450ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+	mix-blend-mode: normal;
+}
+
+/* ══════════════════════════════════════════════════════
    MODERN APP VIEW TRANSITIONS
    Fluid, Apple/Vercel-inspired page transitions with cubic-bezier easing
    ══════════════════════════════════════════════════════ */
