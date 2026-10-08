@@ -4,12 +4,12 @@ import type { TranslateContent } from '$interfaces/basic';
 import type { Snippet, SvelteComponent } from 'svelte';
 import type { FullAutoFill } from 'svelte/elements';
 
-type InputTypes = 'text' | 'password' | 'number' | 'currency' | 'phone' | 'email' | 'file';
+type InputTypes = 'text' | 'password' | 'number' | 'currency' | 'phone' | 'email' | 'file' | 'barcode';
 type InputVariants = 'primary' | 'secondary';
-export type ValidationCompact = (output?: string | boolean | File[]) => boolean | Promise<boolean>;
+export type ValidationCompact = (output?: string | boolean | string[] | File[]) => boolean | Promise<boolean>;
 export type ValidationFull = {
 	id?: string | number;
-	isValid: (output?: string | boolean | File[]) => boolean | Promise<boolean>;
+	isValid: (output?: string | boolean | string[] | File[]) => boolean | Promise<boolean>;
 	message?: {
 		valid?: TranslateContent;
 		invalid?: TranslateContent;
@@ -151,6 +151,48 @@ export interface InputProps extends BasicProps {
 	 * USD 2). Khi đang nhập giữ nguyên phần thập phân người dùng gõ.
 	 */
 	decimals?: number;
+	// ── type='barcode' ──
+	/**
+	 * Một mã đã quét/nhập (type='barcode', KHÔNG dùng value string). Bindable —
+	 * source-of-truth giống pattern files; value (string) không dùng. Form KHÔNG
+	 * serialize (configs không có key `value`) — page đọc qua bind:codes.
+	 */
+	codes?: string[];
+	/**
+	 * Mở camera scan (type='barcode', mặc định false): hiện nút scanner bên phải
+	 * input → click mở overlay camera (video + khung scan + detect loop).
+	 */
+	cameraOn?: boolean;
+	/**
+	 * Âm thanh khi detect thành công (type='barcode', mặc định false):
+	 * WebAudio oscillator — single 1 nốt 880Hz, multiple 2 nốt 880→1320Hz.
+	 */
+	beepOn?: boolean;
+	/**
+	 * Bật sửa từng item trong danh sách detected (type='barcode', mặc định
+	 * `false`): mỗi card có nút edit → input inline cập nhật rawValue.
+	 */
+	updateOn?: boolean;
+	/**
+	 * Bật nút xóa từng item (type='barcode', mặc định `false`): mỗi card có
+	 * nút × góc phải trên → xóa khỏi danh sách.
+	 */
+	deleteOn?: boolean;
+	/**
+	 * Bật chọn nhanh để xóa (type='barcode', mặc định `false`): mỗi card có ô
+	 * tick góc trái trên → tick ≥1 mã → hiện thanh hành động "Xóa N mã".
+	 */
+	selectDeleteOn?: boolean;
+	/**
+	 * Bật nút "Xóa tất cả" (type='barcode', mặc định `false`): hiện khi ≥1 mã,
+	 * nằm ở header row của danh sách. Click → codes = [].
+	 */
+	selectAllOn?: boolean;
+	/**
+	 * Định dạng barcode/QR chấp nhận (type='barcode', mảng BarcodeDetector
+	 * format — vd ['qr_code', 'ean_13']). Rỗng → tất cả format được hỗ trợ.
+	 */
+	formats?: string[];
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;
@@ -230,7 +272,7 @@ export interface InputConfigs extends BasicConfigs {
 		process?: Map<keyof EventListener | 'required', boolean | 'pending'>;
 		isValid?: boolean | 'pending';
 		messages?: Map<
-			string | ((output?: string | boolean | File[]) => boolean | Promise<boolean>),
+			string | ((output?: string | boolean | string[] | File[]) => boolean | Promise<boolean>),
 			{ content?: TranslateContent; kind: 'valid' | 'invalid' }
 		>;
 	};
@@ -262,6 +304,24 @@ export interface InputConfigs extends BasicConfigs {
 	symbolPosition?: 'prefix' | 'suffix';
 	/** Số chữ số thập phân ép khi hiển thị (mặc định theo currency). */
 	decimals?: number;
+	// ── type='barcode' (configs KHÔNG có key `value` → Form serialize bỏ qua field) ──
+	/** Danh sách mã đã quét (type='barcode'). Bind qua props.codes — LUÔN gán
+	 *  array MỚI khi đổi (kỷ luật $bindable, không mutation tại chỗ). */
+	codes?: string[];
+	/** Nút scanner + overlay camera (mặc định false). */
+	cameraOn?: boolean;
+	/** Âm thanh detect (WebAudio oscillator — mặc định false). */
+	beepOn?: boolean;
+	/** Sửa từng item (mặc định false). */
+	updateOn?: boolean;
+	/** Xóa từng item (mặc định false). */
+	deleteOn?: boolean;
+	/** Ô tick chọn nhanh để xóa hàng loạt (mặc định false). */
+	selectDeleteOn?: boolean;
+	/** Nút "Xóa tất cả" ở header list (mặc định false). */
+	selectAllOn?: boolean;
+	/** Định dạng barcode/QR chấp nhận (BarcodeDetector format). */
+	formats?: string[];
 	focus: () => void;
 	loading?: boolean;
 	reset: () => void;

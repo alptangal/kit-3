@@ -152,6 +152,8 @@ export const defaultValidation: {
 	maxFileSize?: (maxBytes: number, fieldName?: string) => ValidationCompact | ValidationFull;
 	maxFiles?: (maxCount: number, fieldName?: string) => ValidationCompact | ValidationFull;
 	isCurrency?: (fieldName?: string) => ValidationCompact | ValidationFull;
+	// type='barcode' — validators nhận string[] (passed qua untrack(() => codes))
+	hasBarcode?: (fieldName?: string) => ValidationCompact | ValidationFull;
 } = {
 	required: (fieldName) => {
 		return {
@@ -319,6 +321,27 @@ export const defaultValidation: {
 				valid: {
 					en: `${fieldName ?? 'this field'} is a valid amount`,
 					vi: `${fieldName ?? 'Trường này'} là số tiền hợp lệ`
+				}
+			}
+		};
+	},
+	// type='barcode' — input là string[] (từ untrack(() => codes)). required →
+	// ≥1 mã trong danh sách đã quét/nhập (mirror hasFile).
+	hasBarcode(fieldName) {
+		return {
+			isValid(codes) {
+				const list = codes as string[] | undefined;
+				if (list?.length) return true;
+				return false;
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'} requires at least one code`,
+					vi: `${fieldName ?? 'Trường này'} yêu cầu ít nhất một mã`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'} is valid`,
+					vi: `${fieldName ?? 'Trường này'} hợp lệ`
 				}
 			}
 		};

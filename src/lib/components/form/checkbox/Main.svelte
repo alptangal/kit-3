@@ -255,7 +255,7 @@ let configs: CheckboxConfigs = $state({
 	aria-label={props['aria-label']}
 	{@attach handleEvents(configs.event)}
 	onkeydown={(e: KeyboardEvent) => {
-		if (e.key === 'Enter' || e.key === ' ') {
+		if (e.key === 'Enter' || e.key === ' ' || e.key === 'Space') {
 			e.preventDefault();
 			toggle();
 		}

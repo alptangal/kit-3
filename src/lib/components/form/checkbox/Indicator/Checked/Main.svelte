@@ -101,7 +101,7 @@
 				stroke-linejoin="round"
 				pathLength="1"
 				class="check-draw"
-				stroke="white"
+				
 				stroke-width="2"
 			/>
 		</svg>

@@ -25,6 +25,21 @@
 	let quickDeleteFiles = $state<File[]>([]);
 	let clearableFiles = $state<File[]>([]);
 
+	// ── type='barcode' (bind:codes — string[] riêng, KHÔNG dùng value string) ──
+	let barcodeCodes = $state<string[]>([]);
+	let barcodeUpdateCodes = $state<string[]>([]);
+	let barcodeSelectCodes = $state<string[]>([]);
+	let barcodeAllCodes = $state<string[]>([]);
+	let barcodeRequiredCodes = $state<string[]>([]);
+	let barcodeDisabledCodes = $state<string[]>([]);
+	// if-form barcode: gate submit theo page state (mirror if-form file)
+	let barcodeFormCodes = $state<string[]>([]);
+	let barcodeFormSubmitted = $state(false);
+	function handleSubmitBarcode() {
+		if (barcodeFormCodes.length === 0) return;
+		barcodeFormSubmitted = true;
+	}
+
 	// if-form: gate submit theo page state (Form không export configs → page tự quản).
 	// File input required → phải có ≥1 tệp. Form KHÔNG serialize file (configs không
 	// có key `value`) → payload chỉ gồm email, probe FI7 kiểm tra.
@@ -241,8 +256,9 @@
 			<Input type="file" bind:files={quickDeleteFiles} multiple quickDelete accept="image/*,.txt" />
 		</TextField>
 		<p class="demo-hint">
-			Tick ô góc trái trên nhiều card → thanh "Xóa N tệp đã chọn" hiện → xóa hàng loạt.
-			Còn: <code>{quickDeleteFiles.length}</code>
+			Checkbox select-all (indeterminate khi một phần) + tick từng card (Checkbox component
+			reuse) → thanh "Xóa N tệp đã chọn" hiện → xóa hàng loạt. Còn:
+			<code>{quickDeleteFiles.length}</code>
 		</p>
 	</section>
 
@@ -288,6 +304,134 @@
 			<Input type="file" bind:files={disabledFiles} disabled />
 		</TextField>
 		<p class="demo-hint">Dropzone disabled: không click/drag-drop được, không focus.</p>
+	</section>
+
+	<!-- ──────────────── type='barcode' ──────────────── -->
+
+	<!-- Base: input tay (Enter/cộng) + nút scanner camera + beep -->
+	<section class="demo" data-test="ib-base">
+		<h2>type=barcode · base (nhập tay + scanner camera + beep)</h2>
+		<TextField name="ib-base">
+			<Input
+				type="barcode"
+				bind:codes={barcodeCodes}
+				cameraOn
+				beepOn
+				placeholder="Quét hoặc nhập mã (VD: 8938506952141)"
+			/>
+		</TextField>
+		<p class="demo-hint">
+			Nhập mã → <code>Enter</code> hoặc nút <code>+</code> → thêm vào danh sách. Nút scanner
+			→ mở camera (native BarcodeDetector hoặc polyfill zbar-wasm). Beep 1 nốt khi quét
+			được 1 mã, 2 nốt khi nhiều mã.
+			Đã quét: <code>{barcodeCodes.length}</code>
+		</p>
+	</section>
+
+	<!-- Update/delete từng item -->
+	<section class="demo" data-test="ib-update">
+		<h2>type=barcode · updateOn + deleteOn (sửa/xóa từng mã)</h2>
+		<TextField name="ib-update">
+			<Input
+				type="barcode"
+				bind:codes={barcodeUpdateCodes}
+				updateOn
+				deleteOn
+				placeholder="Nhập mã…"
+			/>
+		</TextField>
+		<p class="demo-hint">
+			Nút bút chì → input inline sửa mã (<code>Enter</code> commit, <code>Esc</code> hủy).
+			Nút × → xóa khỏi danh sách.
+		</p>
+	</section>
+
+	<!-- Select delete: tick card → xóa hàng loạt -->
+	<section class="demo" data-test="ib-select-delete">
+		<h2>type=barcode · selectDeleteOn (tick + xóa hàng loạt)</h2>
+		<TextField name="ib-select-delete">
+			<Input
+				type="barcode"
+				bind:codes={barcodeSelectCodes}
+				selectDeleteOn
+				placeholder="Nhập mã…"
+			/>
+		</TextField>
+		<p class="demo-hint">
+			Tick ô tròn bên trái nhiều card → thanh "Xóa N mã đã chọn" hiện → xóa hàng loạt.
+			Còn: <code>{barcodeSelectCodes.length}</code>
+		</p>
+	</section>
+
+	<!-- Select all: nút Xóa tất cả ở header list -->
+	<section class="demo" data-test="ib-select-all">
+		<h2>type=barcode · selectAllOn (Xóa tất cả)</h2>
+		<TextField name="ib-select-all">
+			<Input
+				type="barcode"
+				bind:codes={barcodeAllCodes}
+				selectAllOn
+				selectDeleteOn
+				placeholder="Nhập mã…"
+			/>
+		</TextField>
+		<p class="demo-hint">
+			Nút "Xóa tất cả" hiện khi ≥1 mã (bên phải header list) — click → danh sách rỗng.
+			Còn: <code>{barcodeAllCodes.length}</code>
+		</p>
+	</section>
+
+	<!-- Required + FieldMessages (validate theo quy tắc chung) -->
+	<section class="demo" data-test="ib-required">
+		<h2>type=barcode · required (showValid)</h2>
+		<TextField name="ib-required" required>
+			<Input
+				type="barcode"
+				bind:codes={barcodeRequiredCodes}
+				selectAllOn
+				required
+				placeholder="Nhập mã…"
+			/>
+			<FieldMessages showValid />
+		</TextField>
+		<p class="demo-hint">
+			Required chưa có mã → error; thêm mã → ~300ms debounce lên "valid" (showValid);
+			xóa hết → "error" lại.
+		</p>
+	</section>
+
+	<!-- In Form: barcode required + submit gate (payload KHÔNG có barcode) -->
+	<section class="demo" data-test="ib-form">
+		<h2>Trong Form (barcode required + submit gate)</h2>
+		<Form onSubmit={handleSubmitBarcode}>
+			<TextField name="ib-form-code" required>
+				<Input
+					type="barcode"
+					name="ib-form-code"
+					bind:codes={barcodeFormCodes}
+					required
+					selectAllOn
+					placeholder="Nhập mã…"
+				/>
+				<FieldMessages showValid />
+			</TextField>
+			<Button type="submit" color="success" variant="solid" disabled={barcodeFormCodes.length === 0}>
+				{barcodeFormSubmitted ? 'Đã submit ✓' : 'Submit'}
+			</Button>
+		</Form>
+		<p class="demo-hint">
+			Nút Submit disabled tới khi có ≥1 mã. Form KHÔNG serialize barcode (configs không có
+			key `value`) — page đọc qua bind:codes.
+		</p>
+	</section>
+
+	<!-- Disabled: không tương tác -->
+	<section class="demo" data-test="ib-disabled">
+		<h2>type=barcode · disabled</h2>
+		<TextField name="ib-disabled">
+			<Input type="barcode" bind:codes={barcodeDisabledCodes} cameraOn disabled />
+		</TextField>
+		<p class="demo-hint">Barcode disabled: không nhập/scanner/xóa được.</p>
 	</section>
 </div>
 

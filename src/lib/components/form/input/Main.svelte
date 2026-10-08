@@ -2,6 +2,12 @@
 	//$components/form/input/Main.svelte
 	import { iconify } from '$assets/icons/iconify';
 	import { Button, Icon } from '$components/element';
+	// Checkbox row chọn-để-xóa + select-all (type='file' quickDelete) — IMPORT
+	// TRỰC TIẾP file .svelte (bài học wave 6: barrel $components/form re-export
+	// Checkbox root → circular import "Cannot access before initialization";
+	// mirror pattern DataTable Head/Body).
+	import Checkbox from '$components/form/checkbox/Main.svelte';
+	import type { MouseEvents } from '$components/interface';
 	import { measureTextWidth, styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
@@ -29,11 +35,13 @@
 	import { getTextFieldContext } from '../textField';
 	import { Modal } from '$components/modal';
 	import type { FullAutoFill } from 'svelte/elements';
+	import { ensureBarcodeDetector, playBeep, primeAudio, type BarcodeDetectorResult } from '$modules/barcode';
 
 	let {
 		value = $bindable(),
 		disabled = $bindable(),
 		files = $bindable([] as File[]),
+		codes = $bindable([] as string[]),
 		...props
 	}: InputProps = $props();
 	// Ghi nhớ giá trị ban đầu khi component được tạo ra, dùng để reset về đúng mốc ban đầu
@@ -41,9 +49,13 @@
 	// Mốc ban đầu của files (type='file') — so cho status.changed + reset().
 	// Chụp length: files có thể undefined về lý thuyết → luôn array.
 	let _initialFiles: File[] = (files ?? []).slice();
+	// Mốc ban đầu của codes (type='barcode') — mirror _initialFiles.
+	let _initialCodes: string[] = (codes ?? []).slice();
 	// type='file': vừa reset → files effect bỏ qua trigger validation 1 lần
 	// (hoist lên vì configs.reset() tham chiếu; default true để ignore mount lần đầu)
 	let _filesJustReset = $state(true);
+	// type='barcode': vừa reset → codes effect bỏ qua trigger validation 1 lần
+	let _codesJustReset = $state(true);
 
 	// Form/TextField context đọc ngay đầu phase init (getFormContext()/getTextFieldContext()
 	// = getContext(), không reactive) — hoist lên đầu để các derived phía dưới
@@ -89,6 +101,8 @@
 			`color-${colorDerived}`,
 			// type='file': dropzone + previews → height auto (không cố định min-height text)
 			typeDerived == 'file' ? 'input-file-mode' : undefined,
+			// type='barcode': list detected → height auto (mirror file mode)
+			typeDerived == 'barcode' ? 'input-barcode-mode' : undefined,
 			configs.status.hover || textFieldContext?.status.hover ? 'hover' : undefined
 		];
 		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
@@ -578,6 +592,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					// File: "đã đổi" = số lượng tệp khác mốc ban đầu (reset giữ files ban đầu)
 					return (files?.length ?? 0) !== _initialFiles.length;
 				}
+				if (configs.type == 'barcode') {
+					// Barcode: "đã đổi" = danh sách mã khác mốc ban đầu (mirror file mode)
+					return (codes?.length ?? 0) !== _initialCodes.length ||
+						(codes ?? []).some((c, i) => c !== _initialCodes[i]);
+				}
 				return (_initialValue ?? '') !== (configs.value ?? '');
 			}
 		},
@@ -605,6 +624,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		// default validators (maxFiles/maxFileSize) hoạt động.
 		get maxFiles() { return props.maxFiles; },
 		get maxSize() { return props.maxSize; },
+		// type='barcode': formats chấp nhận (BarcodeDetector) — props là source of truth.
+		get formats() { return props.formats; },
 		validation: {
 			_cachedIsValid: undefined as boolean | 'pending' | undefined,
 			get isValid() {
@@ -629,6 +650,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				if (configs.required) {
 					if (configs.type === 'file') {
 						return (files?.length ?? 0) > 0;
+					}
+					if (configs.type === 'barcode') {
+						return (codes?.length ?? 0) > 0;
 					}
 					const val = configs.value ?? '';
 					return val.trim().length > 0;
@@ -1502,6 +1526,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				files = _initialFiles.slice();
 				_filesJustReset = true; // bỏ qua 1 lần trigger validation của files effect
 			}
+			if (configs.type == 'barcode') {
+				// Mirror file mode: gán array mới + bỏ qua 1 lần trigger validation
+				codes = _initialCodes.slice();
+				_codesJustReset = true;
+				editingCodeIndex = -1;
+				editingCodeValue = '';
+				selectedCodes = [];
+			}
 			configs.validation.process = undefined;
 			configs.validation.messages = undefined;
 			configs.validation.isValid = undefined; // Clear cached validation
@@ -1522,7 +1554,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		handles: (ValidationCompact | ValidationFull)[],
 		operator: 'and' | 'or'
 	) {
-		if (!props.validation && !configs.required && configs.type !== 'email' && configs.type !== 'file') return;
+		if (!props.validation && !configs.required && configs.type !== 'email' && configs.type !== 'file' && configs.type !== 'barcode') return;
 		if (!configs.validation.messages) configs.validation.messages = new SvelteMap();
 		if (!configs.timeId) configs.timeId = new Map();
 		const name = `timeout-validation-${eventName}`;
@@ -1553,8 +1585,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 							if (!configs.validation.messages) configs.validation.messages = new SvelteMap();
 							let result;
 							let isValid;
-							// type='file' → validators nhận File[]; các type khác nhận string value
-							const input = configs.type === 'file' ? untrack(() => files ?? []) : untrack(() => value);
+							// type='file' → validators nhận File[]; barcode → codes[]; các type
+							// khác nhận string value
+							const input =
+								configs.type === 'file'
+									? untrack(() => files ?? [])
+									: configs.type === 'barcode'
+										? untrack(() => codes ?? [])
+										: untrack(() => value);
 							if (typeof validateHandler == 'function') {
 								isValid = validateHandler;
 								result = await isValid(input);
@@ -1930,6 +1968,12 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			if (configs.maxSize != null && defaultValidation.maxFileSize) {
 				validators.push(defaultValidation.maxFileSize(configs.maxSize, configs.name));
 			}
+		} else if (configs.type === 'barcode') {
+			// Barcode: required → hasBarcode (≥1 mã, mirror hasFile). Non-required +
+			// không có validation → mảng rỗng (không validate, giống text bare).
+			if (configs.required) {
+				validators.push(defaultValidation.hasBarcode?.(configs.name) ?? defaultValidation.required(configs.name));
+			}
 		}
 		return validators;
 	}
@@ -1976,8 +2020,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		// Sync configs.value with bound value prop for validation getter.
 		// SKIP khi type='file': configs KHÔNG được phép có key `value` — Form serialize
 		// check `'value' in children` (form/Main.svelte) và sẽ bỏ qua field nếu thiếu.
-		// File upload do page làm qua FormData + bind:files.
-		if (configs.type !== 'file' && configs.value !== value) {
+		// File upload do page làm qua FormData + bind:files. Barcode mirror (codes).
+		if (configs.type !== 'file' && configs.type !== 'barcode' && configs.value !== value) {
 			configs.value = value;
 		}
 	});
@@ -2127,6 +2171,38 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			// Kiểm tra TRƯỚC early-return: kể cả lần reset không đổi files (không re-run)
 			// thì lần files đổi THẬT kế tiếp cũng không bị nuốt bởi cờ stale.
 			_filesJustReset = false;
+			return;
+		}
+		if (!changed) return;
+		const userChange = props.validation?.change;
+		let userHandles: (ValidationCompact | ValidationFull)[] = [];
+		let operator: 'and' | 'or' = props.validation?.operator ?? 'and';
+		if (Array.isArray(userChange)) {
+			userHandles = userChange;
+		} else if (userChange && typeof userChange === 'object' && Array.isArray(userChange.handles)) {
+			userHandles = userChange.handles;
+			operator = userChange.operator ?? operator;
+		}
+		const defaultValidators = getDefaultValidators();
+		const finalHandles = defaultValidators.length > 0 ? [...userHandles, ...defaultValidators] : userHandles;
+		if (finalHandles.length === 0) return;
+		void processingValidation('change', finalHandles, operator);
+	});
+
+	// ── type='barcode': validation pipeline (trigger khi codes đổi — mirror file) ──
+	// codes effect: đọc `codes` (reactive dep), so previousCodes (untrack),
+	// changed → debounce processingValidation với input = codes[].
+	let previousCodes: string[] | undefined;
+	$effect(() => {
+		if (configs.type !== 'barcode') return;
+		const current = codes;
+		const changed = untrack(() => previousCodes) !== current;
+		untrack(() => {
+			previousCodes = current;
+		});
+		if (_codesJustReset) {
+			// Vừa reset programmatic → bỏ qua trigger này (mirror file discipline)
+			_codesJustReset = false;
 			return;
 		}
 		if (!changed) return;
@@ -2391,6 +2467,343 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		files = []; // gán array MỚI — files effect trigger validation 1 lần (discipline)
 	}
 
+	// ── type='file': select all (opt-in props.quickDelete) ──
+	// Checkbox "chọn tất cả" ở header previews (mirror DataTable Head):
+	// all → checked; một phần → indeterminate (aria-checked="mixed").
+	// Toggle: all/mixed → deselect hết, chưa đủ → chọn tất cả (DataTable
+	// togglePageSelection pattern).
+	const allFilesSelected = $derived.by(() => {
+		const list = files ?? [];
+		return list.length > 0 && selectedFiles.length === list.length;
+	});
+	const indeterminateSelectAll = $derived(
+		selectedFiles.length > 0 && !allFilesSelected && (files?.length ?? 0) > 0
+	);
+	function toggleAllFilesSelected() {
+		if (configs.disabled) return;
+		_filesJustReset = false;
+		selectedFiles = allFilesSelected ? [] : [...(files ?? [])];
+	}
+	// Events cho Checkbox row/select-all — KHÔNG tự toggle qua mousedown được:
+	// mousedown nội bộ Checkbox mutate local $bindable (transient, không báo về
+	// selectedFiles) → bắt buộc click/keydown handler cập nhật state này rồi
+	// prop sync ngược (mirror DataTable rowCheckEvents/selectAllEvents).
+	// Memoize bằng Map — KHÔNG tạo mảng mới mỗi render (tránh re-attach handleEvents).
+	// FIX: Checkbox component có inline onkeydown (Space/Enter → toggle local $bindable).
+	// Ta dùng stopImmediatePropagation để tránh double-toggle + focus shift sang dropzone.
+	const fileCheckEventsCache = new Map<File, { events: { click: () => void; keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => void } }[]>();
+	let selectAllCheckEventsCache: { events: { click: () => void; keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => void } }[] | undefined;
+	function getFileCheckEvents(f: File) {
+		let cached = fileCheckEventsCache.get(f);
+		if (!cached) {
+			cached = [{
+				events: {
+					click: () => toggleFileSelected(f),
+					keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => {
+						const ke = e as KeyboardEvent | undefined;
+						const key = ke?.key;
+						if (key === ' ' || key === 'Enter') {
+							ke?.preventDefault?.();
+							ke?.stopImmediatePropagation?.();
+							toggleFileSelected(f);
+						}
+					}
+				}
+			}];
+			fileCheckEventsCache.set(f, cached);
+		}
+		return cached;
+	}
+	function getSelectAllCheckEvents() {
+		if (!selectAllCheckEventsCache) {
+			selectAllCheckEventsCache = [{
+				events: {
+					click: () => toggleAllFilesSelected(),
+					keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => {
+						const ke = e as KeyboardEvent | undefined;
+						const key = ke?.key;
+						if (key === ' ' || key === 'Enter') {
+							ke?.preventDefault?.();
+							ke?.stopImmediatePropagation?.();
+							toggleAllFilesSelected();
+						}
+					}
+				}
+			}];
+		}
+		return selectAllCheckEventsCache;
+	}
+
+	// ── type='barcode': state + handlers (mirror pattern file quickDelete/clearable) ──
+	// codes (props, $bindable) = source-of-truth; barcodeInput = value nhập tay.
+	// Scan camera: overlay inline (KHÔNG Modal — video + detect loop đơn giản hơn,
+	// đóng bằng nút ×; Modal bind:display bắt buộc là bẫy đã biết → tránh hẳn).
+	let barcodeInput = $state('');
+	// Ô tick chọn nhanh (selectDeleteOn) — mirror selectedFiles
+	let selectedCodes: string[] = $state([]);
+	const hasCodeSelection = $derived(selectedCodes.length > 0);
+	const barcodeDisplayDerived = $derived(typeDerived == 'barcode');
+	// Tùy chọn scan/camera/beep/list — props là source of truth (mirror maxFiles getter)
+	const cameraOnDerived = $derived(props.cameraOn === true);
+	const beepOnDerived = $derived(props.beepOn === true);
+	const updateOnDerived = $derived(props.updateOn === true);
+	const deleteOnDerived = $derived(props.deleteOn === true);
+	const selectDeleteOnDerived = $derived(props.selectDeleteOn === true);
+	const selectAllOnDerived = $derived(props.selectAllOn === true);
+	const formatsDerived = $derived(props.formats);
+
+	function addBarcode(raw: string) {
+		if (configs.disabled || !raw?.trim()) return;
+		_codesJustReset = false;
+		codes = [...(codes ?? []), raw.trim()]; // gán array MỚI (kỷ luật $bindable)
+	}
+
+	function removeBarcode(raw: string) {
+		if (configs.disabled) return;
+		_codesJustReset = false;
+		codes = (codes ?? []).filter((x) => x !== raw);
+	}
+
+	function toggleCodeSelected(raw: string) {
+		if (configs.disabled) return;
+		_codesJustReset = false;
+		selectedCodes = selectedCodes.includes(raw)
+			? selectedCodes.filter((x) => x !== raw)
+			: [...selectedCodes, raw];
+	}
+
+	function removeSelectedCodes() {
+		if (configs.disabled || !hasCodeSelection) return;
+		_codesJustReset = false;
+		const removed = selectedCodes;
+		selectedCodes = [];
+		// Duy nhất 1 lần gán codes mới — 1 run validation (không burst)
+		codes = (codes ?? []).filter((x) => !removed.includes(x));
+	}
+
+	function clearAllCodes() {
+		if (configs.disabled) return;
+		_codesJustReset = false;
+		selectedCodes = [];
+		codes = [];
+	}
+
+	// codes đổi (thêm/reset/xóa) → dọn selection rác (mã không còn trong list)
+	$effect(() => {
+		if (!barcodeDisplayDerived) return;
+		const list = codes ?? [];
+		if (selectedCodes.length && !list.some((c) => selectedCodes.includes(c))) {
+			selectedCodes = [];
+		} else if (selectedCodes.length) {
+			const kept = list.filter((c) => selectedCodes.includes(c));
+			if (kept.length !== selectedCodes.length) selectedCodes = kept;
+		}
+	});
+
+	// ── type='barcode': edit item (opt-in props.updateOn) ──
+	// Click nút edit → input inline trên card (value cũ làm mặc định) → Enter/blur
+	// commit; Escape hủy. Index theo position trong list (rawValue trùng được phép
+	// — each key dùng index-seq, KHÔNG key theo rawValue).
+	let editingCodeIndex = $state(-1);
+	let editingCodeValue = $state('');
+	let editCodeEl: HTMLInputElement | undefined;
+	function startEditCode(index: number, current: string) {
+		if (configs.disabled) return;
+		editingCodeIndex = index;
+		editingCodeValue = current;
+		requestAnimationFrame(() => editCodeEl?.focus());
+	}
+	function commitEditCode() {
+		if (editingCodeIndex < 0) return;
+		const next = editingCodeValue.trim();
+		if (next && next !== (codes ?? [])[editingCodeIndex]) {
+			_codesJustReset = false;
+			const list = (codes ?? []).slice();
+			list[editingCodeIndex] = next;
+			codes = list; // gán array MỚI
+		}
+		editingCodeIndex = -1;
+		editingCodeValue = '';
+	}
+	function cancelEditCode() {
+		editingCodeIndex = -1;
+		editingCodeValue = '';
+	}
+
+	// ── type='barcode': camera scan overlay ──
+	// getUserMedia → video stream → detect loop (interval 300ms) →
+	//   1 mã: addBarcode + beep single → đóng overlay.
+	//   >1 mã: freeze frame (canvas capture) + bounding box overlay → click vùng
+	//     chọn → addBarcode mã đó + beep single → đóng overlay.
+	// SSR guard: browser check + navigator.mediaDevices undefined → hiện lỗi
+	// (KHÔNG crash). Camera permission probe headless có thể DENIED → probe
+	// assert UI structure + mock getUserMedia qua addInitScript.
+	let scanOpen = $state(false);
+	let scanError = $state('');
+	let scanFrozen = $state(false);
+	// Kết quả detect trên frame freeze — click chọn (bounding box từ video coords)
+	let scanResults: BarcodeDetectorResult[] = $state([]);
+	let videoEl: HTMLVideoElement | undefined;
+	let overlayEl: HTMLDivElement | undefined;
+	let canvasEl: HTMLCanvasElement | undefined;
+	let scanStream: MediaStream | undefined;
+	let scanTimer: ReturnType<typeof setInterval> | undefined;
+	// Dedup: cùng 1 mã trong frame liên tiếp không re-beep (so rawValue cuối đã add)
+	let lastDetectedRaw: string | undefined;
+
+	async function openScan() {
+		if (configs.disabled) return;
+		scanError = '';
+		scanFrozen = false;
+		scanResults = [];
+		lastDetectedRaw = undefined;
+		// primeAudio trong gesture click — AudioContext resume trước khi beep sau
+		if (beepOnDerived) primeAudio();
+		scanOpen = true;
+		if (!browser) return;
+		if (!navigator.mediaDevices?.getUserMedia) {
+			scanError = 'Camera không khả dụng trên trình duyệt này';
+			return;
+		}
+		try {
+			scanStream = await navigator.mediaDevices.getUserMedia({
+				video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+				audio: false
+			});
+			// videoEl gắn sau khi overlay render — chờ rAF
+			requestAnimationFrame(() => {
+				if (!videoEl) return;
+				videoEl.srcObject = scanStream ?? null;
+				void videoEl.play();
+			});
+			startDetectLoop();
+		} catch (e) {
+			scanError =
+				e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
+					? 'Quyền camera bị từ chối — cho phép truy cập camera để quét'
+					: e instanceof DOMException && e.name === 'NotFoundError'
+						? 'Không tìm thấy camera trên thiết bị này'
+						: 'Không mở được camera — thử lại';
+		}
+	}
+
+	function closeScan() {
+		stopDetectLoop();
+		if (scanStream) {
+			for (const track of scanStream.getTracks()) track.stop();
+			scanStream = undefined;
+		}
+		if (videoEl) videoEl.srcObject = null;
+		scanOpen = false;
+		scanFrozen = false;
+		scanResults = [];
+		scanError = '';
+	}
+
+	function startDetectLoop() {
+		stopDetectLoop();
+		scanTimer = setInterval(() => void detectFrame(), 300);
+	}
+
+	function stopDetectLoop() {
+		if (scanTimer) {
+			clearInterval(scanTimer);
+			scanTimer = undefined;
+		}
+	}
+
+	async function detectFrame() {
+		if (!videoEl || videoEl.readyState < 2 || scanFrozen) return;
+		const detector = await ensureBarcodeDetector();
+		if (!detector) {
+			scanError = 'BarcodeDetector không khả dụng';
+			stopDetectLoop();
+			return;
+		}
+		let results: BarcodeDetectorResult[];
+		try {
+			results = (await detector.detect(videoEl)) as BarcodeDetectorResult[];
+		} catch {
+			return; // frame tạm lỗi (video đang seek…) → bỏ qua, loop chạy tiếp
+		}
+		if (scanFrozen) return;
+		const valid = formatsDerived?.length
+			? results.filter((r) => formatsDerived!.includes(r.format))
+			: results;
+		if (valid.length === 0) return;
+		if (valid.length === 1) {
+			// Single: thêm thẳng + beep 1 nốt + đóng overlay. Dedup: cùng mã liên
+			// tiếp (loop 300ms quét 2 lần trước khi đóng) → beep đúng 1 lần.
+			const raw = valid[0].rawValue;
+			if (raw === lastDetectedRaw) return;
+			lastDetectedRaw = raw;
+			if (beepOnDerived) playBeep('single');
+			addBarcode(raw);
+			closeScan();
+		} else {
+			// Multiple: freeze frame + bounding box overlay + beep 2 nốt (cấp cao
+			// hơn) NGAY khi freeze — báo hiệu cần chọn. Vùng chọn click → beep
+			// single (chọn 1 mã) —KHÔNG beep lại multiple.
+			scanFrozen = true;
+			stopDetectLoop();
+			if (beepOnDerived) playBeep('multiple');
+			captureFreezeFrame();
+			scanResults = valid;
+		}
+	}
+
+	/**
+	 * Chụp frame video hiện tại vào canvas (freeze) — DOMRect của bounding box
+	 * nằm trên hệ coords VIDEO (videoWidth×videoHeight), map sang CSS qua tỉ lệ
+	 * video hiển thị (object-fit: cover → tính theo max scale trục).
+	 */
+	function captureFreezeFrame() {
+		if (!videoEl || !canvasEl) return;
+		const vw = videoEl.videoWidth;
+		const vh = videoEl.videoHeight;
+		if (!vw || !vh) return;
+		canvasEl.width = vw;
+		canvasEl.height = vh;
+		const ctx = canvasEl.getContext('2d');
+		if (!ctx) return;
+		try {
+			ctx.drawImage(videoEl, 0, 0);
+		} catch {
+			// Video chưa kịp render frame (stream vừa gắn) → canvas trống — vẫn
+			// hiện regions (bounding box vị trí đúng, nền đen overlay).
+		}
+	}
+
+	function pickScanResult(r: BarcodeDetectorResult) {
+		if (beepOnDerived) playBeep('single');
+		addBarcode(r.rawValue);
+		closeScan();
+	}
+
+	/** Map bounding box (video coords) → % vị trí trên overlay (object-fit cover). */
+	function boxStyle(r: BarcodeDetectorResult) {
+		const video = videoEl;
+		const box = r.boundingBox;
+		if (!video || !box) return undefined;
+		const vw = video.videoWidth || 1;
+		const vh = video.videoHeight || 1;
+		const ow = overlayEl?.clientWidth || 1;
+		const oh = overlayEl?.clientHeight || 1;
+		// object-fit: cover → scale = max(ow/vw, oh/vh); ảnh hiển thị lớn hơn
+		// overlay, căn giữa → offset âm nửa phần tràn.
+		const scale = Math.max(ow / vw, oh / vh);
+		const dispW = vw * scale;
+		const dispH = vh * scale;
+		const offX = (ow - dispW) / 2;
+		const offY = (oh - dispH) / 2;
+		const left = ((box.x * scale + offX) / ow) * 100;
+		const top = ((box.y * scale + offY) / oh) * 100;
+		const width = (box.width * scale / ow) * 100;
+		const height = (box.height * scale / oh) * 100;
+		return `left:${left}%;top:${top}%;width:${width}%;height:${height}%`;
+	}
+
+
 	onMount(() => {
 		if (textFieldContext) {
 			if (!textFieldContext.children) textFieldContext.children = {};
@@ -2405,6 +2818,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	onDestroy(() => {
 		value = undefined;
 		if (configs.type == 'password') configs.input.password.value = undefined;
+		// type='barcode': dọn camera stream/timer khi unmount (đóng overlay)
+		if (configs.type == 'barcode') closeScan();
 		// type='file': revoke mọi objectURL còn lại (effect cleanup đã revoke phần lớn,
 		// đây là phòng thủ nếu preview build chưa kịp chạy cleanup)
 		if (configs.type == 'file') {
@@ -2498,6 +2913,19 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				{:else}
 					<span class="input-file-count" aria-live="polite">{filePreviews.length} tệp</span>
 				{/if}
+				{#if props.quickDelete && !configs.disabled}
+					<div class="input-file-selectall-wrap" data-test="input-file-select-all">
+						<Checkbox
+							checked={allFilesSelected}
+							indeterminate={indeterminateSelectAll}
+							size="sm"
+							color="primary"
+							aria-label={allFilesSelected ? 'Bỏ chọn tất cả tệp' : 'Chọn tất cả tệp'}
+							class="input-file-selectall-checkbox"
+							events={getSelectAllCheckEvents()}
+						/>
+					</div>
+				{/if}
 				{#if clearableDisplay && !hasSelection}
 					<button
 						type="button"
@@ -2570,29 +2998,22 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 						aria-label={`${p.file.name}, ${formatBytes(p.file.size)}`}
 					>
 						{#if props.quickDelete && !configs.disabled}
-							<button
-								type="button"
-								class="input-file-check"
-								data-test="input-file-check"
-								class:input-file-checked={selectedFiles.includes(p.file)}
-								role="checkbox"
-								aria-checked={selectedFiles.includes(p.file) ? 'true' : 'false'}
-								aria-label={`Chọn ${p.file.name} để xóa`}
-								onclick={(e) => {
-									e.stopPropagation();
-									toggleFileSelected(p.file);
-								}}
-							>
-								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-									<path
-										d="M5 12.5l4.5 4.5L19 7.5"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-							</button>
+							<!-- Checkbox component (reuse) — mirror DataTable Body rowCheckEvents:
+							     checked one-way + click/keydown → toggleFileSelected; mousedown
+							     nội bộ Checkbox mutate local $bindable (transient) → prop sync
+							     ngược khi selectedFiles đổi → net đúng 1 lần toggle.
+							     data-test KHÔNG render lên DOM (BasicProps không spread) → hook
+							     DOM qua wrapper span data-test + class input-file-check. -->
+							<span class="input-file-check-wrap" data-test="input-file-check">
+								<Checkbox
+									checked={selectedFiles.includes(p.file)}
+									size="sm"
+									color="primary"
+									aria-label={`Chọn ${p.file.name} để xóa`}
+									class="input-file-check"
+									events={getFileCheckEvents(p.file)}
+								/>
+							</span>
 						{/if}
 						{#if props.fileDetails && !configs.disabled}
 							<button
@@ -2712,6 +3133,267 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					</Modal.Container.Body>
 				</Modal.Container>
 			</Modal>
+		{/if}
+	{:else if configs.type == 'barcode'}
+		<!-- type='barcode': input text + nút scanner (inline SVG — iconify không có
+		     camera) + danh sách detected + overlay camera inline (KHÔNG Modal).
+		     codes = source-of-truth (bindable), value string không dùng. -->
+		{#snippet barcodeCard(index: number, raw: string)}
+			{#if selectDeleteOnDerived && !configs.disabled}
+				<button
+					type="button"
+					class="input-barcode-check"
+					data-test="input-barcode-check"
+					class:input-barcode-checked={selectedCodes.includes(raw)}
+					role="checkbox"
+					aria-checked={selectedCodes.includes(raw) ? 'true' : 'false'}
+					aria-label={`Chọn mã ${raw} để xóa`}
+					onclick={() => toggleCodeSelected(raw)}
+				>
+					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M5 12.5l4.5 4.5L19 7.5"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				</button>
+			{/if}
+			{#if editingCodeIndex == index}
+				<input
+					class="input-barcode-edit"
+					data-test="input-barcode-edit"
+					type="text"
+					bind:value={editingCodeValue}
+					bind:this={editCodeEl}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') commitEditCode();
+						else if (e.key === 'Escape') cancelEditCode();
+					}}
+					onblur={commitEditCode}
+				/>
+			{:else}
+				<span
+					class="input-barcode-value"
+					class:input-barcode-value-offset={selectDeleteOnDerived && !configs.disabled}
+					title={raw}
+				>{raw}</span>
+			{/if}
+			{#if updateOnDerived && !configs.disabled && editingCodeIndex != index}
+				<button
+					type="button"
+					class="input-barcode-edit-trigger"
+					data-test="input-barcode-edit-trigger"
+					aria-label={`Sửa mã ${raw}`}
+					onclick={() => startEditCode(index, raw)}
+				>
+					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M4 20h4L19.5 8.5a2.12 2.12 0 0 0-3-3L5 17v3zM13.5 6.5l3 3"
+							stroke="currentColor"
+							stroke-width="1.75"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				</button>
+			{/if}
+			{#if deleteOnDerived && !configs.disabled}
+				<button
+					type="button"
+					class="input-barcode-remove"
+					data-test="input-barcode-remove"
+					aria-label={`Xóa mã ${raw}`}
+					onclick={() => removeBarcode(raw)}
+				>
+					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M6 6l12 12M18 6L6 18"
+							stroke="currentColor"
+							stroke-width="1.75"
+							stroke-linecap="round"
+						/>
+					</svg>
+				</button>
+			{/if}
+		{/snippet}
+		<div class="input-barcode-row">
+			<input
+				type="text"
+				class="bg-transparent outline-none border-none w-full"
+				placeholder={placeholderDerived}
+				id={inputId}
+				data-test="input-barcode-input"
+				bind:value={barcodeInput}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						addBarcode(barcodeInput);
+						barcodeInput = '';
+					}
+				}}
+			/>
+			{#if cameraOnDerived}
+				<button
+					type="button"
+					class="input-barcode-scan-trigger"
+					data-test="input-barcode-scan-trigger"
+					aria-haspopup="dialog"
+					aria-label="Quét mã bằng camera"
+					onclick={() => void openScan()}
+				>
+					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"
+							stroke="currentColor"
+							stroke-width="1.75"
+							stroke-linecap="round"
+						/>
+						<path d="M4 12h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+					</svg>
+				</button>
+			{/if}
+			{#if barcodeInput.length && !configs.disabled}
+				<button
+					type="button"
+					class="input-barcode-add"
+					data-test="input-barcode-add"
+					aria-label="Thêm mã đã nhập"
+					onclick={() => {
+						addBarcode(barcodeInput);
+						barcodeInput = '';
+					}}
+				>
+					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+					</svg>
+				</button>
+			{/if}
+		</div>
+		{#if (codes?.length ?? 0) > 0 || selectAllOnDerived}
+			<div class="input-file-previews-head" data-test="input-barcode-list-head">
+				{#if hasCodeSelection}
+					<span class="input-file-selected-count" aria-live="polite">
+						Đã chọn {selectedCodes.length}/{codes?.length ?? 0} mã
+					</span>
+				{:else}
+					<span class="input-file-count" aria-live="polite">{codes?.length ?? 0} mã</span>
+				{/if}
+				{#if selectAllOnDerived && !hasCodeSelection && (codes?.length ?? 0) > 0}
+					<button
+						type="button"
+						class="input-file-clear-all"
+						data-test="input-barcode-clear-all"
+						aria-label="Xóa tất cả mã đã quét"
+						onclick={clearAllCodes}
+					>
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M6 6l12 12M18 6L6 18"
+								stroke="currentColor"
+								stroke-width="1.75"
+								stroke-linecap="round"
+							/>
+						</svg>
+						<span>Xóa tất cả</span>
+					</button>
+				{/if}
+			</div>
+		{/if}
+		{#if hasCodeSelection}
+			<div class="input-file-quickbar" data-test="input-barcode-quickbar" role="toolbar" aria-label="Hành động mã đã chọn">
+				<button
+					type="button"
+					class="input-file-quickbar-delete"
+					data-test="input-barcode-quickbar-delete"
+					onclick={removeSelectedCodes}
+				>
+					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"
+							stroke="currentColor"
+							stroke-width="1.75"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					Xóa {selectedCodes.length} mã đã chọn
+				</button>
+			</div>
+		{/if}
+		{#if (codes?.length ?? 0) > 0}
+			<ul class="input-barcode-list">
+				{#each codes ?? [] as raw, i (i)}
+					<li
+						class="input-barcode-card"
+						class:input-barcode-selected={selectedCodes.includes(raw)}
+						data-test="input-barcode-card"
+					>
+						{@render barcodeCard(i, raw)}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if scanOpen}
+			<!-- Overlay camera inline (KHÔNG Modal) — video + khung scan + detect loop.
+			     Multiple detect → freeze frame canvas + bounding box regions click chọn
+			     (label divided top hiển thị giá trị). -->
+			<div
+				class="input-barcode-overlay"
+				data-test="input-barcode-overlay"
+				bind:this={overlayEl}
+				role="dialog"
+				aria-modal="true"
+				aria-label="Quét mã bằng camera"
+			>
+				<video
+					class="input-barcode-video"
+					bind:this={videoEl}
+					playsinline
+					muted
+				></video>
+				<canvas class="input-barcode-freeze" bind:this={canvasEl} class:input-barcode-freeze-on={scanFrozen}></canvas>
+				{#if !scanFrozen}
+					<div class="input-barcode-frame" aria-hidden="true"></div>
+				{/if}
+				{#if scanError}
+					<div class="input-barcode-scan-error" data-test="input-barcode-scan-error" role="alert">{scanError}</div>
+				{/if}
+				{#if scanFrozen}
+					<div class="input-barcode-hint" data-test="input-barcode-hint">
+						Phát hiện {scanResults.length} mã — bấm vào mã cần chọn
+					</div>
+					{#each scanResults as r, ri (ri)}
+						<button
+							type="button"
+							class="input-barcode-region"
+							data-test="input-barcode-region"
+							style={boxStyle(r)}
+							aria-label={`Chọn mã ${r.rawValue}`}
+							onclick={() => pickScanResult(r)}
+						>
+							<span class="input-barcode-region-label">{r.rawValue}</span>
+						</button>
+					{/each}
+				{/if}
+				<button
+					type="button"
+					class="input-barcode-overlay-close"
+					data-test="input-barcode-overlay-close"
+					aria-label="Đóng camera"
+					onclick={closeScan}
+				>
+					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M6 6l12 12M18 6L6 18"
+							stroke="currentColor"
+							stroke-width="1.75"
+							stroke-linecap="round"
+						/>
+					</svg>
+				</button>
+			</div>
 		{/if}
 	{:else if configs.type == 'number'}
 		<div class={configs.input.number.style}>
