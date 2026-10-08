@@ -30,7 +30,9 @@ export function useVisualKeyboard(options: {
 	let onKeyup: undefined | ((val: NumbericKey) => void) = undefined;
 	let input: null | ((input: string) => void) = null;
 
-	// block gốc L34-37 — height getter dùng chung cho processFocus + accessor trả về
+	// block gốc L34-37 — height getter dùng chung cho processFocus + accessor trả về.
+	// Chưa có giá trị đo (meta) → fallback 1/3 viewport (visualViewport.height) —
+	// xấp xỉ chiều cao keyboard trên thiết bị di động.
 	function getHeight(): number | null {
 		if (browser && !_height) return (visualViewport?.height ?? 0) / 3;
 		return _height;
@@ -38,28 +40,31 @@ export function useVisualKeyboard(options: {
 
 	function processFocus(el: HTMLElement) {
 		// block gốc L67-91 — mobile scroll compensation
-		if (options.getBrowserType()?.includes('mobile')) {
-			const refRect = el.getBoundingClientRect();
-
-			const bodyH = document.body.scrollHeight;
-			setTimeout(() => {
-				el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-			}, options.getDelay());
-			if (
-				getHeight() &&
-				window.innerHeight - refRect.bottom < getHeight()! &&
-				bodyH - el.scrollTop < getHeight()!
-			) {
-				document.body.setAttribute('height-bu', document.body.style.getPropertyValue('height'));
-				document.body.style.height = `${document.body.offsetHeight + (getHeight() ?? 0 - (window.innerHeight - refRect.bottom))}px`;
-				window.scrollTo({ top: document.body.offsetHeight, behavior: 'smooth' });
-			} else if (
-				getHeight() &&
-				window.innerHeight - refRect.bottom < getHeight()! &&
-				bodyH - el.scrollTop > getHeight()!
-			) {
-				window.scrollTo({ top: el.scrollTop, behavior: 'smooth' });
+		if (!options.getBrowserType()?.includes('mobile')) return;
+		const refRect = el.getBoundingClientRect();
+		const bodyH = document.body.scrollHeight;
+		const kbH = getHeight();
+		if (!kbH) return;
+		setTimeout(() => {
+			el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+		}, options.getDelay());
+		// Input gần đáy viewport (keyboard sẽ che) — đền bù theo khoảng thân trang
+		// còn cuộn được. Cả 2 nhánh dưới chung điều kiện này (block gốc lặp 2 lần).
+		if (window.innerHeight - refRect.bottom >= kbH) return;
+		if (bodyH - el.scrollTop < kbH) {
+			// Ít chỗ cuộn phía dưới input: nới body thêm phần keyboard lộ ra +
+			// cuộn xuống đáy. Backup height gốc 1 LẦN (focus phím sau không đè
+			// backup bằng giá trị đã nới — restore vẫn về đúng mốc ban đầu).
+			if (!document.body.hasAttribute('height-bu')) {
+				document.body.setAttribute('height-bu', document.body.style.height);
 			}
+			document.body.style.height = `${
+				document.body.offsetHeight + kbH - (window.innerHeight - refRect.bottom)
+			}px`;
+			window.scrollTo({ top: document.body.offsetHeight, behavior: 'smooth' });
+		} else if (bodyH - el.scrollTop > kbH) {
+			// Còn nhiều chỗ cuộn: chỉ cuộn tới vị trí scroll hiện có của el.
+			window.scrollTo({ top: el.scrollTop, behavior: 'smooth' });
 		}
 	}
 
@@ -88,7 +93,10 @@ export function useVisualKeyboard(options: {
 		get focusOn(): HTMLElement | null { return _focusOn; },
 		set focusOn(el: HTMLElement | null) {
 			if (!el) {
-				document.body.style.height = `${document.body.getAttribute('height-bu')}px`;
+				// Restore height về đúng giá trị backup (raw string, ví dụ "800px" hoặc
+				// rỗng) — block gốc gán `${attr}px` nên raw có đơn vị thành "800pxpx"
+				// (invalid, restore thất bại). Xóa attr để chu kỳ focus sau backup lại.
+				document.body.style.height = document.body.getAttribute('height-bu') ?? '';
 				document.body.removeAttribute('height-bu');
 				_focusOn = null;
 			} else {
@@ -96,6 +104,8 @@ export function useVisualKeyboard(options: {
 					cancelAnimationFrame(timeId.requestAnimation);
 				}
 				timeId.requestAnimation = requestAnimationFrame(() => {
+					// Gán _focusOn TRƯỚC processFocus để consumer reactive (layout
+					// touchActionDisabled) kịp đọc, rồi mới scroll compensation.
 					_focusOn = el;
 					processFocus(el);
 					if (fallbackFocusOn) fallbackFocusOn();

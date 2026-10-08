@@ -5,13 +5,19 @@
 	import type { KeyboardNumberConfigs, KeyboardNumberProps } from './_interface';
 	import { numberKeyboardState } from '$modules/numberKeyboardState.svelte';
 	import type { BasicProps } from '$components/interface';
+	import type { NumberKeyAllowed } from '$components/form/input/_interface';
 	import { client } from '$store/basic.svelte';
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onMount } from 'svelte';
 
+	// Khoảng cách tối thiểu giữa đáy input và đỉnh keyboard — chênh nhỏ hơn này
+	// nghĩa là keyboard đè lên input → cần đẩy nội dung trang lên trên.
 	const OFFSET = 5;
 
 	let { ...props }: KeyboardNumberProps = $props();
 	let configs: KeyboardNumberConfigs = $state({
+		// timeId khởi tạo ngay từ $state (không đợi onMount) — load handler luôn có
+		// Map bất kể thứ tự attachment vs onMount khi keyboard mount qua host.
+		timeId: new Map(),
 		get style() {
 			const defaultStyles: (string | undefined)[] = ['keyboard-number-root'];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
@@ -20,84 +26,82 @@
 			{
 				events: {
 					load(e, data) {
-						if (data?.node instanceof HTMLElement && configs.timeId) {
-							const name = 'timeout-load';
-							const timeId = configs.timeId.get(name);
-							if (timeId) clearTimeout(timeId);
-							let bodyHeightBackup: undefined | string;
-							if (client.browser?.visualKeyboard) client.browser.visualKeyboard.ref = configs.ref;
-							requestAnimationFrame(() => {
-								if (!(data.node instanceof HTMLElement) || !numberKeyboardState.target?.ref) return;
-								const kbRect = data.node.getBoundingClientRect();
-								const targetRect = numberKeyboardState.target.ref.getBoundingClientRect();
-								bodyHeightBackup = document.body.style.getPropertyValue('margin-top');
-								if (kbRect.top - targetRect.bottom < OFFSET) {
-									document.body.style.marginTop = `-${targetRect.bottom - kbRect.top + OFFSET}px`;
-									data.node.style.bottom = `${0}px`;
-									window.scrollTo({ top: 100, behavior: 'smooth' });
-								} else if (kbRect.top - targetRect.bottom > OFFSET) {
-									document.body.style.marginTop = `${kbRect.top - targetRect.bottom - OFFSET}px`;
-								}
-							});
-							return () => {
-								document.body.style.marginTop = bodyHeightBackup ?? '0px';
-							};
-						}
+						if (!(data?.node instanceof HTMLElement) || !configs.timeId) return;
+						if (client.browser?.visualKeyboard) client.browser.visualKeyboard.ref = configs.ref;
+						let bodyHeightBackup: undefined | string;
+						requestAnimationFrame(() => {
+							if (!(data.node instanceof HTMLElement) || !numberKeyboardState.target?.ref) return;
+							const kbRect = data.node.getBoundingClientRect();
+							const targetRect = numberKeyboardState.target.ref.getBoundingClientRect();
+							bodyHeightBackup = document.body.style.getPropertyValue('margin-top');
+							if (kbRect.top - targetRect.bottom < OFFSET) {
+								// Keyboard đè lên input: đẩy toàn bộ nội dung trang lên trên
+								// keyboard (margin âm) + cuộn xuống để input + vùng phía trên hiện đủ.
+								document.body.style.marginTop = `-${targetRect.bottom - kbRect.top + OFFSET}px`;
+								data.node.style.bottom = `${0}px`;
+								// Cuộn 100px quanh mốc sau khi margin đổi — bù viewport mobile
+								// (input có thể bị khuất nếu không cuộn).
+								window.scrollTo({ top: 100, behavior: 'smooth' });
+							} else if (kbRect.top - targetRect.bottom > OFFSET) {
+								// Keyboard cách input quá xa: kéo nội dung xuống gần keyboard hơn.
+								document.body.style.marginTop = `${kbRect.top - targetRect.bottom - OFFSET}px`;
+							}
+						});
+						return () => {
+							document.body.style.marginTop = bodyHeightBackup ?? '0px';
+						};
 					},
 					mousedown(e) {
-						const event = e as MouseEvent;
-						event.preventDefault();
+						// Root-level: phủ cả vùng trống (gap) giữa các phím — mousedown ở vùng
+						// trống không được focus native input. Per-key preventDefault nằm ở keyEvents().
+						(e as MouseEvent).preventDefault();
 					}
 				}
 			}
 		]
 	});
-	type keys =
-		| '1'
-		| '2'
-		| '3'
-		| '4'
-		| '5'
-		| '6'
-		| '7'
-		| '8'
-		| '9'
-		| '+'
-		| '-'
-		| 'x'
-		| '0'
-		| '.'
-		| '%'
-		| '=';
-	const keys: { [k in keys]?: BasicProps['events'] }[] = [
-		{ '7': eventObj('7') },
-		{ '8': eventObj('8') },
-		{ '9': eventObj('9') },
-		{ x: eventObj('x') },
-		{ '4': eventObj('4') },
-		{ '5': eventObj('5') },
-		{ '6': eventObj('6') },
-		{ '-': eventObj('-') },
-		{ '1': eventObj('1') },
-		{ '2': eventObj('2') },
-		{ '3': eventObj('3') },
-		{ '+': eventObj('+') },
-		{ '0': eventObj('0') },
-		{ '.': eventObj('.') },
-		{ '%': eventObj('%') },
-		{ '=': eventObj('=') }
+
+	// ── Cấu hình phím — tập trung theo pattern configs $state (Checkbox/DataTable) ──
+	// label = ký tự hiển thị trên nút, detail = chuỗi gửi qua CustomEvent('keydown')
+	// cho input tiêu thụ (calculator xử lý '=', 'x'→'*', ':'→'/').
+	type NumberKeyConfig = { label: string; detail: NumberKeyAllowed };
+	// Lưới số: 7 8 9 x / 4 5 6 - / 1 2 3 + / 0 . % =
+	const NUMBER_KEYS: NumberKeyConfig[] = [
+		{ label: '7', detail: '7' },
+		{ label: '8', detail: '8' },
+		{ label: '9', detail: '9' },
+		{ label: 'x', detail: 'x' },
+		{ label: '4', detail: '4' },
+		{ label: '5', detail: '5' },
+		{ label: '6', detail: '6' },
+		{ label: '-', detail: '-' },
+		{ label: '1', detail: '1' },
+		{ label: '2', detail: '2' },
+		{ label: '3', detail: '3' },
+		{ label: '+', detail: '+' },
+		{ label: '0', detail: '0' },
+		{ label: '.', detail: '.' },
+		{ label: '%', detail: '%' },
+		{ label: '=', detail: '=' }
 	];
-	function eventObj(character: keys | 'ac' | 'del' | '(' | ')'): BasicProps['events'] {
+	// Props dùng chung cho mọi phím — góc vuông (không bo) + không delay (bấm là chạy).
+	const KEY_PROPS = { rounded: 'none', delay: '0ms' } as const;
+
+	/**
+	 * Sự kiện mousedown dùng chung cho 1 phím — preventDefault (không focus native
+	 * input, caret do visual keyboard quản lý) + dispatch CustomEvent('keydown',
+	 * { detail }) → input (form/input Main.svelte) tiêu thụ để cập nhật value.
+	 * Closure per phím (Button events không có kênh truyền payload khác).
+	 */
+	function keyEvents(detail: NumberKeyAllowed): BasicProps['events'] {
 		return [
 			{
 				events: {
 					mousedown: {
 						handler(e) {
-							const event = e as MouseEvent;
-							event.preventDefault();
-							if (!numberKeyboardState.target) return;
-							numberKeyboardState.target.ref?.dispatchEvent(
-								new CustomEvent<string>('keydown', { detail: character })
+							(e as MouseEvent).preventDefault();
+							numberKeyboardState.target?.ref?.dispatchEvent(
+								new CustomEvent<string>('keydown', { detail })
 							);
 						}
 					}
@@ -107,7 +111,6 @@
 	}
 
 	onMount(() => {
-		if (!configs.timeId) configs.timeId = new Map();
 		if (client.browser?.visualKeyboard) {
 			configs.width = client.browser.visualKeyboard.width;
 			configs.height = client.browser.visualKeyboard.height;
@@ -123,17 +126,15 @@
 	style:height={configs.height ? `${configs.height}px` : undefined}
 	{@attach handleEvents(configs.event)}
 >
-	<Button rounded="none" delay="0ms" events={eventObj('ac')}>AC</Button>
+	<Button {...KEY_PROPS} events={keyEvents('ac')}>AC</Button>
 	<div class="grid grid-cols-2">
-		<Button rounded="none" delay="0ms" events={eventObj('(')}>(</Button>
-		<Button rounded="none" delay="0ms" events={eventObj(')')}>)</Button>
+		<Button {...KEY_PROPS} events={keyEvents('(')}>(</Button>
+		<Button {...KEY_PROPS} events={keyEvents(')')}>)</Button>
 	</div>
-	<Button rounded="none" delay="0ms" events={eventObj('del')}>Del</Button>
-	<Button rounded="none" delay="0ms">:</Button>
-	{#each keys as item, k (k)}
-		<Button rounded="none" delay="0ms" events={Object.values(item)[0]}
-			>{Object.keys(item)[0]}</Button
-		>
+	<Button {...KEY_PROPS} events={keyEvents('del')}>Del</Button>
+	<Button {...KEY_PROPS} events={keyEvents(':')}>:</Button>
+	{#each NUMBER_KEYS as key (key.detail)}
+		<Button {...KEY_PROPS} events={keyEvents(key.detail)}>{key.label}</Button>
 	{/each}
 </svelte:element>
 

@@ -318,7 +318,9 @@ export function createDefaultInputEvents(
 					// Chỉ chặn ký tự in được (key.length === 1) — phím điều hướng/chức năng
 					// (arrow, shift, enter, tab, escape, IME 'Process'…) luôn cho qua.
 					// Skip khi đang giữ ctrl/meta/alt để cho phép copy-paste/select-all.
-					const k = event.key.toLowerCase();
+					// key ?? '' — CustomEvent từ visual keyboard chỉ có detail (không .key)
+					// → rỗng, không chặn (trước đây toLowerCase() throw PAGEERROR).
+					const k = (event.key ?? '').toLowerCase();
 					if (k.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
 						if (configs.type === 'email' && !email_keys_allowed.includes(k)) {
 							event.preventDefault();
@@ -329,14 +331,14 @@ export function createDefaultInputEvents(
 							return;
 						}
 					}
-					if (event.key.toLowerCase() == 'enter' && textFieldContext?.onEnter) {
+					if (k == 'enter' && textFieldContext?.onEnter) {
 						textFieldContext.onEnter();
 						if (!formContext?.validation.isValid) {
 							event.preventDefault();
 						}
 					} else if (event.key == 'a' && event.ctrlKey) {
 						configs.status.selectAll = true;
-					} else if (event.key.toLowerCase() == 'tab' && textFieldContext?.onTab) {
+					} else if (k == 'tab' && textFieldContext?.onTab) {
 						textFieldContext.onTab();
 					}
 				}

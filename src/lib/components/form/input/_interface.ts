@@ -35,6 +35,7 @@ export type NumberKeyAllowed =
 	| '-'
 	| 'x'
 	| ':'
+	| '%'
 	| '=';
 export interface NumberInputTarget {
 	value: string | undefined;
