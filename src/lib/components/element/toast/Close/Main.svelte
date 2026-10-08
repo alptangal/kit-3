@@ -9,6 +9,8 @@
 
 	let { ...props }: ButtonProps = $props();
 	let configs: Partial<ButtonConfigs> = $state({
+		// Icon-only button: ratio vuông (width == height) để cân đối ở góc toast.
+		'aspect-square': true,
 		get size() {
 			return props.size ?? toastContext?.size ?? client.browser?.size ?? 'md';
 		},

@@ -194,6 +194,9 @@
 			--cursor: not-allowed;
 		}
 		display: flex;
+		/* Căn dọc: icon (Indicator) + Content + action button cùng trục giữa — mặc định
+		   stretch làm Indicator div stretch full mà svg nằm đỉnh (lệch title). */
+		align-items: center;
 		cursor: var(--cursor);
 		backdrop-filter: blur(10px);
 		border-radius: var(--border-radius);
