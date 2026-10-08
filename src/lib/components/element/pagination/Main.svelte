@@ -107,9 +107,15 @@
 		commitPage();
 	}
 
-	// oninput: chỉ giữ [0-9] — paste "abc" → rỗng (blur → pageAtEditStart), "abc12" → "12".
+	// oninput: CHỈ nhận số — lọc giữ [0-9] ("abc" → rỗng, "12a3" → "123").
+	// Set DOM TRỰC TIẾP khi có ký tự bị lọc: Svelte 5 `value={draft}` không re-apply
+	// khi draft KHÔNG đổi (draft '5' + gõ 'a' → draft vẫn '5' → chữ 'a' kẹt trong DOM).
+	// IME composition (unikey) vẫn firing input → lọc đúng, không cần compositionend.
 	function onDraftInput(e: Event & { currentTarget: EventTarget & HTMLInputElement }) {
-		draft = (e.currentTarget.value ?? '').replace(/[^0-9]/g, '');
+		const raw = e.currentTarget.value ?? '';
+		const filtered = raw.replace(/[^0-9]/g, '');
+		if (filtered !== raw) e.currentTarget.value = filtered;
+		draft = filtered;
 	}
 
 	// ── shadcn usePaginationRange algorithm (mirror) ──
