@@ -409,18 +409,6 @@
 			<tr class="datatable-empty-row">
 				<td class="datatable-empty" colspan={colCount}>
 					<span class="datatable-empty-text">{configs?.emptyText}</span>
-					{#if configs?.creatable}
-						<!-- Nút create khi không có data / không có kết quả khớp filter. -->
-						<button
-							type="button"
-							class="datatable-empty-create"
-							data-test="datatable-empty-create"
-							aria-label={configs.createText}
-							onclick={() => ctx?.createRow()}
-						>
-							<span aria-hidden="true">＋</span>{configs.createText}
-						</button>
-					{/if}
 				</td>
 			</tr>
 		{/if}
@@ -770,34 +758,6 @@
 
 		.datatable-empty-text {
 			display: block;
-			margin-bottom: 0.75rem;
-		}
-
-		// ── Nút create khi không có data / không có kết quả khớp filter ──
-		.datatable-empty-create {
-			display: inline-flex;
-			align-items: center;
-			gap: 0.35rem;
-			min-height: 2rem;
-			padding: 0 0.875rem;
-			font-size: 0.8125rem;
-			font-weight: 500;
-			color: hsl(0 0% 100%);
-			background: var(--primary, var(--color-indigo-500));
-			border: 0;
-			border-radius: var(--border-radius-sm, 0.375rem);
-			cursor: var(--cursor-interactive);
-			transition: background-color 150ms ease;
-
-			@media (hover: hover) and (pointer: fine) {
-				&:hover {
-					background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 85%, black);
-				}
-			}
-			&:focus-visible {
-				outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
-				outline-offset: 2px;
-			}
 		}
 	}
 

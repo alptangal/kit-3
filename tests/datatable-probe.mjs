@@ -501,25 +501,40 @@ await tb.locator('[data-test="datatable-clear-selection"]').click();
 await page.waitForTimeout(150);
 ok('DT14: clear selection → tools ẩn, không row selected', (await tb.locator('[data-role="selection-tools"]').count()) === 0 && (await tb.locator('tr.datatable-row.selected').count()) === 0);
 
-console.log('\n=== DT15: NO-RESULTS + EMPTY CREATE ===');
+console.log('\n=== DT15: NO-RESULTS + EMPTY → TEXT-ONLY + TOOLBAR CREATE ATTENTION ===');
 const nr = page.locator('[data-test="dt-noresults"]');
 await nr.locator('input.datatable-search').fill('zzz-không-có');
 await page.waitForTimeout(250);
 ok('DT15: search không khớp → 0 row', (await nr.locator('tr.datatable-row').count()) === 0);
-ok('DT15: no-results → nút create hiện (empty row)', (await nr.locator('[data-test="datatable-empty-create"]').count()) === 1);
-// 13-noresults: search không khớp → empty row + nút create.
+// Wave 9: nút create phụ trong empty state ĐÃ XÓA — empty chỉ còn text.
+ok('DT15: nút create trong empty row ĐÃ XÓA (count 0)', (await nr.locator('[data-test="datatable-empty-create"]').count()) === 0);
+ok(
+	'DT15: no-results → toolbar create hiện + attention class',
+	(await nr.locator('[data-test="datatable-create"]').count()) === 1 &&
+		(await nr.locator('[data-test="datatable-create"].datatable-btn--attention').count()) === 1
+);
+// 13-noresults: search không khớp → empty row text-only + toolbar create attention.
 await nr.screenshot({ path: `${shotDirNew}/13-noresults.png` });
-ok('DT15: empty text "Không có dữ liệu"/"No data" + nút', /không có dữ liệu|no data/i.test((await nr.locator('td.datatable-empty').textContent()) ?? ''));
-// Click create từ no-results → row editor mở (n row tăng từ 0 → 1).
-await nr.locator('[data-test="datatable-empty-create"]').click();
+ok('DT15: empty text "Không có dữ liệu"/"No data"', /không có dữ liệu|no data/i.test((await nr.locator('td.datatable-empty').textContent()) ?? ''));
+// Click toolbar create từ no-results → row editor mở (n row tăng 0 → 1).
+await nr.locator('[data-test="datatable-create"]').click();
 await page.waitForTimeout(250);
 ok('DT15: create từ no-results → row editor mở', (await nr.locator('input.datatable-row-input').count()) >= 1);
 await nr.locator('input.datatable-row-input').first().press('Escape');
 await page.waitForTimeout(150);
-// Empty section (data=[] + creatable).
+// Empty section (data=[] + creatable, KHÔNG searchable).
 const emp = page.locator('[data-test="dt-empty"]');
-ok('DT15: empty → nút create hiện', (await emp.locator('[data-test="datatable-empty-create"]').count()) === 1);
-await emp.locator('[data-test="datatable-empty-create"]').click();
+ok(
+	'DT15: empty → toolbar create hiện + attention class',
+	(await emp.locator('[data-test="datatable-create"]').count()) === 1 &&
+		(await emp.locator('[data-test="datatable-create"].datatable-btn--attention').count()) === 1
+);
+// Clear search trước để không còn attention (check animate chỉ khi empty).
+ok(
+	'DT15: toolbar section (searchable) KHÔNG attention khi có row',
+	(await tb.locator('[data-test="datatable-create"].datatable-btn--attention').count()) === 0
+);
+await emp.locator('[data-test="datatable-create"]').click();
 await page.waitForTimeout(250);
 ok('DT15: create từ empty → 1 row xuất hiện', (await emp.locator('tr.datatable-row').count()) === 1, String(await emp.locator('tr.datatable-row').count()));
 await emp.locator('input.datatable-row-input').first().press('Escape');
@@ -705,6 +720,16 @@ await page.waitForTimeout(350);
 ok(
 	'DT19: click name → focus field name',
 	(await page.evaluate(() => document.activeElement?.closest('[data-detail-field]')?.getAttribute('data-detail-field'))) === 'name'
+);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+// Wave 9: field static (status) → focus container field div (tabindex="-1"),
+// KHÔNG rơi vào nút close modal.
+await cdSec.locator('tr.datatable-row').nth(0).locator('td.datatable-td').nth(4).click();
+await page.waitForTimeout(350);
+ok(
+	'DT19: click static field (status) → focus container field div',
+	(await page.evaluate(() => document.activeElement?.closest('[data-detail-field]')?.getAttribute('data-detail-field'))) === 'status'
 );
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);

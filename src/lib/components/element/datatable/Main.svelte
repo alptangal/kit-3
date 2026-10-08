@@ -299,6 +299,9 @@
 			return false;
 		});
 	});
+	// 2b) Nút create "cuống" khi bảng trống hoặc filter không khớp kết quả nào —
+	// gợi ý người dùng có thể tạo data thay vì nhìn bảng rỗng.
+	const createAttention: boolean = $derived(creatableDerived && filtered.length === 0);
 	// 3) sort (bảo toàn index gốc)
 	const sorted: { row: Record<string, unknown>; index: number }[] = $derived.by(() => {
 		if (!activeSort) return filtered;
@@ -1398,6 +1401,7 @@
 				<button
 					type="button"
 					class="datatable-btn datatable-btn--create"
+					class:datatable-btn--attention={createAttention}
 					data-test="datatable-create"
 					aria-label={configs.createText}
 					onclick={() => createRow()}
@@ -1534,9 +1538,11 @@
 				size="md"
 				placement="center"
 				onClose={() => closeRowDetail(false)}
-				// initialFocus trỏ input/select bên trong field (div không
-				// focusable — focus() no-op nếu không tabindex).
-				initialFocus={`[data-detail-field="${detailFocusColumn ?? ''}"] :is(input, select)`}
+				// initialFocus 2 selector: editable → input/select bên trong field;
+				// static (render/status) → field div (tabindex="-1" bên dưới).
+				// querySelector trả first match theo document order — field editable
+				// KHÔNG có tabindex nên div không chặn selector input.
+				initialFocus={`[data-detail-field="${detailFocusColumn ?? ''}"] :is(input, select), [data-detail-field="${detailFocusColumn ?? ''}"][tabindex="-1"]`}
 			>
 				<Modal.Container>
 					<Modal.Container.Header class="justify-between">
@@ -1551,7 +1557,14 @@
 								{@const editableCol = rowDetailCfg.editable && !col.status && !col.render}
 								{@const editorType = getEditorType(col, value)}
 								{@const rawValue = detailValues[col.id]}
-								<div class="datatable-detail-field" data-detail-field={col.id}>
+								<!-- tabindex="-1" cho field static: focus() vào container field
+								     khi click cell không có input/select (mục 6 wave 9) -->
+								<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+								<div
+									class="datatable-detail-field"
+									data-detail-field={col.id}
+									tabindex={editableCol ? undefined : -1}
+								>
 									<label class="datatable-detail-label" for={`detail-${col.id}`}>{col.label}</label>
 									{#if !editableCol}
 										<span class="datatable-detail-value">
@@ -1754,12 +1767,31 @@
 		white-space: nowrap;
 
 		&--create {
+			// Cố định layout toolbar: create LUÔN bên phải, search (flex:1) bên trái
+			// — scope trong toolbar để KHÔNG ảnh hưởng nút Save modal detail
+			// (cũng dùng class datatable-btn--create).
+			.datatable-toolbar & {
+				margin-left: auto;
+			}
+
 			color: hsl(0 0% 100%);
 			background: var(--primary, var(--color-indigo-500));
 			border-color: transparent;
 
 			&:hover {
 				background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 85%, black);
+			}
+		}
+
+		// ── Attention animate (chỉ khi bảng trống / filter không khớp) ──
+		&--attention {
+			// Shake nhẹ (lateral ±2px) + ring pulse quanh nút.
+			animation: datatable-btn-attention 1.6s ease-in-out infinite;
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			&--attention {
+				animation: none;
 			}
 		}
 
@@ -1800,6 +1832,29 @@
 		&:focus-visible {
 			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
 			outline-offset: 2px;
+		}
+	}
+
+	// ── Keyframes nút create attention (shake + ring pulse) ──
+	@keyframes datatable-btn-attention {
+		0%,
+		100% {
+			transform: translateX(0);
+			box-shadow: 0 0 0 0 hsl(241 100% 68.6% / 45%);
+		}
+		10%,
+		30%,
+		50% {
+			transform: translateX(-2px);
+		}
+		20%,
+		40% {
+			transform: translateX(2px);
+		}
+		60%,
+		75% {
+			transform: translateX(0);
+			box-shadow: 0 0 0 0.375rem hsl(241 100% 68.6% / 0%);
 		}
 	}
 
