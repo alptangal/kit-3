@@ -117,6 +117,7 @@
 		margin-bottom: 2.5rem;
 		display: flex;
 		flex-direction: column;
+		align-items: flex-start;
 		gap: 0.75rem;
 		h2 {
 			font-size: 1rem;

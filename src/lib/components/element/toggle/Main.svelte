@@ -1,19 +1,19 @@
-// src/lib/components/element/toggle/Main.svelte
-// Toggle (element — KHÔNG phải form field): nút nhấn 2 trạng thái pressed/unpressed,
-// theo shadcn base/toggle (pressed state + variant default/outline + size sm/default/lg).
-// Atom nhẹ (mẫu alert/tag/button): $derived cho style — không context, không form.
-//
-// A11y: native button type=button + aria-pressed (browser tự handle
-// Space/Enter + focus) → KHÔNG cần keydown handler riêng. KHÔNG role="switch"
-// (switch là form field riêng ở form/switch — toggle base chỉ pressed state).
-//
-// Controlled/uncontrolled: `pressed` $bindable — bind:pressed → controlled
-// (parent giữ source of truth); không bind → uncontrolled ($state cục bộ,
-// toggle() đổi nội bộ). `onchange` callback cả 2 mode.
-//
-// Icon: prop `icon` (iconify) hiển thị cạnh text (span.toggle-icon → Icon
-// component, aria-hidden). Không label/children → icon-only (aria-label bắt buộc).
 <script lang="ts">
+	// src/lib/components/element/toggle/Main.svelte
+	// Toggle (element — KHÔNG phải form field): nút nhấn 2 trạng thái pressed/unpressed,
+	// theo shadcn base/toggle (pressed state + variant default/outline + size sm/default/lg).
+	// Atom nhẹ (mẫu alert/tag/button): $derived cho style — không context, không form.
+	//
+	// A11y: native button type=button + aria-pressed (browser tự handle
+	// Space/Enter + focus) → KHÔNG cần keydown handler riêng. KHÔNG role="switch"
+	// (switch là form field riêng ở form/switch — toggle base chỉ pressed state).
+	//
+	// Controlled/uncontrolled: `pressed` $bindable — bind:pressed → controlled
+	// (parent giữ source of truth); không bind → uncontrolled ($state cục bộ,
+	// toggle() đổi nội bộ). `onchange` callback cả 2 mode.
+	//
+	// Icon: prop `icon` (iconify) hiển thị cạnh text (span.toggle-icon → Icon
+	// component, aria-hidden). Không label/children → icon-only (aria-label bắt buộc).
 import { styleSynced } from '$modules';
 import { handleEvents } from '$modules/_attachments';
 import { client } from '$store/basic.svelte';
