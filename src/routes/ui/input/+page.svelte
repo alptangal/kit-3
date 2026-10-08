@@ -7,6 +7,12 @@
 	let phoneValue = $state('');
 	let numberValue = $state('');
 	let textValue = $state('');
+	// ── type='currency' ──
+	let currencyVnd = $state('');
+	let currencyUsd = $state('');
+	let currencyCustom = $state('');
+	let currencyCalc = $state('');
+	let currencyForm = $state('');
 
 	// ── type='file' (bind:files — File[] riêng, KHÔNG dùng value string) ──
 	let singleFiles = $state<File[]>([]);
@@ -30,6 +36,14 @@
 	function handleSubmit() {
 		if (!formValid) return;
 		formSubmitted = true;
+	}
+	// Section ic-form: currency required (value = chuỗi raw) — gate riêng KHÔNG
+	// dùng formValid (yêu cầu files + email của section if-form).
+	let icFormSubmitted = $state(false);
+	const icFormValid = $derived(currencyForm.replace(/\D/g, '').length > 0);
+	function handleSubmitCurrency() {
+		if (!icFormValid) return;
+		icFormSubmitted = true;
 	}
 </script>
 
@@ -60,6 +74,88 @@
 		<div data-test="input-number">
 			<Input type="number" bind:value={numberValue} placeholder="0" />
 		</div>
+	</section>
+
+	<!-- ──────────────── type='currency' ──────────────── -->
+
+	<!-- VND (mặc định): symbol ₫ suffix, 0 decimals, nhóm nghìn vi-VN -->
+	<section class="demo" data-test="ic-vnd">
+		<h2>type=currency · VND (mặc định — ₫ suffix, 0 decimals)</h2>
+		<div data-test="input-currency-vnd">
+			<Input type="currency" bind:value={currencyVnd} placeholder="0" />
+		</div>
+		<p class="demo-hint">
+			Gõ <code>1234</code> → auto format <code>1.234</code> + symbol <code>₫</code> bên phải.
+			Blur → giữ nguyên (decimals=0).
+		</p>
+	</section>
+
+	<!-- USD: symbol $ prefix, 2 decimals, nhóm nghìn en-US -->
+	<section class="demo" data-test="ic-usd">
+		<h2>type=currency · USD ($ prefix, 2 decimals)</h2>
+		<div data-test="input-currency-usd">
+			<Input type="currency" currency="USD" bind:value={currencyUsd} placeholder="0.00" />
+		</div>
+		<p class="demo-hint">
+			Gõ <code>1234</code> → <code>1,234</code> + symbol <code>$</code> bên trái. Blur →
+			<code>1,234.00</code> (decimals=2).
+		</p>
+	</section>
+
+	<!-- Custom: symbol ghi đè + decimals ép + vị trí symbol -->
+	<section class="demo" data-test="ic-custom">
+		<h2>type=currency · custom (symbol="US$" + decimals=1 + suffix)</h2>
+		<div data-test="input-currency-custom">
+			<Input
+				type="currency"
+				currency="USD"
+				symbol="US$"
+				decimals={1}
+				symbolPosition="suffix"
+				bind:value={currencyCustom}
+				placeholder="0.0"
+			/>
+		</div>
+		<p class="demo-hint">
+			Symbol <code>US$</code> ghi đè <code>$</code>, bên phải (suffix). Blur → 1 chữ số thập
+			phân (decimals=1).
+		</p>
+	</section>
+
+	<!-- autoCalculate: nhập biểu thức + - x / ( ) % → '=' hoặc blur tính -->
+	<section class="demo" data-test="ic-calc">
+		<h2>type=currency · autoCalculate (biểu thức + - x / ( ) %)</h2>
+		<div data-test="input-currency-calc">
+			<Input type="currency" bind:value={currencyCalc} placeholder="1.000+500" />
+		</div>
+		<p class="demo-hint">
+			Gõ <code>1000+500</code> → nhấn <code>=</code> (hoặc blur) → <code>1.500</code>. Keyboard
+			số mobile: <code>x</code> → nhân, <code>:</code> → chia.
+		</p>
+	</section>
+
+	<!-- In Form: serialize string raw qua configs.value -->
+	<section class="demo" data-test="ic-form">
+		<h2>Trong Form (currency serialize — payload JSON)</h2>
+		<Form onSubmit={handleSubmitCurrency}>
+			<TextField name="ic-form-amount" required>
+				<Input
+					type="currency"
+					name="ic-form-amount"
+					currency="VND"
+					bind:value={currencyForm}
+					placeholder="0"
+				/>
+				<FieldMessages showValid />
+			</TextField>
+			<Button type="submit" color="success" variant="solid">
+				{icFormSubmitted ? 'Đã submit ✓' : 'Submit'}
+			</Button>
+		</Form>
+		<p class="demo-hint">
+			Value serialize vào JSON payload dạng chuỗi raw (<code>"ic-form-amount": "150000"</code>).
+			Chưa chọn số → required error; gõ số → valid (showValid).
+		</p>
 	</section>
 
 	<!-- Text (mặc định) -->

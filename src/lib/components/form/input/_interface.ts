@@ -134,6 +134,23 @@ export interface InputProps extends BasicProps {
 	 * ≥1 tệp, nằm ở header row của previews list. Click → files = [].
 	 */
 	clearable?: boolean;
+	// ── type='currency' ──
+	/**
+	 * Mã tiền tệ ISO 4217 (type='currency', mặc định 'VND'). Quyết định locale
+	 * + symbol + decimals mặc định qua Intl.NumberFormat: VND → vi-VN
+	 * ("1.234 ₫", suffix, 0 số thập phân), USD/EUR/GBP/JPY → en-US
+	 * ("$1,234.00", prefix, 2 số thập phân).
+	 */
+	currency?: string;
+	/** Ghi đè symbol lấy từ currency (vd "$" → "US$"). */
+	symbol?: string;
+	/** Vị trí symbol (mặc định theo thói quen locale: VND suffix, USD prefix). */
+	symbolPosition?: 'prefix' | 'suffix';
+	/**
+	 * Số chữ số thập phân ép khi hiển thị (mặc định theo currency: VND 0,
+	 * USD 2). Khi đang nhập giữ nguyên phần thập phân người dùng gõ.
+	 */
+	decimals?: number;
 }
 export interface InputConfigs extends BasicConfigs {
 	previousValue?: string;
@@ -236,6 +253,15 @@ export interface InputConfigs extends BasicConfigs {
 	quickDelete?: boolean;
 	/** Nút "Xóa tất cả" ở header previews (type='file') — mặc định false */
 	clearable?: boolean;
+	// ── type='currency' ──
+	/** Mã tiền tệ ISO 4217 (mặc định 'VND') — quyết định locale/symbol/decimals. */
+	currency?: string;
+	/** Ghi đè symbol lấy từ currency. */
+	symbol?: string;
+	/** Vị trí symbol (mặc định theo thói quen locale: VND suffix, USD prefix). */
+	symbolPosition?: 'prefix' | 'suffix';
+	/** Số chữ số thập phân ép khi hiển thị (mặc định theo currency). */
+	decimals?: number;
 	focus: () => void;
 	loading?: boolean;
 	reset: () => void;

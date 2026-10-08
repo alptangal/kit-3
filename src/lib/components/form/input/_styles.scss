@@ -300,6 +300,15 @@
 			height: calc(100% - var(--border-width) * 2);
 		}
 	}
+	// type='currency' — symbol span (prefix/suffix): muted màu phụ, không select
+	// (aria-hidden + pointer-events none), co giãn theo font-size input cha.
+	.input-currency-symbol {
+		color: var(--color-gray-500);
+		pointer-events: none;
+		user-select: none;
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
 	.input-mask {
 		overflow: hidden;
 		flex: 1;

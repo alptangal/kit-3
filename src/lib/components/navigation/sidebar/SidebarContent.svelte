@@ -14,7 +14,7 @@
 	.sidebar-content {
 		flex: 1;
 		overflow-y: auto;
-		padding: 0.25rem 0.75rem 1rem;
+		padding-block: 0.25rem 1rem;
 
 		&::-webkit-scrollbar {
 			width: 6px;

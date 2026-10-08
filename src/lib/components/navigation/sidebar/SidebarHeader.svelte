@@ -15,7 +15,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		padding: 1rem 0.75rem;
+		padding-block: 1rem;
 		min-height: 3.5rem;
 	}
 </style>

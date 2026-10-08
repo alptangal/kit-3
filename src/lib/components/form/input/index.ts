@@ -7,6 +7,7 @@ import Input from './Main.svelte';
 export { default as Input } from './Main.svelte';
 export type { InputProps, InputConfigs } from './_interface';
 
+
 export const text_keys_allowed = [
 	'arrowleft',
 	'arrowright',
@@ -111,6 +112,35 @@ export const phone_keys_allowed = [
 	'escape',
 	...text_keys_allowed
 ];
+// Currency gồm số + toán tử biểu thức + - x / * ( ) % . (mirror keyboard số:
+// 'x'→'*', ':'→'/') — KHÔNG space/chữ cái. Phím điều hướng luôn cho phép.
+export const currency_keys_allowed = [
+	'0',
+	'1',
+	'2',
+	'3',
+	'4',
+	'5',
+	'6',
+	'7',
+	'8',
+	'9',
+	'.',
+	'+',
+	'-',
+	':',
+	'/',
+	'*',
+	'x',
+	'(',
+	')',
+	'%',
+	'=',
+	'enter',
+	'tab',
+	'escape',
+	...text_keys_allowed
+];
 export const defaultValidation: {
 	required: (fieldName?: string) => ValidationCompact | ValidationFull;
 	minNumber?: (minValue: number, fieldName?: string) => ValidationCompact | ValidationFull;
@@ -121,6 +151,7 @@ export const defaultValidation: {
 	hasFile?: (fieldName?: string) => ValidationCompact | ValidationFull;
 	maxFileSize?: (maxBytes: number, fieldName?: string) => ValidationCompact | ValidationFull;
 	maxFiles?: (maxCount: number, fieldName?: string) => ValidationCompact | ValidationFull;
+	isCurrency?: (fieldName?: string) => ValidationCompact | ValidationFull;
 } = {
 	required: (fieldName) => {
 		return {
@@ -267,6 +298,30 @@ export const defaultValidation: {
 				}
 			}
 		};
+	},
+	// type='currency' — input là chuỗi raw (số "1234" hoặc biểu thức "1234+5").
+	// Chỉ chặn khi có nội dung nhưng KHÔNG parse được thành số (chữ cái lạ,
+	// biểu thức gãy). minNumber/maxNumber dùng chung validators number (parseFloat).
+	isCurrency(fieldName) {
+		return {
+			isValid(input) {
+				const raw = input as string | undefined;
+				if (!raw?.length) return true;
+				const cleaned = raw.replaceAll('x', '*').replaceAll(':', '/').replace(/[+\-*/%()]/g, '');
+				// Chỉ gồm digits + 1 dấu chấm → hợp lệ; khác → không parse
+				return /^[0-9]*\.?[0-9]+$/.test(raw.replaceAll(/[^0-9.]/g, '')) || /^\d+$/.test(cleaned);
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'} must be a valid amount`,
+					vi: `${fieldName ?? 'Trường này'} phải là số tiền hợp lệ`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'} is a valid amount`,
+					vi: `${fieldName ?? 'Trường này'} là số tiền hợp lệ`
+				}
+			}
+		};
 	}
 };
 export function createDefaultInputEvents(
@@ -327,6 +382,10 @@ export function createDefaultInputEvents(
 							return;
 						}
 						if (configs.type === 'phone' && !phone_keys_allowed.includes(k)) {
+							event.preventDefault();
+							return;
+						}
+						if (configs.type === 'currency' && !currency_keys_allowed.includes(k)) {
 							event.preventDefault();
 							return;
 						}

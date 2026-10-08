@@ -103,8 +103,14 @@
 	:global(.sidebar-menu-group__trigger) {
 		justify-content: center;
 		padding-inline: 0;
-		/* P3: item SQUARE (nền 72px rail − padding header/content 24px = 48px
-		   → 48×48) cho cân đối, đúng nguyên tắc "rail chỉ có icon". */
+		/* Wave10: bỏ padding-inline header/content → item sẽ full-width rail (72px).
+		   Ép display flex (block-level — margin-inline auto VÔ HIỆU trên inline-flex,
+		   bẫy TeamSwitcher) + width 3rem (48px) + margin auto (li block container)
+		   → giữ square 48×48, căn giữa theo trục rail (x = 36px). */
+		display: flex;
+		width: 3rem;
+		margin-inline: auto;
+		/* P3: item SQUARE (48×48) cho cân đối, đúng nguyên tắc "rail chỉ có icon". */
 		aspect-ratio: 1 / 1;
 		min-height: 0;
 	}
@@ -130,6 +136,9 @@
 	:global(.sidebar-menu-group__trigger) {
 		justify-content: flex-start;
 		padding-inline: 0.75rem;
+		/* Wave10: khôi phục full width + bỏ margin auto (rule collapsed ép 3rem). */
+		width: 100%;
+		margin-inline: 0;
 		/* P3: peek (hover) → quay lại layout full (không còn square). */
 		aspect-ratio: auto;
 		min-height: 2.25rem;

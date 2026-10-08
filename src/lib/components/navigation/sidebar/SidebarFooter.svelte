@@ -15,7 +15,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		padding: 0.75rem;
+		padding-block: 0.75rem;
 		min-height: 3.5rem;
 		border-top: var(--border-width, 1px) solid var(--border, hsl(0 0% 88%));
 

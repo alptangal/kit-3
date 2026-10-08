@@ -238,13 +238,15 @@
 		min-height: 100dvh;
 	}
 
-	/* Header: brand + trigger nằm ngang */
+	/* Wave10: 3 section (header/content/footer) không còn padding-inline —
+	   nội dung con tự mang spacing riêng (item tự có spacing, section "flush"). */
 	.brand {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		flex: 1;
 		min-width: 0;
+		padding-inline: 0.75rem;
 
 		.brand-icon {
 			width: 1.5rem;
@@ -285,13 +287,15 @@
 		margin-bottom: 0.5rem;
 	}
 
-	/* Footer user */
+	/* Footer user — Wave10: section không còn padding-inline → user menu tự mang
+	   spacing (padding-inline 0.75rem, đồng bộ brand/search/switcher). */
 	.footer-user {
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
 		width: 100%;
 		min-width: 0;
+		padding-inline: 0.75rem;
 
 		.footer-avatar {
 			width: 2rem;

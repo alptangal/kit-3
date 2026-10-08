@@ -17,6 +17,7 @@
 	import {
 		text_keys_allowed,
 		number_keys_allowed,
+		currency_keys_allowed,
 		defaultValidation,
 		createDefaultInputEvents
 	} from '.';
@@ -126,6 +127,41 @@
 				? parseFloat(props.minNumber)
 				: undefined;
 	});
+
+	// ── type='currency': locale + symbol + decimals mặc định theo currency ──
+	// VND → vi-VN ("1.234 ₫", suffix, 0 decimals); USD/EUR/GBP/JPY → en-US
+	// (prefix, USD 2, JPY 0). symbol prop ghi đè symbol từ currency.
+	const CURRENCY_DEFAULTS: { [currencyCode: string]: { locale: string; prefix: boolean; decimals: number } } = {
+		VND: { locale: 'vi-VN', prefix: false, decimals: 0 },
+		USD: { locale: 'en-US', prefix: true, decimals: 2 },
+		EUR: { locale: 'en-US', prefix: true, decimals: 2 },
+		GBP: { locale: 'en-GB', prefix: true, decimals: 2 },
+		JPY: { locale: 'ja-JP', prefix: true, decimals: 0 },
+		CNY: { locale: 'zh-CN', prefix: true, decimals: 2 },
+		KRW: { locale: 'ko-KR', prefix: true, decimals: 0 },
+		SGD: { locale: 'en-SG', prefix: true, decimals: 2 },
+		THB: { locale: 'th-TH', prefix: true, decimals: 2 }
+	};
+	const currencyDerived = $derived(props.currency ?? 'VND');
+	const currencyConfigDerived = $derived.by(() => {
+		return CURRENCY_DEFAULTS[currencyDerived.toUpperCase()] ?? { locale: 'vi-VN', prefix: false, decimals: 0 };
+	});
+	const currencySymbolDerived = $derived.by(() => {
+		if (props.symbol) return props.symbol;
+		try {
+			const parts = new Intl.NumberFormat(currencyConfigDerived.locale, {
+				style: 'currency',
+				currency: currencyDerived.toUpperCase(),
+				currencyDisplay: 'narrowSymbol'
+			}).formatToParts(1);
+			return parts.find((part) => part.type === 'currency')?.value ?? currencyDerived.toUpperCase();
+		} catch {
+			// RangeError: currency code invalid → dùng chính mã làm symbol
+			return currencyDerived.toUpperCase();
+		}
+	});
+	const currencySymbolPositionDerived = $derived(props.symbolPosition ?? (currencyConfigDerived.prefix ? 'prefix' : 'suffix'));
+	const currencyDecimalsDerived = $derived(props.decimals ?? currencyConfigDerived.decimals);
 
 	const colorDerived = $derived.by(() => {
 		// Ưu tiên props.color nếu được set explicitly
@@ -1052,7 +1088,177 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					return events;
 				}
 			},
-			currency: {},
+			currency: {
+				get style() {
+					return [...(configs.input.text.style ?? []), 'input-editor-number'];
+				},
+				get event() {
+					if (!browser) return undefined;
+					if (configs.disabled) return [];
+					const events = [
+						props.validation
+							? {
+									events: Object.fromEntries(
+										Object.entries(props.validation)
+											.filter(([eventName, _]) => ['keyup', 'keydown'].includes(eventName))
+											.map(([eventName, data]) => {
+												return [
+													eventName,
+													async () => {
+														const evName = eventName as keyof EventListener | 'operator';
+														if (evName == 'operator') {
+															if (typeof data == 'string') {
+															}
+														} else {
+															if (!configs.validation.process)
+																configs.validation.process = new SvelteMap();
+															if (typeof data == 'object' && Array.isArray(data)) {
+																const operator = props.validation?.operator ?? 'and';
+																await processingValidation(evName, data, operator);
+															} else if (typeof data == 'object') {
+																const operator =
+																	data.operator ?? props.validation?.operator ?? 'and';
+																await processingValidation(evName, data.handles, operator);
+															}
+														}
+													}
+												];
+											})
+									)
+								}
+							: { events: {} },
+						{
+							events: {
+								async load(_, data) {
+									if (data?.node instanceof HTMLInputElement && client.browser?.isMobile) {
+										if (!value) {
+											data.node.style.width = `0px`;
+										} else {
+											const w = measureTextWidth(value, data.node);
+											const baseSize = getComputedStyle(document.body).fontSize;
+											data.node.style.width = `${(w + 1) / parseFloat(baseSize)}rem`;
+										}
+									}
+								},
+								async keydown(e, data) {
+									let event = e as KeyboardEvent;
+
+									if (
+										!client.browser?.isMobile &&
+										!currency_keys_allowed.includes(event.key.toLowerCase())
+									) {
+										event.preventDefault();
+										return;
+									}
+									if (client.browser?.isMobile) {
+										const event = e as CustomEvent<string>;
+										event.preventDefault();
+										const key = event.detail as NumberKeyAllowed;
+										const currentIndex = configs.status.currentCursor;
+										if (key == 'ac') {
+											value = '';
+											configs.status.currentCursor = 0;
+										} else if (key == 'del') {
+											if (value && configs.status.currentCursor) {
+												if (currentIndex == value.length) {
+													value = value.slice(0, -1);
+													configs.status.currentCursor = value.length ?? 1;
+												} else if (currentIndex !== undefined) {
+													value =
+														value.slice(0, currentIndex - 1) +
+														value.slice(currentIndex, value.length);
+													configs.status.currentCursor = Math.max(
+														0,
+														configs.status.currentCursor - 1
+													);
+												}
+											}
+										} else if (key == '=' && value) {
+											currencyApplyCalculate();
+											return;
+										} else {
+											if (!value) value = '';
+											if (currentIndex === undefined) {
+												value += key;
+												configs.status.currentCursor = 1;
+											} else {
+												if (currentIndex == value.length) {
+													value += key;
+												} else {
+													value =
+														value.slice(0, currentIndex) +
+														key +
+														value.slice(currentIndex, value.length);
+												}
+												if (!configs.status.currentCursor) configs.status.currentCursor = 0;
+												configs.status.currentCursor += 1;
+											}
+										}
+										if (configs.status.currentCursor != undefined) {
+											requestAnimationFrame(() => {
+												const inputRef = configs.input.currency.ref as HTMLInputElement;
+												if (configs.status.currentCursor != undefined)
+													if (inputRef)
+														inputRef.setSelectionRange(
+															configs.status.currentCursor,
+															configs.status.currentCursor
+														);
+											});
+										}
+										if (configs.input.currency.ref && value) {
+											const w = measureTextWidth(value, configs.input.currency.ref);
+											configs.input.currency.ref.style.width = `${w + 4}px`;
+										}
+
+										return;
+									}
+								},
+								mousedown(e) {
+									const ev = e as MouseEvent;
+									// Mirror number: mobile preventDefault (caret do visual keyboard);
+									// PC cho native focus.
+									if (client.browser?.isMobile) ev.preventDefault();
+									let index: number | undefined;
+									if (!value || !configs.input.currency.ref) {
+										index = 1;
+									} else {
+										index = calculatorCursor(e as MouseEvent, value, configs.input.currency.ref);
+									}
+									configs.status.currentCursor = index ?? value?.length ?? 1;
+								}
+							}
+						},
+						...(createDefaultInputEvents(
+							untrack(() => value),
+							configs,
+							textFieldContext,
+							formContext
+						) ?? []),
+						{
+							events: {
+								mousedown: {
+									handler(e) {
+										const ev = e as MouseEvent;
+										if (
+											configs.status.focus &&
+											!configs.ref?.contains(ev.target as HTMLElement) &&
+											!client.browser?.visualKeyboard?.ref?.contains(ev.target as HTMLElement)
+										) {
+											configs.status.focus = false;
+											if (visualNumberKbCleaner) visualNumberKbCleaner();
+										}
+									},
+									options: {
+										capture: true
+									}
+								}
+							},
+							target: window
+						}
+					] as BasicConfigs['event'];
+					return events;
+				}
+			},
 			// type='file': chỉ cần ref (input[type=file] hidden) + style. event/giao diện
 			// xử lý bởi render branch riêng (dropzone), không dùng input-editor text.
 			file: {
@@ -1408,7 +1614,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			set value(v: string | undefined) {
 				value = v; // gán thẳng vào biến $bindable(), Svelte tự lo phần reactivity
 			},
-			ref: configs.input.number.ref as HTMLInputElement,
+			// type='currency' → ref nằm ở configs.input.currency.ref (không phải number)
+			ref:
+				(configs.input.currency.ref as HTMLInputElement | undefined) ??
+				(configs.input.number.ref as HTMLInputElement),
 			maxLength: configs.maxLength
 		};
 		visualNumberKbCleaner = ensureKeyboardHost(target);
@@ -1425,6 +1634,171 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			return configs.previousValue ? parseFloat(configs.previousValue) : undefined;
 		}
 	}
+
+	/**
+	 * Resolve token số currency ("1.234.567", "1234,56", "1234") → number.
+	 * Heuristic: DÙNG cùng locale currencyConfigDerived — dấu phân cách nhóm nghìn
+	 * của locale (vi-VN '.', en-US ',') bị bỏ; dấu thập phân của locale (vi-VN ',',
+	 * en-US '.') được giữ. Parse thủ công digits trước/sau dấu thập phân — KHÔNG
+	 * parseFloat toàn token (vi-VN "1.234" parseFloat → 1.234, sai — phải là 1234).
+	 */
+	function resolveCurrencyNumberToken(token: string): number | undefined {
+		const groupSep = currencyConfigDerived.locale === 'vi-VN' ? '.' : ',';
+		const decSep = currencyConfigDerived.locale === 'vi-VN' ? ',' : '.';
+		let cleaned = token.replaceAll(groupSep, '');
+		const decIndex = cleaned.indexOf(decSep);
+		let intPart = cleaned;
+		let fracPart = '';
+		if (decIndex !== -1) {
+			intPart = cleaned.slice(0, decIndex);
+			fracPart = cleaned.slice(decIndex + 1);
+		}
+		const intDigits = intPart.replace(/\D/g, '');
+		const fracDigits = fracPart.replace(/\D/g, '');
+		if (!intDigits && !fracDigits) return undefined;
+		const intNum = intDigits ? parseInt(intDigits, 10) : 0;
+		const num = fracDigits ? parseFloat(`${intNum}.${fracDigits}`) : intNum;
+		return Number.isFinite(num) ? num : undefined;
+	}
+
+	// ── type='currency': safe expression parser (recursive descent, KHÔNG eval) ──
+	// Grammar: expr := term (('+'|'-') term)* ; term := factor (('x'|'*'|':'|'/'|'%') factor)*
+	// factor := number | '(' expr ')' | ('+'|'-') factor. 'x'→'*', ':'→'/' (mirror
+	// keyboard số). Trả undefined khi biểu thức không hợp lệ (chữ cái lạ, thừa
+	// toán tử, thiếu ngoặc đóng, chia 0 không xử lý riêng — JS cho Infinity).
+	function parseCurrencyExpression(input: string): number | undefined {
+		const src = input.toString().replaceAll('x', '*').replaceAll(':', '/');
+		let pos = 0;
+		const peek = () => src[pos];
+		function parseExpr(): number | undefined {
+			let left = parseTerm();
+			if (left === undefined) return undefined;
+			while (peek() === '+' || peek() === '-') {
+				const op = src[pos++];
+				const right = parseTerm();
+				if (right === undefined) return undefined;
+				left = op === '+' ? left + right : left - right;
+			}
+			return left;
+		}
+		function parseTerm(): number | undefined {
+			let left = parseFactor();
+			if (left === undefined) return undefined;
+			while (peek() === '*' || peek() === '/' || peek() === '%') {
+				const op = src[pos++];
+				const right = parseFactor();
+				if (right === undefined) return undefined;
+				left = op === '*' ? left * right : op === '/' ? left / right : left % right;
+			}
+			return left;
+		}
+		function parseFactor(): number | undefined {
+			const ch = peek();
+			if (ch === '+') {
+				pos++;
+				return parseFactor();
+			}
+			if (ch === '-') {
+				pos++;
+				const v = parseFactor();
+				return v === undefined ? undefined : -v;
+			}
+			if (ch === '(') {
+				pos++;
+				const v = parseExpr();
+				if (v === undefined || peek() !== ')') return undefined;
+				pos++; // consume ')'
+				return v;
+			}
+			// number: token gồm digits + dấu '.' / ',' (nhóm nghìn từ autoFormat hoặc
+			// thập phân user gõ) — resolve qua heuristic nhóm trước, parseFloat sau.
+			const start = pos;
+			while (pos < src.length && /[0-9.,]/.test(src[pos])) pos++;
+			if (pos === start || src[start] === '.') return undefined; // không có digit
+			const num = resolveCurrencyNumberToken(src.slice(start, pos));
+			return num;
+		}
+		const result = parseExpr();
+		// Còn ký tự chưa consume → biểu thức thừa (vd "1+2)")
+		if (result === undefined || pos !== src.length) return undefined;
+		return result;
+	}
+	/** Format number → chuỗi currency theo locale/decimals (Intl.NumberFormat). */
+	function formatCurrency(num: number): string {
+		try {
+			return new Intl.NumberFormat(currencyConfigDerived.locale, {
+				style: 'decimal',
+				minimumFractionDigits: currencyDecimalsDerived,
+				maximumFractionDigits: currencyDecimalsDerived
+			}).format(num);
+		} catch {
+			return num.toString();
+		}
+	}
+
+	/**
+	 * autoCalculate: parse biểu thức hiện tại (an toàn, KHÔNG eval) → gán lại
+	 * value = kết quả số (raw string). Gọi khi nhấn '=' (PC Enter/mobile phím =)
+	 * hoặc blur có toán tử. Kết quả không parse được → giữ nguyên value.
+	 */
+	function currencyApplyCalculate() {
+		if (!value) return;
+		const rs = parseCurrencyExpression(value);
+		if (rs !== undefined) {
+			const next = String(rs);
+			if (next !== value) value = next;
+		}
+	}
+
+	/**
+	 * autoFormat LIVE khi nhập (type='currency', PC): chèn nhóm nghìn theo locale
+	 * (không đụng phần thập phân đang gõ). Token số đã format ("1.234" vi-VN) phải
+	 * strip group-sep locale TRƯỚC khi group lại — nếu không, chấm nhóm bị coi là
+	 * thập phân → double-group ("1.000" + "000" → "1.000.000" khi gõ tiếp).
+	 */
+	function currencyFormatLive(): string | undefined {
+		if (!value) return undefined;
+		const groupSep = currencyConfigDerived.locale === 'vi-VN' ? '.' : ',';
+		const decSep = currencyConfigDerived.locale === 'vi-VN' ? ',' : '.';
+		const groupNumber = (digitsOnly: string): string | undefined => {
+			if (!digitsOnly) return undefined;
+			try {
+				return new Intl.NumberFormat(currencyConfigDerived.locale, {
+					style: 'decimal',
+					useGrouping: true,
+					maximumFractionDigits: 0
+				}).format(parseFloat(digitsOnly));
+			} catch {
+				return undefined;
+			}
+		};
+		// Format 1 token số: strip group-sep → tách thập phân (decSep hoặc '.' raw
+		// đang gõ) → group phần nguyên, giữ nguyên phần sau.
+		const formatToken = (part: string): string => {
+			const stripped = part.replaceAll(groupSep, '');
+			// Phần thập phân: dấu decSep locale (',' vi-VN) HOẶC '.' đang gõ trực tiếp
+			const decIndex = Math.max(stripped.indexOf(decSep), stripped.indexOf('.'));
+			if (decIndex === -1) return groupNumber(stripped.replace(/\D/g, '')) ?? part;
+			const intPart = stripped.slice(0, decIndex).replace(/\D/g, '');
+			const fracPart = stripped.slice(decIndex + 1);
+			const grouped = groupNumber(intPart);
+			if (!grouped) return part;
+			return fracPart ? `${grouped}.${fracPart}` : grouped;
+		};
+		// Có toán tử biểu thức → format từng token số trong biểu thức
+		if (/[+\-*/%()x:]/.test(value)) {
+			const parts = value.split(/([+\-*/%()x:])/);
+			return parts
+				.map((part) => {
+					if (/[+\-*/%()x:]/.test(part) || !part) return part;
+					return formatToken(part);
+				})
+				.join('');
+		}
+		// Số thuần
+		return formatToken(value);
+	}
+
 	function buildCoreEvents() {
 		return {
 			async load() {
@@ -1462,7 +1836,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 
 					if (e.detail == 1) {
 						if (
-							configs.type === 'number' &&
+							(configs.type === 'number' || configs.type === 'currency') &&
 							client.browser?.isMobile &&
 							!client.browser?.visualKeyboard
 						) {
@@ -1489,7 +1863,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 								}
 							} else {
 								configs.focus();
-								if (configs.type === 'number' && client.browser?.isMobile) {
+								if (
+									(configs.type === 'number' || configs.type === 'currency') &&
+									client.browser?.isMobile
+								) {
 									requestAnimationFrame(() => showVisualNumberKb());
 								}
 							}
@@ -1519,6 +1896,18 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			validators.push(defaultValidation.required(configs.name));
 		}
 		if (configs.type === 'number') {
+			if (configs.minNumber != null && defaultValidation.minNumber) {
+				validators.push(defaultValidation.minNumber(configs.minNumber, configs.name));
+			}
+			if (configs.maxNumber != null && defaultValidation.maxNumber) {
+				validators.push(defaultValidation.maxNumber(configs.maxNumber, configs.name));
+			}
+		} else if (configs.type === 'currency') {
+			// Currency: chỉ chặn nội dung không parse được; minNumber/maxNumber
+			// dùng chung validators number (parseFloat trên chuỗi raw).
+			if (defaultValidation.isCurrency) {
+				validators.push(defaultValidation.isCurrency(configs.name));
+			}
 			if (configs.minNumber != null && defaultValidation.minNumber) {
 				validators.push(defaultValidation.minNumber(configs.minNumber, configs.name));
 			}
@@ -1630,6 +2019,93 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					}
 				}, configs.delay)
 			);
+		}
+	});
+
+	// ── type='currency': autoFormat LIVE khi nhập (nhóm nghìn theo locale, giữ caret) ──
+	// Chỉ chạy khi đang focus (blur có effect riêng ép decimals đầy đủ). Mapping caret
+	// theo digits: đếm digits trước cursor cũ → tìm vị trí tương ứng trong chuỗi mới
+	// (nhóm nghìn chèn ký tự phân cách, digits giữ nguyên thứ tự → caret không nhảy).
+	$effect(() => {
+		if (configs.type !== 'currency') return;
+		const current = value;
+		// PC: format live khi đang focus (blur có effect riêng). Mobile: LUÔN format
+		// live — status.focus không được set trong flow CustomEvent keyboard (readonly
+		// input, preventDefault mousedown), value chỉ đổi qua phím visual keyboard.
+		if (!current || (!client.browser?.isMobile && !configs.status.focus)) return;
+		const inputRef = configs.input.currency.ref as HTMLInputElement | undefined;
+		// oldCursor: PC gõ phím → native caret đúng nằm trên DOM (selectionStart);
+		// mobile caret do visual keyboard quản lý (currentCursor). Fallback cuối chuỗi.
+		const oldCursor =
+			(inputRef && configs.status.focus ? inputRef.selectionStart : undefined) ??
+			configs.status.currentCursor ??
+			current.length;
+		const formatted = currencyFormatLive();
+		if (!formatted || formatted === current) return;
+		// Đếm digits trước cursor cũ trong chuỗi raw → vị trí tương ứng trong chuỗi formatted
+		const digitsBefore = current.slice(0, oldCursor).replace(/\D/g, '').length;
+		let seen = 0;
+		let newCursor = formatted.length;
+		for (let i = 0; i < formatted.length; i++) {
+			if (formatted[i] >= '0' && formatted[i] <= '9') {
+				seen++;
+				if (seen === digitsBefore) {
+					newCursor = i + 1;
+					break;
+				}
+			}
+		}
+		value = formatted;
+		configs.status.currentCursor = newCursor;
+		// rAF: bind:value cập nhật DOM sau effect — setSelectionRange ngay sẽ bị
+		// DOM render đè (caret về cuối chuỗi).
+		requestAnimationFrame(() => {
+			if (inputRef && configs.status.currentCursor != undefined) {
+				inputRef.setSelectionRange(configs.status.currentCursor, configs.status.currentCursor);
+			}
+		});
+	});
+
+	// ── type='currency': autoCalculate + ép format đầy đủ khi blur (không focus) ──
+	// Có toán tử → parse (recursive descent, KHÔNG eval) → gán kết quả số raw.
+	// Không có toán tử → reformat decimals đầy đủ theo currency (vd 1234 →
+	// "1,234.00" USD 2 decimals, "1.234" VND 0 decimals). value rỗng → bỏ qua
+	// (không hiện "0" giả). STRIP group-sep locale TRƯỚC khi parse — nếu không,
+	// "1,234.00" USD → digits "123400" (nhân 100 mỗi lần blur → "∞").
+	$effect(() => {
+		if (configs.type !== 'currency') return;
+		const current = value;
+		// CHỈ chạy khi focus là false TƯỜNG MINH (PC blur thật / click ngoài khi
+		// focus đang true). Mobile flow: keydown CustomEvent không set status.focus
+		// (undefined) — nếu coi undefined là "đã blur", effect parse rút gọn biểu
+		// thức giữa chừng khi gõ ("1.000+5" → "1005" → "1.005", mất '+' và digit).
+		if (!current || configs.status.focus !== false) return;
+		const groupSep = currencyConfigDerived.locale === 'vi-VN' ? '.' : ',';
+		const decSep = currencyConfigDerived.locale === 'vi-VN' ? ',' : '.';
+		if (/[+\-*/%()x:]/.test(current)) {
+			const rs = parseCurrencyExpression(current);
+			if (rs !== undefined && String(rs) !== current) {
+				value = String(rs);
+			}
+			return;
+		}
+		const stripped = current.replaceAll(groupSep, '');
+		const decIndex = stripped.indexOf(decSep);
+		const intPart = decIndex === -1 ? stripped : stripped.slice(0, decIndex);
+		const fracPart = decIndex === -1 ? '' : stripped.slice(decIndex + 1);
+		const digits = intPart.replace(/\D/g, '');
+		const fracDigits = fracPart.replace(/\D/g, '');
+		if (!digits && !fracDigits) return;
+		// Parse thủ công (mirror resolveCurrencyNumberToken) — KHÔNG parseFloat toàn
+		// token: vi-VN "1.234" parseFloat → 1.234 sai (phải là 1234).
+		const intNum = digits ? parseInt(digits, 10) : 0;
+		const num = fracDigits ? parseFloat(`${intNum}.${fracDigits}`) : intNum;
+		if (!Number.isFinite(num)) return;
+		// Format decimals đầy đủ (formatCurrency nhận number — nhóm nghìn theo
+		// locale + decimals ép). value mới = chuỗi formatted (đã gồm nhóm nghìn).
+		const formatted = formatCurrency(num);
+		if (formatted !== current) {
+			value = formatted;
 		}
 	});
 
@@ -2250,6 +2726,32 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				id={inputId}
 				{@attach handleEvents(configs.input.number.event)}
 			/>
+			{#if client.browser?.isMobile}
+				<div class="input-visual-cursor"></div>
+			{/if}
+		</div>
+	{:else if configs.type == 'currency'}
+		<!-- type='currency': symbol = span RIÊNG ngoài input (prefix/suffix) —
+		     luôn hiển thị, không nằm trong value. value = chuỗi raw người dùng
+		     nhập (số hoặc biểu thức), autoFormat live nhóm nghìn theo locale. -->
+		<div class={configs.input.currency.style}>
+			{#if currencySymbolPositionDerived == 'prefix'}
+				<span class="input-currency-symbol" data-test="input-currency-symbol" aria-hidden="true">{currencySymbolDerived}</span>
+			{/if}
+			<input
+				type="text"
+				bind:value
+				bind:this={configs.input.currency.ref}
+				class="bg-transparent outline-none border-none w-full"
+				placeholder={placeholderDerived}
+				readonly={client.browser?.isMobile}
+				inputmode={client.browser?.isMobile ? 'none' : undefined}
+				id={inputId}
+				{@attach handleEvents(configs.input.currency.event)}
+			/>
+			{#if currencySymbolPositionDerived == 'suffix'}
+				<span class="input-currency-symbol" data-test="input-currency-symbol" aria-hidden="true">{currencySymbolDerived}</span>
+			{/if}
 			{#if client.browser?.isMobile}
 				<div class="input-visual-cursor"></div>
 			{/if}
