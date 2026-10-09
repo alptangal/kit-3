@@ -102,6 +102,7 @@
 				'slider-root',
 				`size-${this.size}`,
 				`color-${this.color}`,
+				`variant-${this.variant}`,
 				this.disabled ? 'disabled' : undefined,
 				this.status.focus ? 'focus' : undefined,
 				props.showValue ? 'show-value' : undefined
@@ -132,6 +133,12 @@
 		},
 		get disabled() {
 			return props.disabled ?? formContext?.disabled;
+		},
+		get variant() {
+			// Validation màu (error/success) override variant — state quan trọng hơn style
+			const autoColor = this.color;
+			if (autoColor === 'error' || autoColor === 'success') return 'solid';
+			return props.variant ?? 'solid';
 		},
 		get duration() {
 			return convertToMiliseconds(props.duration) ?? convertToMiliseconds(client.browser?.duration) ?? 300;

@@ -48,8 +48,12 @@ export interface SliderProps extends BasicProps {
 	id?: string;
 	/** Override màu semantic (khi không dùng validation auto). */
 	color?: Color;
+	/** Variant hiển thị (default 'solid'): solid đậm, soft fill nhạt, outline viền track, ghost mờ. */
+	variant?: SliderVariant;
 	'aria-label'?: string;
 }
+
+export type SliderVariant = 'solid' | 'soft' | 'outline' | 'ghost';
 
 export interface SliderConfigs extends Omit<BasicConfigs, 'status' | 'value'> {
 	/**

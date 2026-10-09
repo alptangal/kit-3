@@ -20,6 +20,9 @@
 		get color() {
 			return props.color ?? 'primary';
 		},
+		get variant() {
+			return props.variant ?? 'solid';
+		},
 		get max() {
 			const m = props.max ?? 100;
 			return m > 0 ? m : 100;
@@ -54,7 +57,9 @@
 				'progress-root',
 				`size-${this.size}`,
 				`color-${this.color}`,
-				this.indeterminate ? 'is-indeterminate' : undefined
+				`variant-${this.variant}`,
+				this.indeterminate ? 'is-indeterminate' : undefined,
+				props.valueInside && props.showValue ? 'has-value-inside' : undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
@@ -68,10 +73,15 @@
 	const barNow = $derived(configs.indeterminate ? undefined : configs.clampedValue);
 	const barBusy = $derived(configs.indeterminate ? 'true' : undefined);
 	const showValue = $derived(!!props.showValue);
+	const valueInside = $derived(!!props.valueInside && showValue);
+	// --progress-bar-w: inline trên root (CSS var) → .progress-value-inside right =
+	// calc(100% - bar-w) canh phải mép bar (KHÔNG đặt span trong bar — overflow:hidden clip text)
+	const barWVar = $derived(configs.indeterminate ? '40%' : `${configs.percent}%`);
 </script>
 
 <div
 	class={configs.style}
+	style:--progress-bar-w={barWVar}
 	role="progressbar"
 	aria-valuemin={0}
 	aria-valuemax={configs.max}
@@ -82,8 +92,11 @@
 >
 	<div class="progress-track">
 		<div class="progress-bar" style:width={barWidth}></div>
+		{#if valueInside}
+			<span class="progress-value progress-value-inside">{configs.displayText}</span>
+		{/if}
 	</div>
-	{#if showValue}
+	{#if showValue && !valueInside}
 		<span class="progress-value">{configs.displayText}</span>
 	{/if}
 </div>

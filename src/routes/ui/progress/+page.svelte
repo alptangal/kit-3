@@ -4,7 +4,8 @@
 
 	const values = [0, 25, 50, 75, 100] as const;
 	const colors = ['primary', 'success', 'warning', 'error'] as const;
-	const sizes = ['xs', 'sm', 'md', 'lg'] as const;
+	const sizes = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'] as const;
+	const variants = ['solid', 'soft', 'outline', 'ghost'] as const;
 </script>
 
 <div class="page" data-test="progress-demo">
@@ -49,12 +50,39 @@
 	</section>
 
 	<section class="demo" data-test="pr-size">
-		<h2>Size (xs/sm/md/lg = 4/6/8/10px)</h2>
+		<h2>Size (2xs → 3xl = 2/4/6/8/10/12/14/16px)</h2>
 		<p class="demo-hint">--progress-height theo size + text % scale theo size.</p>
 		<div class="stack">
 			{#each sizes as s}
 				<Progress value={40} size={s} showValue label={{ en: `Size ${s}`, vi: `Kích thước ${s}` }} />
 			{/each}
+		</div>
+	</section>
+
+	<section class="demo" data-test="pr-variant">
+		<h2>Variant (solid / soft / outline / ghost)</h2>
+		<p class="demo-hint">
+			solid nền đậm · soft nền nhạt 55% + track 15% · outline viền track + fill đậm ·
+			ghost fill mờ + track trong suốt.
+		</p>
+		<div class="stack">
+			{#each variants as v}
+				<Progress value={65} variant={v} showValue />
+			{/each}
+		</div>
+	</section>
+
+	<section class="demo" data-test="pr-value-inside">
+		<h2>Value inside (text % trong track canh phải mép bar)</h2>
+		<p class="demo-hint">
+			Text % nằm TRONG track, canh phải mép bar (màu trắng đè nền bar). Bar ngắn →
+			text kẹp mép phải track.
+		</p>
+		<div class="stack">
+			<Progress value={75} showValue valueInside />
+			<Progress value={100} showValue valueInside color="success" />
+			<Progress value={30} showValue valueInside color="warning" variant="soft" />
+			<Progress value={50} showValue valueInside variant="outline" />
 		</div>
 	</section>
 

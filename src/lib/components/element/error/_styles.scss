@@ -1,0 +1,131 @@
+// $components/element/error/_styles.scss
+// Error page — matrix rain nền + mã lỗi to đè + mô tả lỗi.
+// Token + CSS vars, KHÔNG hardcode màu. status-* class set --error-status-color
+// (4xx → warning, 5xx → danger, khác → foreground).
+// Matrix: CSS grid cells (span), mỗi cell 1 ký tự, shimmer đổi màu nhấp nháy
+// stagger theo --cell-delay. Reduced-motion: tắt shimmer + entrance tức thì.
+
+.error-root {
+	--error-status-color: var(--foreground);
+	--error-matrix-color: var(--foreground);
+	--error-matrix-opacity: 0.08;
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	// Đủ cao màn hình để flex centering căn giữa THẬT theo viewport
+	// (60vh → khối nằm nửa trên, nửa dưới trống — lỗi ui-checker bắt được).
+	// border-box: padding 2rem nằm TRONG 100dvh → không overflow Container (h-full).
+	box-sizing: border-box;
+	min-height: 100vh;
+	min-height: 100dvh;
+	overflow: hidden;
+	padding: 2rem 1.5rem;
+
+	/* ── Màu mã lỗi theo nhóm ── */
+	&.status-warning {
+		--error-status-color: var(--warning);
+	}
+	&.status-danger {
+		--error-status-color: var(--danger);
+	}
+
+	/* ── Matrix rain nền (grid ký tự) ── */
+	.error-matrix {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		grid-template-columns: repeat(var(--error-cols, 40), 1fr);
+		grid-template-rows: repeat(var(--error-rows, 14), 1fr);
+		gap: 0;
+		pointer-events: none;
+		user-select: none;
+		color: var(--error-matrix-color);
+		opacity: var(--error-matrix-opacity);
+		font-size: var(--font-size-2xs, 0.625rem);
+		font-family: var(--font-mono, monospace);
+		line-height: 1;
+	}
+
+	.error-matrix-cell {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		animation: error-cell-shimmer 2.4s ease-in-out infinite;
+		animation-delay: var(--cell-delay, 0s);
+	}
+
+	/* ── Nội dung đè (mã lỗi + mô tả) ── */
+	.error-content {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		text-align: center;
+		animation: error-content-in 500ms cubic-bezier(0.65, 0, 0.35, 1) both;
+	}
+
+	.error-eyebrow {
+		margin: 0;
+		font-size: var(--font-size-xs, 0.75rem);
+		font-weight: 600;
+		letter-spacing: 0.15em;
+		text-transform: uppercase;
+		color: var(--muted, var(--foreground));
+	}
+
+	.error-status {
+		margin: 0;
+		font-size: var(--font-size-9xl, 8rem);
+		font-weight: 900;
+		line-height: 1;
+		color: var(--error-status-color);
+		font-variant-numeric: tabular-nums;
+		text-shadow: 0 4px 24px color-mix(in srgb, var(--error-status-color) 25%, transparent);
+	}
+
+	.error-message {
+		margin: 0;
+		max-width: 36rem;
+		font-size: var(--font-size-md, 1rem);
+		line-height: var(--line-height, 1.5rem);
+		color: var(--muted, var(--foreground));
+	}
+
+	/* ── Static matrix (staticMatrix prop): tắt shimmer ── */
+	&.is-static .error-matrix-cell {
+		animation: none;
+	}
+}
+
+@keyframes error-cell-shimmer {
+	0%, 100% { opacity: 0.4; }
+	50% { opacity: 1; }
+}
+
+@keyframes error-content-in {
+	from {
+		opacity: 0;
+		transform: translateY(0.75rem) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+/* ── Reduced motion: tắt shimmer + entrance tức thì ── */
+@media (prefers-reduced-motion: reduce) {
+	.error-root {
+		.error-matrix-cell {
+			animation: none;
+			opacity: 0.6;
+		}
+		.error-content {
+			animation: none;
+		}
+	}
+}

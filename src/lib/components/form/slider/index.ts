@@ -7,7 +7,7 @@ import { setSliderContext } from './_context';
 
 export { default as Slider } from './Main.svelte';
 export { setSliderContext, getSliderContext } from './_context';
-export type { SliderProps, SliderConfigs } from './_interface';
+export type { SliderProps, SliderConfigs, SliderVariant } from './_interface';
 
 // Slider value là number — ValidationFull.input là union
 // `string | boolean | File[]` (form-wide) → coerce qua Number() trước so sánh.
@@ -20,9 +20,12 @@ export const defaultValidation: {
 } = {
 	required: (fieldName) => {
 		return {
-			isValid(input?: string | boolean | File[]) {
+			isValid(input?: string | boolean | string[] | File[]) {
 				// Slider LUÔN có giá trị (native range input luôn có value) →
 				// required chỉ fail khi input NaN (trạng thái bất thường).
+				// input là union form-wide (string|boolean|string[]|File[]) —
+				// slider truyền String(number) — coerce Number() lại trước so sánh.
+				if (typeof input !== 'string') return false;
 				const n = Number(input);
 				if (input != null && !Number.isNaN(n)) return true;
 				return false;
@@ -41,7 +44,8 @@ export const defaultValidation: {
 	},
 	minValue: (minCount, fieldName) => {
 		return {
-			isValid(input?: string | boolean | File[]) {
+			isValid(input?: string | boolean | string[] | File[]) {
+				if (typeof input !== 'string') return false;
 				const n = Number(input);
 				if (Number.isNaN(n)) return false;
 				return n >= minCount;
@@ -60,7 +64,8 @@ export const defaultValidation: {
 	},
 	maxValue: (maxCount, fieldName) => {
 		return {
-			isValid(input?: string | boolean | File[]) {
+			isValid(input?: string | boolean | string[] | File[]) {
+				if (typeof input !== 'string') return false;
 				const n = Number(input);
 				if (Number.isNaN(n)) return false;
 				return n <= maxCount;

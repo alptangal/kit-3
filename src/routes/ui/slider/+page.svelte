@@ -6,9 +6,11 @@
 	// ── State (probe locate qua data-test) ──
 	let basicValue = $state(30);
 	let ticksValue = $state(40);
+	let sizes2xs = $state(20);
 	let sizesSm = $state(25);
 	let sizesMd = $state(50);
 	let sizesLg = $state(75);
+	let sizes2xl = $state(85);
 
 	// sl-clamp: page state OUT OF RANGE (500) — Slider phải clamp về max=100
 	let clampValue = $state(30);
@@ -54,10 +56,25 @@
 
 	<!-- 3) Sizes -->
 	<section class="demo" data-test="sl-sizes">
-		<h2>Sizes (sm / md / lg)</h2>
+		<h2>Sizes (2xs / sm / md / lg / 2xl)</h2>
+		<Slider size="2xs" bind:value={sizes2xs} aria-label="Size 2xs slider" />
 		<Slider size="sm" bind:value={sizesSm} aria-label="Size sm slider" />
 		<Slider size="md" bind:value={sizesMd} aria-label="Size md slider" />
 		<Slider size="lg" bind:value={sizesLg} aria-label="Size lg slider" />
+		<Slider size="2xl" bind:value={sizes2xl} aria-label="Size 2xl slider" />
+	</section>
+
+	<!-- 3b) Variants -->
+	<section class="demo" data-test="sl-variants">
+		<h2>Variants (solid / soft / outline / ghost)</h2>
+		<p class="demo-hint">
+			solid đậm · soft fill nhạt 35% · outline viền track + thumb nền background ·
+			ghost mờ 55%. Validation error/success → ép solid (màu trạng thái ưu tiên).
+		</p>
+		<Slider variant="solid" value={30} aria-label="Variant solid slider" />
+		<Slider variant="soft" value={45} aria-label="Variant soft slider" />
+		<Slider variant="outline" value={60} showTicks tickCount={5} aria-label="Variant outline slider" />
+		<Slider variant="ghost" value={75} aria-label="Variant ghost slider" />
 	</section>
 
 	<!-- 4) Disabled -->

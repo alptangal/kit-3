@@ -1,13 +1,19 @@
 // $components/element/progress/_styles.scss
 // Progress — state display (track + bar). Token + CSS vars, KHÔNG hardcode.
-// --progress-height: theo size-* (4/6/8/10px). --color: class color-* (hệ token semantic).
+// --progress-height: theo size-* (2/4/6/8/10/12/14/16px; full = track full container).
+// --color: class color-* (hệ token semantic). Variant: solid/soft/outline/ghost.
 // Indeterminate: bar width 40% + keyframes trượt translateX(-100% → 250%) infinite linear.
+// Value inside: text % nằm TRONG track canh phải mép bar (--progress-bar-w set inline
+// trên root từ template; KHÔNG đặt span trong .progress-bar — overflow:hidden clip text).
+
+@use '$styles/colors.scss';
 
 .progress-root {
 	--progress-height: 6px; // fallback sm
 	--progress-font: 0.75rem;
 	--progress-color: var(--color, var(--primary));
 	--progress-track: var(--content2);
+	--progress-bar-w: 0%;
 	position: relative;
 	display: inline-flex;
 	align-items: center;
@@ -16,10 +22,19 @@
 	max-width: 100%;
 
 	/* ── Size map (chiều cao track + font text %) ── */
+	&.size-2xs { --progress-height: 2px;  --progress-font: 0.5rem; }
 	&.size-xs { --progress-height: 4px;  --progress-font: 0.625rem; }
 	&.size-sm { --progress-height: 6px;  --progress-font: 0.75rem; }
 	&.size-md { --progress-height: 8px;  --progress-font: 0.8125rem; }
 	&.size-lg { --progress-height: 10px; --progress-font: 0.875rem; }
+	&.size-xl { --progress-height: 12px; --progress-font: 1rem; }
+	&.size-2xl { --progress-height: 14px; --progress-font: 1.125rem; }
+	&.size-3xl { --progress-height: 16px; --progress-font: 1.25rem; }
+	// full: track chiếm full chiều cao container (height var từ size-full token)
+	&.size-full {
+		--progress-height: 100%;
+		--progress-font: 1rem;
+	}
 
 	.progress-track {
 		position: relative;
@@ -41,6 +56,39 @@
 		transition: width 300ms cubic-bezier(0.65, 0, 0.35, 1);
 	}
 
+	/* ── Variants ──
+	   solid: nền đậm màu (mặc định — giữ UI gốc)
+	   soft: nền color nhạt 20% opacity + track nhạt theo color
+	   outline: track trong suốt + viền 1px màu + fill solid
+	   ghost: fill mờ 55% + track trong suốt (nền page lồ lộ) */
+	&.variant-solid {
+		.progress-bar {
+			background: var(--progress-color);
+		}
+	}
+	&.variant-soft {
+		--progress-track: color-mix(in srgb, var(--progress-color) 15%, transparent);
+		.progress-bar {
+			background: color-mix(in srgb, var(--progress-color) 55%, transparent);
+		}
+	}
+	&.variant-outline {
+		--progress-track: transparent;
+		.progress-track {
+			border: 1px solid var(--progress-color);
+		}
+		.progress-bar {
+			background: var(--progress-color);
+		}
+	}
+	&.variant-ghost {
+		--progress-track: transparent;
+		.progress-bar {
+			background: color-mix(in srgb, var(--progress-color) 45%, transparent);
+			opacity: 0.55;
+		}
+	}
+
 	/* Indeterminate — bar trượt vô hạn (shimmer) */
 	&.is-indeterminate {
 		.progress-bar {
@@ -59,6 +107,44 @@
 		min-width: 2.25em;
 		text-align: right;
 	}
+
+	/* Value inside — text % nằm TRONG track canh phải mép bar.
+	   right = calc(100% - bar-w): bar đủ rộng → text cuối bar (đè nền màu, trắng);
+	   bar ngắn hơn text → right < 0 → track overflow:hidden kẹp về mép phải track
+	   (text lồi trên track, màu màu). Indeterminate: right 0.5rem cố định. */
+	.progress-value-inside {
+		position: absolute;
+		top: 50%;
+		transform: translateY(-50%);
+		right: calc(100% - var(--progress-bar-w, 0%));
+		left: auto;
+		padding-inline: 0.5em;
+		min-width: 0;
+		color: var(--background, #fff);
+		transition: right 300ms cubic-bezier(0.65, 0, 0.35, 1);
+	}
+
+	// Bar quá ngắn / track hẹp (2xs-full hẹp) → text không đủ chỗ trong track:
+	// contrast fallback — text chuyển màu foreground khi text vượt mép track trái.
+	// (track overflow:hidden KHÔNG kẹp được position:absolute con — text có thể
+	// tràn ra ngoài track → has-value-inside giới hạn min bar-width bằng text width.)
+	&.has-value-inside {
+		.progress-value-inside {
+			color: var(--background, #fff);
+		}
+		// Giữ bar không hẹp hơn text: min-width track con qua ::after? — đơn giản:
+		// bar min-width = 2.25em (chứa text % ngắn nhất "0%")
+		.progress-bar {
+			min-width: calc(2.25em + 1em);
+		}
+	}
+
+	// size hẹp (2xs/xs) + value inside → text cao hơn track → text tràn dọc:
+	// track overflow:hidden clip dọc. Chấp nhận: value inside khuyến nghị md+.
+	&.size-2xs.has-value-inside,
+	&.size-xs.has-value-inside {
+		--progress-font: 0.5rem;
+	}
 }
 
 @keyframes progress-slide {
@@ -70,6 +156,9 @@
 @media (prefers-reduced-motion: reduce) {
 	.progress-root {
 		.progress-bar {
+			transition: none;
+		}
+		.progress-value-inside {
 			transition: none;
 		}
 		&.is-indeterminate .progress-bar {

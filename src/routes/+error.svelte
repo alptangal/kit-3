@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { ErrorPage } from '$components/element';
 </script>
 
-<h1>{page.status}{page.error?.message}</h1>
+<ErrorPage status={page.status} message={page.error?.message} />

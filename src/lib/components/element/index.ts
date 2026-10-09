@@ -59,7 +59,9 @@ export { default as Skeleton } from './skeleton/Main.svelte';
 export { default as Spinner } from './spinner/Main.svelte';
 export type { SpinnerProps, SpinnerConfigs, SpinnerPattern, SpinnerSize } from './spinner/_interface';
 export { default as Progress } from './progress/Main.svelte';
-export type { ProgressProps, ProgressConfigs, ProgressSize } from './progress/_interface';
+export type { ProgressProps, ProgressConfigs, ProgressSize, ProgressVariant } from './progress/_interface';
+export { default as ErrorPage } from './error/Main.svelte';
+export type { ErrorPageProps, ErrorPageConfigs } from './error/_interface';
 
 export { Badge } from './badge';
 export type { BadgeConfigs, BadgeProps, BadgeVariant } from './badge';
