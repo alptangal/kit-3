@@ -843,7 +843,34 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 							configs,
 							textFieldContext,
 							formContext
-						) ?? [])
+						) ?? []),
+						// type='barcode': blur ngoài root (click h2/nút khác) — window-level
+						// mousedown capture reset status.focus (mirror currency, dòng 1261).
+						// KHÔNG có listener này: focus class kẹt 'true' → effect focus/blur
+						// (prevFocus) không dispatch 'blur' → validation blur không chạy.
+						...(barcodeDisplayDerived
+							? ([
+									{
+										events: {
+											mousedown: {
+												handler(e) {
+													const ev = e as MouseEvent;
+													if (
+														configs.status.focus &&
+														!configs.ref?.contains(ev.target as HTMLElement)
+													) {
+														configs.status.focus = false;
+													}
+												},
+												options: {
+													capture: true
+												}
+											}
+										},
+										target: window
+									}
+								] as InputConfigs['input']['text']['event'])
+							: [])
 					] as InputConfigs['input']['text']['event'];
 				},
 				get style() {
@@ -3227,12 +3254,17 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				id={inputId}
 				data-test="input-barcode-input"
 				bind:value={barcodeInput}
+				// bind ref vào configs.input.text (mirror text/number/currency) —
+				// configs.focus() focus được input thật (click vào root ngoài input),
+				// native blur → status.focus=false → effect dispatch 'blur' → validation.
+				bind:this={configs.input.text.ref}
 				onkeydown={(e) => {
 					if (e.key === 'Enter') {
 						addBarcode(barcodeInput);
 						barcodeInput = '';
 					}
 				}}
+				{@attach handleEvents(configs.input.text.event)}
 			/>
 			{#if cameraOnDerived}
 				<button
