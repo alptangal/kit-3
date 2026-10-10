@@ -9,7 +9,9 @@
 // sẽ không bao giờ match). User override được bằng CSS var trên element ngoài.
 .sidebar-aside {
 	--sidebar-width: 240px;
-	--sidebar-collapsed-width: 72px;
+	/* P3: rail thu gọn 56px (user chốt) — nút icon fill FULL rail (không 48px
+	   square lề 12px mỗi bên như 72px cũ). */
+	--sidebar-collapsed-width: 56px;
 	--sb-width: var(--sidebar-width);
 	/* P3: duration animation "streaming label" (mở rộng từ icon rail) */
 	--sb-label-reveal-duration: 500ms;
@@ -103,14 +105,14 @@
 	:global(.sidebar-menu-group__trigger) {
 		justify-content: center;
 		padding-inline: 0;
-		/* Wave10: bỏ padding-inline header/content → item sẽ full-width rail (72px).
-		   Ép display flex (block-level — margin-inline auto VÔ HIỆU trên inline-flex,
-		   bẫy TeamSwitcher) + width 3rem (48px) + margin auto (li block container)
-		   → giữ square 48×48, căn giữa theo trục rail (x = 36px). */
+		/* P3 rail 56px: item FILL FULL rail (width 100%, bỏ margin-inline auto —
+		   trước đây 3rem/48px square + lề 12px mỗi bên với rail 72px). Ép display
+		   flex (block-level — margin auto VÔ HIỆU trên inline-flex, bẫy
+		   TeamSwitcher) → item sát 2 mép rail (lề 0), icon căn giữa. */
 		display: flex;
-		width: 3rem;
-		margin-inline: auto;
-		/* P3: item SQUARE (48×48) cho cân đối, đúng nguyên tắc "rail chỉ có icon". */
+		width: 100%;
+		margin-inline: 0;
+		/* P3: aspect-square giữ (icon giữa item, cân đối theo trục rail). */
 		aspect-ratio: 1 / 1;
 		min-height: 0;
 	}
@@ -147,9 +149,11 @@
 
 /* P3: LOGO ẨN khi collapsed (prop hideLogoWhenCollapsed, desktop) — demo CSS
    ẩn `.brand` (TOÀN BỘ, display:none) để header chỉ còn trigger → trigger căn
-   CHUẨN tâm rail (x = 36px), cùng trục với icon menu (square 48×48, icon tâm
-   item = tâm rail). Nếu chỉ ẩn icon+name (brand còn box rỗng), flex gap của
-   header lệch trigger khỏi tâm → menu không thẳng hàng trục Y. */
+   CHUẨN tâm rail (x = 28px với rail 56px), cùng trục với icon menu (fill full
+   rail, icon tâm item = tâm rail). Nếu chỉ ẩn icon+name (brand còn box rỗng),
+   flex gap của header lệch trigger khỏi tâm → menu không thẳng hàng trục Y.
+   Prop vẫn hoạt động (ON → ẩn logo row); demo mặc định OFF (logo icon vẫn
+   hiện khi thu gọn — layout 2-row: brand-row trên, trigger-row dưới). */
 .sidebar-aside.sidebar-collapsed.sidebar-logo-hidden {
 	:global(.brand) {
 		display: none;
@@ -168,6 +172,35 @@
 
 	:global(.sidebar-header) {
 		justify-content: flex-start;
+	}
+}
+
+/* P3: HEADER 2-ROW (brand-row trên + trigger-row dưới — demo đặt markup dọc).
+   Khi collapsed: 2 row đều căn GIỮA rail 56px (bỏ padding-inline dư — slot con
+   tự mang padding 0.75rem phải đè bằng 0). Peek hover → về layout đầy đủ. */
+.sidebar-aside.sidebar-collapsed {
+	:global(.brand-row),
+	:global(.trigger-row) {
+		justify-content: center;
+		padding-inline: 0;
+		width: 100%;
+	}
+
+	/* brand icon giữ kích thước (name ẩn qua rule .brand-name bên dưới) */
+	:global(.brand-row .brand-name) {
+		display: none;
+	}
+}
+
+.sidebar-aside.sidebar-collapsed:hover {
+	:global(.brand-row),
+	:global(.trigger-row) {
+		justify-content: flex-start;
+		padding-inline: 0.75rem;
+	}
+
+	:global(.brand-row .brand-name) {
+		display: block;
 	}
 }
 

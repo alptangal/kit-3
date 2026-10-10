@@ -16,8 +16,15 @@
 	import { browser } from '$app/environment';
 	import type { AppTheme } from '$interfaces/basic';
 	import { animateThemeTransition } from '$modules/theme.svelte';
+	import type { TimeUnits } from '$components/interface';
 	import { Button } from '$components/element';
 	import Icon from '$components/element/icon/Main.svelte';
+
+	// duration animate circle (TimeUnits — number | `${number}s` | `${number}ms`).
+	// Truyền thẳng vào animateThemeTransition → set --theme-transition-duration
+	// trên documentElement (app.css ::view-transition-new(root) đọc var — pseudo
+	// không inline style được). Default 450ms (fallback var trong app.css).
+	let { duration, ...props }: { duration?: TimeUnits } = $props();
 
 	// Resolved theme hiện tại (getter profile.theme resolve 'system' → dark/light
 	// + set data-theme). Guard browser bên trong getter (document chỉ có client).
@@ -53,7 +60,7 @@
 		const me = e instanceof MouseEvent ? e : null;
 		const x = me?.clientX ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
 		const y = me?.clientY ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
-		animateThemeTransition(nextTheme(currentTheme), x, y);
+		animateThemeTransition(nextTheme(currentTheme), x, y, duration ?? 450);
 	}
 </script>
 

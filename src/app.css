@@ -31,7 +31,7 @@
 
 :root.theme-transitioning::view-transition-new(root) {
 	animation-name: theme-clip-expand;
-	animation-duration: 450ms;
+	animation-duration: var(--theme-transition-duration, 450ms);
 	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 	mix-blend-mode: normal;
 }
