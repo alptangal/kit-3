@@ -4,7 +4,7 @@ import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const BASE = process.env.PROBE_BASE ?? 'https://localhost:3012/ui/input';
+const BASE = process.env.PROBE_BASE ?? 'https://localhost:3000/ui/input';
 const shotDir = 'tests/screenshots/input-file';
 mkdirSync(shotDir, { recursive: true });
 

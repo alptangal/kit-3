@@ -21,7 +21,7 @@
 import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-const BASE = 'https://localhost:3000/ui/input';
+const BASE = process.env.PROBE_BASE ?? 'https://localhost:3000/ui/input';
 const results = [];
 const ok = (name, cond, extra = '') => {
 	results.push({ name, pass: !!cond, extra });
@@ -300,7 +300,9 @@ ok(
 
 console.log('\n=== FI13: QUICK DELETE (tick + xóa hàng loạt) ===');
 const qdSection = section('if-quick-delete');
-const qdChecks = qdSection.locator('[data-test="input-file-check"]');
+// Checkbox component KHÔNG render prop data-test lên DOM (BasicProps không
+// spread) → tick locator qua wrapper span data-test (nằm ngoài Checkbox root).
+const qdChecks = qdSection.locator('[data-test="input-file-check"] > .checkbox-root');
 const qdBar = qdSection.locator('[data-test="input-file-quickbar"]');
 const qdDelete = qdSection.locator('[data-test="input-file-quickbar-delete"]');
 ok('FI13: ban đầu KHÔNG có quickbar', (await qdBar.count()) === 0);

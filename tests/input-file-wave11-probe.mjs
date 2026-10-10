@@ -14,7 +14,9 @@ import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const BASE = 'https://localhost:3012/ui/input';
+// Port lấy từ biến môi trường PROBE_BASE (dev server mặc định 3000; khi cổng
+// 3000 bận Vite tự nhảy cổng → đặt PROBE_BASE=https://localhost:XXXX/ui/input).
+const BASE = process.env.PROBE_BASE ?? 'https://localhost:3000/ui/input';
 const results = [];
 const ok = (name, cond, extra = '') => {
 	results.push({ name, pass: !!cond, extra });
