@@ -1440,8 +1440,6 @@
 		font-weight: 700 !important;
 		font-size: var(--font-size-lg, 1.125rem) !important;
 		letter-spacing: -0.01em !important;
-		/* Nền modal glass LUÔN tối (hardcode) → chữ literal sáng cả 2 mode
-		   (--foreground-50 đảo chiều theo dark mode → tối trên nền tối). */
 		color: #f4f4f5 !important;
 	}
 
@@ -1454,12 +1452,65 @@
 		padding-block: 1.25rem !important;
 	}
 
+	/* ── Modal theo APP THEME (data-theme — mirror ma trận variables.scss):
+	   nền modal hardcode TỐI trước đây khiến Button hover (đã theme-aware từ
+	   d9b51935) mất tương phản ở light mode (nền hover sáng + chữ hack sáng).
+	   Light mode → glass SÁNG, chữ tối; bỏ hack Decline literal ở footer.
+	   dark = OS dark (không ép light) HOẶC ép dark; light = OS light HOẶC ép
+	   light. Modal render trong page scope nhưng bọc :global cho chắc (không
+	   phụ thuộc portal). ── */
+	@media (prefers-color-scheme: light) {
+		:global(:root:not([data-theme='dark']) .terms-modal-box) {
+			background: rgba(255, 255, 255, 0.88) !important;
+			border-color: rgba(0, 0, 0, 0.08) !important;
+			box-shadow:
+				0 25px 50px -12px rgba(0, 0, 0, 0.25),
+				0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+		}
+		:global(:root:not([data-theme='dark']) .terms-modal-box .modal-header-root) {
+			background: rgba(0, 0, 0, 0.03) !important;
+		}
+		:global(:root:not([data-theme='dark']) .terms-modal-header) {
+			color: #18181b !important;
+		}
+		:global(:root:not([data-theme='dark']) .terms-modal-body) {
+			color: #52525b !important;
+		}
+	}
+	:global(:root[data-theme='light'] .terms-modal-box) {
+		background: rgba(255, 255, 255, 0.88) !important;
+		border-color: rgba(0, 0, 0, 0.08) !important;
+		box-shadow:
+			0 25px 50px -12px rgba(0, 0, 0, 0.25),
+			0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+	}
+	:global(:root[data-theme='light'] .terms-modal-box .modal-header-root) {
+		background: rgba(0, 0, 0, 0.03) !important;
+	}
+	:global(:root[data-theme='light'] .terms-modal-header) {
+		color: #18181b !important;
+	}
+	:global(:root[data-theme='light'] .terms-modal-body) {
+		color: #52525b !important;
+	}
+
+	/* modal-intro + clause-item nằm TRONG modal (nền theo app theme ở trên) →
+	   các literal sáng này chỉ đúng khi modal TỐI (dark). Light mode → đè bằng
+	   biến hệ thống (đảo chiều tự động theo :root tokens). */
 	.modal-intro {
 		margin: 0 0 1.1rem;
 		font-weight: 600;
 		font-size: 0.95rem;
 		letter-spacing: -0.005em;
 		color: #e4e4e7;
+		:global(:root[data-theme='light']) & {
+			color: #27272a;
+		}
+		@media (prefers-color-scheme: light) {
+			:global(:root:not([data-theme='dark'])) & {
+				color: #27272a;
+			}
+		}
 	}
 
 	.modal-clauses {
@@ -1471,7 +1522,7 @@
 			padding: 0.85rem 1rem;
 			background: rgba(255, 255, 255, 0.04);
 			border-radius: 0.75rem;
-			/* primary giữ var (đủ tương phản trên nền glass tối cả 2 mode) */
+			/* primary giữ var (indigo-500 đủ tương phản cả 2 nền modal) */
 			border-left: 3px solid var(--primary, #6366f1);
 			transition:
 				background 0.2s ease,
@@ -1485,6 +1536,27 @@
 				margin: 0;
 				color: #d4d4d8;
 			}
+
+			@media (prefers-color-scheme: light) {
+				:global(:root:not([data-theme='dark'])) & {
+					background: rgba(0, 0, 0, 0.04);
+					&:hover {
+						background: rgba(0, 0, 0, 0.07);
+					}
+					p {
+						color: #3f3f46;
+					}
+				}
+			}
+			:global(:root[data-theme='light']) & {
+				background: rgba(0, 0, 0, 0.04);
+				&:hover {
+					background: rgba(0, 0, 0, 0.07);
+				}
+				p {
+					color: #3f3f46;
+				}
+			}
 		}
 	}
 
@@ -1497,17 +1569,10 @@
 		min-width: 6.5rem;
 	}
 
-	/* Nút Decline (ghost + default → --color: var(--foreground) ĐỔI CHIỀU theo
-	   dark mode → TỐI ở light) in trên nền modal glass TỐI hardcode cả 2 mode
-	   → text gần như vô hình ở light mode. Nền modal LUÔN tối (hardcode) →
-	   override --color sáng LITERAL (giống header/body — #e4e4e7/#d4d4d8) cả
-	   2 mode. Chỉ nút ghost (Decline) — nút Accept (success) đã có màu riêng. */
-	:global(.terms-modal-footer button.button-root.color-default) {
-		--color: #d4d4d8 !important;
-	}
-	:global(.terms-modal-footer button.button-root.color-default:hover:not(.disabled):not(.loading)) {
-		--color: #e4e4e7 !important;
-	}
+	/* Nút Decline (ghost + default): KHÔNG còn hack --color literal — modal giờ
+	   theo app theme (dark → glass tối, light → glass sáng) nên Button hover
+	   theme-aware (d9b51935) tự tương phản đúng: dark hover nền tối + chữ sáng,
+	   light hover nền SÁNG gray-200 + chữ tối. Accept (success) có màu riêng. */
 
 	.auth-input-icon {
 		width: 1.25rem;

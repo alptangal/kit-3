@@ -1,8 +1,9 @@
 // auth-complete-probe.mjs
 // Hoàn thiện authorization (register, login, forgot password) — 5 nhiệm vụ verify.
 //
-// (a) Register terms modal: nút Decline màu sáng ở light mode (emulateMedia colorScheme:'light'
-//     kỳ vọng rgb(212,212,216) #d4d4d8) + dark mode.
+// (a) Register terms modal: modal theo APP THEME (light → glass sáng, dark → glass tối);
+//     Decline hover tương phản đọc được cả 2 mode (Δluma chữ/nền > 60) — bug user:
+//     light mode hover chữ + nền cùng màu.
 // (b) Register mobile viewport 375px: name-grid mỗi field 1 row (đo rect top 3 input khác nhau).
 // (c) Gender RadioGroup: render 3 option + required validation lỗi khi submit trống.
 // (d) Datetime component demo /ui/datetime: nhập tuần tự auto-advance qua nhóm, ngày invalid
@@ -61,7 +62,30 @@ async function clickAndWait(page, locator, waitSelector, label) {
 // ═══════════════════════════════════════════════════════════════════════
 
 async function testTermsModalDeclineColor() {
-	console.log('\n=== (A) Register Terms Modal — Decline button color ===');
+	console.log('\n=== (A) Register Terms Modal — Decline contrast (theme-aware) ===');
+
+	// Modal giờ theo APP THEME (không còn nền hardcode tối) → check TƯƠNG PHẢN
+	// thực tế: luma chữ vs luma nền hover chênh đủ lớn để đọc được — đúng bug
+	// user báo (light mode hover: chữ + nền cùng màu → mất nội dung).
+	const readContrast = (el) =>
+		el.evaluate((btn) => {
+			const s = getComputedStyle(btn);
+			const parse = (input) => {
+				const m = (input ?? '').match(/rgba?\(([^)]+)\)/);
+				if (!m) return null;
+				const parts = m[1].split(',').map((x) => parseFloat(x));
+				return 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2];
+			};
+			// Nền hiệu dụng: nút ghost transparent khi rest → nền modal; khi hover
+			// nút tự tô nền (gray-200 light / gray-950 dark) → lấy chính nó.
+			const btnBg = s.backgroundColor;
+			const transparent = !btnBg || btnBg === 'rgba(0, 0, 0, 0)' || btnBg === 'transparent';
+			const bg = transparent
+				? getComputedStyle(btn.closest('.terms-modal-box')).backgroundColor
+				: btnBg;
+			return { text: s.color, bg, textLuma: parse(s.color), bgLuma: parse(bg) };
+		});
+	const contrastOk = (r) => r.textLuma !== null && r.bgLuma !== null && Math.abs(r.textLuma - r.bgLuma) > 60;
 
 	// --- Light mode ---
 	const ctxLight = await browser.newContext({
@@ -77,26 +101,26 @@ async function testTermsModalDeclineColor() {
 	// Click Terms link → mở modal
 	await clickAndWait(pageLight, pageLight.locator('.terms-link-btn').first(), '.terms-modal-box', 'Terms link');
 
-	// Kiểm tra nút Decline có màu sáng (color: #d4d4d8)
 	const declineBtnLight = pageLight.locator('.terms-modal-footer button.button-root.color-default');
 	await declineBtnLight.waitFor({ state: 'visible', timeout: 5000 });
 
-	const declineColorLight = await declineBtnLight.evaluate((el) => {
-		const style = getComputedStyle(el);
-		return style.getPropertyValue('--color').trim();
-	});
-
-	ok('A1 Light: Decline --color set to light literal', declineColorLight.includes('212') || declineColorLight.includes('d4d4d8') || declineColorLight.includes('#d4d4d8'), `got: ${declineColorLight}`);
+	// A1: modal light mode nền SÁNG theo theme (bỏ hardcode tối)
+	const boxBgLight = await pageLight
+		.locator('.terms-modal-box')
+		.evaluate((el) => getComputedStyle(el).backgroundColor);
+	const boxLightFirst = (boxBgLight.match(/\d+(\.\d+)?/g) ?? []).map(Number)[0] ?? 0;
+	ok('A1 Light: modal nền SÁNG theo theme (không còn hardcode tối)', boxLightFirst > 200, `bg=${boxBgLight}`);
 	await shot(pageLight, 'A1-terms-modal-decline-light');
 
-	// Kiểm tra hover --color sáng hơn (#e4e4e7)
+	// A2: HOVER — đúng bug user: light mode hover phải còn đọc được chữ
 	await declineBtnLight.hover();
-	await sleep(150);
-	const declineHoverColorLight = await declineBtnLight.evaluate((el) => {
-		const style = getComputedStyle(el);
-		return style.getPropertyValue('--color').trim();
-	});
-	ok('A2 Light: Decline hover --color lighter', declineHoverColorLight.includes('228') || declineHoverColorLight.includes('e4e4e7') || declineHoverColorLight.includes('#e4e4e7'), `got: ${declineHoverColorLight}`);
+	await sleep(200);
+	const rHover = await readContrast(declineBtnLight);
+	ok(
+		'A2 Light: hover contrast chữ/nền đọc được (Δluma>60)',
+		contrastOk(rHover),
+		`text=${rHover.text} bg=${rHover.bg} Δ=${Math.round(Math.abs((rHover.textLuma ?? 0) - (rHover.bgLuma ?? 0)))}`
+	);
 	await shot(pageLight, 'A2-terms-modal-decline-light-hover');
 
 	await ctxLight.close();
@@ -116,11 +140,15 @@ async function testTermsModalDeclineColor() {
 	const declineBtnDark = pageDark.locator('.terms-modal-footer button.button-root.color-default');
 	await declineBtnDark.waitFor({ state: 'visible', timeout: 5000 });
 
-	const declineColorDark = await declineBtnDark.evaluate((el) => {
-		const style = getComputedStyle(el);
-		return style.getPropertyValue('--color').trim();
-	});
-	ok('A3 Dark: Decline --color visible (not transparent)', declineColorDark && declineColorDark !== 'rgba(0, 0, 0, 0)' && declineColorDark !== 'transparent', `got: ${declineColorDark}`);
+	// A3: dark hover vẫn tương phản (chữ sáng trên nền hover tối)
+	await declineBtnDark.hover();
+	await sleep(200);
+	const rHoverDark = await readContrast(declineBtnDark);
+	ok(
+		'A3 Dark: hover contrast chữ/nền đọc được (Δluma>60)',
+		contrastOk(rHoverDark),
+		`text=${rHoverDark.text} bg=${rHoverDark.bg} Δ=${Math.round(Math.abs((rHoverDark.textLuma ?? 0) - (rHoverDark.bgLuma ?? 0)))}`
+	);
 	await shot(pageDark, 'A3-terms-modal-decline-dark');
 
 	await ctxDark.close();
