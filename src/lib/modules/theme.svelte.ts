@@ -21,7 +21,10 @@ import type { AppTheme } from '$interfaces/basic';
 export const THEME_TRANSITION_VARS = {
 	x: '--thx',
 	y: '--thy',
-	r: '--thr'
+	r: '--thr',
+	/** duration animate circle (app.css ::view-transition-new(root) đọc) — pseudo
+	    không inline style được → var là cách duy nhất (default 450ms). */
+	duration: '--theme-transition-duration'
 } as const;
 
 /** Class gắn lên html trong lúc transition chạy — scope keyframes app.css */
@@ -40,6 +43,12 @@ function maxRadius(x: number, y: number): number {
 	return Math.ceil(Math.hypot(Math.max(x, w - x), Math.max(y, h - y)));
 }
 
+/** Chuẩn hoá duration (TimeUnits: number | `${number}s` | `${number}ms`) → ms */
+function normalizeDuration(d: number | `${number}s` | `${number}ms`): number {
+	if (typeof d === 'number') return d;
+	return d.endsWith('ms') ? parseFloat(d) : parseFloat(d) * 1000;
+}
+
 /**
  * Đổi theme với animate lan dần từ vị trí click/tap (x, y).
  *
@@ -48,12 +57,28 @@ function maxRadius(x: number, y: number): number {
  *   theme-clip-expand app.css). Theme state (profile.theme) đổi TRONG callback —
  *   snapshot mới chụp sau khi DOM đổi. Radial-gradient rAF của setter bị skip
  *   (cancel + reset body background) — tránh frame gradient 0% rơi vào snapshot.
+ * - duration (TimeUnits, default 450ms): đặt --theme-transition-duration trên
+ *   documentElement (cạnh --thx) — app.css ::view-transition-new(root) đọc var
+ *   (pseudo không inline style được → var là cách duy nhất).
  * - Không có API: fallback setter radial-gradient rAF (setter đọc
- *   profile.cursor — set cursor trước khi gọi setter).
+ *   profile.cursor — set cursor trước khi gọi setter; duration fallback qua
+ *   biến module THEME_FALLBACK_DURATION_MS — KHÔNG sửa store).
  * - reduced-motion → đổi tức thì.
  */
-export function animateThemeTransition(next: AppTheme, x: number, y: number): void {
+
+/** Duration fallback (ms) cho path radial-gradient rAF (không có View
+    Transitions) — module-level vì setter profile.theme không nhận tham số. */
+export let THEME_FALLBACK_DURATION_MS: number | null = null;
+
+export function animateThemeTransition(
+	next: AppTheme,
+	x: number,
+	y: number,
+	duration: number | `${number}s` | `${number}ms` = 450
+): void {
 	if (typeof document === 'undefined') return;
+
+	const durationMs = normalizeDuration(duration);
 
 	// Reduced-motion → đổi tức thì (không animate)
 	if (prefersReducedMotion()) {
@@ -65,7 +90,10 @@ export function animateThemeTransition(next: AppTheme, x: number, y: number): vo
 
 	// Fallback: không có View Transitions API → setter radial-gradient rAF
 	// (profile.theme setter tự animate radial-gradient trên body từ cursor).
+	// Duration đồng bộ qua biến module (setter đọc profile.delay ?? 300 —
+	// KHÔNG sửa store; biến module đọc trong setDuration setter bên dưới).
 	if (typeof document.startViewTransition !== 'function') {
+		THEME_FALLBACK_DURATION_MS = durationMs;
 		profile.cursor.x = x;
 		profile.cursor.y = y;
 		profile.theme = next;
@@ -80,6 +108,7 @@ export function animateThemeTransition(next: AppTheme, x: number, y: number): vo
 	root.style.setProperty(THEME_TRANSITION_VARS.x, `${x}px`);
 	root.style.setProperty(THEME_TRANSITION_VARS.y, `${y}px`);
 	root.style.setProperty(THEME_TRANSITION_VARS.r, `${maxRadius(x, y)}px`);
+	root.style.setProperty(THEME_TRANSITION_VARS.duration, `${durationMs}ms`);
 	root.classList.add(THEME_TRANSITION_CLASS);
 
 	const transition = document.startViewTransition(() => {
@@ -102,5 +131,6 @@ export function animateThemeTransition(next: AppTheme, x: number, y: number): vo
 		root.style.removeProperty(THEME_TRANSITION_VARS.x);
 		root.style.removeProperty(THEME_TRANSITION_VARS.y);
 		root.style.removeProperty(THEME_TRANSITION_VARS.r);
+		root.style.removeProperty(THEME_TRANSITION_VARS.duration);
 	});
 }

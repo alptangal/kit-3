@@ -12,6 +12,36 @@ $colorRefs: (
 $themes: 'dark', 'light';
 
 @use '$styles/sizes.scss';
+
+// ── Theme-aware theo APP THEME (data-theme attr trên html), mirror ma trận
+// variables.scss — KHÔNG theo OS một mình như @media (prefers-color-scheme):
+//   dark  = OS dark (unset/'system' — trừ khi user ép light) HOẶC user ép dark
+//   light = user ép light HOẶC OS light (trừ khi ép dark)
+// Trước đây hover/tapped nghe mỗi OS → app theme ≠ OS (vd data-theme='light'
+// trên OS dark) vẫn tô màu dark: nền đen + chữ --foreground tối → mất contrast
+// (bug theme-sidebar-probe A1). :global vì :root scoped bị Svelte hash hoá
+// (html không mang hash component); phần & giữ scoped — precedent :global
+// trong navigation/sidebar/_styles.scss.
+@mixin theme-dark {
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) & {
+			@content;
+		}
+	}
+	:global(:root[data-theme='dark']) & {
+		@content;
+	}
+}
+@mixin theme-light {
+	@media (prefers-color-scheme: light) {
+		:global(:root:not([data-theme='dark'])) & {
+			@content;
+		}
+	}
+	:global(:root[data-theme='light']) & {
+		@content;
+	}
+}
 .button-root {
 	--cursor: pointer;
 	@each $variant in $variants {
@@ -22,7 +52,7 @@ $themes: 'dark', 'light';
 					&.color-#{$color} {
 						--background: var(--color-#{$ref}-600);
 						--color: var(--color-#{$ref}-400);
-						@media (prefers-color-scheme: light) {
+						@include theme-light {
 							&.loading {
 								--color: var(--color-#{$ref}-500);
 							}
@@ -52,19 +82,19 @@ $themes: 'dark', 'light';
 
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled):not(.loading) {
-								@media (prefers-color-scheme: dark) {
+								@include theme-dark {
 									--background: var(--color-#{$ref}-950);
 								}
-								@media (prefers-color-scheme: light) {
+								@include theme-light {
 									--background: var(--color-#{$ref}-200);
 								}
 							}
 						}
 						&.button-tapped {
-							@media (prefers-color-scheme: dark) {
+							@include theme-dark {
 								--background: var(--color-#{$ref}-950);
 							}
-							@media (prefers-color-scheme: light) {
+							@include theme-light {
 								--background: var(--color-#{$ref}-200);
 							}
 						}
@@ -72,30 +102,30 @@ $themes: 'dark', 'light';
 				} @else if $variant== 'soft' {
 					--border-color: transparent;
 					&.color-#{$color} {
-						@media (prefers-color-scheme: dark) {
+						@include theme-dark {
 							--background: var(--color-#{$ref}-950);
 						}
-						@media (prefers-color-scheme: light) {
+						@include theme-light {
 							--background: var(--color-#{$ref}-200);
 						}
 						--color: var(--foreground);
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled):not(.loading) {
-								@media (prefers-color-scheme: dark) {
+								@include theme-dark {
 									// BUG FIX: was --color--#{$ref}-900 (typo)
 									--background: var(--color-#{$ref}-900);
 								}
-								@media (prefers-color-scheme: light) {
+								@include theme-light {
 									--background: var(--color-#{$ref}-300);
 								}
 							}
 						}
 						&.button-tapped {
-							@media (prefers-color-scheme: dark) {
+							@include theme-dark {
 								// BUG FIX: was --color--#{$ref}-900 (typo)
 								--background: var(--color-#{$ref}-900);
 							}
-							@media (prefers-color-scheme: light) {
+							@include theme-light {
 								--background: var(--color-#{$ref}-300);
 							}
 						}
@@ -133,10 +163,10 @@ $themes: 'dark', 'light';
 								@if $color== 'default' {
 									--color: var(--foreground-500);
 								} @else {
-									@media (prefers-color-scheme: dark) {
+									@include theme-dark {
 										--color: var(--color-#{$ref}-400);
 									}
-									@media (prefers-color-scheme: light) {
+									@include theme-light {
 										--color: var(--color-#{$ref}-700);
 									}
 								}
@@ -151,10 +181,10 @@ $themes: 'dark', 'light';
 							@if $color== 'default' {
 								--color: var(--foreground-500);
 							} @else {
-								@media (prefers-color-scheme: dark) {
+								@include theme-dark {
 									--color: var(--color-#{$ref}-400);
 								}
-								@media (prefers-color-scheme: light) {
+								@include theme-light {
 									--color: var(--color-#{$ref}-700);
 								}
 							}
@@ -171,19 +201,19 @@ $themes: 'dark', 'light';
 						}
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled):not(.loading) {
-								@media (prefers-color-scheme: dark) {
+								@include theme-dark {
 									--background: var(--color-#{$ref}-950);
 								}
-								@media (prefers-color-scheme: light) {
+								@include theme-light {
 									--background: var(--color-#{$ref}-200);
 								}
 							}
 						}
 						&.button-tapped {
-							@media (prefers-color-scheme: dark) {
+							@include theme-dark {
 								--background: var(--color-#{$ref}-950);
 							}
-							@media (prefers-color-scheme: light) {
+							@include theme-light {
 								--background: var(--color-#{$ref}-200);
 							}
 						}

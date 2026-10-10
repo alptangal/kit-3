@@ -12,14 +12,16 @@
 	let team = $state('acme');
 
 	// P3: tùy chọn rail (điều khiển props của Sidebar.Provider, reactive).
-	//  - hideLogo: ẩn LOGO (brand) khi thu gọn → menu Y-align chuẩn (default true).
+	//  - hideLogo: ẩn LOGO (brand) khi thu gọn (default demo OFF — logo icon vẫn
+	//    hiện khi thu gọn, layout header 2-row: brand-row trên + trigger-row dưới;
+	//    ON → ẩn logo row, trigger căn giữa rail 56px).
 	//  - animMode: animation "streaming label" khi expand (on/off/auto; auto = PC
 	//    bật + mobile tắt + tôn trọng prefers-reduced-motion).
-	let hideLogo = $state(true);
+	let hideLogo = $state(false);
 	let animMode = $state<'on' | 'off' | 'auto'>('auto');
 
 	// Demo Sidebar (shadcn sidebar-07 + P2 hoàn thiện):
-	//  - collapsible="icon" → trigger collapse rail (240 ↔ 72px, hover peek)
+	//  - collapsible="icon" → trigger collapse rail (240 ↔ 56px, hover peek)
 	//  - P2: handle resize width (desktop, kéo chuột / phím mũi tên, persist
 	//    localStorage 'sidebar-width', clamp 200–480)
 	//  - P2: Sidebar.Search (ô tìm kiếm đầu Content) → filter item theo
@@ -33,14 +35,18 @@
 	<Sidebar.Provider collapsible="icon" hideLogoWhenCollapsed={hideLogo} animation={animMode}>
 		<Sidebar>
 			<Sidebar.Header>
-				<div class="brand" data-test="sb-brand">
-					<svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity="0.15" />
-						<path d="M8 8h8v8H8z" stroke="currentColor" stroke-width="1.5" />
-					</svg>
-					<span class="brand-name">RetailApp</span>
+				<!-- P3: header 2-ROW — brand (logo) ROW TRÊN CÙNG, trigger ROW DƯỚI
+				     (không cùng row như trước). Collapsed: 2 row căn giữa rail 56px. -->
+				<div class="brand-row" data-test="sb-brand-row">
+					<div class="brand" data-test="sb-brand">
+						<svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity="0.15" />
+							<path d="M8 8h8v8H8z" stroke="currentColor" stroke-width="1.5" />
+						</svg>
+						<span class="brand-name">RetailApp</span>
+					</div>
 				</div>
-				<div class="brand-actions">
+				<div class="trigger-row" data-test="sb-trigger-row">
 					<Sidebar.Trigger />
 				</div>
 			</Sidebar.Header>
@@ -149,10 +155,10 @@
 				<h1 class="inset-title">Sidebar · shadcn sidebar-07 + P2</h1>
 				<p class="inset-desc">
 					Provider giữ <code>open / collapsed / isMobile / width / searchQuery</code>
-					+ Symbol context. Trigger (góc header) collapse rail về icon (collapsible="icon").
-					Độ rộng 240px ↔ 72px. <code>Sidebar.Rail</code> (quai mép phải) hiện
-					khi sidebar ẩn: hover → peek mở rộng tạm, tap → toggle.
-					Mobile (≤768px) tự offcanvas + overlay.
+					+ Symbol context. Trigger (header, row dưới logo) collapse rail về icon
+					(collapsible="icon"). Độ rộng 240px ↔ 56px. <code>Sidebar.Rail</code>
+					(quai mép phải) hiện khi sidebar ẩn: hover → peek mở rộng tạm, tap →
+					toggle. Mobile (≤768px) tự offcanvas + overlay.
 				</p>
 				<p class="inset-desc">
 					<b>P2</b>: kéo handle mép phải đổi độ rộng (clamp 200–480, persist
@@ -167,7 +173,8 @@
 				<section class="demo-block" data-test="sb-p3-controls">
 					<h2>Rail (thu gọn) — P3</h2>
 					<p class="inset-desc">
-						Bấm trigger góc header để thu gọn về icon rail (72px), rồi chỉnh:
+						Bấm trigger (row dưới logo) để thu gọn về icon rail (56px, nút fill
+						full rail), rồi chỉnh:
 					</p>
 					<div class="p3-row">
 						<label class="p3-toggle">
@@ -178,7 +185,7 @@
 								data-test="sb-hide-logo"
 							/>
 							<span>Ẩn LOGO khi thu gọn</span>
-							<small>Off → giữ logo; On → menu item căn thẳng trục Y</small>
+							<small>Off (mặc định) → logo icon vẫn hiện khi thu gọn; On → ẩn logo row</small>
 						</label>
 					</div>
 					<div class="p3-row">
@@ -239,7 +246,29 @@
 	}
 
 	/* Wave10: 3 section (header/content/footer) không còn padding-inline —
-	   nội dung con tự mang spacing riêng (item tự có spacing, section "flush"). */
+	   nội dung con tự mang spacing riêng (item tự có spacing, section "flush").
+	   P3: header 2-row — brand-row (logo, row trên) + trigger-row (trigger, row
+	   dưới) dọc; collapsed: 2 row căn giữa rail 56px, padding-inline dư về 0.
+	   .sidebar-header là flex NGANG (hash scoped SidebarHeader — component chung
+	   cho mọi sidebar) → đè bằng :global + flex-direction column (bẫy scoped
+	   CSS: slot con hash khác → :global). */
+	:global(.sidebar-aside .sidebar-header) {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.25rem;
+	}
+
+	.brand-row,
+	.trigger-row {
+		display: flex;
+		align-items: center;
+		width: 100%;
+	}
+
+	.trigger-row {
+		padding-block: 0.25rem 0.5rem;
+	}
+
 	.brand {
 		display: flex;
 		align-items: center;
@@ -261,11 +290,6 @@
 			overflow: hidden;
 			text-overflow: ellipsis;
 		}
-	}
-
-	.brand-actions {
-		display: flex;
-		align-items: center;
 	}
 
 	/* Team switcher (trên menu) */
@@ -332,13 +356,21 @@
 		}
 	}
 
-	/* COLLAPSED (icon rail 72px): component Sidebar chỉ ẩn label menu; nội dung
+	/* COLLAPSED (icon rail 56px): component Sidebar chỉ ẩn label menu; nội dung
 	   PAGE nạp vào slot (brand / TeamSwitcher / search / footer user) phải tự ẩn
 	   text, giữ lại icon/avatar và căn giữa — tránh chữ tràn ra ngoài rail.
 	   (Mô hình shadcn: user bọc text trong `.text` để CSS sidebar ẩn khi collapse.)
-	   PEEK (hover aside) → hiện lại. Search: rail hẹp (72px) không đủ chỗ →
+	   PEEK (hover aside) → hiện lại. Search: rail hẹp (56px) không đủ chỗ →
 	   ẩn cả ô, hiện lại khi peek. */
 	:global(.sidebar-aside.sidebar-collapsed) {
+		/* P3: header 2-row căn giữa rail 56px + padding-inline dư về 0
+		   (brand-row/trigger-row tự mang padding 0.75rem phải đè 0). */
+		.brand-row,
+		.trigger-row {
+			justify-content: center;
+			padding-inline: 0;
+		}
+
 		.brand {
 			flex: none;
 
@@ -348,8 +380,9 @@
 		}
 
 		.switcher {
-			/* P3: bỏ padding ngang (0.75rem) khi rail → trigger 48px cùng cột
-			   với menu button (cũng 48px) → hover-background + avatar nhất quán. */
+			/* P3: bỏ padding ngang (0.75rem) khi rail → trigger 56px full-width
+			   cùng cột với menu button (cũng fill full rail) → hover-background +
+			   avatar nhất quán. */
 			padding-inline: 0;
 
 			:global(.ts-name),
@@ -359,8 +392,8 @@
 
 			/* P3: CĂN CHUẨN tâm rail. Root cause: .team-switcher/.dropdown-menu-trigger
 			   là inline-flex (inline-level) → `margin-inline: auto` VÔ HIỆU, avatar
-			   dính lề trái → lệch khỏi tâm rail (x=36). Ép width 100% (block) +
-			   justify-content center → avatar 1.5rem căn đúng tâm 72px rail, thẳng
+			   dính lề trái → lệch khỏi tâm rail (x=28). Ép width 100% (block) +
+			   justify-content center → avatar 1.5rem căn đúng tâm 56px rail, thẳng
 			   trục Y với icon menu. */
 			:global(.team-switcher) {
 				display: block;
@@ -368,9 +401,9 @@
 			}
 
 			/* Wave10: content không còn padding-inline → root inline-flex
-			   shrink-to-fit 48px khiến avatar lệch trái (tâm 24 thay vì 36).
+			   shrink-to-fit 48px khiến avatar lệch trái (tâm 24 thay vì 28).
 			   Ép display flex (block-level) + width 100% → root full-width rail,
-			   trigger 100% căn giữa (tâm ≈ 36, thẳng trục Y icon menu). */
+			   trigger 100% căn giữa (tâm ≈ 28, thẳng trục Y icon menu). */
 			:global(.dropdown-menu-root) {
 				display: flex;
 				width: 100%;
@@ -382,7 +415,7 @@
 			}
 		}
 
-		/* Rail 72px: ô search không đủ chỗ → ẩn hẳn (peek sẽ hiện lại) */
+		/* Rail 56px: ô search không đủ chỗ → ẩn hẳn (peek sẽ hiện lại) */
 		.sb-search {
 			display: none;
 		}
@@ -399,8 +432,14 @@
 	}
 
 	/* PEEK: hover khi collapsed → trở lại layout đầy đủ (đồng bộ với rule
-	   .sidebar-collapsed:hover của _styles.scss cho label menu). */
+	   .sidebar-collapsed:hover của _styles.scss cho label menu + 2-row header). */
 	:global(.sidebar-aside.sidebar-collapsed:hover) {
+		.brand-row,
+		.trigger-row {
+			justify-content: flex-start;
+			padding-inline: 0.75rem;
+		}
+
 		.brand {
 			flex: 1;
 

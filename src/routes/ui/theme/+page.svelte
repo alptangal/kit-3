@@ -44,7 +44,7 @@
 		const { x, y } = eventCoords(e);
 		lastClick = { x, y };
 		const next: AppTheme = currentTheme === 'dark' ? 'light' : 'dark';
-		animateThemeTransition(next, x, y);
+		animateThemeTransition(next, x, y, duration);
 	}
 
 	// Đổi trực tiếp sang giá trị cụ thể (light/dark/system) — circle từ nút vừa click
@@ -52,7 +52,7 @@
 		return (e?: Event | MouseEvent) => {
 			const { x, y } = eventCoords(e);
 			lastClick = { x, y };
-			animateThemeTransition(next, x, y);
+			animateThemeTransition(next, x, y, duration);
 		};
 	}
 
@@ -62,7 +62,7 @@
 		return (e?: Event | MouseEvent) => {
 			const { x, y } = eventCoords(e);
 			lastClick = { x, y };
-			animateThemeTransition(next, x, y);
+			animateThemeTransition(next, x, y, duration);
 		};
 	}
 
@@ -74,6 +74,11 @@
 		if (!browser) return 'system';
 		return currentTheme;
 	}
+
+	// P2: duration animate circle (ms) — truyền vào ThemeToggle + animate
+	// trực tiếp (nút text/corner). Fallback 450ms (default app.css var).
+	const durations = [150, 300, 450, 600] as const;
+	let duration = $state<number>(450);
 </script>
 
 <div class="page" data-test="theme-demo">
@@ -83,7 +88,7 @@
 	<section class="demo" data-test="th-toggle">
 		<h2>ThemeToggle (light ⇄ dark)</h2>
 		<div class="toggle-row">
-			<ThemeToggle />
+			<ThemeToggle duration={duration} />
 			<!-- data-test nằm trên wrapper (Button không render 'data-test' prop) -->
 			<span data-test="theme-toggle-btn">
 				<Button variant="outline" onclick={handleToggleClick}>Đổi theme (nút text)</Button>
@@ -98,6 +103,25 @@
 			Click anywhere → circle lan từ tâm vị trí vừa click (View Transitions API
 			+ clip-path circle). Reduced-motion → đổi tức thì.
 		</p>
+		<!-- P2: duration animate circle (token qua inline CSS var — pseudo
+		     ::view-transition không inline style được) -->
+		<div class="duration-row" data-test="th-duration-row">
+			<span class="duration-label">Duration animate</span>
+			<div class="duration-seg" role="group" aria-label="Chọn duration animate">
+				{#each durations as d (d)}
+					<button
+						type="button"
+						class:duration-on={duration === d}
+						aria-pressed={duration === d}
+						onclick={() => (duration = d)}
+						data-test="th-duration-{d}"
+					>
+						{d}ms
+					</button>
+				{/each}
+			</div>
+			<code class="duration-current" data-test="th-duration-current">{duration}ms</code>
+		</div>
 	</section>
 
 	<!-- 2) Đổi trực tiếp sang giá trị cụ thể (light / dark / system) -->
@@ -166,6 +190,52 @@
 		gap: 0.75rem;
 		align-items: center;
 		flex-wrap: wrap;
+	}
+	/* P2: điều khiển duration animate (segmented — bám p3-seg của sidebar demo) */
+	.duration-row {
+		display: flex;
+		gap: 0.75rem;
+		align-items: center;
+		flex-wrap: wrap;
+
+		.duration-label {
+			font-size: 0.875rem;
+			color: var(--foreground);
+		}
+
+		.duration-current {
+			font-size: 0.8rem;
+			color: var(--foreground);
+		}
+	}
+	.duration-seg {
+		display: inline-flex;
+		border: 1px solid var(--border, hsl(0 0% 88%));
+		border-radius: var(--border-radius-sm, 0.375rem);
+		overflow: hidden;
+
+		@media (prefers-color-scheme: dark) {
+			border-color: var(--border, hsl(0 0% 24%));
+		}
+
+		button {
+			padding: 0.25rem 0.75rem;
+			font-size: 0.8125rem;
+			color: var(--foreground);
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			transition: background-color var(--transition-duration, 150ms) ease;
+
+			&:not(:first-child) {
+				border-left: 1px solid var(--border, hsl(0 0% 88%));
+			}
+
+			&.duration-on {
+				background: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
+				color: var(--background, #fff);
+			}
+		}
 	}
 	.demo-hint {
 		font-size: 0.85rem;
