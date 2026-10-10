@@ -678,14 +678,19 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 	--min-height-md: 2.5rem;    // 40px
 	--min-height-lg: 2.875rem;  // 46px
 	--min-height-xl: 3.125rem;  // 50px
-	--min-height-2xl: var(--font-size);
-	--min-height-3xl: var(--font-size);
-	--min-height-4xl: var(--font-size);
-	--min-height-5xl: var(--font-size);
-	--min-height-6xl: var(--font-size);
-	--min-height-7xl: var(--font-size);
-	--min-height-8xl: var(--font-size);
-	--min-height-9xl: var(--font-size);
+	// 2xl+: min-height = font-size của size token. KHÔNG viết var(--font-size)
+	// — custom property resolve var() tại :root (nơi khai báo), nơi KHÔNG có
+	// --font-size (chỉ .size-* đặt trên phần tử) → token rỗng → min-height 0
+	// (bug ảnh hưởng mọi component size ≥ 2xl). Tham chiếu token font-size-*
+	// tương ứng (đều khai báo tại :root → resolve được).
+	--min-height-2xl: var(--font-size-2xl);
+	--min-height-3xl: var(--font-size-3xl);
+	--min-height-4xl: var(--font-size-4xl);
+	--min-height-5xl: var(--font-size-5xl);
+	--min-height-6xl: var(--font-size-6xl);
+	--min-height-7xl: var(--font-size-7xl);
+	--min-height-8xl: var(--font-size-8xl);
+	--min-height-9xl: var(--font-size-9xl);
 	--min-width-button-2xs: calc(var(--spacing) * 10);
 	--min-width-button-xs: calc(var(--spacing) * 12);
 	--min-width-button-sm: calc(var(--spacing) * 16);
