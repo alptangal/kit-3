@@ -1,6 +1,6 @@
 <script lang="ts">
 	// src\routes\(unauthorized)\forgot-password\+page.svelte
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { Button } from '$components/element';
 	import {
 		Description,
@@ -136,6 +136,20 @@
 		// Khởi tạo cặp khoá RSA tạm thời
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
+	});
+
+	// Auto-focus field đầu tiên khi route THAY ĐỔI (afterNavigate — precedent
+	// Pagination "focus qua rAF — KHÔNG dùng autofocus"): requestAnimationFrame
+	// đợi DOM ổn định rồi focus input EMAIL — field đầu form. Touch device bỏ
+	// qua (bàn phím ảo tự bật làm giật viewport). Success state (đã gửi) →
+	// không còn form → querySelector trả null → no-op.
+	afterNavigate(() => {
+		if (typeof window === 'undefined') return;
+		if (client.browser?.isMobile) return;
+		requestAnimationFrame(() => {
+			const el = document.querySelector<HTMLInputElement>('.form-root .auth-input-wrapper input');
+			if (el && document.activeElement !== el) el.focus();
+		});
 	});
 </script>
 

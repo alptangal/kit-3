@@ -62,6 +62,38 @@ export const pageContents: { [k: string]: any } = {
 		phone: {
 			vi: 'Số điện thoại',
 			en: 'Phone number'
+		},
+		gender: {
+			vi: 'Giới tính',
+			en: 'Gender'
+		},
+		birthdate: {
+			vi: 'Ngày sinh',
+			en: 'Date of birth'
+		}
+	},
+	genderOptions: {
+		male: {
+			vi: 'Nam',
+			en: 'Male'
+		},
+		female: {
+			vi: 'Nữ',
+			en: 'Female'
+		},
+		other: {
+			vi: 'Không xác định',
+			en: 'Prefer not to say'
+		}
+	},
+	datetimeLabels: {
+		hint: {
+			vi: 'Nhập theo thứ tự: năm · tháng · ngày · giờ · phút (VD: 2000-01-15 08:30)',
+			en: 'Type in order: year · month · day · hour · minute (e.g., 2000-01-15 08:30)'
+		},
+		invalidDay: {
+			vi: 'Ngày không hợp lệ cho tháng đã chọn',
+			en: 'Invalid day for the selected month'
 		}
 	},
 	hints: {

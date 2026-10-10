@@ -1,6 +1,6 @@
 <script lang="ts">
 	// src\routes\(unauthorized)\register\+page.svelte
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { Button } from '$components/element';
 	import {
 		Checkbox,
@@ -8,7 +8,10 @@
 		FieldMessages,
 		Form,
 		Input,
+		InputDatetime,
 		Label,
+		RadioGroup,
+		RadioItem,
 		TextField
 	} from '$components/form';
 	import { Modal } from '$components/modal';
@@ -28,6 +31,8 @@
 		username: '',
 		email: '',
 		phone: '',
+		gender: '',
+		birthdate: '',
 		password: '',
 		confirmPassword: ''
 	});
@@ -496,6 +501,8 @@
 			!!current.username &&
 			!!current.email &&
 			!!current.phone &&
+			!!formData.gender &&
+			!!formData.birthdate?.trim() &&
 			!!current.password &&
 			formData.password.length >= 8 &&
 			formData.password === formData.confirmPassword &&
@@ -551,6 +558,14 @@
 		}
 		if (!/^\+?[0-9][0-9\s\-]{5,20}$/.test(formData.phone?.trim() ?? '')) {
 			return lang === 'vi' ? 'Số điện thoại không hợp lệ' : 'Invalid phone number';
+		}
+		if (!formData.gender) {
+			return lang === 'vi'
+				? 'Vui lòng chọn giới tính'
+				: 'Please select your gender';
+		}
+		if (!formData.birthdate?.trim()) {
+			return lang === 'vi' ? 'Vui lòng nhập ngày sinh' : 'Please enter your date of birth';
 		}
 		if (!formData.password) {
 			return lang === 'vi' ? 'Vui lòng nhập mật khẩu' : 'Please enter a password';
@@ -657,6 +672,8 @@
 		formData.username = '';
 		formData.email = '';
 		formData.phone = '';
+		formData.gender = '';
+		formData.birthdate = '';
 		formData.password = '';
 		formData.confirmPassword = '';
 		honeypot = '';
@@ -702,6 +719,19 @@
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
+	});
+
+	// Auto-focus field đầu tiên khi route THAY ĐỔI (afterNavigate — precedent
+	// Pagination "focus qua rAF — KHÔNG dùng autofocus"): requestAnimationFrame
+	// đợi DOM ổn định rồi focus input HỌ (lastname) — field đầu form. Touch
+	// device bỏ qua (bàn phím ảo tự bật làm giật viewport).
+	afterNavigate(() => {
+		if (typeof window === 'undefined') return;
+		if (client.browser?.isMobile) return;
+		requestAnimationFrame(() => {
+			const el = document.querySelector<HTMLInputElement>('.form-root .name-grid input');
+			if (el && document.activeElement !== el) el.focus();
+		});
 	});
 
 	onDestroy(() => {
@@ -798,6 +828,43 @@
 				</TextField>
 			</div>
 		</fieldset>
+
+		<!-- Gender field: RadioGroup required (nam / nữ / không xác định) -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="gender-scope">
+			<TextField name="gender" required>
+				<Label>{pageContents.textFields.gender[lang] ?? 'Gender'}</Label>
+				<RadioGroup
+					name="gender"
+					required
+					bind:value={formData.gender}
+					aria-label={lang === 'vi' ? 'Giới tính' : 'Gender'}
+					orientation="horizontal"
+				>
+					<RadioItem id="male" label={pageContents.genderOptions.male[lang] ?? 'Male'} />
+					<RadioItem id="female" label={pageContents.genderOptions.female[lang] ?? 'Female'} />
+					<RadioItem id="other" label={pageContents.genderOptions.other[lang] ?? 'Prefer not to say'} />
+					<FieldMessages showValid />
+				</RadioGroup>
+			</TextField>
+		</div>
+
+		<!-- Birthdate field: InputDatetime (nhóm ô tuần tự năm·tháng·ngày·giờ·phút) -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="datetime-scope">
+			<TextField name="birthdate" required>
+				<Label>{pageContents.textFields.birthdate[lang] ?? 'Date of birth'}</Label>
+				<InputDatetime
+					bind:value={formData.birthdate}
+					required
+					clearable
+					aria-label={lang === 'vi' ? 'Ngày sinh' : 'Date of birth'}
+					class="dt-field-input"
+				/>
+				<Description class="form-hint">{pageContents.datetimeLabels.hint[lang]}</Description>
+				<FieldMessages />
+			</TextField>
+		</div>
 
 		<!-- Username field -->
 		<TextField name="username" required>
@@ -1153,6 +1220,21 @@
 		display: contents;
 	}
 
+	/* Wrapper gender + datetime: display:contents → TextField vẫn là con trực
+	   tiếp của .form-root (flex column) — layout không đổi. */
+	.gender-scope,
+	.datetime-scope {
+		display: contents;
+	}
+
+	/* Mobile: RadioGroup ngang dễ tràn → wrap đã có (flex-wrap); rộng ô radio
+	   co theo nội dung. Datetime: 5 ô + separator có thể vượt 100% → cho root
+	   co vừa (max-width) + ô thu hẹp nhẹ. */
+	:global(.datetime-scope .input-datetime-root) {
+		max-width: 100%;
+		flex-wrap: wrap;
+	}
+
 	.caps-hint {
 		display: flex;
 		align-items: center;
@@ -1201,7 +1283,9 @@
 		min-width: 0;
 	}
 
-	/* ══ Name Grid — 3 breakpoints ══ */
+	/* ══ Name Grid — mobile mỗi field 1 ROW (≤680px = 1 cột hết; desktop 3 cột).
+	   Trước đây ≤680px còn 2 cột (mid thu hẹp cùng row) → mobile field dính
+	   nhau theo hàng ngang; yêu cầu mới: mobile đứng dọc từng field. */
 	.name-grid {
 		display: grid;
 		gap: 0.625rem;
@@ -1209,17 +1293,6 @@
 	}
 
 	@media (max-width: 680px) {
-		.name-grid {
-			grid-template-columns: 1fr 1fr;
-			gap: 0.625rem;
-
-			:global(.name-input-full) {
-				grid-column: 1 / -1;
-			}
-		}
-	}
-
-	@media (max-width: 420px) {
 		.name-grid {
 			grid-template-columns: 1fr;
 			gap: 0.75rem;
@@ -1422,6 +1495,18 @@
 	:global(.terms-modal-footer button) {
 		font-weight: 600 !important;
 		min-width: 6.5rem;
+	}
+
+	/* Nút Decline (ghost + default → --color: var(--foreground) ĐỔI CHIỀU theo
+	   dark mode → TỐI ở light) in trên nền modal glass TỐI hardcode cả 2 mode
+	   → text gần như vô hình ở light mode. Nền modal LUÔN tối (hardcode) →
+	   override --color sáng LITERAL (giống header/body — #e4e4e7/#d4d4d8) cả
+	   2 mode. Chỉ nút ghost (Decline) — nút Accept (success) đã có màu riêng. */
+	:global(.terms-modal-footer button.button-root.color-default) {
+		--color: #d4d4d8 !important;
+	}
+	:global(.terms-modal-footer button.button-root.color-default:hover:not(.disabled):not(.loading)) {
+		--color: #e4e4e7 !important;
 	}
 
 	.auth-input-icon {

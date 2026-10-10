@@ -173,6 +173,7 @@ import ToastWrapper from '$components/element/toast/Wrapper/Main.svelte';
 <Container
 	touchActionDisabled={profile.visualKeyboard.focusOn ? true : false}
 	transitionEnabled
+	safeArea
 	width={profile.browser.dimensions?.width ?? 0}
 	height={profile.browser.dimensions?.height ?? 0}
 	class="overflow-auto"

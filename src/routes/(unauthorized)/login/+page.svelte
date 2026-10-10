@@ -1,6 +1,6 @@
 <script lang="ts">
 	// src\routes\(unauthorized)\login\+page.svelte
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '$components/element';
 	import {
@@ -308,6 +308,19 @@ $effect(() => {
 	});
 
 	onDestroy(() => {});
+
+	// Auto-focus field đầu tiên khi route THAY ĐỔI (afterNavigate — precedent
+	// Pagination "focus qua rAF — KHÔNG dùng autofocus"): requestAnimationFrame
+	// đợi DOM ổn định rồi focus input USERNAME — field đầu form. Touch device
+	// bỏ qua (bàn phím ảo tự bật làm giật viewport).
+	afterNavigate(() => {
+		if (typeof window === 'undefined') return;
+		if (client.browser?.isMobile) return;
+		requestAnimationFrame(() => {
+			const el = document.querySelector<HTMLInputElement>('.form-root .auth-input-wrapper input');
+			if (el && document.activeElement !== el) el.focus();
+		});
+	});
 </script>
 
 <svelte:head>
