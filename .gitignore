@@ -20,3 +20,10 @@ partykit/.env
 
 # Kho lưu tạm (script debug/scratch từ các phiên) — không theo dõi
 tests/_scratch/
+
+# Log runtime server + report Playwright chạy cục bộ (nội dung sinh mỗi phiên)
+dev-server.log
+dev-server-run.log
+dev-server.err.log
+last_ssr_error.log
+playwright-report/
