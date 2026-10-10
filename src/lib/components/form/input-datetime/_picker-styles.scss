@@ -1,0 +1,63 @@
+// src/lib/components/form/input-datetime/_picker-styles.scss
+// Nút lịch (props.datePicker) — mount trong PickerToggle.svelte. Mirror
+// .dt-clear (kích thước --box-size theo size token, border/background token
+// cùng bộ) — khác: giữ màu foreground (icon là hành động chính, không phải
+// xóa) + state .open (field-type recipe: border sky-500, như .focus trên root).
+.dt-picker {
+	width: calc(var(--box-size, 2.75rem) * 0.64);
+	height: calc(var(--box-size, 2.75rem) * 0.64);
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius, 0.5rem);
+	background: var(--background);
+	color: var(--foreground);
+	cursor: var(--cursor-interactive, pointer);
+	touch-action: manipulation;
+	transition:
+		border-color var(--transition-duration, 300ms) ease,
+		background-color var(--transition-duration, 300ms) ease,
+		color var(--transition-duration, 300ms) ease,
+		box-shadow var(--transition-duration, 300ms) ease;
+
+	svg {
+		width: calc(var(--box-size, 2.75rem) * 0.36);
+		height: calc(var(--box-size, 2.75rem) * 0.36);
+		display: block;
+	}
+
+	// Panel đang mở — field-type recipe (mirror root.focus)
+	&.open {
+		border-color: var(--color-sky-500);
+	}
+
+	&:active {
+		transform: scale(0.97);
+	}
+
+	&:disabled {
+		opacity: var(--disabled-opacity, 0.5);
+		cursor: not-allowed;
+	}
+
+	// PC-only hover guard (mirror .dt-clear — tăng nhẹ nền)
+	@media (hover: hover) and (pointer: fine) {
+		&:not(:disabled):hover {
+			@media (prefers-color-scheme: dark) {
+				background: rgba(63, 63, 70, 0.6);
+			}
+			@media (prefers-color-scheme: light) {
+				background: rgba(226, 232, 240, 0.75);
+			}
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}

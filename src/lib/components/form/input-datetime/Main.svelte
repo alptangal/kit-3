@@ -2,9 +2,14 @@
 	// src/lib/components/form/input-datetime/Main.svelte
 	// FORM FIELD — mirror mẫu input-otp: configs $state + Symbol context + form
 	// registration + validation debounce + _justReset.
-	// Render: nhóm ô NHẬP TUẦN TỰ [năm 4 số][tháng 2][ngày 2] · [giờ 2][phút 2],
-	// separator là span (KHÔNG input). value = ISO `YYYY-MM-DDTHH:MM` (form
-	// serialize đọc được). Cơ chế 3 chiều giống input-otp:
+	// Render: nhóm ô NHẬP TUẦN TỰ theo format hiển thị (ymd `yyyy-mm-dd` mặc
+	// định, dmy `dd/mm/yyyy`, mdy `mm/dd/yyyy` — segments[] nội bộ LUÔN theo cột
+	// ISO, ô hiển thị map ngược qua isoIndex) · [giờ 2][phút 2], separator là
+	// span (KHÔNG input). Snap khi gõ (normalizeSegments): tháng/ngày/giờ/phút
+	// vượt → snap; năm vượt [minYear, maxYear] → snap; cross-field ngày re-clamp
+	// theo tháng+năm. props.datePicker → DatePicker.Root bọc field + nút lịch
+	// (PickerToggle) + bridge pickerDate 2 chiều. value = ISO `YYYY-MM-DDTHH:MM`
+	// (form serialize đọc được). Cơ chế 3 chiều giống input-otp:
 	//   value→segments ($effect guard `v === joined`),
 	//   segments→value (syncValue() VÔ ĐIỀU KIỆN trong input handler),
 	//   segments→DOM ($effect guard `el.value !== segments[i]` — KHÔNG bind:value
@@ -13,17 +18,27 @@
 	import { client } from '$store/basic.svelte';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	// DatePicker sub-file DIRECT (không qua barrel element — tránh vòng import
+	// form↔element; mirror datatable/Head import form/checkbox/Main.svelte).
+	import DatePickerRoot from '$components/element/date-picker/Root.svelte';
+	import DatePickerContent from '$components/element/date-picker/Content.svelte';
+	import { daysInMonth, sameDay } from '$components/element/date-picker/_dates';
 	import { getFormContext } from '../form';
 	import { setInputDatetimeContext, defaultValidation } from './index';
-	import type { InputDatetimeConfigs, InputDatetimeProps } from './_interface';
+	import PickerToggle from './PickerToggle.svelte';
+	import type {
+		InputDatetimeConfigs,
+		InputDatetimeFormat,
+		InputDatetimeProps
+	} from './_interface';
 	import type { ValidationFull } from '../input/_interface';
 
 	let { value = $bindable(), children, ...props }: InputDatetimeProps = $props();
 	const formContext = getFormContext();
 
-	// ── Nhóm ô theo thứ tự hiển thị VN: NGÀY trước, GIỜ sau ──
-	// [năm(4), tháng(2), ngày(2)] — [giờ(2), phút(2)]  (thuật ISO: YYYY-MM-DDTHH:MM)
-	// hideTime → chỉ 3 ô ngày. Separator: '-' giữa nhóm ngày, '·' chuyển nhóm, ':' giờ:phút.
+	// ── Cột ISO nội bộ (index storage): 0=y, 1=m, 2=d, 3=H, 4=M ──
+	// Ô hiển thị theo format (display order) — map ngược qua isoIndex, KHÔNG
+	// đổi storage → buildIso/splitIso/value ISO không phụ thuộc format.
 	interface SegmentDef {
 		/** Ký tự tương ứng trong ISO: y | m | d | H | M */
 		kind: 'y' | 'm' | 'd' | 'H' | 'M';
@@ -38,8 +53,28 @@
 		{ kind: 'M', max: 2 }
 	];
 	const hideTime = $derived(props.hideTime === true);
-	// Segment hiện hành (lọc time nếu hideTime) — mảng STATIC theo render.
-	const activeSegs = $derived(hideTime ? SEGMENTS.slice(0, 3) : SEGMENTS);
+	// format hiển thị nhóm ngày (props.format — default 'ymd' backward-compat)
+	const format = $derived((props.format ?? 'ymd') as InputDatetimeFormat);
+	// Thứ tự hiển thị: nhóm ngày theo format, giờ/phút luôn cuối.
+	//   ymd → [y, m, d]   dmy → [d, m, y]   mdy → [m, d, y]
+	const DATE_ORDER: Record<InputDatetimeFormat, ('y' | 'm' | 'd')[]> = {
+		ymd: ['y', 'm', 'd'],
+		dmy: ['d', 'm', 'y'],
+		mdy: ['m', 'd', 'y']
+	};
+	// Display segment: mang isoIndex (vị trí storage trong SEGMENTS) — mọi
+	// handler đọc/ghi segments[seg.isoIndex], focus/advance theo display i.
+	interface DisplaySeg extends SegmentDef {
+		isoIndex: number;
+	}
+	const activeSegs = $derived.by<DisplaySeg[]>(() => {
+		const order: ('y' | 'm' | 'd' | 'H' | 'M')[] = [...DATE_ORDER[format]];
+		if (!hideTime) order.push('H', 'M');
+		return order.map((kind) => {
+			const isoIndex = SEGMENTS.findIndex((s) => s.kind === kind);
+			return { ...SEGMENTS[isoIndex], isoIndex };
+		});
+	});
 	const totalSegs = $derived(activeSegs.length);
 
 	// Mốc ban đầu (mốc reset + tính status.changed)
@@ -133,13 +168,92 @@
 		value = buildIso();
 	}
 
+	// ── Snap khi gõ (validate cơ bản NGAY trong ô — yêu cầu user #3) ──
+	// CHỈ áp cho segment ĐÃ ĐỦ số chữ số (đang gõ dở '0' chuẩn bị '05' không
+	// bị snap); '00' → '01'; vượt max hợp lệ → snap max (tháng 13 → 12, giờ
+	// 25 → 23…); năm đủ 4 → snap [minYear, maxYear]; CROSS-FIELD: năm+tháng đủ
+	// → re-clamp ngày theo daysInMonth (2/2000 → 29, 2/2001 → 28 — yêu cầu #5).
+	function normalizeSegments(): boolean {
+		let changed = false;
+		// segment đã gõ đủ max chữ số mới snap (tránh snap giữa chừng user gõ)
+		const full = (i: number) => (segments[i] ?? '').length === SEGMENTS[i].max;
+		// Tháng (iso 1): '00' → '01', >12 → '12'
+		if (full(1)) {
+			const mo = Number(segments[1]);
+			if (mo === 0) {
+				segments[1] = '01';
+				changed = true;
+			} else if (mo > 12) {
+				segments[1] = '12';
+				changed = true;
+			}
+		}
+		// Giờ (iso 3): >23 → '23' ('00' hợp lệ)
+		if (!hideTime && full(3)) {
+			const h = Number(segments[3]);
+			if (h > 23) {
+				segments[3] = '23';
+				changed = true;
+			}
+		}
+		// Phút (iso 4): >59 → '59' ('00' hợp lệ)
+		if (!hideTime && full(4)) {
+			const mi = Number(segments[4]);
+			if (mi > 59) {
+				segments[4] = '59';
+				changed = true;
+			}
+		}
+		// Ngày (iso 2): '00' → '01'; vượt daysInMonth(year, month) khi năm+tháng
+		// đủ → snap NGÀY CUỐI THÁNG (2/2000=29, 4/2001=30, 2/2003=28). Năm/tháng
+		// chưa đủ → chỉ chặn >31 (validate cơ bản).
+		if (full(2)) {
+			const d = Number(segments[2]);
+			const y = segments[0].length === 4 ? Number(segments[0]) : null;
+			const m = segments[1].length === 2 ? Number(segments[1]) : null;
+			const maxDay = y !== null && m !== null ? daysInMonth(y, m - 1) : 31;
+			if (d === 0) {
+				segments[2] = '01';
+				changed = true;
+			} else if (d > maxDay) {
+				segments[2] = String(maxDay).padStart(2, '0');
+				changed = true;
+			}
+		}
+		// Năm (iso 0): đủ 4 → snap [minYear, maxYear] (tùy chọn — yêu cầu #3)
+		if (full(0)) {
+			const y = Number(segments[0]);
+			if (configs.minYear !== undefined && y < configs.minYear) {
+				segments[0] = String(configs.minYear);
+				changed = true;
+			} else if (configs.maxYear !== undefined && y > configs.maxYear) {
+				segments[0] = String(configs.maxYear);
+				changed = true;
+			}
+		}
+		// Năm vừa snap (2020→1990) có thể làm ngày đã clamp (29) vượt tháng đích
+		// → re-clamp ngày theo (năm mới, tháng cũ).
+		if (changed && full(0) && full(1) && full(2)) {
+			const d = Number(segments[2]);
+			const maxDay = daysInMonth(Number(segments[0]), Number(segments[1]) - 1);
+			if (d > maxDay) {
+				segments[2] = String(maxDay).padStart(2, '0');
+			}
+		}
+		return changed;
+	}
+
 	// segments → DOM input: segments là nguồn sự thật của từng ô. KHÔNG dùng
 	// bind:value (bẫy đã biết — Svelte gán trước oninput → wipe). Guard `!==`
-	// để KHÔNG clobber ô user vừa gõ (el.value đã đúng → no-op).
+	// để KHÔNG clobber ô user vừa gõ (el.value đã đúng → no-op). boxRefs theo
+	// DISPLAY position → đọc cột storage qua isoIndex.
 	$effect(() => {
-		for (let i = 0; i < SEGMENTS.length; i++) {
+		for (let i = 0; i < totalSegs; i++) {
 			const el = boxRefs[i];
-			if (el && el.value !== segments[i]) el.value = segments[i];
+			const seg = activeSegs[i];
+			if (el && seg && el.value !== segments[seg.isoIndex]) {
+				el.value = segments[seg.isoIndex];
+			}
 		}
 	});
 
@@ -204,6 +318,18 @@
 		},
 		get hideTime() {
 			return props.hideTime;
+		},
+		get format() {
+			return format;
+		},
+		get datePicker() {
+			return props.datePicker === true;
+		},
+		get minYear() {
+			return props.minYear;
+		},
+		get maxYear() {
+			return props.maxYear;
 		},
 		validation: {
 			_isValid: undefined as undefined | boolean | 'pending',
@@ -305,8 +431,9 @@
 		configs.status.focus = false;
 	}
 
-	// Input 1 ô: filter → cập nhật segment → sync value → AUTO-ADVANCE khi ĐỦ
-	// số chữ số NHÓM (năm=4, khác=2). Không đủ → giữ nguyên ô (tuần tự).
+	// Input 1 ô: filter → cập nhật segment (theo isoIndex — display i chỉ là
+	// vị trí focus) → normalize snap → sync value → AUTO-ADVANCE khi ĐỦ số chữ
+	// số NHÓM (năm=4, khác=2). Không đủ → giữ nguyên ô (tuần tự).
 	function handleBoxInput(i: number, e: Event) {
 		const el = e.target as HTMLInputElement;
 		// Lọc ký tự không hợp lệ (chỉ số) trong oninput
@@ -314,11 +441,16 @@
 		if (filtered !== (el.value ?? '')) {
 			el.value = filtered;
 		}
-		const max = activeSegs[i]?.max ?? 2;
+		const seg = activeSegs[i];
+		const max = seg?.max ?? 2;
 		// Ô giữ tối đa `max` chữ số (auto-advance KHÔNG tràn sang ô khác)
 		const val = (el.value ?? '').slice(0, max);
 		if (val !== (el.value ?? '')) el.value = val;
-		segments[i] = val;
+		segments[seg.isoIndex] = val;
+		// Snap khi gõ (tháng 13 → 12, 2/2000 ngày 30 → 29…) — chạy TRƯỚC sync để
+		// value ISO luôn mang giá trị đã chuẩn hóa. DOM ô bị snap tự sửa qua
+		// effect segments→DOM (guard !==).
+		normalizeSegments();
 		// syncValue() VÔ ĐIỀU KIỆN — segments là nguồn sự thật; value ISO phải
 		// theo segments để (a) form serialize, (b) effect value→segments không
 		// coi joined khác value → wipe, (c) config.color/status đồng bộ.
@@ -359,10 +491,11 @@
 			!e.altKey &&
 			!e.isComposing &&
 			(e.key >= '0' && e.key <= '9') &&
-			(segments[idx]?.length ?? 0) >= (activeSegs[idx]?.max ?? 2)
+			(segments[activeSegs[idx]?.isoIndex ?? 0]?.length ?? 0) >= (activeSegs[idx]?.max ?? 2)
 		) {
 			e.preventDefault();
-			segments[idx] = e.key;
+			segments[activeSegs[idx].isoIndex] = e.key;
+			normalizeSegments();
 			syncValue();
 			if (idx < totalSegs - 1) focusBox(idx + 1);
 			return;
@@ -371,27 +504,29 @@
 		// date input chuẩn như Chrome native: mỗi ô là một đơn vị năm/tháng/ngày/
 		// giờ/phút, không xóa từng ký tự); ô rỗng → về ô trước + xóa ô trước (quá nhóm).
 		if (e.key === 'Backspace') {
-			if ((segments[idx] ?? '') !== '') {
+			if ((segments[activeSegs[idx]?.isoIndex ?? 0] ?? '') !== '') {
 				e.preventDefault();
-				segments[idx] = '';
+				segments[activeSegs[idx].isoIndex] = '';
 				syncValue();
 			} else if (idx > 0) {
 				e.preventDefault();
-				segments[idx - 1] = '';
+				segments[activeSegs[idx - 1].isoIndex] = '';
 				syncValue();
 				focusBox(idx - 1);
 			}
 		}
 		// Delete xóa ô hiện tại (giữ focus)
-		if (e.key === 'Delete' && (segments[idx] ?? '') !== '') {
+		if (e.key === 'Delete' && (segments[activeSegs[idx]?.isoIndex ?? 0] ?? '') !== '') {
 			e.preventDefault();
-			segments[idx] = '';
+			segments[activeSegs[idx].isoIndex] = '';
 			syncValue();
 		}
 	}
 
-	// Paste: dán chuỗi (chấp nhận dạng liên tục `200001150830` hoặc ISO có dấu
-	// gạch) → lọc số → tán vào các ô bắt đầu từ ô đang focus.
+	// Paste: dán chuỗi (chấp nhận dạng liên tục `200001150830` hoặc có dấu
+	// gạch) → lọc số → tán vào các ô bắt đầu từ ô đang focus THEO THỨ TỰ HIỂN
+	// THỊ (format ymd mặc định = ISO cũ; dmy/mdy user nhìn ô nào trước thì chuỗi
+	// số rơi vào ô đó) → normalize snap.
 	function handleBoxPaste(i: number, e: ClipboardEvent) {
 		e.preventDefault();
 		let text = e.clipboardData?.getData('text') ?? '';
@@ -413,15 +548,17 @@
 		const start = Math.max(0, Math.min(i, totalSegs - 1));
 		let cursor = 0;
 		for (let k = start; k < totalSegs && cursor < cleaned.length; k++) {
-			const max = activeSegs[k]?.max ?? 2;
-			segments[k] = cleaned.slice(cursor, cursor + max);
+			const seg = activeSegs[k];
+			const max = seg?.max ?? 2;
+			segments[seg.isoIndex] = cleaned.slice(cursor, cursor + max);
 			cursor += max;
 		}
+		normalizeSegments();
 		syncValue();
 		// Focus ô tiếp theo còn thiếu (hoặc ô cuối nếu đã đầy)
 		let firstIncomplete = totalSegs - 1;
 		for (let k = 0; k < totalSegs; k++) {
-			if ((segments[k] ?? '').length < (activeSegs[k]?.max ?? 2)) {
+			if ((segments[activeSegs[k].isoIndex] ?? '').length < (activeSegs[k]?.max ?? 2)) {
 				firstIncomplete = k;
 				break;
 			}
@@ -450,6 +587,59 @@
 		focusBox(0);
 	}
 
+	// ── DatePicker bridge (props.datePicker — yêu cầu user #2) ──
+	// DatePicker.Root bọc toàn field (chỉ khi bật) → PickerToggle + panel
+	// Content trong field đọc context qua _context.ts. pickerDate là Date|null
+	// của panel; bridge 2 chiều với value ISO. MỖI effect đọc phía còn lại qua
+	// untrack (bẫy vòng: nếu A theo dõi pickerDate thì panel vừa select xong bị
+	// A revert về ISO cũ — A chạy trước B):
+	//   A: value ISO đủ ngày → pickerDate (thiếu → null) — chỉ chạy khi value đổi;
+	//   B: pickerDate đổi (select từ panel) → set segments y/m/d (giữ giờ) + sync.
+	const pickerDateInit = (() => {
+		const v = value ?? '';
+		if (v.length >= 10) {
+			return new Date(Number(v.slice(0, 4)), Number(v.slice(5, 7)) - 1, Number(v.slice(8, 10)));
+		}
+		return null;
+	})();
+	let pickerDate = $state<Date | null>(pickerDateInit);
+	let pickerOpen = $state(false);
+	// min/max panel từ minYear/maxYear (chặn select ngoài khoảng — year-only)
+	const pickerMin = $derived(
+		configs.minYear !== undefined ? new Date(configs.minYear, 0, 1) : undefined
+	);
+	const pickerMax = $derived(
+		configs.maxYear !== undefined ? new Date(configs.maxYear, 11, 31) : undefined
+	);
+
+	// A: value ISO → pickerDate
+	$effect(() => {
+		if (!configs.datePicker) return;
+		const v = value ?? '';
+		if (v.length >= 10) {
+			const d = new Date(Number(v.slice(0, 4)), Number(v.slice(5, 7)) - 1, Number(v.slice(8, 10)));
+			const cur = untrack(() => pickerDate);
+			if (!cur || !sameDay(cur, d)) pickerDate = d;
+		} else if (untrack(() => pickerDate) !== null) {
+			pickerDate = null;
+		}
+	});
+
+	// B: pickerDate → segments (user chọn ngày từ panel lịch)
+	$effect(() => {
+		if (!configs.datePicker || !pickerDate) return;
+		const v = untrack(() => value ?? '');
+		if (v.length >= 10) {
+			const d = new Date(Number(v.slice(0, 4)), Number(v.slice(5, 7)) - 1, Number(v.slice(8, 10)));
+			if (sameDay(d, pickerDate)) return;
+		}
+		segments[0] = String(pickerDate.getFullYear()).padStart(4, '0');
+		segments[1] = String(pickerDate.getMonth() + 1).padStart(2, '0');
+		segments[2] = String(pickerDate.getDate()).padStart(2, '0');
+		normalizeSegments();
+		syncValue();
+	});
+
 	onMount(() => {
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
@@ -467,67 +657,95 @@
 <!-- tabindex: root không phải Tab stop (roving ở từng ô); aria-invalid nằm ở
      từng input (role 'group' không hỗ trợ aria-invalid — mirror otp nhưng giữ
      a11y đúng WAI-ARIA); onkeydown scoped root (bubbles từ native inputs). -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div
-	class={configs.style}
-	style:--duration={`${configs.duration}ms`}
-	role="group"
-	aria-label={props['aria-label']}
-	aria-disabled={configs.disabled ? 'true' : undefined}
-	onkeydown={handleKeydown}
->
-	{#each activeSegs as seg, i (seg.kind)}
-		<input
-			bind:this={boxRefs[i]}
-			type="text"
-			class="dt-box"
-			class:filled={segments[i] !== ''}
-			maxlength={seg.max}
-			data-length={seg.max}
-			data-segment={seg.kind}
-			inputmode="numeric"
-			autocomplete="off"
-			autocapitalize="none"
-			spellcheck={false}
-			disabled={configs.disabled ? true : undefined}
-			aria-label={`${props['aria-label'] ?? 'Ngày giờ'}, phần ${i + 1}`}
-			aria-invalid={configs.validation.isValid === false ? 'true' : undefined}
-			onfocus={handleFocus}
-			onblur={handleBlur}
-			oninput={(e) => handleBoxInput(i, e)}
-			onpaste={(e) => handleBoxPaste(i, e)}
-		/>
-		{#if i < totalSegs - 1}
-			<span class="dt-separator" aria-hidden="true">
-				{#if i === 2}
-					{hideTime ? '' : '·'}
-				{:else if i === 3}
-					:
-				{:else}
-					-
-				{/if}
-			</span>
+{#snippet field()}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div
+		class={configs.style}
+		style:--duration={`${configs.duration}ms`}
+		role="group"
+		aria-label={props['aria-label']}
+		aria-disabled={configs.disabled ? 'true' : undefined}
+		onkeydown={handleKeydown}
+	>
+		{#each activeSegs as seg, i (seg.kind)}
+			<input
+				bind:this={boxRefs[i]}
+				type="text"
+				class="dt-box"
+				class:filled={segments[seg.isoIndex] !== ''}
+				maxlength={seg.max}
+				data-length={seg.max}
+				data-segment={seg.kind}
+				inputmode="numeric"
+				autocomplete="off"
+				autocapitalize="none"
+				spellcheck={false}
+				disabled={configs.disabled ? true : undefined}
+				aria-label={`${props['aria-label'] ?? 'Ngày giờ'}, phần ${i + 1}`}
+				aria-invalid={configs.validation.isValid === false ? 'true' : undefined}
+				onfocus={handleFocus}
+				onblur={handleBlur}
+				oninput={(e) => handleBoxInput(i, e)}
+				onpaste={(e) => handleBoxPaste(i, e)}
+			/>
+			{#if i < totalSegs - 1}
+				<!-- Separator PAIR-BASED theo display order (không còn index cứng):
+				     cặp trong nhóm ngày → theo format ('-' ymd, '/' dmy/mdy);
+				     cặp cuối nhóm ngày → giờ: '·' (nếu !hideTime); giờ → phút ':' -->
+				<span class="dt-separator" aria-hidden="true">
+					{#if i < 2}
+						{format === 'ymd' ? '-' : '/'}
+					{:else if i === 2}
+						{hideTime ? '' : '·'}
+					{:else}
+						:
+					{/if}
+				</span>
+			{/if}
+		{/each}
+		{#if configs.datePicker && !configs.disabled}
+			<PickerToggle />
 		{/if}
-	{/each}
-	{#if configs.clearable && hasValue && !configs.disabled}
-		<button
-			type="button"
-			class="dt-clear"
-			aria-label="Xóa toàn bộ"
-			onclick={handleClearClick}
-		>
-			<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-				<path
-					d="M6 6l12 12M18 6L6 18"
-					stroke="currentColor"
-					stroke-width="1.75"
-					stroke-linecap="round"
-				/>
-			</svg>
-		</button>
-	{/if}
-	{@render children?.()}
-</div>
+		{#if configs.clearable && hasValue && !configs.disabled}
+			<button
+				type="button"
+				class="dt-clear"
+				aria-label="Xóa toàn bộ"
+				onclick={handleClearClick}
+			>
+				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<path
+						d="M6 6l12 12M18 6L6 18"
+						stroke="currentColor"
+						stroke-width="1.75"
+						stroke-linecap="round"
+					/>
+				</svg>
+			</button>
+		{/if}
+		{@render children?.()}
+	</div>
+{/snippet}
+
+{#if configs.datePicker}
+	<!-- DatePicker.Root bọc field: panel absolute theo root relative; PickerToggle
+	     + Content đọc context qua _context.ts. size passthrough để panel cell theo
+	     field size. min/max chặn select ngoài [minYear, maxYear]. -->
+	<DatePickerRoot
+		bind:value={pickerDate}
+		bind:open={pickerOpen}
+		min={pickerMin}
+		max={pickerMax}
+		size={configs.size}
+		disabled={configs.disabled ? true : undefined}
+		aria-label={props['aria-label'] ?? 'Chọn ngày'}
+	>
+		{@render field()}
+		<DatePickerContent />
+	</DatePickerRoot>
+{:else}
+	{@render field()}
+{/if}
 
 <style lang="scss">
 	@use '_styles.scss';

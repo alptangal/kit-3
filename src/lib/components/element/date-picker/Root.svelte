@@ -67,11 +67,13 @@
 	// tháng hiển thị) > hôm nay (nếu hợp lệ) > ngày valid đầu tháng. KHÔNG
 	// re-seed khi displayMonth/focusDate đổi (shiftMonth/setFocus tự quản lý
 	// focusDate) — nếu không, roam phím qua tháng khác sẽ bị "hút" về seed.
+	// Anchor tháng: value đã chọn mà khác tháng đang xem → ĐỔI displayMonth sang
+	// tháng đó khi mở (mở panel với 15/10/2000 phải THẤY tháng 10/2000 — bridge
+	// InputDatetime đặt value trước khi mở; không thì seed focus ngày khác
+	// tháng hiển thị → cell không tồn tại → focus fail ngầm).
 	let wasOpen = false;
 	$effect(() => {
 		const isOpen = open;
-		const y = displayMonth.year;
-		const m = displayMonth.month;
 		const v = value instanceof Date ? value : null;
 		const mn = min;
 		const mx = max;
@@ -81,6 +83,15 @@
 		}
 		if (wasOpen) return;
 		wasOpen = true;
+		let y = displayMonth.year;
+		let m = displayMonth.month;
+		const anchor = range && rangeFrom ? rangeFrom : v;
+		if (anchor && (monthOf(anchor).year !== y || monthOf(anchor).month !== m)) {
+			const am = monthOf(anchor);
+			displayMonth = { year: am.year, month: am.month };
+			y = am.year;
+			m = am.month;
+		}
 		const today = new Date();
 		const inMonth = (d: Date) => monthOf(d).year === y && monthOf(d).month === m;
 		// seed: range từ (nếu đang ở tháng) > selected single > hôm nay > valid đầu tháng

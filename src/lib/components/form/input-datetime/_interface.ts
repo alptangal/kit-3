@@ -6,6 +6,15 @@ import type { BasicConfigs, BasicProps, Color, Size, TimeUnits } from '$componen
 import type { TranslateContent } from '$interfaces/basic';
 
 /**
+ * Thứ tự hiển thị nhóm NGÀY (value ISO LUÔN `YYYY-MM-DDTHH:MM` — chỉ đổi
+ * thứ tự ô hiển thị + separator, không đổi cột ISO nội bộ):
+ * - 'ymd': yyyy-mm-dd (ISO — Nhật/Trung, mặc định backward-compat)
+ * - 'dmy': dd/mm/yyyy (VN/châu Âu)
+ * - 'mdy': mm/dd/yyyy (Mỹ)
+ */
+export type InputDatetimeFormat = 'ymd' | 'dmy' | 'mdy';
+
+/**
  * Nhóm ô hiển thị, theo thứ tự tuần tự: năm (4 số) → tháng (2) → ngày (2)
  * → giờ (2) → phút (2). Value ISO `YYYY-MM-DDTHH:MM`.
  */
@@ -18,6 +27,14 @@ export interface InputDatetimeProps extends BasicProps {
 	clearable?: boolean;
 	/** Ẩn nhóm GIỜ (giờ + phút) — chỉ nhập ngày. Default false. */
 	hideTime?: boolean;
+	/** Thứ tự hiển thị nhóm ngày. Default 'ymd' (giữ hành vi cũ). */
+	format?: InputDatetimeFormat;
+	/** Hiện nút lịch (mở panel DatePicker chọn ngày) bên phải các ô. Default false. */
+	datePicker?: boolean;
+	/** Năm nhỏ nhất user nhập được (snap khi vượt) + giới hạn panel lịch. */
+	minYear?: number;
+	/** Năm lớn nhất user nhập được (snap khi vượt) + giới hạn panel lịch. */
+	maxYear?: number;
 	size?: Size;
 	color?: Color;
 	duration?: TimeUnits;
@@ -34,6 +51,10 @@ export interface InputDatetimeConfigs extends Omit<BasicConfigs, 'status' | 'val
 	required?: boolean;
 	clearable?: boolean;
 	hideTime?: boolean;
+	format: InputDatetimeFormat;
+	datePicker?: boolean;
+	minYear?: number;
+	maxYear?: number;
 	size: Size;
 	color: Color;
 	disabled?: boolean;
