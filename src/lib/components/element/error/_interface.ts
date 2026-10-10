@@ -28,4 +28,10 @@ export interface ErrorPageConfigs extends Omit<BasicConfigs, 'status' | 'value'>
 	statusColor: 'warning' | 'danger' | 'foreground';
 	/** Tập ký tự matrix (0/1 + katakana). */
 	matrixChars: string[];
+	/** Mã lỗi render dạng hình ảnh pixel (true khi status gồm đủ 3 digit 0-9). */
+	pixelStatus: string | undefined;
+	/** Danh sách cell "on" của hình ảnh pixel (tọa độ col/row trong matrix grid). */
+	pixelCells: { col: number; row: number }[];
+	/** Key tập hợp pixel (status + kích thước matrix) — re-trigger animation khi đổi. */
+	pixelKey: string;
 }

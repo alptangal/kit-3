@@ -1,9 +1,11 @@
 // $components/element/error/_styles.scss
-// Error page — matrix rain nền + mã lỗi to đè + mô tả lỗi.
+// Error page — matrix rain nền + mã lỗi ghép hình micro-pixel đè (layer riêng
+// .error-pixel cùng grid) + mô tả lỗi + nút Home/Back.
 // Token + CSS vars, KHÔNG hardcode màu. status-* class set --error-status-color
 // (4xx → warning, 5xx → danger, khác → foreground).
 // Matrix: CSS grid cells (span), mỗi cell 1 ký tự, shimmer đổi màu nhấp nháy
-// stagger theo --cell-delay. Reduced-motion: tắt shimmer + entrance tức thì.
+// stagger theo --cell-delay. Reduced-motion: tắt shimmer + entrance tức thì
+// + pixel hiện không stagger.
 
 .error-root {
 	--error-status-color: var(--foreground);
@@ -56,6 +58,56 @@
 		animation-delay: var(--cell-delay, 0s);
 	}
 
+	/* ── Pixel "on" của hình ảnh mã lỗi ── */
+	/* Layer riêng .error-pixel: absolute inset:0 cùng grid với matrix (KHÔNG kế thừa
+		opacity 0.08 của rain — pixel giữ đậm). Cell khớp bitmap: màu theo nhóm status. */
+	.error-pixel {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		grid-template-columns: repeat(var(--error-cols, 40), 1fr);
+		grid-template-rows: repeat(var(--error-rows, 14), 1fr);
+		gap: 0;
+		pointer-events: none;
+		user-select: none;
+		z-index: 1;
+		font-size: var(--font-size-2xs, 0.625rem);
+		font-family: var(--font-mono, monospace);
+		line-height: 1;
+	}
+
+	.error-matrix-cell-on {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--error-status-color);
+		color: transparent;
+		font-weight: 700;
+		opacity: 0.85;
+		animation: error-pixel-in 300ms cubic-bezier(0.65, 0, 0.35, 1) both;
+		animation-delay: var(--cell-delay, 0s);
+		box-shadow: 0 0 8px color-mix(in srgb, var(--error-status-color) 35%, transparent);
+	}
+
+	/* ── Caption nhỏ dưới pixel-digit (thay error-status khi có hình pixel) ── */
+	.error-pixel-caption {
+		font-size: var(--font-size-sm, 0.875rem);
+		font-weight: 700;
+		letter-spacing: 0.3em;
+		color: var(--error-status-color);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* ── Row nút Home/Back dưới message ── */
+	.error-actions {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		margin-top: 0.5rem;
+	}
+
 	/* ── Nội dung đè (mã lỗi + mô tả) ── */
 	.error-content {
 		position: relative;
@@ -106,6 +158,18 @@
 	50% { opacity: 1; }
 }
 
+/* Pixel materialize: lấp dần stagger (delay theo row+col) khi mount/status đổi */
+@keyframes error-pixel-in {
+	from {
+		opacity: 0;
+		transform: scale(0.4);
+	}
+	to {
+		opacity: 0.85;
+		transform: scale(1);
+	}
+}
+
 @keyframes error-content-in {
 	from {
 		opacity: 0;
@@ -117,12 +181,16 @@
 	}
 }
 
-/* ── Reduced motion: tắt shimmer + entrance tức thì ── */
+/* ── Reduced motion: tắt shimmer + entrance tức thì + pixel hiện không stagger ── */
 @media (prefers-reduced-motion: reduce) {
 	.error-root {
 		.error-matrix-cell {
 			animation: none;
 			opacity: 0.6;
+		}
+		.error-matrix-cell-on {
+			animation: none;
+			opacity: 0.85;
 		}
 		.error-content {
 			animation: none;
