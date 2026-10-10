@@ -88,8 +88,8 @@ export const pageContents: { [k: string]: any } = {
 	},
 	datetimeLabels: {
 		hint: {
-			vi: 'Nhập theo thứ tự: năm · tháng · ngày · giờ · phút (VD: 2000-01-15 08:30)',
-			en: 'Type in order: year · month · day · hour · minute (e.g., 2000-01-15 08:30)'
+			vi: 'Nhập theo thứ tự: ngày · tháng · năm (VD: 15/01/2000) — hoặc chọn qua nút lịch. Giới hạn 1900–nay',
+			en: 'Type in order: month · day · year (e.g., 01/15/2000) — or pick via the calendar button. Range 1900–now'
 		},
 		invalidDay: {
 			vi: 'Ngày không hợp lệ cho tháng đã chọn',

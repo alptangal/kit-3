@@ -849,7 +849,7 @@
 			</TextField>
 		</div>
 
-		<!-- Birthdate field: InputDatetime (nhóm ô tuần tự năm·tháng·ngày·giờ·phút) -->
+		<!-- Birthdate field: InputDatetime (date-only + format theo lang + picker + clamp năm sinh) -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="datetime-scope">
 			<TextField name="birthdate" required>
@@ -858,6 +858,11 @@
 					bind:value={formData.birthdate}
 					required
 					clearable
+					hideTime
+					datePicker
+					format={lang === 'vi' ? 'dmy' : 'mdy'}
+					minYear={1900}
+					maxYear={new Date().getFullYear()}
 					aria-label={lang === 'vi' ? 'Ngày sinh' : 'Date of birth'}
 					class="dt-field-input"
 				/>
