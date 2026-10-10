@@ -17,7 +17,7 @@
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
-const BASE = 'https://localhost:3003/ui/input';
+const BASE = `${process.env.PROBE_BASE || 'https://localhost:3000'}/ui/input`;
 const results = [];
 const ok = (name, cond, extra = '') => {
 	results.push({ name, pass: !!cond, extra });
@@ -165,6 +165,8 @@ await checkBtn('ib-select-delete', 1).click();
 await sleep(200);
 const ib4b = await readSelectedCount('ib-select-delete');
 ok('IB4b: tick 2 card → selected count 2', ib4b?.includes('2/') ?? false, `selected=${ib4b}`);
+// selectDeleteOn KHÔNG selectAllOn → quickbar giữ nguyên khi selected ≥2
+// (clear-all chỉ render khi selectAllOn — không thì mất nút xóa hàng loạt)
 await quickbarDelete('ib-select-delete').click();
 await sleep(500);
 const ib4c = await listCount('ib-select-delete');
@@ -185,10 +187,16 @@ await addBtn('ib-select-all').click();
 await sleep(300);
 const ib5a = await listCount('ib-select-all');
 ok('IB5a: 2 mã trong list', ib5a === 2, `count=${ib5a}`);
+// Refinement: clear-all chỉ hiện khi selected ≥2 và CHỈ xóa phần đã chọn →
+// tick cả 2 card trước để clear-all render + xóa đúng 2 mã đó
+await checkBtn('ib-select-all', 0).click();
+await sleep(200);
+await checkBtn('ib-select-all', 1).click();
+await sleep(200);
 await clearAllBtn('ib-select-all').click();
 await sleep(500);
 const ib5b = await listCount('ib-select-all');
-ok('IB5b: Xóa tất cả → list rỗng', ib5b === 0, `count=${ib5b}`);
+ok('IB5b: clear-all (2 mã đã chọn) → list rỗng', ib5b === 0, `count=${ib5b}`);
 
 console.log('\n=== IB6: REQUIRED + FIELDMESSAGES (SHOWVALID) ===');
 // _justReset=true lần đầu → blur KHÔNG validate (discipline: suppress until user interacts)
@@ -221,7 +229,8 @@ const ib6b = await page.evaluate(() => {
 });
 ok('IB6b: gõ mã + Enter → valid (showValid)', ib6b.hasValid, ib6b.all.slice(0, 80));
 
-// Xóa mã bằng clearAllBtn (selectAllOn=true → nút hiện khi không có selection)
+// Xóa mã: ib-required KHÔNG có selectDeleteOn (không tick card) → clear-all
+// giữ nghĩa đen "Xóa tất cả" (hành vi prop gốc, luôn hiện khi có mã)
 await clearAllBtn('ib-required').click();
 await sleep(500);
 // Blur lại
@@ -320,7 +329,11 @@ await pageM.waitForSelector('[data-test="ib-base"]', { timeout: 20000 });
 await sleep(400);
 
 await pageM.locator('[data-test="ib-base"] [data-test="input-barcode-scan-trigger"]').click();
-await sleep(2500); // detect loop 300ms + zbar init QR đầu + addBarcode + close
+// Fullscreen transition làm detect loop start muộn → đợi overlay tự đóng
+// (single detect → addBarcode + close) theo điều kiện thay vì sleep cứng
+await pageM
+	.locator('[data-test="ib-base"] [data-test="input-barcode-overlay"]')
+	.waitFor({ state: 'detached', timeout: 15000 });
 const ib9codes = await pageM.evaluate(() => {
 	const wrap = document.querySelector('[data-test="ib-base"]');
 	if (!wrap) return [];
@@ -378,7 +391,11 @@ await pageM2.waitForSelector('[data-test="ib-base"]', { timeout: 20000 });
 await sleep(400);
 
 await pageM2.locator('[data-test="ib-base"] [data-test="input-barcode-scan-trigger"]').click();
-await sleep(2500); // detect loop → detect 2 mã → freeze + regions
+// Fullscreen transition làm detect loop start muộn (freeze có thể >2500ms) →
+// đợi theo điều kiện DOM thay vì sleep cứng
+await pageM2
+	.locator('[data-test="ib-base"] .input-barcode-freeze-on')
+	.waitFor({ timeout: 15000 });
 const ib10frozen = await pageM2.locator('[data-test="ib-base"] .input-barcode-freeze-on').count();
 ok('IB10a: multiple detect → freeze canvas render', ib10frozen === 1);
 const ib10regions = await pageM2.locator('[data-test="ib-base"] [data-test="input-barcode-region"]').count();

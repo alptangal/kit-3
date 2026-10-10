@@ -2561,6 +2561,33 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		return selectAllCheckEventsCache;
 	}
 
+	// Events Checkbox card barcode (selectDeleteOn) — mirror getFileCheckEvents:
+	// click/keydown → toggleCodeSelected (memoize theo mã, KHÔNG tạo mảng mới
+	// mỗi render). keydown Space/Enter → stopImmediatePropagation để tránh
+	// double-toggle với inline onkeydown của Checkbox.
+	const codeCheckEventsCache = new Map<string, { events: { click: () => void; keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => void } }[]>();
+	function getCodeCheckEvents(raw: string) {
+		let cached = codeCheckEventsCache.get(raw);
+		if (!cached) {
+			cached = [{
+				events: {
+					click: () => toggleCodeSelected(raw),
+					keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => {
+						const ke = e as KeyboardEvent | undefined;
+						const key = ke?.key;
+						if (key === ' ' || key === 'Enter') {
+							ke?.preventDefault?.();
+							ke?.stopImmediatePropagation?.();
+							toggleCodeSelected(raw);
+						}
+					}
+				}
+			}];
+			codeCheckEventsCache.set(raw, cached);
+		}
+		return cached;
+	}
+
 	// ── type='barcode': state + handlers (mirror pattern file quickDelete/clearable) ──
 	// codes (props, $bindable) = source-of-truth; barcodeInput = value nhập tay.
 	// Scan camera: overlay inline (KHÔNG Modal — video + detect loop đơn giản hơn,
@@ -2569,7 +2596,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	// Ô tick chọn nhanh (selectDeleteOn) — mirror selectedFiles
 	let selectedCodes: string[] = $state([]);
 	const hasCodeSelection = $derived(selectedCodes.length > 0);
+	// Clear-all mới: hiện khi selected ≥2, click chỉ xóa PHẦN ĐÃ CHỌN (giữ phần
+	// chưa tick). Quickbar trùng chức năng (hiện khi selected ≥1) → ẨN quickbar
+	// khi clear-all hiển thị (selected ≥2) để không trùng lặp nút.
+	const codeSelectionMulti = $derived(selectedCodes.length >= 2);
 	const barcodeDisplayDerived = $derived(typeDerived == 'barcode');
+	// Yêu cầu (4): class tạm khi nút add vừa thêm mã (Enter hoặc click) —
+	// animation pulse + glow + shake 600ms rồi tự gỡ (triggerAddFlash).
+	let addFlash = $state(false);
 	// Tùy chọn scan/camera/beep/list — props là source of truth (mirror maxFiles getter)
 	const cameraOnDerived = $derived(props.cameraOn === true);
 	const beepOnDerived = $derived(props.beepOn === true);
@@ -2583,6 +2617,27 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		if (configs.disabled || !raw?.trim()) return;
 		_codesJustReset = false;
 		codes = [...(codes ?? []), raw.trim()]; // gán array MỚI (kỷ luật $bindable)
+		// Yêu cầu (4): Enter/click nút add → nút add flash (pulse ring + glow +
+		// shake ~600ms) rồi tự bỏ class — guard nhiều lần gõ liên tiếp.
+		if (browser) triggerAddFlash();
+	}
+
+	// Flash animation nút add — 1 timer dùng chung: gõ liên tiếp → reset timer
+	// (không chồng class); gỡ class sau 600ms. prefers-reduced-motion → CSS
+	// animation: none nên class có gắn cũng không animate.
+	let addFlashTimer: ReturnType<typeof setTimeout> | undefined;
+	function triggerAddFlash() {
+		addFlash = false;
+		// rAF: force reflow giữa 2 lần gắn class → animation restart đúng
+		// (không bị nuốt khi class chưa kịp remove/attach lại).
+		requestAnimationFrame(() => {
+			addFlash = true;
+			if (addFlashTimer) clearTimeout(addFlashTimer);
+			addFlashTimer = setTimeout(() => {
+				addFlash = false;
+				addFlashTimer = undefined;
+			}, 600);
+		});
 	}
 
 	function removeBarcode(raw: string) {
@@ -2608,7 +2663,17 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		codes = (codes ?? []).filter((x) => !removed.includes(x));
 	}
 
+	// Yêu cầu (3): clear-all (selectAllOn) — Có tick card (selectDeleteOn) → bấm
+	// CHỈ XÓA PHẦN ĐÃ CHỌN (lọc codes giữ phần chưa tick), KHÔNG codes = [] như
+	// trước; hàm removeSelectedCodes đã đúng pattern → tái dùng (không trùng
+	// logic). KHÔNG có tick card → selection không thể tồn tại → giữ nghĩa đen
+	// "Xóa tất cả" (hành vi prop gốc) — nếu không, section chỉ selectAllOn (vd
+	// ib-required) mất hoàn toàn nút xóa (regression probe cũ IB6).
 	function clearAllCodes() {
+		if (selectDeleteOnDerived) {
+			removeSelectedCodes();
+			return;
+		}
 		if (configs.disabled) return;
 		_codesJustReset = false;
 		selectedCodes = [];
@@ -2662,12 +2727,18 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	//   1 mã: addBarcode + beep single → đóng overlay.
 	//   >1 mã: freeze frame (canvas capture) + bounding box overlay → click vùng
 	//     chọn → addBarcode mã đó + beep single → đóng overlay.
+	// Fullscreen API thật: mở scan → overlayEl.requestFullscreen() (fallback
+	// overlay thường nếu browser chặn/unsupported); đóng → exitFullscreen (guard
+	// document.fullscreenElement); listener fullscreenchange cleanup khi user
+	// Esc khỏi fullscreen.
 	// SSR guard: browser check + navigator.mediaDevices undefined → hiện lỗi
 	// (KHÔNG crash). Camera permission probe headless có thể DENIED → probe
 	// assert UI structure + mock getUserMedia qua addInitScript.
 	let scanOpen = $state(false);
 	let scanError = $state('');
 	let scanFrozen = $state(false);
+	// Yêu cầu (5): pause/resume detect loop — GIỮ stream + video hiển thị.
+	let scanPaused = $state(false);
 	// Kết quả detect trên frame freeze — click chọn (bounding box từ video coords)
 	let scanResults: BarcodeDetectorResult[] = $state([]);
 	let videoEl: HTMLVideoElement | undefined;
@@ -2677,17 +2748,47 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	let scanTimer: ReturnType<typeof setInterval> | undefined;
 	// Dedup: cùng 1 mã trong frame liên tiếp không re-beep (so rawValue cuối đã add)
 	let lastDetectedRaw: string | undefined;
+	// Fullscreen: cleanup listener khi đóng overlay/unmount
+	let fullscreenChangeCleanup: (() => void) | undefined;
+
+	async function enterOverlayFullscreen() {
+		if (!browser || !overlayEl) return;
+		if (document.fullscreenElement) return; // đã fullscreen (hoặc tab khác giữ) → bỏ qua
+		try {
+			await overlayEl.requestFullscreen();
+		} catch {
+			// Fallback: browser chặn (permission/iframe) → overlay fixed vẫn dùng được
+		}
+	}
+
+	function exitOverlayFullscreen() {
+		if (!browser) return;
+		if (document.fullscreenElement) {
+			void document.exitFullscreen().catch(() => {
+				// browser từ chối (đang transition) → bỏ qua
+			});
+		}
+	}
+
+	function handleFullscreenChange() {
+		// User Esc khỏi fullscreen khi overlay đang mở KHÔNG qua closeScan (VD
+		// Esc) → sync state: overlay vẫn mở (fallback inline), detect loop vẫn chạy.
+		// Không cần action riêng — chỉ đảm bảo không leak listener (cleanup ở onDestroy).
+	}
 
 	async function openScan() {
 		if (configs.disabled) return;
 		scanError = '';
 		scanFrozen = false;
+		scanPaused = false;
 		scanResults = [];
 		lastDetectedRaw = undefined;
 		// primeAudio trong gesture click — AudioContext resume trước khi beep sau
 		if (beepOnDerived) primeAudio();
 		scanOpen = true;
 		if (!browser) return;
+		// Yêu cầu (5): fullscreen ngay khi mở (overlay render xong → rAF)
+		requestAnimationFrame(() => void enterOverlayFullscreen());
 		if (!navigator.mediaDevices?.getUserMedia) {
 			scanError = 'Camera không khả dụng trên trình duyệt này';
 			return;
@@ -2716,6 +2817,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 
 	function closeScan() {
 		stopDetectLoop();
+		exitOverlayFullscreen();
 		if (scanStream) {
 			for (const track of scanStream.getTracks()) track.stop();
 			scanStream = undefined;
@@ -2723,8 +2825,22 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		if (videoEl) videoEl.srcObject = null;
 		scanOpen = false;
 		scanFrozen = false;
+		scanPaused = false;
 		scanResults = [];
 		scanError = '';
+	}
+
+	// Yêu cầu (5): pause/resume — pause dừng detect loop, GIỮ stream + video;
+	// resume chạy lại interval. Freeze state không đụng (pause ≠ freeze).
+	function toggleScanPause() {
+		if (!scanOpen || scanFrozen) return;
+		scanPaused = !scanPaused;
+		if (scanPaused) {
+			stopDetectLoop();
+		} else {
+			lastDetectedRaw = undefined; // cho phép re-detect cùng mã sau resume
+			startDetectLoop();
+		}
 	}
 
 	function startDetectLoop() {
@@ -2740,7 +2856,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	}
 
 	async function detectFrame() {
-		if (!videoEl || videoEl.readyState < 2 || scanFrozen) return;
+		if (!videoEl || videoEl.readyState < 2 || scanFrozen || scanPaused) return;
 		const detector = await ensureBarcodeDetector();
 		if (!detector) {
 			scanError = 'BarcodeDetector không khả dụng';
@@ -2753,7 +2869,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		} catch {
 			return; // frame tạm lỗi (video đang seek…) → bỏ qua, loop chạy tiếp
 		}
-		if (scanFrozen) return;
+		if (scanFrozen || scanPaused) return;
 		const valid = formatsDerived?.length
 			? results.filter((r) => formatsDerived!.includes(r.format))
 			: results;
@@ -2841,12 +2957,28 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
 			formContext.childrens.add(configs);
 		}
+		// type='barcode' fullscreen: theo dõi fullscreenchange — user Esc khỏi
+		// fullscreen (KHÔNG qua closeScan) → fullscreenchange bung, cleanup guard.
+		if (browser && configs.type == 'barcode') {
+			const onChange = () => handleFullscreenChange();
+			document.addEventListener('fullscreenchange', onChange);
+			fullscreenChangeCleanup = () => document.removeEventListener('fullscreenchange', onChange);
+		}
 	});
 	onDestroy(() => {
 		value = undefined;
 		if (configs.type == 'password') configs.input.password.value = undefined;
 		// type='barcode': dọn camera stream/timer khi unmount (đóng overlay)
-		if (configs.type == 'barcode') closeScan();
+		if (configs.type == 'barcode') {
+			closeScan();
+			fullscreenChangeCleanup?.();
+			fullscreenChangeCleanup = undefined;
+		}
+		// type='barcode': hủy flash timer nút add khi unmount
+		if (addFlashTimer) {
+			clearTimeout(addFlashTimer);
+			addFlashTimer = undefined;
+		}
 		// type='file': revoke mọi objectURL còn lại (effect cleanup đã revoke phần lớn,
 		// đây là phòng thủ nếu preview build chưa kịp chạy cleanup)
 		if (configs.type == 'file') {
@@ -3162,31 +3294,34 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			</Modal>
 		{/if}
 	{:else if configs.type == 'barcode'}
-		<!-- type='barcode': input text + nút scanner (inline SVG — iconify không có
-		     camera) + danh sách detected + overlay camera inline (KHÔNG Modal).
-		     codes = source-of-truth (bindable), value string không dùng. -->
+		<!-- type='barcode': input text + nút scanner (Button children SVG — iconify
+		     không có icon camera) + danh sách detected + overlay camera inline
+		     (KHÔNG Modal). codes = source-of-truth (bindable), value string không
+		     dùng. Nút action dùng Button component (element) — aspect-square scale
+		     theo --min-height của Input root; tick card = Checkbox component reuse
+		     (mirror file mode). -->
 		{#snippet barcodeCard(index: number, raw: string)}
 			{#if selectDeleteOnDerived && !configs.disabled}
-				<button
-					type="button"
-					class="input-barcode-check"
+				<!-- Checkbox component (reuse) — mirror DataTable/file rowCheckEvents:
+				     checked one-way + click/keydown → toggleCodeSelected; mousedown
+				     nội bộ Checkbox mutate local $bindable (transient) → prop sync
+				     ngược khi selectedCodes đổi → net đúng 1 lần toggle.
+				     data-test KHÔNG render lên DOM (BasicProps không spread) → hook
+				     DOM qua wrapper span data-test + class input-barcode-check. -->
+				<span
+					class="input-barcode-check-wrap"
 					data-test="input-barcode-check"
 					class:input-barcode-checked={selectedCodes.includes(raw)}
-					role="checkbox"
-					aria-checked={selectedCodes.includes(raw) ? 'true' : 'false'}
-					aria-label={`Chọn mã ${raw} để xóa`}
-					onclick={() => toggleCodeSelected(raw)}
 				>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path
-							d="M5 12.5l4.5 4.5L19 7.5"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-				</button>
+					<Checkbox
+						checked={selectedCodes.includes(raw)}
+						size="sm"
+						color="primary"
+						aria-label={`Chọn mã ${raw} để xóa`}
+						class="input-barcode-check"
+						events={getCodeCheckEvents(raw)}
+					/>
+				</span>
 			{/if}
 			{#if editingCodeIndex == index}
 				<input
@@ -3209,41 +3344,38 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				>{raw}</span>
 			{/if}
 			{#if updateOnDerived && !configs.disabled && editingCodeIndex != index}
-				<button
-					type="button"
-					class="input-barcode-edit-trigger"
-					data-test="input-barcode-edit-trigger"
-					aria-label={`Sửa mã ${raw}`}
-					onclick={() => startEditCode(index, raw)}
-				>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path
-							d="M4 20h4L19.5 8.5a2.12 2.12 0 0 0-3-3L5 17v3zM13.5 6.5l3 3"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-				</button>
+				<!-- Button component (reuse) — ghost + aspect-square + Icon pencil
+				     (iconify fetch online). Size tự scale theo --min-height Input root.
+				     Wrapper span data-test hook DOM (Button không spread props). -->
+				<span data-test="input-barcode-edit-trigger" class="input-barcode-action-hook">
+					<Button
+						variant="ghost"
+						color="default"
+						size="xs"
+						aspect-square
+						class="input-barcode-edit-trigger"
+						aria-label={`Sửa mã ${raw}`}
+						onclick={() => startEditCode(index, raw)}
+					>
+						<Icon icon="lucide:pencil" class="input-barcode-icon" />
+					</Button>
+				</span>
 			{/if}
 			{#if deleteOnDerived && !configs.disabled}
-				<button
-					type="button"
-					class="input-barcode-remove"
-					data-test="input-barcode-remove"
-					aria-label={`Xóa mã ${raw}`}
-					onclick={() => removeBarcode(raw)}
-				>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path
-							d="M6 6l12 12M18 6L6 18"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-						/>
-					</svg>
-				</button>
+				<!-- Wrapper span data-test hook DOM (Button không spread props) -->
+				<span data-test="input-barcode-remove" class="input-barcode-action-hook">
+					<Button
+						variant="ghost"
+						color="error"
+						size="xs"
+						aspect-square
+						class="input-barcode-remove"
+						aria-label={`Xóa mã ${raw}`}
+						onclick={() => removeBarcode(raw)}
+					>
+						<Icon icon="lucide:x" class="input-barcode-icon" />
+					</Button>
+				</span>
 			{/if}
 		{/snippet}
 		<div class="input-barcode-row">
@@ -3267,40 +3399,55 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				{@attach handleEvents(configs.input.text.event)}
 			/>
 			{#if cameraOnDerived}
-				<button
-					type="button"
-					class="input-barcode-scan-trigger"
-					data-test="input-barcode-scan-trigger"
-					aria-haspopup="dialog"
-					aria-label="Quét mã bằng camera"
-					onclick={() => void openScan()}
-				>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path
-							d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-						/>
-						<path d="M4 12h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-					</svg>
-				</button>
+				<!-- Button component (reuse) — iconify KHÔNG có icon camera → giữ SVG
+				     camera inline nhưng bọc trong Button qua children snippet.
+				     data-test KHÔNG render lên DOM (Button không spread props) → hook
+				     DOM qua wrapper span data-test (mirror file mode). -->
+				<span data-test="input-barcode-scan-trigger" class="input-barcode-action-hook">
+					<Button
+						variant="ghost"
+						color="info"
+						size="sm"
+						aspect-square
+						class="input-barcode-scan-trigger"
+						aria-haspopup="dialog"
+						aria-label="Quét mã bằng camera"
+						onclick={() => void openScan()}
+					>
+						<svg class="input-barcode-scan-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"
+								stroke="currentColor"
+								stroke-width="1.75"
+								stroke-linecap="round"
+							/>
+							<path d="M4 12h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+						</svg>
+					</Button>
+				</span>
 			{/if}
-			{#if barcodeInput.length && !configs.disabled}
-				<button
-					type="button"
-					class="input-barcode-add"
-					data-test="input-barcode-add"
-					aria-label="Thêm mã đã nhập"
-					onclick={() => {
-						addBarcode(barcodeInput);
-						barcodeInput = '';
-					}}
-				>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-					</svg>
-				</button>
+			{#if (barcodeInput.length || addFlash) && !configs.disabled}
+				<!-- Button component (reuse) — Icon plus (iconify). class tạm
+				     barcode-add-flash khi vừa add (Enter/click) → pulse+glow+shake 600ms.
+				     addFlash giữ nút hiển thị sau khi input rỗng (Enter → flash vẫn thấy
+				     trong 600ms rồi nút mới ẩn). Wrapper span data-test hook DOM
+				     (Button không spread props). -->
+				<span data-test="input-barcode-add" class="input-barcode-action-hook">
+					<Button
+						variant="ghost"
+						color="success"
+						size="sm"
+						aspect-square
+						class={addFlash ? 'input-barcode-add barcode-add-flash' : 'input-barcode-add'}
+						aria-label="Thêm mã đã nhập"
+						onclick={() => {
+							addBarcode(barcodeInput);
+							barcodeInput = '';
+						}}
+					>
+						<Icon icon="lucide:plus" class="input-barcode-icon" />
+					</Button>
+				</span>
 			{/if}
 		</div>
 		{#if (codes?.length ?? 0) > 0 || selectAllOnDerived}
@@ -3312,46 +3459,49 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				{:else}
 					<span class="input-file-count" aria-live="polite">{codes?.length ?? 0} mã</span>
 				{/if}
-				{#if selectAllOnDerived && !hasCodeSelection && (codes?.length ?? 0) > 0}
-					<button
-						type="button"
-						class="input-file-clear-all"
-						data-test="input-barcode-clear-all"
-						aria-label="Xóa tất cả mã đã quét"
-						onclick={clearAllCodes}
-					>
-						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-							<path
-								d="M6 6l12 12M18 6L6 18"
-								stroke="currentColor"
-								stroke-width="1.75"
-								stroke-linecap="round"
-							/>
-						</svg>
-						<span>Xóa tất cả</span>
-					</button>
+				<!-- Yêu cầu (3) + giữ hành vi prop gốc: Có tick card (selectDeleteOn)
+				     → clear-all hiện khi selected ≥2, click CHỈ XÓA PHẦN ĐÃ CHỌN;
+				     KHÔNG có tick card → selection không thể tồn tại → clear-all là
+				     nút "Xóa tất cả" nghĩa đen (hành vi prop gốc, luôn hiện khi có mã).
+				     Quickbar (selected ≥1) ẨN khi clear-all hiển thị → không trùng nút. -->
+				{#if selectAllOnDerived && (selectDeleteOnDerived ? codeSelectionMulti : (codes?.length ?? 0) > 0)}
+					<!-- Wrapper span data-test hook DOM (Button không spread props) -->
+					<span data-test="input-barcode-clear-all" class="input-barcode-action-hook">
+						<Button
+							variant="ghost"
+							color="error"
+							size="xs"
+							class="input-file-clear-all input-barcode-clear-all-btn"
+							aria-label={selectDeleteOnDerived ? 'Xóa các mã đã chọn' : 'Xóa tất cả mã'}
+							onclick={clearAllCodes}
+						>
+							<Icon icon="lucide:x" class="input-barcode-icon" />
+							<span>
+								{selectDeleteOnDerived ? `Xóa ${selectedCodes.length} mã đã chọn` : 'Xóa tất cả'}
+							</span>
+						</Button>
+					</span>
 				{/if}
 			</div>
 		{/if}
-		{#if hasCodeSelection}
+		<!-- Quickbar khi có selection (selected ≥1). Khi clear-all đang hiển thị
+		     (selectAllOn + selected ≥2) thì ẩn quickbar để không trùng nút xóa —
+		     nhưng nếu KHÔNG có selectAllOn thì clear-all không render → giữ nguyên
+		     quickbar, nếu không sẽ mất nút xóa hàng loạt (regression IB4). -->
+		{#if hasCodeSelection && !(selectAllOnDerived && codeSelectionMulti)}
 			<div class="input-file-quickbar" data-test="input-barcode-quickbar" role="toolbar" aria-label="Hành động mã đã chọn">
-				<button
-					type="button"
-					class="input-file-quickbar-delete"
-					data-test="input-barcode-quickbar-delete"
-					onclick={removeSelectedCodes}
-				>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path
-							d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-					Xóa {selectedCodes.length} mã đã chọn
-				</button>
+				<span data-test="input-barcode-quickbar-delete" class="input-barcode-action-hook">
+					<Button
+						variant="outline"
+						color="error"
+						size="xs"
+						class="input-file-quickbar-delete"
+						onclick={removeSelectedCodes}
+					>
+						<Icon icon="lucide:trash-2" class="input-barcode-icon" />
+						Xóa {selectedCodes.length} mã đã chọn
+					</Button>
+				</span>
 			</div>
 		{/if}
 		{#if (codes?.length ?? 0) > 0}
@@ -3409,22 +3559,44 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 						</button>
 					{/each}
 				{/if}
-				<button
-					type="button"
-					class="input-barcode-overlay-close"
-					data-test="input-barcode-overlay-close"
-					aria-label="Đóng camera"
-					onclick={closeScan}
-				>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path
-							d="M6 6l12 12M18 6L6 18"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-						/>
-					</svg>
-				</button>
+				<!-- Nút pause/resume (Yêu cầu 5) + close — Button component, góc trên
+				     phải cạnh nhau. Pause dừng detect loop GIỮ stream + video; resume
+				     chạy lại interval. -->
+				<div class="input-barcode-overlay-actions">
+					<!-- Wrapper span data-test hook DOM (Button không spread props) -->
+					<span data-test="input-barcode-overlay-pause" class="input-barcode-action-hook">
+						<Button
+							variant="ghost"
+							color="default"
+							size="sm"
+							aspect-square
+							rounded="full"
+							class="input-barcode-overlay-btn"
+							aria-label={scanPaused ? 'Tiếp tục quét' : 'Tạm dừng quét'}
+							onclick={toggleScanPause}
+						>
+							{#if scanPaused}
+								<Icon icon="lucide:play" class="input-barcode-icon" />
+							{:else}
+								<Icon icon="lucide:pause" class="input-barcode-icon" />
+							{/if}
+						</Button>
+					</span>
+					<span data-test="input-barcode-overlay-close" class="input-barcode-action-hook">
+						<Button
+							variant="ghost"
+							color="default"
+							size="sm"
+							aspect-square
+							rounded="full"
+							class="input-barcode-overlay-btn"
+							aria-label="Đóng camera"
+							onclick={closeScan}
+						>
+							<Icon icon="lucide:x" class="input-barcode-icon" />
+						</Button>
+					</span>
+				</div>
 			</div>
 		{/if}
 	{:else if configs.type == 'number'}
