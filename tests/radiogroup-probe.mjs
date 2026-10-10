@@ -48,8 +48,9 @@ const activeInfo = async () =>
 
 console.log('\n=== RG0: PAGE RENDER ===');
 ok('RG0: demo root render', (await page.locator('[data-test="radiogroup-demo"]').count()) === 1);
+// Demo audit mở rộng: 14 size + 7 color group mới + 5 group ban đầu = 26.
 const groupCount = await page.locator('[role="radiogroup"]').count();
-ok('RG0: 7 RadioGroup role=radiogroup', groupCount === 7, String(groupCount));
+ok('RG0: 26 RadioGroup role=radiogroup (14 size + 7 color + 5 ban đầu)', groupCount === 26, String(groupCount));
 
 console.log('\n=== RG1: UNIQUE NAME + KHÔNG COLLISION (regression R6) ===');
 const nameH = await allNames('rg-horizontal'); // group KHÔNG có prop name → auto-unique

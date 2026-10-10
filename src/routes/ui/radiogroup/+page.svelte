@@ -2,9 +2,35 @@
 <script lang="ts">
 	import { Button } from '$components/element';
 	import { FieldMessages, Form, Input, RadioGroup, RadioItem, TextField } from '$components/form';
+	import type { Color, Size } from '$components/interface';
 
 	// ── State (probe locate qua data-test + .radiogroup-root con trực tiếp) ──
-	let sizeValue = $state<string | null>(null);
+	// Audit: đủ 14 size của type Size (2xs → 9xl; 'full' KHÔNG thuộc Size —
+	// .size-full chỉ set width/height 100% cho container) + đủ 7 Color.
+	const sizesList: Size[] = [
+		'2xs',
+		'xs',
+		'sm',
+		'md',
+		'lg',
+		'xl',
+		'2xl',
+		'3xl',
+		'4xl',
+		'5xl',
+		'6xl',
+		'7xl',
+		'8xl',
+		'9xl'
+	];
+	const colorsList: Color[] = ['default', 'primary', 'info', 'secondary', 'success', 'warning', 'error'];
+	// Checked sẵn item đầu để thấy luôn checked-state (fill + label màu semantic)
+	let sizePicked = $state<Record<string, string>>(
+		Object.fromEntries(sizesList.map((s) => [s, 'on']))
+	);
+	let colorPicked = $state<Record<string, string>>(
+		Object.fromEntries(colorsList.map((c) => [c, 'on']))
+	);
 	let colorValue = $state<string | null>(null);
 	let planValue = $state<string | null>(null);
 	let disabledValue = $state<string | null>('plan-sm');
@@ -27,19 +53,35 @@
 <div class="page" data-test="radiogroup-demo">
 	<h1 class="page-title">RadioGroup · single-select (native radio + roving tabindex)</h1>
 
-	<!-- Sizes: demo 3 size tokens (size property trên group) -->
+	<!-- Sizes: đủ 14 token type Size (2xs → 9xl) — --radio-size scale theo --font-size -->
 	<section class="demo" data-test="rg-sizes">
-		<h2>Sizes (size-xs / size-md)</h2>
-		<RadioGroup size="xs" name="rg-size-xs" bind:value={sizeValue} aria-label="Size XS">
-			<RadioItem id="xs" label="Extra Small" />
-			<RadioItem id="sm" label="Small" />
-		</RadioGroup>
-		<RadioGroup size="md" name="rg-size-md" aria-label="Size MD">
-			<RadioItem id="md" label="Medium" />
-			<RadioItem id="lg" label="Large" />
-		</RadioGroup>
+		<h2>Sizes (2xs → 9xl — đủ 14 token của type Size)</h2>
+		{#each sizesList as s (s)}
+			<RadioGroup size={s} bind:value={sizePicked[s]} aria-label="Size {s}">
+				<RadioItem id="on" label={s} />
+				<RadioItem id="off" label="—" />
+			</RadioGroup>
+		{/each}
 		<p class="demo-hint">
-			Đang chọn: <code>{sizeValue ?? 'chưa có'}</code>
+			<code>.size-full</code> KHÔNG thuộc type <code>Size</code> (chỉ set width/height 100%
+			cho container) nên không áp cho form field. 'full' user liệt kê trong yêu cầu
+			không triển khai được theo nguyên tắc hệ thống.
+		</p>
+	</section>
+
+	<!-- Colors: đủ 7 giá trị type Color — checked-state đổi theo màu semantic -->
+	<section class="demo" data-test="rg-colors">
+		<h2>Colors (default / primary / info / secondary / success / warning / error)</h2>
+		{#each colorsList as c (c)}
+			<RadioGroup color={c} bind:value={colorPicked[c]} aria-label="Color {c}">
+				<RadioItem id="on" label={c} />
+				<RadioItem id="off" label="—" />
+			</RadioGroup>
+		{/each}
+		<p class="demo-hint">
+			Checked fill + label màu theo <code>--radio-checked-color</code> (primary mặc định /
+			semantic theo prop); unchecked border theo <code>--color</code>. error/success cũng
+			tự sinh từ validation (required + đã chọn).
 		</p>
 	</section>
 

@@ -19,9 +19,11 @@
 	cursor: pointer;
 
 	// ── PC-only guard: hover chỉ khi thiết bị có chuột ──
+	// Token hover (mirror switch off-track hover): light/dark tự đảo qua
+	// --default-100 (variables.scss set theo mode).
 	@media (hover: hover) and (pointer: fine) {
 		&:hover:not(.disabled-item) {
-			background-color: rgba(125, 125, 125, 0.12);
+			background-color: var(--default-100, rgba(125, 125, 125, 0.12));
 		}
 	}
 
@@ -65,18 +67,22 @@
 			background-color 150ms ease;
 	}
 
+	// Checked: fill + border theo --radio-checked-color (root set — primary
+	// mặc định / semantic theo prop color + validation), KHÔNG hardcode indigo.
 	> .radio-input:checked ~ .radio-circle {
-		border-color: var(--color-indigo-500);
-		background-color: var(--color-indigo-500);
+		border-color: var(--radio-checked-color);
+		background-color: var(--radio-checked-color);
 	}
 
-	// Dot: scale-in 150ms (transform → mượt, không reflow)
+	// Dot: scale-in 150ms (transform → mượt, không reflow).
+	// Màu = token background (light #fff / dark nền tối — tự đảo theme, mirror
+	// switch --switch-thumb-color) thay vì #fff cứng.
 	> .radio-circle::after {
 		content: '';
 		position: absolute;
 		width: calc(var(--radio-size) / 3);
 		height: calc(var(--radio-size) / 3);
-		background-color: #fff;
+		background-color: var(--background, #fff);
 		border-radius: 50%;
 		transform: scale(0);
 		transition: transform 150ms ease;
@@ -106,9 +112,9 @@
 		line-height: 1.3;
 	}
 
-	// ── Selected: label đậm + màu chủ đạo ──
+	// ── Selected: label đậm + màu chủ đạo (theo --radio-checked-color) ──
 	&.selected > .radio-text > .radio-label {
-		color: var(--color-indigo-500);
+		color: var(--radio-checked-color);
 		font-weight: 600;
 	}
 }

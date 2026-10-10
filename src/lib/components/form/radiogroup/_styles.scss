@@ -15,6 +15,11 @@
 	// --radio-size: đường kính vòng tròn radio; item min-height/padding dùng
 	// --min-height/--padding (size tokens) — KHÔNG hardcode px.
 	--radio-size: calc(var(--font-size) + 0.5rem);
+	// ── Checked-state color (mirror switch --switch-on-color) ──
+	// Mặc định (.color-default / chưa validation) = primary — quy ước "đã
+	// chọn" của hệ thống (checkbox checkmark, switch on-track). .color-* ghi
+	// đè cả 2 biến dưới cho đúng màu semantic.
+	--radio-checked-color: var(--primary, var(--color-indigo-500));
 
 	display: flex;
 	flex-direction: column;
@@ -29,13 +34,36 @@
 		gap: calc(var(--gap) * 2);
 	}
 
-	// ── Color (validation: error/success inherit --color xuống items) ──
-	&.color-error {
-		--color: var(--danger);
+	// ── Color (semantic map đủ 7 giá trị type Color — mirror colors.scss) ──
+	// --color: border unchecked + kế thừa xuống items (như checkbox);
+	// --radio-checked-color: fill + border checked + label selected.
+	// error/success cũng sinh từ validation (configs.color) — cùng map.
+	&.color-primary {
+		--color: var(--primary);
+		--radio-checked-color: var(--primary);
+	}
+	&.color-info {
+		--color: var(--primary);
+		--radio-checked-color: var(--primary);
+	}
+	&.color-secondary {
+		--color: var(--secondary);
+		--radio-checked-color: var(--secondary);
 	}
 	&.color-success {
 		--color: var(--success);
+		--radio-checked-color: var(--success);
 	}
+	&.color-warning {
+		--color: var(--warning);
+		--radio-checked-color: var(--warning);
+	}
+	&.color-error {
+		--color: var(--danger);
+		--radio-checked-color: var(--danger);
+	}
+	// .color-default: --color giữ var(--default) (border unchecked — như
+	// checkbox); checked vẫn primary (fallback phía trên).
 
 	// ── Disabled (group-level: overlay block click + opacity) ──
 	&.disabled {
