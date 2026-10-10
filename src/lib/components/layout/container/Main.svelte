@@ -21,6 +21,38 @@
 			en: 'No data'
 		} as TranslateContent
 	};
+
+	// === VisualViewport keyboard handling (mobile) ===
+	// Safari iOS KHÔNG hỗ trợ meta `interactive-widget` → keyboard mở nhưng layout viewport
+	// KHÔNG co (dvh giữ nguyên) → input focus bị che. Chrome 108+ co layout sẵn (meta đủ).
+	// Handler này set CSS var `--vvh` (chiều cao visual viewport — phần KHÔNG bị keyboard
+	// che) + class `keyboard-open` trên <html> để CSS điều chỉnh (vd: thu padding, giữ
+	// action bar trên keyboard). Chỉ chạy khi visualViewport tồn tại (client-side).
+	// Cleanup qua onDestroy — Svelte 5 component destroy.
+	let keyboardOpen = $state(false);
+	let vvh = $state<number | undefined>(undefined);
+	if (typeof window !== 'undefined' && window.visualViewport) {
+		const vv = window.visualViewport;
+		const syncViewport = () => {
+			// Keyboard mở: visual viewport co (~60% gốc). Ngưỡng 150px loại trừ resize
+			// nhỏ (rotation, URL bar thu/mở trên Safari chỉ chênh ~60-100px).
+			const isOpen = window.innerHeight - vv.height > 150;
+			keyboardOpen = isOpen;
+			vvh = vv.height;
+			document.documentElement.classList.toggle('keyboard-open', isOpen);
+			document.documentElement.style.setProperty('--vvh', `${vv.height}px`);
+		};
+		vv.addEventListener('resize', syncViewport);
+		vv.addEventListener('scroll', syncViewport);
+		syncViewport();
+		onDestroy(() => {
+			vv.removeEventListener('resize', syncViewport);
+			vv.removeEventListener('scroll', syncViewport);
+			document.documentElement.classList.remove('keyboard-open');
+			document.documentElement.style.removeProperty('--vvh');
+		});
+	}
+
 	let { children, ...props }: ContainerProps = $props();
 	let configs: ContainerConfigs = $state({
 		get duration() {
@@ -79,7 +111,16 @@
 		}
 	});
 
-	export { configs };
+	export { configs, keyboardOpen };
+
+	// Safe-area height (viewport-fit=cover): height number + prop safeArea → bọc
+	// `calc(h - env(inset-top) - env(inset-bottom))`. Body padding env (theme.scss)
+	// đẩy Container vào vùng an toàn → height trừ env giữ tổng = viewport khả dụng,
+	// Container root KHÔNG tràn khi có notch/tai tai. Chỉ bật ở Container root layout.
+	const safeAreaHeight = $derived.by(() => {
+		if (!props.safeArea || typeof props.height !== 'number') return undefined;
+		return `calc(${props.height}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`;
+	});
 </script>
 
 {#if children}
@@ -103,7 +144,7 @@
 				]}
 		style:touch-action={props.touchActionDisabled ? 'none' : 'auto'}
 		style:width={typeof props.width == 'number' ? `${props.width}px` : (props.width ?? 'auto')}
-		style:height={typeof props.height == 'number' ? `${props.height}px` : (props.height ?? 'auto')}
+		style:height={safeAreaHeight ?? (typeof props.height == 'number' ? `${props.height}px` : (props.height ?? 'auto'))}
 		style:transition-duration="var(--transition-duration)"
 		style:--transition-duration={props.transitionEnabled ? `${configs.duration}ms` : undefined}
 		transition:fly={client.browser?.transition?.fly}

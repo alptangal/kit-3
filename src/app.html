@@ -3,14 +3,17 @@
 	<head>
 		<meta charset="utf-8" />
 		<!--BEGIN SINGLE PWA-->
-		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<!-- 1 meta viewport DUY NHẤT: gộp PWA + interactive-widget (Chrome 108+ — keyboard
+		     co layout nên dvh phản hồi). BỎ shrink-to-fit=no + maximum-scale=1 (cái cũ
+		     chặn zoom — vi phạm accessibility WCAG 1.4.4 + iOS tự zoom khi focus input
+		     font <16px, và meta viewport sau GHI ĐÈ meta trước nên chặn zoom toàn cục). -->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+		/>
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<!--END SINGLE PWA-->
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1, shrink-to-fit=no, maximum-scale=1"
-		/>
 
 		%unocss-svelte-scoped.global%
 		<!--------------------- -->
