@@ -127,6 +127,28 @@
 		}
 	});
 
+	// ── Rest attributes forward xuống element ──
+	// ButtonProps destructuring (children) + các prop đã consume ở trên không
+	// spread — data-test/aria-*/title/id... phải được forward thủ công, nếu không
+	// mọi data-test đặt trên <Button> đều không bao giờ xuống DOM (probe không
+	// tìm thấy locator).
+	const restAttrs = $derived.by(() => {
+		const out: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(props)) {
+			if (value === undefined) continue;
+			if (
+				key === 'data-test' ||
+				key.startsWith('data-') ||
+				key.startsWith('aria-') ||
+				key === 'title' ||
+				key === 'id'
+			) {
+				out[key] = value;
+			}
+		}
+		return out;
+	});
+
 	const delayDerived = $derived.by(() => {
 		if (!props.delay) return client.browser?.delay ?? 300;
 		if (props.delay == 'none') return undefined;
@@ -494,6 +516,7 @@
 	data-tap={configs.status?.tap}
 	data-long-press={configs.status?.longPress}
 	aria-label={ariaLabelDerived}
+	{...restAttrs}
 	style:--transition-duration={`${configs.transitionDuration}ms`}
 	style:--loading-duration={`${configs.loadingDuration}ms`}
 	{@attach handleEvents(configs.event)}

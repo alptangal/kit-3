@@ -28,6 +28,7 @@
 	role="tabpanel"
 	id={`tabs-pn-${rootId}-${value}`}
 	aria-labelledby={`tabs-tr-${rootId}-${value}`}
+	{...props}
 	class={styleDerived}
 	hidden={!active}
 >

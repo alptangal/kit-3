@@ -47,9 +47,12 @@
 			return activation;
 		},
 		select(v: string) {
-			// Uncontrolled (parent không bind value): tự đồng bộ props.value để
-			// behavior "value ?? defaultValue ?? first trigger" nhất quán.
-			if (!value) value = v;
+			// Luôn ghi prop value: controlled (parent bind:value) cần child ghi để
+			// Svelte propagate về parent — nếu chỉ set activeValue, effect sync bên
+			// dưới thấy value (parent) cũ ≠ activeValue mới và REVERT (click tab nào
+			// cũng bật về lại tab đầu). Uncontrolled: ghi local value để behavior
+			// "value ?? defaultValue ?? first trigger" nhất quán.
+			value = v;
 			configs.activeValue = v;
 		},
 		register(v: string, ref: HTMLElement) {

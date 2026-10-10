@@ -45,6 +45,26 @@
 		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 	});
 
+	// Forward data-*/aria-*/title/id xuống element (TagProps không destructuring
+	// riêng — data-test đặt trên <Tag> phải xuống DOM, nếu không probe không
+	// tìm thấy locator, vd db-badge-ok ở /settings).
+	const restAttrs = $derived.by(() => {
+		const out: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(props)) {
+			if (value === undefined) continue;
+			if (
+				key === 'data-test' ||
+				key.startsWith('data-') ||
+				key.startsWith('aria-') ||
+				key === 'title' ||
+				key === 'id'
+			) {
+				out[key] = value;
+			}
+		}
+		return out;
+	});
+
 	let configs: TagConfigs = $state({
 		get style() {
 			return styleDerived;
@@ -75,7 +95,12 @@
 	export { configs };
 </script>
 
-<svelte:element this={props.as ?? 'span'} class={configs.style} {@attach handleEvents(configs.event)}>
+<svelte:element
+	this={props.as ?? 'span'}
+	class={configs.style}
+	{...restAttrs}
+	{@attach handleEvents(configs.event)}
+>
 	<span class="tag-text" title={textDerived}>{configs.text}</span>
 	{#if configs.removable}
 		<!-- Nút ×: preventDefault mousedown để tránh blur trigger (tag nằm trong trigger button của Select) -->
