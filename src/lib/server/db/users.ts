@@ -166,7 +166,7 @@ const ADMIN_SAFE_FIELDS = [
 	'updatedAt',
 	'deletedAt'
 ] as const;
-type AdminSafeField = (typeof ADMIN_SAFE_FIELDS)[number];
+export type AdminSafeField = (typeof ADMIN_SAFE_FIELDS)[number];
 export type SafeUserDocument = { _id: string } & Pick<User, AdminSafeField>;
 
 function sanitizeUserForAdmin(doc: UserDocument): SafeUserDocument {

@@ -7,6 +7,7 @@ import type { ServerResponse } from '$interfaces/basic';
 import { Users } from '$lib/server/db/users';
 import { dev } from '$app/environment';
 import { resolveLang, localizePayload } from '$lib/server/i18n';
+import { signAccessToken } from '$lib/server/jwt';
 
 export const POST: RequestHandler = async ({ request, getClientAddress, cookies }) => {
 	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
@@ -109,23 +110,20 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 			);
 		}
 
-		// ── 8. Xây dựng session token và thiết lập cookie ──
+		// ── 8. Xây dựng JWT session token và thiết lập cookie ──
 		const userInstance = loginResult.user;
 		const userDocKey = userInstance.getDocumentKey();
 
-		/**
-		 * Session data được lưu vào cookie.
-		 * Lưu ý: trong production nên ký JWT hoặc dùng thư viện session an toàn
-		 * thay vì base64 thuần để tránh giả mạo session.
-		 */
-		const sessionData = {
-			userId: userDocKey,
+		// Ký JWT access token (ES256) để hooks.server.ts verifyAccessToken() khớp
+		const sessionPayload = {
+			sub: userDocKey,
 			username: userInstance.user.firstname,
 			roleId: userInstance.user.roleId,
-			// Thêm timestamp để có thể kiểm tra thời hạn phía server nếu cần
-			issuedAt: Date.now()
+			statusId: userInstance.user.statusId,
+			iat: Math.floor(Date.now() / 1000),
+			exp: Math.floor(Date.now() / 1000) + (remember ? 30 * 86400 : 86400)
 		};
-		const sessionToken = Buffer.from(JSON.stringify(sessionData)).toString('base64');
+		const sessionToken = await signAccessToken(sessionPayload);
 
 		// Thời hạn cookie: 30 ngày nếu remember, 1 ngày nếu không
 		const maxAge = remember ? 60 * 60 * 24 * 30 : 60 * 60 * 24;

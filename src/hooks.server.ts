@@ -5,6 +5,9 @@ import { systemVault, initSystemVault } from '$store/initSystemVault';
 import { initApp } from '$store/init-app';
 import { verifyAccessToken } from '$lib/server/jwt';
 import { resolveLang, localize } from '$lib/server/i18n';
+import { cbData } from '$modules/couchbase/clients';
+
+const cbRoles = cbData('name_roles');
 
 declare global {
 	// eslint-disable-next-line no-var
@@ -12,7 +15,13 @@ declare global {
 	var __initPromise: Promise<void> | undefined;
 }
 
-if (!globalThis.__appInitialized || !systemVault?.privateKey) {
+// Vault "đủ" khi có CẢ khoá RSA (encrypted API) lẫn cặp ES256 (JWT) — module reload
+// (Vite SSR) làm systemVault reset về undefined nhưng __appInitialized (global) vẫn
+// true → guard cũ chỉ check privateKey sẽ bỏ sót re-init và jwtPrivateKey stay undefined.
+const vaultReady = () =>
+	!!(systemVault?.privateKey && systemVault?.jwtPrivateKey && systemVault?.indexKey);
+
+if (!globalThis.__appInitialized || !vaultReady()) {
 	globalThis.__appInitialized = true;
 	globalThis.__initPromise = (async () => {
 		await initApp();
@@ -22,7 +31,7 @@ if (!globalThis.__appInitialized || !systemVault?.privateKey) {
 
 // Ensure initialization completes before handling requests
 async function ensureInitialized(): Promise<void> {
-	if (!systemVault?.privateKey) {
+	if (!vaultReady()) {
 		globalThis.__initPromise = (async () => {
 			await initApp();
 			await initSystemVault();
@@ -38,7 +47,21 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 		const payload = await verifyAccessToken(token);
 
 		// Extract user info from JWT payload
-		// JWT payload contains: userId, username, roleId, statusId, iat, exp, jti
+		// JWT payload (signAccessToken): sub = user docKey, username = firstname,
+		// roleId = role docKey, statusId, iat, exp.
+		// userId/roleId bắt buộc — getActorContext + admin layout tra quyền qua 2
+		// field này; thiếu là 401 "Session expired" ở API lẫn redirect ở trang admin.
+		// roleName tra từ name_roles theo roleId (admin layout + PermissionChecker
+		// keyof theo roleName, vd 'owner'); tra fail → fallback roleId để không
+		// khoá user vì lỗi tạm thời (PermissionChecker sẽ trả false nếu không khớp).
+		let roleName: string | undefined;
+		try {
+			const res = await cbRoles.document.get({ documentKey: payload.roleId });
+			if (res.ok && res.data) roleName = (res.data as { name?: string }).name ?? undefined;
+		} catch {
+			roleName = undefined;
+		}
+
 		const user: MetaUser = {
 			firstName: payload.username,
 			lastName: '',
@@ -50,7 +73,10 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 			email: '',
 			username: payload.username,
 			password: '', // Don't expose password
-			role: payload.roleId.includes('owner') ? 'admin' : payload.roleId.includes('manager') ? 'staff' : 'customer'
+			role: payload.roleId.includes('owner') ? 'admin' : payload.roleId.includes('manager') ? 'staff' : 'customer',
+			userId: payload.sub,
+			roleId: payload.roleId,
+			roleName: roleName ?? payload.roleId
 		};
 
 		return user;
@@ -66,7 +92,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Defensive check — nếu vì lý do gì đó vault chưa sẵn sàng (init lỗi/đang chạy),
 	// từ chối sớm thay vì để lỗi mơ hồ xảy ra sâu bên trong từng route
-	if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {
+	if (!vaultReady()) {
 		return new Response('Service unavailable — system initializing', { status: 503 });
 	}
 

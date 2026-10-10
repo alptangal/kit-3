@@ -276,3 +276,108 @@ export const management: ManagementMessages = {
 		}
 	}
 };
+
+// MỚI — messages cho mảng nghiệp vụ orders (đơn hàng) + customers (khách hàng).
+// Const rời (không tự sinh từ cbData) như pattern của users/products — service
+// tham chiếu qua identity (===) để statusForServiceFailure map HTTP status.
+export const orders: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy đơn hàng',
+		en: 'Order not found'
+	},
+	queryFailed: {
+		vi: 'Lấy danh sách đơn hàng thất bại',
+		en: 'Failed to fetch order list'
+	},
+	createFailed: {
+		vi: 'Tạo đơn hàng thất bại',
+		en: 'Failed to create order'
+	},
+	updateFailed: {
+		vi: 'Cập nhật đơn hàng thất bại',
+		en: 'Failed to update order'
+	},
+	deleteFailed: {
+		vi: 'Xoá đơn hàng thất bại',
+		en: 'Failed to delete order'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	variantNotFound: {
+		vi: 'Không tìm thấy biến thể sản phẩm trong đơn',
+		en: 'Product variant not found'
+	},
+	itemsRequired: {
+		vi: 'Đơn hàng cần ít nhất 1 sản phẩm',
+		en: 'Order requires at least one item'
+	},
+	customerRequired: {
+		vi: 'Đơn hàng cần chọn khách hàng',
+		en: 'Order requires a customer'
+	},
+	invalidStatus: {
+		vi: 'Trạng thái đơn hàng không hợp lệ',
+		en: 'Invalid order status'
+	},
+	invalidStatusTransition: {
+		vi: 'Không thể chuyển sang trạng thái này',
+		en: 'Invalid status transition'
+	},
+	statusUpdated: {
+		vi: 'Cập nhật trạng thái đơn hàng thành công',
+		en: 'Order status updated successfully'
+	},
+	statsFailed: {
+		vi: 'Lấy thống kê đơn hàng thất bại',
+		en: 'Failed to fetch order statistics'
+	},
+	customerNotFound: {
+		vi: 'Không tìm thấy khách hàng',
+		en: 'Customer not found'
+	}
+};
+
+export const customers: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy khách hàng',
+		en: 'Customer not found'
+	},
+	queryFailed: {
+		vi: 'Lấy danh sách khách hàng thất bại',
+		en: 'Failed to fetch customer list'
+	},
+	createFailed: {
+		vi: 'Tạo khách hàng thất bại',
+		en: 'Failed to create customer'
+	},
+	updateFailed: {
+		vi: 'Cập nhật khách hàng thất bại',
+		en: 'Failed to update customer'
+	},
+	deleteFailed: {
+		vi: 'Xoá khách hàng thất bại',
+		en: 'Failed to delete customer'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	statusNotFound: {
+		vi: 'Trạng thái không tồn tại trong hệ thống',
+		en: 'Status does not exist'
+	},
+	invalidStatus: {
+		vi: 'Trạng thái tài khoản không hợp lệ',
+		en: 'Invalid account status'
+	},
+	statusUpdated: {
+		vi: 'Cập nhật trạng thái khách hàng thành công',
+		en: 'Customer status updated successfully'
+	},
+	vaultUninitialized: {
+		vi: 'Hệ thống chưa khởi tạo kho mã hoá (systemVault)',
+		en: 'System vault has not been initialized'
+	}
+};
