@@ -27,3 +27,6 @@ dev-server-run.log
 dev-server.err.log
 last_ssr_error.log
 playwright-report/
+
+# Ảnh ad-hoc cho ui-checker sinh mỗi lần chạy probe (không track; test-results/ đợt audit cũ vẫn giữ)
+test-results/ui-check/
