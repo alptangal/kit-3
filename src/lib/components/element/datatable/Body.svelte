@@ -461,14 +461,22 @@
 			background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 12%, var(--content1, #fff));
 		}
 
-		// Hover highlight CHỈ khi hoverable (visual.hoverable) — guard PC.
-		@media (hover: hover) and (pointer: fine) {
-			&:hover .datatable-td {
-				background: var(--content2, hsl(240 4.76% 95.88%));
-			}
-			&.selected:hover .datatable-td {
-				background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 18%, var(--content1, #fff));
-			}
+		// Mobile: dòng đang expand action bar — highlight nhẹ (primary mix)
+		// để user biết bar dưới nó thuộc dòng nào (bar nền content1 đặc).
+		&.row-expanded .datatable-td {
+			background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 8%, var(--content1, #fff));
+		}
+	}
+
+	// Hover highlight CHỈ khi hoverable (visual.hoverable) — guard PC.
+	// .hoverable nằm trên root (render bởi Main.svelte — scope hash khác
+	// Body) nên phải match qua :global như pattern bordered-columns.
+	@media (hover: hover) and (pointer: fine) {
+		:global(.datatable-root.hoverable) .datatable-row:hover .datatable-td {
+			background: var(--content2, hsl(240 4.76% 95.88%));
+		}
+		:global(.datatable-root.hoverable) .datatable-row.selected:hover .datatable-td {
+			background: color-mix(in srgb, var(--primary, var(--color-indigo-500)) 18%, var(--content1, #fff));
 		}
 	}
 
@@ -668,6 +676,15 @@
 	}
 
 	.datatable-mobile-actions {
+		// B14: bar nằm trong <td colspan> trải theo table width — khi table
+		// nhiều cột rộng hơn viewport (vd products 7 cột = 413px > 375px),
+		// block fill-full-width khiến nút bị đẩy ra ngoài vùng nhìn thấy.
+		// fit-content hút div về nội dung (nút không tràn); sticky pin vào
+		// mép trái vùng cuộn để bar vẫn hiển thị khi user cuộn table ngang.
+		position: sticky;
+		left: 0;
+		width: fit-content;
+		max-width: 100%;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
