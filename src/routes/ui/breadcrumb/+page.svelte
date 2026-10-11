@@ -110,6 +110,7 @@
 		<p class="demo-hint">
 			7 hạng nhưng <code>maxItems={3}</code> → giữ hạng đầu + hạng cuối, gộp 4 hạng giữa
 			thành nút <code>…</code>. Bấm <code>…</code> để mở menu chọn hạng trung gian.
+			Mobile (≤768px): chỉ hiện 2 cấp gần nhất, các cấp cao hơn vào <code>…</code>.
 		</p>
 		<Breadcrumb
 			maxItems={3}

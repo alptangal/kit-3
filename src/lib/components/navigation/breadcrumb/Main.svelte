@@ -60,10 +60,29 @@
 	type EllipsisEntry = { kind: 'ellipsis'; items: BreadcrumbItem[] };
 	type VisibleEntry = ItemEntry | EllipsisEntry;
 
-	// maxItems: giữ item đầu + (maxItems - 1) item cuối, gộp phần giữa thành "…".
+	// Mobile (<768px — cùng breakpoint Sidebar Provider): chỉ hiện 2 cấp gần nhất
+	// (current + cha trực tiếp); mọi cấp cao hơn gộp vào nút "…" (DropdownMenu),
+	// thứ tự menu TỪ CAO ĐẾN THẤP (gốc → gần current). maxItems 768px+ giữ nguyên.
+	let isMobile = $state(false);
+	$effect(() => {
+		const mq = window.matchMedia('(max-width: 768px)');
+		const update = () => (isMobile = mq.matches);
+		update();
+		mq.addEventListener('change', update);
+		return () => mq.removeEventListener('change', update);
+	});
+
 	const visible = $derived.by<VisibleEntry[]>(() => {
 		const all = derivedItems;
 		const n = all.length;
+		// Mobile: "…" (toàn bộ cấp cao hơn, thứ tự cao→thấp) + 2 cấp gần nhất.
+		if (isMobile && n > 2) {
+			return [
+				{ kind: 'ellipsis', items: all.slice(0, n - 2) },
+				{ kind: 'item', item: all[n - 2], current: false },
+				{ kind: 'item', item: all[n - 1], current: true }
+			];
+		}
 		const max = props.maxItems;
 		if (max && n > max) {
 			const tailCount = Math.max(1, max - 1);

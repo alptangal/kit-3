@@ -60,12 +60,25 @@
 	font-size: var(--breadcrumb-font);
 }
 
-/* Icon trước label của item (iconify) */
-.breadcrumb-item-icon {
+/* Icon trước label của item (iconify). LƯU Ý: class nằm trên span con của
+   component Icon (hash riêng) → scoped CSS breadcrumb không reach (chết) →
+   :global() như precedent .breadcrumb-ellipsis-trigger. svg con phải :global
+   RIÊNG (lồng svg trong :global() vẫn bị scope hash → svg của Icon không có
+   hash breadcrumb → chết). Tailwind preflight đặt svg{display:block} →
+   neutralize inline-block để icon + label cùng 1 row. */
+:global(.breadcrumb-item-icon) {
 	flex-shrink: 0;
 	display: inline-flex;
 	align-items: center;
+	vertical-align: middle;
 	color: var(--muted, var(--foreground));
+}
+
+:global(.breadcrumb-item-icon svg) {
+	display: inline-block;
+	width: 1em;
+	height: 1em;
+	vertical-align: middle;
 }
 
 .breadcrumb-link {
@@ -73,6 +86,12 @@
 	text-decoration: none;
 	line-height: 1.4;
 	padding: 0.125rem 0;
+	/* icon + label cùng 1 row (fix 2-row): Icon span con không flex container →
+	   gom text-node label vào anonymous box cùng icon qua inline-flow; biến
+	   link thành flex sẽ gộp mọi inline con thành 1 dòng duy nhất. */
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375rem;
 	border-radius: var(--border-radius-sm, 0.25rem);
 	transition: color var(--transition-duration, 300ms) cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -95,6 +114,9 @@
 	font-weight: 500;
 	line-height: 1.4;
 	padding: 0.125rem 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375rem;
 }
 
 /* Nút "…" (ellipsis) — là DropdownMenu.Trigger (component riêng, root button mang

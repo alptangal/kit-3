@@ -149,7 +149,34 @@ const bc8 = await page.evaluate(() => {
 });
 ok('BC8 external target=_blank rel=noopener', bc8.found && bc8.target === '_blank' && (bc8.rel ?? '').includes('noopener'), JSON.stringify(bc8));
 
-// ---- Screenshots (cho ui-checker) ----
+// BC3x — icon + label CÙNG 1 ROW (fix 2-row): icon nằm trọn trong bounds dọc
+// của link (align-items:center → icon top ≠ link top là BÌNH THƯỜNG, lệch
+// đúng (linkH-iconH)/2). 2-row cũ: icon rơi xuống dòng → icon bottom vượt link
+// bottom. LƯU Ý: flex item bị blockify (spec) → computed display của icon/svg
+// là flex/block dù rule là inline-flex/inline-block — KHÔNG assert display.
+await page.waitForSelector('[data-test="bc-icon"] .breadcrumb-item-icon svg', { timeout: 8000 });
+const bc3x = await page.evaluate(() => {
+	const sec = document.querySelector('[data-test="bc-icon"]');
+	const links = [...sec.querySelectorAll('.breadcrumb-link')];
+	return links.map((l) => {
+		const icon = l.querySelector('.breadcrumb-item-icon');
+		if (!icon) return { noIcon: true };
+		const i = icon.getBoundingClientRect();
+		const r = l.getBoundingClientRect();
+		return {
+			sameRow: i.top >= r.top - 1 && i.bottom <= r.bottom + 1,
+			linkH: Math.round(r.height),
+			iconH: Math.round(i.height)
+		};
+	});
+});
+ok(
+	'BC3x icon + label cùng 1 row (icon trong bounds dọc link, link 1 hàng ~24px)',
+	bc3x.length >= 2 && bc3x.every((r) => r.sameRow && !r.noIcon && r.linkH < 30),
+	JSON.stringify(bc3x)
+);
+
+// ---- Mobile (≤768px): 2 cấp gần nhất + more menu "…" ----
 import { mkdirSync } from 'node:fs';
 const shotDir = 'tests/screenshot/breadcrumb';
 mkdirSync(shotDir, { recursive: true });
@@ -157,6 +184,93 @@ await page.locator('[data-test="breadcrumb-demo"] section.demo').nth(0).screensh
 await page.locator('[data-test="bc-icon"]').screenshot({ path: `${shotDir}/02-icon-description.png` });
 await page.locator('[data-test="bc-separator"]').screenshot({ path: `${shotDir}/03-separator.png` });
 await page.locator('[data-test="bc-ellipsis"]').screenshot({ path: `${shotDir}/04-ellipsis.png` });
+
+const mbrowser = await chromium.launch({ args: ['--ignore-certificate-errors'] });
+const mctx = await mbrowser.newContext({
+	ignoreHTTPSErrors: true,
+	viewport: { width: 375, height: 700 },
+	hasTouch: true,
+	isMobile: true
+});
+const mpage = await mctx.newPage();
+mpage.on('pageerror', (e) => console.log('PAGEERROR(m):', e.message));
+await mpage.goto('https://localhost:3000/ui/breadcrumb', { waitUntil: 'domcontentloaded' });
+await mpage.waitForSelector('[data-test="bc-ellipsis"] .breadcrumb-root', { timeout: 20000 });
+await sleep(500);
+
+// BC10 — section bc-ellipsis (7 cấp): mobile branch slice(0, n-2) →
+// DOM entry = "…" + 2 cấp gần nhất (Lượt chạy + build-1287) = 3 entry.
+// (maxItems=3 chỉ áp desktop — mobile quy tắc riêng: luôn "…" + 2 cấp gần nhất
+// kể cả khi maxItems nhỏ hơn — ưu tiên đọc được current + cha.)
+const bc10 = await mpage.evaluate(() => {
+	const sec = document.querySelector('[data-test="bc-ellipsis"]');
+	const items = [...sec.querySelectorAll('.breadcrumb-item')];
+	const trigger = sec.querySelector('.breadcrumb-ellipsis-trigger');
+	const labels = items.map((i) => i.textContent.trim());
+	return { count: items.length, labels, hasTrigger: !!trigger };
+});
+ok(
+	'BC10 mobile 7 cấp → "…" + 2 cấp gần nhất (3 entry)',
+	bc10.count === 3 && bc10.hasTrigger && bc10.labels[0] === '…' && bc10.labels[1] === 'Lượt chạy' && bc10.labels[2] === 'build-1287',
+	JSON.stringify(bc10)
+);
+
+// BC11 — menu "…" mobile: thứ tự CAO→THẤP (Trang chủ → Dự án), 5 item
+const bc11 = await (async () => {
+	await mpage.locator('[data-test="bc-ellipsis"] .breadcrumb-ellipsis-trigger').click();
+	await sleep(400);
+	return mpage.evaluate(() => {
+		const content = document.querySelector('.dropdown-menu-content');
+		return content
+			? [...content.querySelectorAll('[data-dm-item]')].map((e) => e.textContent.trim())
+			: [];
+	});
+})();
+const expected = ['Trang chủ', 'Khu vực', 'Tổ chức', 'Nhóm', 'Dự án'];
+ok(
+	'BC11 mobile menu "…": 5 item, thứ tự cao→thấp',
+	JSON.stringify(bc11) === JSON.stringify(expected),
+	JSON.stringify(bc11)
+);
+
+// BC12 — mobile breadcrumb gọn: nav width ≤ viewport
+const bc12 = await mpage.evaluate(() => {
+	const nav = document.querySelector('[data-test="bc-ellipsis"] .breadcrumb-root');
+	const r = nav.getBoundingClientRect();
+	return { navWidth: Math.round(r.width), vw: window.innerWidth };
+});
+ok('BC12 mobile nav không tràn viewport', bc12.navWidth <= bc12.vw, JSON.stringify(bc12));
+
+// Screenshots mobile (cho ui-checker)
+// BC11 đã click mở menu (check menu) — Escape ĐÓNG menu TRƯỚC khi chụp 05,
+// nếu không 05 chụp lúc menu còn mở (state leak) và click cho 06 thực chất
+// ĐÓNG menu (trigger click = toggle) → 06 mất menu.
+await mpage.keyboard.press('Escape');
+await sleep(400);
+// 05: section bc-ellipsis TRƯỚC khi click (đúng 3 entry, chưa có menu)
+await mpage.locator('[data-test="bc-ellipsis"]').scrollIntoViewIfNeeded();
+await sleep(400);
+await mpage
+	.locator('[data-test="bc-ellipsis"]')
+	.screenshot({ path: `${shotDir}/05-mobile-ellipsis.png` });
+// 06: click mở menu → chụp VIEWPORT (bẫy đã gặp: element screenshot cắt phần
+// menu vượt bounds section — menu flip lên khi section sát đáy viewport).
+// Cuộn section vào GIỮA viewport trước → menu mở XUỐNG đủ chỗ, toàn viewport
+// chứa đủ menu + breadcrumb.
+await mpage
+	.locator('[data-test="bc-ellipsis"]')
+	.evaluate((el) => {
+		const r = el.getBoundingClientRect();
+		window.scrollBy(0, r.top - window.innerHeight / 2 + r.height / 2);
+	});
+await sleep(300);
+await mpage.locator('[data-test="bc-ellipsis"] .breadcrumb-ellipsis-trigger').click();
+await sleep(500);
+await mpage.screenshot({ path: `${shotDir}/06-mobile-menu.png` });
+await mpage.keyboard.press('Escape');
+await sleep(300);
+
+await mbrowser.close();
 
 // ---- Tổng kết ----
 const passed = results.filter((r) => r.pass).length;
