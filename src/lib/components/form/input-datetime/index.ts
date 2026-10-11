@@ -12,6 +12,10 @@ export type { InputDatetimeProps, InputDatetimeConfigs } from './_interface';
 export const defaultValidation: {
 	/** required: isValid = đủ ô + tháng/ngày/giờ/phút hợp lệ (ngày theo tháng, năm nhuận). */
 	required: (fieldName?: string, dateOnly?: boolean) => ValidationFull;
+	/** minDate: value ISO ≥ bound (so ngày-tháng-năm; time chỉ so khi cả 2 có giờ). */
+	minDate: (min: string, fieldName?: string) => ValidationFull;
+	/** maxDate: value ISO ≤ bound. */
+	maxDate: (max: string, fieldName?: string) => ValidationFull;
 } = {
 	required: (fieldName, dateOnly) => {
 		return {
@@ -29,6 +33,55 @@ export const defaultValidation: {
 				valid: {
 					en: `${fieldName ?? 'Date'} is valid`,
 					vi: `${fieldName ?? 'Ngày'} hợp lệ`
+				}
+			}
+		};
+	},
+	// ── Pha 3 (B4): validate khoảng ngày — mirror minNumber/maxNumber của
+	// form/input (message theo pattern; KHÔNG snap như minYear/maxYear — snap
+	// thay đổi input user, validate chỉ BÁO LỖI).
+	minDate(min, fieldName) {
+		return {
+			// So sánh CHUỔI ISO an toàn cho mốc date-only: value `2024-01-05T00:00`
+			// so bound `2024-01-05` — so trực tiếp chuỗi sẽ sai (T > mọi ký tự số…
+			// thực tế so lexical vẫn đúng chiều vì prefix khớp → so phần thời gian
+			// như 00:00). Dùng so theo NGÀY (10 ký tự đầu) để nhất quán: cùng ngày
+			// → pass (time tự do); khác ngày → lexical so đúng `YYYY-MM-DD`.
+			isValid(input?: string | boolean | string[] | File[]) {
+				// RỖNG (< 10 ký tự) → PASS: chưa nhập thì chưa sai khoảng (required
+				// bắt lỗi thiếu riêng nếu có) — tránh viền đỏ trên field trống.
+				if (typeof input !== 'string' || input.length < 10) return true;
+				if (!InputDatetimeIsValidIso(input, false) && !InputDatetimeIsValidIso(input, true)) return false;
+				return input.slice(0, 10) >= min.slice(0, 10);
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'} must be on or after ${min.slice(0, 10)}`,
+					vi: `${fieldName ?? 'Trường này'} phải từ ${min.slice(0, 10)} trở đi`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'} is valid min date=${min.slice(0, 10)}`,
+					vi: `${fieldName ?? 'Trường này'} hợp lệ từ ${min.slice(0, 10)}`
+				}
+			}
+		};
+	},
+	maxDate(max, fieldName) {
+		return {
+			isValid(input?: string | boolean | string[] | File[]) {
+				// RỖNG → PASS (mirror minDate)
+				if (typeof input !== 'string' || input.length < 10) return true;
+				if (!InputDatetimeIsValidIso(input, false) && !InputDatetimeIsValidIso(input, true)) return false;
+				return input.slice(0, 10) <= max.slice(0, 10);
+			},
+			message: {
+				invalid: {
+					en: `${fieldName ?? 'this field'} must be on or before ${max.slice(0, 10)}`,
+					vi: `${fieldName ?? 'Trường này'} phải đến ${max.slice(0, 10)} trở lại`
+				},
+				valid: {
+					en: `${fieldName ?? 'this field'} is valid max date=${max.slice(0, 10)}`,
+					vi: `${fieldName ?? 'Trường này'} hợp lệ đến ${max.slice(0, 10)}`
 				}
 			}
 		};

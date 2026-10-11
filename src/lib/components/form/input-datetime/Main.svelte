@@ -262,8 +262,13 @@
 		value: '',
 		name: stableName,
 		get loading() {
-			// Form loading indicator: true khi validation đang 'pending'
-			return configs.required && configs.validation.isValid === 'pending';
+			// Form loading indicator: true khi validation đang 'pending' (B4: bất kỳ
+			// validator nào required/minDate/maxDate). Boolean() ép chuỗi min/max
+			// → boolean (tránh type string rò vào configs.loading).
+			return (
+				Boolean(configs.required || configs.minDate || configs.maxDate) &&
+				configs.validation.isValid === 'pending'
+			);
 		},
 		status: {
 			focus: false,
@@ -290,9 +295,9 @@
 			if (props.color) return props.color;
 			// Khi đang pending (debounce chạy) → trung tính
 			if (configs.loading) return 'default';
-			// Có validator (required): đổi màu chỉ khi ĐÃ trigger (messages populate
-			// — mirror textarea), tránh màu pending trên pristine field.
-			if (props.required) {
+			// Có validator (required/minDate/maxDate): đổi màu chỉ khi ĐÃ trigger
+			// (messages populate — mirror textarea), tránh màu pending trên pristine field.
+			if (props.required || props.minDate || props.maxDate) {
 				const messages = configs.validation.messages;
 				if (messages && messages.size > 0) {
 					return configs.validation.isValid ? 'success' : 'error';
@@ -331,12 +336,19 @@
 		get maxYear() {
 			return props.maxYear;
 		},
+		get minDate() {
+			return props.minDate;
+		},
+		get maxDate() {
+			return props.maxDate;
+		},
 		validation: {
 			_isValid: undefined as undefined | boolean | 'pending',
 			get isValid() {
 				// Programmatic reset → chưa validate → hợp lệ (trả true)
 				if (_justReset) return true;
-				if (configs.required) {
+				// B4: có BẤT KỲ validator nào (required/minDate/maxDate) → pending
+				if (configs.required || configs.minDate || configs.maxDate) {
 					if (this._isValid === undefined) return 'pending';
 					return this._isValid;
 				}
@@ -388,8 +400,11 @@
 			_justReset = false;
 			return;
 		}
-		// Không có validator nào → skip (không validate, giữ neutral)
-		if (!configs.required) return;
+		// Không có validator nào → skip (không validate, giữ neutral). Pha 3 (B4):
+		// minDate/maxDate cũng kích hoạt validation (field không required nhưng
+		// có khoảng ngày vẫn phải báo lỗi khi sai) — chỉ skip nếu KHÔNG có validator
+		// nào trong [required, minDate, maxDate].
+		if (!configs.required && !configs.minDate && !configs.maxDate) return;
 
 		if (!configs.timeId) configs.timeId = new Map();
 		const name = 'timeout-validation';
@@ -398,16 +413,38 @@
 		configs.timeId.set(
 			name,
 			setTimeout(async () => {
-				// dateOnly: field hideTime sinh value `YYYY-MM-DD` — validator phải
-				// kiểm theo đúng dạng đó (regex đầy đủ T..:.. sẽ từ chối tất cả).
-				const validator: ValidationFull = defaultValidation.required(configs.name, hideTime);
-				const rs = (await validator.isValid(current)) as boolean;
+				// Mảng validators theo pattern operator-and của form/input (Main.svelte
+				// 639-700): mỗi validator set message theo KEY riêng vào messages map,
+				// isValid tổng = TẤT CẢ pass. Key riêng để FieldMessages hiện đúng lỗi
+				// cụ thể (required vs min-date vs max-date) thay vì 1 message chung.
+				// dateOnly: field hideTime sinh value `YYYY-MM-DD` — validator required
+				// phải kiểm theo đúng dạng đó (regex đầy đủ T..:.. từ chối tất cả).
+				const validators: Array<{ key: string; run: ValidationFull | undefined }> = [
+					{
+						key: 'required',
+						run: configs.required ? defaultValidation.required(configs.name, hideTime) : undefined
+					},
+					{
+						key: 'min-date',
+						run: configs.minDate ? defaultValidation.minDate(configs.minDate, configs.name) : undefined
+					},
+					{
+						key: 'max-date',
+						run: configs.maxDate ? defaultValidation.maxDate(configs.maxDate, configs.name) : undefined
+					}
+				];
+				let allValid = true;
 				if (!configs.validation.messages) configs.validation.messages = new SvelteMap();
-				configs.validation.isValid = rs;
-				configs.validation.messages.set('required', {
-					content: rs ? validator.message?.valid : validator.message?.invalid,
-					kind: rs ? 'valid' : 'invalid'
-				});
+				for (const { key, run } of validators) {
+					if (!run) continue;
+					const rs = (await run.isValid(current)) as boolean;
+					if (!rs) allValid = false;
+					configs.validation.messages.set(key, {
+						content: rs ? run.message?.valid : run.message?.invalid,
+						kind: rs ? 'valid' : 'invalid'
+					});
+				}
+				configs.validation.isValid = allValid;
 			}, configs.delay ?? client.browser?.delay ?? 300)
 		);
 	});
@@ -604,13 +641,33 @@
 	})();
 	let pickerDate = $state<Date | null>(pickerDateInit);
 	let pickerOpen = $state(false);
-	// min/max panel từ minYear/maxYear (chặn select ngoài khoảng — year-only)
-	const pickerMin = $derived(
-		configs.minYear !== undefined ? new Date(configs.minYear, 0, 1) : undefined
-	);
-	const pickerMax = $derived(
-		configs.maxYear !== undefined ? new Date(configs.maxYear, 11, 31) : undefined
-	);
+	// min/max panel: GIAO của minYear/maxYear (year-only) và minDate/maxDate
+	// (B4) — lấy bound CHẶT HƠN (min = lớn hơn trong 2 cận dưới, max = nhỏ hơn
+	// trong 2 cận trên) để panel chặn select đúng khoảng validation.
+	const pickerMin = $derived.by(() => {
+		let d: Date | undefined = configs.minYear !== undefined ? new Date(configs.minYear, 0, 1) : undefined;
+		if (configs.minDate) {
+			const md = new Date(
+				Number(configs.minDate.slice(0, 4)),
+				Number(configs.minDate.slice(5, 7)) - 1,
+				Number(configs.minDate.slice(8, 10))
+			);
+			if (!d || md > d) d = md;
+		}
+		return d;
+	});
+	const pickerMax = $derived.by(() => {
+		let d: Date | undefined = configs.maxYear !== undefined ? new Date(configs.maxYear, 11, 31) : undefined;
+		if (configs.maxDate) {
+			const md = new Date(
+				Number(configs.maxDate.slice(0, 4)),
+				Number(configs.maxDate.slice(5, 7)) - 1,
+				Number(configs.maxDate.slice(8, 10))
+			);
+			if (!d || md < d) d = md;
+		}
+		return d;
+	});
 
 	// A: value ISO → pickerDate
 	$effect(() => {

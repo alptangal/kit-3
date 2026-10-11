@@ -35,6 +35,11 @@ export interface InputDatetimeProps extends BasicProps {
 	minYear?: number;
 	/** Năm lớn nhất user nhập được (snap khi vượt) + giới hạn panel lịch. */
 	maxYear?: number;
+	/** Ngày nhỏ nhất hợp lệ (ISO `YYYY-MM-DD` hoặc `YYYY-MM-DDTHH:MM`) — VALIDATION
+	 *  (báo lỗi, KHÔNG snap như minYear) + giới hạn panel lịch. */
+	minDate?: string;
+	/** Ngày lớn nhất hợp lệ (ISO) — validation + giới hạn panel lịch. */
+	maxDate?: string;
 	size?: Size;
 	color?: Color;
 	duration?: TimeUnits;
@@ -55,6 +60,9 @@ export interface InputDatetimeConfigs extends Omit<BasicConfigs, 'status' | 'val
 	datePicker?: boolean;
 	minYear?: number;
 	maxYear?: number;
+	/** Ngày giới hạn validation (ISO) — mirror props (panel lịch + validator). */
+	minDate?: string;
+	maxDate?: string;
 	size: Size;
 	color: Color;
 	disabled?: boolean;

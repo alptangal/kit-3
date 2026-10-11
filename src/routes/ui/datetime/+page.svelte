@@ -31,6 +31,9 @@
 	// ── Snap cross-field (2/2000 → 29 · 2/2001 → 28) ──
 	let clampValue = $state('');
 
+	// ── Pha 3 (B4): validate khoảng ngày minDate/maxDate (báo lỗi, KHÔNG snap) ──
+	let minmaxValue = $state('');
+
 	// bind parent: value cha đọc được trực tiếp (ISO string)
 	const parentEcho = $derived(dateValue || 'chưa có giá trị');
 
@@ -45,6 +48,7 @@
 		formatValue = '';
 		pickerValue = '';
 		clampValue = '';
+		minmaxValue = '';
 	}
 </script>
 
@@ -216,6 +220,30 @@
 			Gõ <code>dd/mm/2000</code> ngày 31 → snap 29 (năm nhuận); <code>2001</code> → 28. Tháng
 			<code>00</code> → 01, <code>13</code> → 12. Năm <code>1899</code> → 1900, <code>9999</code>
 			→ 2030. Value: <code data-test="dt-clamp-echo">{clampValue || 'chưa có'}</code>
+		</p>
+	</section>
+
+	<!-- Pha 3 (B4): minDate/maxDate — validation khoảng ngày (mirror minNumber/maxNumber) -->
+	<section class="demo" data-test="dt-minmax">
+		<h2>minDate / maxDate — validate khoảng ngày (không snap)</h2>
+		<TextField name="dt-minmax">
+			<Label>Ngày hẹn (2024-06-01 → 2024-06-30)</Label>
+			<InputDatetime
+				bind:value={minmaxValue}
+				clearable
+				hideTime
+				format="dmy"
+				datePicker
+				minDate="2024-06-01"
+				maxDate="2024-06-30"
+				aria-label="Ngày hẹn demo minDate/maxDate"
+			/>
+			<FieldMessages showValid />
+		</TextField>
+		<p class="demo-hint">
+			Khác <code>minYear/maxYear</code> (snap khi gõ), <code>minDate/maxDate</code> chỉ
+			<b> báo lỗi</b>: ngày ngoài 01–30/06/2024 → invalid (picker cũng chặn select ngoài
+			khoảng). Value: <code data-test="dt-minmax-echo">{minmaxValue || 'chưa có'}</code>
 		</p>
 	</section>
 

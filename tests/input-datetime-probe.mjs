@@ -423,6 +423,106 @@ const run = async () => {
 		log('R5 · required thiếu ngày → aria-invalid sau debounce', invalid > 0, `invalid=${invalid}`);
 	}
 
+	// ═══ B4 (Pha 3): minDate/maxDate — validate khoảng ngày (KHÔNG snap) ═══
+	// MM1: gõ ngày TRƯỚC minDate (15/05/2024) → aria-invalid + message min-date
+	{
+		await clearIfVisible(page, 'dt-minmax');
+		await typeSegments(page, 'dt-minmax', ['15', '05', '2024']);
+		await page.waitForTimeout(700);
+		const invalid = await page
+			.locator('[data-test="dt-minmax"] .dt-box[aria-invalid="true"]')
+			.count();
+		const msg = (
+			(await page
+				.locator('[data-test="dt-minmax"] [data-kind="invalid"], [data-test="dt-minmax"] .invalid, [data-test="dt-minmax"] .error')
+				.allTextContents()) ?? []
+		).join(' ');
+		log(
+			'MM1 · 15/05/2024 < minDate 01/06 → invalid',
+			invalid > 0,
+			`invalid=${invalid} msg="${msg.slice(0, 80)}"`
+		);
+	}
+	// MM2: ngày TRONG khoảng (15/06/2024) → không aria-invalid + message valid
+	{
+		await clearIfVisible(page, 'dt-minmax');
+		await typeSegments(page, 'dt-minmax', ['15', '06', '2024']);
+		await page.waitForTimeout(700);
+		const invalid = await page
+			.locator('[data-test="dt-minmax"] .dt-box[aria-invalid="true"]')
+			.count();
+		log('MM2 · 15/06/2024 trong khoảng → valid', invalid === 0, `invalid=${invalid}`);
+	}
+	// MM3: ngày SAU maxDate (31/07/2024) → aria-invalid (max-date)
+	{
+		await clearIfVisible(page, 'dt-minmax');
+		await typeSegments(page, 'dt-minmax', ['31', '07', '2024']);
+		await page.waitForTimeout(700);
+		const invalid = await page
+			.locator('[data-test="dt-minmax"] .dt-box[aria-invalid="true"]')
+			.count();
+		log('MM3 · 31/07/2024 > maxDate 30/06 → invalid', invalid > 0, `invalid=${invalid}`);
+	}
+	// MM5 (ngay sau MM3, trước khi MM4 xóa field): KHÔNG snap — value giữ
+	// nguyên 31/07 (khác minYear/maxYear snap giá trị khi gõ)
+	{
+		const echo = await readEcho(page, 'dt-minmax-echo');
+		log('MM5 · không snap: 31/07/2024 giữ nguyên', echo === '2024-07-31', `echo=${echo}`);
+	}
+	// MM4: biên min (01/06/2024) + biên max (30/06/2024) → đều valid
+	{
+		await clearIfVisible(page, 'dt-minmax');
+		await typeSegments(page, 'dt-minmax', ['01', '06', '2024']);
+		await page.waitForTimeout(700);
+		const invalidMin = await page
+			.locator('[data-test="dt-minmax"] .dt-box[aria-invalid="true"]')
+			.count();
+		await clearIfVisible(page, 'dt-minmax');
+		await typeSegments(page, 'dt-minmax', ['30', '06', '2024']);
+		await page.waitForTimeout(700);
+		const invalidMax = await page
+			.locator('[data-test="dt-minmax"] .dt-box[aria-invalid="true"]')
+			.count();
+		log(
+			'MM4 · biên 01/06 + 30/06 đều valid',
+			invalidMin === 0 && invalidMax === 0,
+			`min=${invalidMin} max=${invalidMax}`
+		);
+	}
+	// MM6: picker chặn select ngoài khoảng — cell tháng 7/2024 aria-disabled
+	{
+		await clearIfVisible(page, 'dt-minmax');
+		// Mở panel qua nút picker (.dt-picker trong field)
+		await page.locator('[data-test="dt-minmax"] .dt-picker').click();
+		await page.waitForTimeout(300);
+		// Navigate tới "Tháng 7, 2024": panel mở ở tháng HIỆN TẠI (value rỗng →
+		// seed hiện tại, 10/2026 hôm nay) → 7/2024 là QUÁ KHỨ → bấm prev; nhưng
+		// viết hướng-động: parse label "Tháng M, YYYY" rồi chọn prev/next theo
+		// khoảng cách, max 36 lần (an toàn mọi mốc test trong tương lai).
+		const labelLoc = page.locator('[data-test="dt-minmax"] [data-dp-month-label]');
+		const prevBtn = page.locator('[data-test="dt-minmax"] [data-dp-prev]');
+		const nextBtn = page.locator('[data-test="dt-minmax"] [data-dp-next]');
+		let monthLabel = ((await labelLoc.textContent()) ?? '').trim();
+		for (let i = 0; i < 36 && monthLabel !== 'Tháng 7, 2024'; i++) {
+			const m = monthLabel.match(/Tháng (\d+), (\d+)/);
+			if (!m) break;
+			const cur = Number(m[2]) * 12 + (Number(m[1]) - 1);
+			const target = 2024 * 12 + 6; // Tháng 7, 2024
+			await (cur > target ? prevBtn : nextBtn).click();
+			await page.waitForTimeout(100);
+			monthLabel = ((await labelLoc.textContent()) ?? '').trim();
+		}
+		const disabledCells = await page
+			.locator('[data-test="dt-minmax"] .date-picker-day[aria-disabled="true"]')
+			.count();
+		log(
+			'MM6 · picker tháng 7/2024: cell ngoài khoảng disabled',
+			monthLabel === 'Tháng 7, 2024' && disabledCells >= 30,
+			`label="${monthLabel}" disabledCells=${disabledCells}`
+		);
+	}
+
+
 	await browser.close();
 
 	const failed = results.filter((r) => !r.pass);
