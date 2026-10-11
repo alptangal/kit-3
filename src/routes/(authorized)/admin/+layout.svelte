@@ -178,6 +178,12 @@
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.75rem 1.5rem;
+
+		/* Mobile: bỏ padding-inline — tiết kiệm chiều ngang 375px (yêu cầu user,
+		   đồng bộ inset header demo /ui/sidebar). padding-block giữ. */
+		@media (max-width: 767px) {
+			padding-inline: 0.5rem;
+		}
 	}
 
 	/* Mobile: hiện nút mở sidebar trong inset header. Desktop ẩn (trigger-row

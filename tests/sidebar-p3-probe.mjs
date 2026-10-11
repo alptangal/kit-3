@@ -37,13 +37,15 @@ await page.waitForSelector('.sidebar-aside', { timeout: 20000 });
 await sleep(400);
 
 // Helper: collapse rồi chờ transition + di chuột ra khỏi aside (để peek rơi).
+// .first(): demo có 2 trigger (sidebar header + inset mobile-trigger — desktop
+// inset trigger display:none nhưng vẫn trong DOM → strict mode fail).
 async function collapse() {
-	await page.locator('.sidebar-trigger').click();
+	await page.locator('.sidebar-trigger').first().click();
 	await page.mouse.move(700, 500);
 	await sleep(500);
 }
 async function expand() {
-	await page.locator('.sidebar-trigger').click();
+	await page.locator('.sidebar-trigger').first().click();
 	await page.mouse.move(700, 500);
 	await sleep(500);
 }
@@ -57,9 +59,11 @@ const midX = (sel) =>
 		return r.x + r.width / 2;
 	}, sel);
 
-// P3-01a — mặc định hideLogo=true → khi collapsed, aside có class sidebar-logo-hidden
+// P3-01a — demo MẶC ĐỊNH hideLogo=off (P3 chốt: logo icon vẫn hiện khi thu
+// gọn, header 2-row brand-trên/trigger-dưới) → KHÔNG có sidebar-logo-hidden.
+// Toggle ON qua checkbox demo → khi collapsed, aside có class + .brand ẩn.
 await collapse();
-const p31a = await page.evaluate(() => {
+const p31aOff = await page.evaluate(() => {
 	const aside = document.querySelector('.sidebar-aside');
 	const brand = document.querySelector('.brand');
 	return {
@@ -69,10 +73,27 @@ const p31a = await page.evaluate(() => {
 	};
 });
 ok(
-	'P3-01a default (hideLogo=true): collapsed → aside.sidebar-logo-hidden + .brand display:none',
-	p31a.collapsed && p31a.hasClass && p31a.brandDisplay === 'none',
+	'P3-01a default (hideLogo=off): collapsed → KHÔNG sidebar-logo-hidden, .brand hiện',
+	p31aOff.collapsed && !p31aOff.hasClass && p31aOff.brandDisplay === 'flex',
+	JSON.stringify(p31aOff)
+);
+await page.locator('[data-test="sb-hide-logo"]').check();
+await sleep(300);
+const p31a = await page.evaluate(() => {
+	const aside = document.querySelector('.sidebar-aside');
+	const brand = document.querySelector('.brand');
+	return {
+		hasClass: aside.classList.contains('sidebar-logo-hidden'),
+		brandDisplay: brand ? getComputedStyle(brand).display : 'n/a'
+	};
+});
+ok(
+	'P3-01a hideLogo=on: collapsed → aside.sidebar-logo-hidden + .brand display:none',
+	p31a.hasClass && p31a.brandDisplay === 'none',
 	JSON.stringify(p31a)
 );
+await page.locator('[data-test="sb-hide-logo"]').uncheck();
+await sleep(300);
 
 // P3-02 — menu item SQUARE + P3-03 — trục Y (cùng tâm x) khi collapsed
 // Các icon menu (square 48×48, content area 72px) phải cùng tâm X = 36px (tâm rail).
@@ -103,9 +124,10 @@ ok(
 	p32.asideW < 100 && p32.itemCount >= 5 && Math.abs(p32.btnW - p32.btnH) < 1 && p32.btnW > 40,
 	JSON.stringify(p32)
 );
-// P3-03: icon menu + trigger group + button cùng tâm x ≈ 36px (tâm rail 72px)
+// P3-03: icon menu + trigger group + button cùng tâm x ≈ 28px (tâm rail 56px —
+// P3 chốt rail 56px; cũ Wave10: 36/72px)
 const p33 = await page.evaluate(() => {
-	const center = 36;
+	const center = 28;
 	const btns = [...document.querySelectorAll('.sidebar-menu-button .leading')];
 	const xs = btns.map((l) => {
 		const r = l.getBoundingClientRect();
@@ -113,7 +135,7 @@ const p33 = await page.evaluate(() => {
 	});
 	const trig = document.querySelector('.sidebar-menu-group__trigger');
 	const trigX = trig ? trig.getBoundingClientRect().x + trig.getBoundingClientRect().width / 2 : null;
-	// điểm icon switcher (avatar) — tâm phải ≈ 36
+	// điểm icon switcher (avatar) — tâm phải ≈ 28
 	const av = document.querySelector('.switcher .ts-avatar');
 	const avX = av ? av.getBoundingClientRect().x + av.getBoundingClientRect().width / 2 : null;
 	const spread = xs.length ? Math.max(...xs) - Math.min(...xs) : 999;
@@ -121,13 +143,13 @@ const p33 = await page.evaluate(() => {
 });
 const p33ok =
 	p33.xs.length >= 4 &&
-	p33.xs.every((x) => Math.abs(x - 36) < 4) &&
+	p33.xs.every((x) => Math.abs(x - 28) < 4) &&
 	p33.trigX != null &&
-	Math.abs(p33.trigX - 36) < 4 &&
+	Math.abs(p33.trigX - 28) < 4 &&
 	p33.avX != null &&
-	Math.abs(p33.avX - 36) < 4;
+	Math.abs(p33.avX - 28) < 4;
 ok(
-	'P3-03 collapsed: TOÀN BỘ item + group trigger + switcher THẲNG HÀNG trục Y (tâm x≈36)',
+	'P3-03 collapsed: TOÀN BỘ item + group trigger + switcher THẲNG HÀNG trục Y (tâm x≈28)',
 	p33ok,
 	JSON.stringify(p33)
 );
@@ -137,7 +159,7 @@ ok(
 //     class .sidebar-label-anim + CSS animation trên .label.
 // Không dùng helper expand() (sleep 500ms làm flag 500ms hết hạn):
 // click trigger rồi đọc TRONG khung animation (~120ms sau click).
-await page.locator('.sidebar-trigger').click();
+await page.locator('.sidebar-trigger').first().click();
 await sleep(120);
 const p34 = await page.evaluate(() => {
 	const aside = document.querySelector('.sidebar-aside');
@@ -232,10 +254,9 @@ ok(
 	JSON.stringify(p2b)
 );
 
-// P3-01b — toggle hideLogo OFF → collapsed giữ logo (.brand hiện, không sidebar-logo-hidden)
+// P3-01b — demo MẶC ĐỊNH hideLogo=off → không cần toggle; chỉ cần collapse
+// kiểm chứng lần cuối (aside KHÔNG có class, .brand hiện flex).
 await searchInput.fill('');
-await sleep(150);
-await page.locator('[data-test="sb-hide-logo"]').setChecked(false);
 await sleep(150);
 await collapse();
 const p31b = await page.evaluate(() => {

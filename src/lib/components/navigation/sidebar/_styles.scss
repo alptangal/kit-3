@@ -56,7 +56,12 @@
 		inset-block: 0;
 		left: 0;
 		height: 100dvh;
-		width: min(var(--sb-width), 90vw);
+		/* Width co theo NỘI DUNG (fit-content — yêu cầu user: không khoảng trống
+		   lãng phí bên phải trên mobile). Cột menu/label tự quyết định rộng tự
+		   nhiên; cap 85vw đề phòng label dài/1 từ không ngắt dòng. Các item bên
+		   trong đã width:100% → khớp đúng content width, không tràn. */
+		width: min(fit-content, 85vw);
+		min-width: 14rem;
 		transform: translateX(-100%);
 		box-shadow: 0 24px 48px -12px rgb(0 0 0 / 0.25);
 
@@ -86,11 +91,46 @@
 
 }
 
+/* Collapsed (icon rail 56px): dropdown mở từ trong aside (TeamSwitcher…) tràn
+   ra ngoài rail — ẨN content (yêu cầu user: khi thu gọn không hiển thị menu
+   tràn ra sidebar). Ẩn theo :hover THÔI (KHÔNG :focus-within — click avatar
+   mở menu → focus nằm trên trigger → focus-within đúng luôn → menu vẫn hiện
+   dù chuột đã rời, bug quay lại). Flow: hover rail → peek 240px → click →
+   menu mở (aside đang hover) → chuột trên menu (nằm trong bounds aside) →
+   giữ; rời aside → peek co + menu ẩn. Mobile/offcanvas không mang
+   .sidebar-collapsed → không ảnh hưởng. */
+.sidebar-aside.sidebar-collapsed:not(:hover) {
+	:global(.dropdown-menu-content) {
+		display: none;
+	}
+}
+
 /* ── icon rail: ẩn/align element SLOT con (hash scoped khác → :global) ── */
 .sidebar-aside.sidebar-collapsed {
 	:global(.sidebar-header),
 	:global(.sidebar-footer) {
 		justify-content: center;
+	}
+
+	/* TeamSwitcher (consumer đặt trong header/footer): co về avatar, căn giữa
+	   rail — tên + chevron ẨN (tràn rail 56px; consumer demo /ui/sidebar có
+	   rule riêng, admin layout KHÔNG → rule chung tại đây cho mọi consumer).
+	   Root inline-flex shrink-to-fit → ép flex full-width (bẫy margin auto
+	   vô hiệu trên inline-level, precedent Wave10 demo). */
+	:global(.team-switcher),
+	:global(.dropdown-menu-root) {
+		display: flex;
+		width: 100%;
+	}
+
+	:global(.dropdown-menu-trigger) {
+		width: 100%;
+		justify-content: center;
+	}
+
+	:global(.ts-name),
+	:global(.ts-chevron) {
+		display: none;
 	}
 
 	:global(.sidebar-group-label),
@@ -123,6 +163,16 @@
 .sidebar-aside.sidebar-collapsed:hover {
 	:global(.sidebar-header),
 	:global(.sidebar-footer) {
+		justify-content: flex-start;
+	}
+
+	/* TeamSwitcher khôi phục layout full (mirror rule collapsed bên trên). */
+	:global(.ts-name),
+	:global(.ts-chevron) {
+		display: revert;
+	}
+
+	:global(.dropdown-menu-trigger) {
 		justify-content: flex-start;
 	}
 

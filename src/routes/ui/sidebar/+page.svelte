@@ -146,8 +146,13 @@
 		</Sidebar>
 
 		<Sidebar.Inset>
-			<!-- Content chính: Breadcrumb (derive từ URL) + Separator + body -->
+			<!-- Content chính: Breadcrumb (derive từ URL) + Separator + body.
+			     Mobile: thêm nút mở sidebar (aside offcanvas ẩn → trigger trong
+			     Sidebar.Header không bấm được — đồng bộ admin layout). -->
 			<div class="inset-header">
+				<div class="inset-mobile-trigger">
+					<Sidebar.Trigger />
+				</div>
 				<Breadcrumb />
 			</div>
 			<Separator decorative />
@@ -473,7 +478,27 @@
 
 	/* Inset: header (breadcrumb) + body scroll */
 	.inset-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
 		padding: 1rem 1.5rem 0;
+
+		/* Mobile: bỏ padding-inline — tiết kiệm chiều ngang 375px (yêu cầu user).
+		   padding-block giữ (tách breadcrumb khỏi Separator). */
+		@media (max-width: 767px) {
+			padding-inline: 0.5rem;
+		}
+	}
+
+	/* Mobile: nút mở sidebar trong inset header (aside offcanvas ẩn → trigger
+	   trong Sidebar.Header không bấm được). Desktop ẩn — trigger-row trong
+	   sidebar header đã có. (Đồng bộ admin layout B6.1.) */
+	.inset-mobile-trigger {
+		display: none;
+
+		@media (max-width: 767px) {
+			display: inline-flex;
+		}
 	}
 
 	.inset-body {

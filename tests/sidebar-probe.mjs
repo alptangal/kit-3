@@ -127,8 +127,8 @@ ok(
 	JSON.stringify(wave10Padding.footer)
 );
 
-// SB17 — Wave10: collapsed (icon rail) — item square 48×48 căn giữa trục rail
-// (width 3rem + margin-inline auto, bù vì header/content không còn padding).
+// SB17 — P3 rail 56px: collapsed item FILL FULL rail (55×55, padding-inline 0)
+// căn giữa trục rail (56px; cũ Wave10: 48×48 + rail 72px).
 await page.click('.sidebar-trigger');
 await page.mouse.move(600, 400);
 await sleep(450);
@@ -149,8 +149,8 @@ const wave10Square = await page.evaluate(() => {
 	};
 });
 ok(
-	'SB17 collapsed item square 48×48 (padding-inline 0)',
-	wave10Square?.w === 48 && wave10Square?.h === 48 && wave10Square?.pl === '0px' && wave10Square?.pr === '0px',
+	'SB17 collapsed item square full-rail 56 (padding-inline 0)',
+	wave10Square?.w === 55 && wave10Square?.h === 55 && wave10Square?.pl === '0px' && wave10Square?.pr === '0px',
 	JSON.stringify(wave10Square)
 );
 ok(
