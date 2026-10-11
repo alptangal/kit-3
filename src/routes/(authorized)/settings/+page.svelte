@@ -1,7 +1,7 @@
 <!-- src/routes/(authorized)/settings/+page.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Button, Tag, Tabs } from '$components/element';
+	import { Accordion, Button, Tag, Tabs } from '$components/element';
 	import { Input, Select } from '$components/form';
 	import type { SelectOption } from '$components/form';
 	import { encryption } from '$modules/encryption';
@@ -89,6 +89,8 @@
 		} as TranslateContent,
 		save: { vi: 'Lưu cấu hình', en: 'Save settings' } as TranslateContent,
 		saving: { vi: 'Đang lưu…', en: 'Saving…' } as TranslateContent,
+		cancel: { vi: 'Bỏ thay đổi', en: 'Discard changes' } as TranslateContent,
+		cancelled: { vi: 'Đã bỏ các thay đổi chưa lưu', en: 'Unsaved changes discarded' } as TranslateContent,
 		ownerOnly: {
 			vi: 'Chỉ owner được sửa cấu hình',
 			en: 'Only the owner can edit settings'
@@ -339,6 +341,17 @@
 		}
 	}
 
+	// ── Cancel (B5): revert settings về bản gốc đã load — draft string tự
+	// refresh qua $effect sync (settings → draft), modified trở về false ──
+	function handleCancel() {
+		if (!modified) return;
+		settings = { ...original };
+		client.browser?.toasts?.create({
+			title: t.cancelled[lang] ?? t.cancelled.en ?? 'Đã bỏ thay đổi',
+			color: 'secondary'
+		});
+	}
+
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
@@ -393,8 +406,220 @@
 			</Button>
 		</div>
 	{:else}
-		<!-- ── Tabs cấu hình (4 tab cấu hình + tab status) ── -->
-		<Tabs bind:value={activeTab} type="underline" data-test="settings-tabs">
+		<!-- ── Pha 3 (B5): NỘI DUNG 5 TAB tách thành 5 snippet — render 2 nơi:
+		     Tabs (desktop ≥768px) + Accordion (mobile <768px). activeTab SHARED
+		     giữ trạng thái khi đổi viewport ── -->
+		{#snippet tabGeneralContent()}
+			<div class="form-grid">
+				<div class="form-field">
+					<label class="form-label" for="settings-app-name">{t.appName[lang]}</label>
+					<Input
+						id="settings-app-name"
+						bind:value={settings.general.appName}
+						disabled={!canEdit}
+						data-test="input-app-name"
+					/>
+				</div>
+				<div class="form-field">
+					<span class="form-label">{t.defaultLang[lang]}</span>
+					<Select
+						bind:value={settings.general.defaultLang}
+						options={langOptions}
+						disabled={!canEdit}
+						data-test="select-default-lang"
+					/>
+				</div>
+				<div class="form-field">
+					<label class="form-label" for="settings-timezone">{t.timezone[lang]}</label>
+					<Input
+						id="settings-timezone"
+						bind:value={settings.general.timezone}
+						disabled={!canEdit}
+						placeholder="Asia/Ho_Chi_Minh"
+						data-test="input-timezone"
+					/>
+				</div>
+			</div>
+		{/snippet}
+		{#snippet tabSecurityContent()}
+			<div class="form-grid">
+				<div class="form-field">
+					<label class="form-label" for="settings-session-timeout">{t.sessionTimeout[lang]}</label>
+					<Input
+						id="settings-session-timeout"
+						type="number"
+						inputmode="numeric"
+						bind:value={sessionTimeoutDraft}
+						disabled={!canEdit}
+						data-test="input-session-timeout"
+					/>
+				</div>
+				<div class="form-field">
+					<label class="form-label" for="settings-max-login">{t.maxLoginAttempts[lang]}</label>
+					<Input
+						id="settings-max-login"
+						type="number"
+						inputmode="numeric"
+						bind:value={maxLoginAttemptsDraft}
+						disabled={!canEdit}
+						data-test="input-max-login"
+					/>
+				</div>
+				<div class="form-field">
+					<label class="form-label" for="settings-password-min">{t.passwordMinLength[lang]}</label>
+					<Input
+						id="settings-password-min"
+						type="number"
+						inputmode="numeric"
+						bind:value={passwordMinLengthDraft}
+						disabled={!canEdit}
+						data-test="input-password-min"
+					/>
+				</div>
+			</div>
+		{/snippet}
+		{#snippet tabCommerceContent()}
+			<div class="form-grid">
+				<div class="form-field">
+					<span class="form-label">{t.currency[lang]}</span>
+					<Select
+						bind:value={settings.commerce.currency}
+						options={currencyOptions}
+						disabled={!canEdit}
+						data-test="select-currency"
+					/>
+				</div>
+				<div class="form-field">
+					<label class="form-label" for="settings-tax-rate">{t.taxRate[lang]}</label>
+					<Input
+						id="settings-tax-rate"
+						type="number"
+						inputmode="decimal"
+						bind:value={taxRateDraft}
+						disabled={!canEdit}
+						data-test="input-tax-rate"
+					/>
+				</div>
+				<div class="form-field">
+					<label class="form-label" for="settings-low-stock">{t.lowStock[lang]}</label>
+					<Input
+						id="settings-low-stock"
+						type="number"
+						inputmode="numeric"
+						bind:value={lowStockDraft}
+						disabled={!canEdit}
+						data-test="input-low-stock"
+					/>
+				</div>
+			</div>
+		{/snippet}
+		{#snippet tabAppearanceContent()}
+			<div class="form-grid">
+				<div class="form-field">
+					<span class="form-label">{t.theme[lang]}</span>
+					<Select
+						bind:value={settings.appearance.theme}
+						options={themeOptions}
+						disabled={!canEdit}
+						data-test="select-theme"
+					/>
+				</div>
+				<div class="form-field">
+					<span class="form-label">{t.density[lang]}</span>
+					<Select
+						bind:value={settings.appearance.density}
+						options={densityOptions}
+						disabled={!canEdit}
+						data-test="select-density"
+					/>
+				</div>
+			</div>
+		{/snippet}
+		{#snippet tabStatusContent()}
+			{#if statusLoading && !status}
+				<div class="settings-state" role="status">
+					<p>{t.statusLoading[lang]}</p>
+				</div>
+			{:else if statusError && !status}
+				<div class="settings-state error" role="alert">
+					<p class="state-title">{t.statusFailed[lang]}</p>
+					<p class="state-detail">{statusError}</p>
+					<Button color="primary" variant="outline" onClick={loadStatus}>
+						{t.retry[lang]}
+					</Button>
+				</div>
+			{:else if status}
+				<div class="status-grid" data-test="status-grid">
+					<div class="status-card">
+						<span class="status-label">{t.uptime[lang]}</span>
+						<span class="status-value" data-test="status-uptime">{formatUptime(status.uptimeSeconds)}</span>
+					</div>
+					<div class="status-card">
+						<span class="status-label">{t.memory[lang]}</span>
+						<span class="status-value" data-test="status-memory">
+							{formatMemory(status.memory?.heapUsed)} / {formatMemory(status.memory?.heapTotal)}
+						</span>
+					</div>
+					<div class="status-card">
+						<span class="status-label">{t.nodeVersion[lang]}</span>
+						<span class="status-value" data-test="status-node">{status.nodeVersion ?? '—'}</span>
+					</div>
+					<div class="status-card">
+						<span class="status-label">{t.platform[lang]}</span>
+						<span class="status-value" data-test="status-platform">{status.platform ?? '—'}</span>
+					</div>
+					<div class="status-card">
+						<span class="status-label">{t.dbStatus[lang]}</span>
+						<span class="status-value">
+							{#if status.db?.ok}
+								<Tag label={t.dbOk[lang]} color="success" variant="soft" size="sm" data-test="db-badge-ok" />
+							{:else}
+								<Tag label={t.dbError[lang]} color="error" variant="soft" size="sm" data-test="db-badge-error" />
+							{/if}
+						</span>
+					</div>
+				</div>
+
+				<!-- Audit logs gần đây (bảng nhỏ) -->
+				<div class="audit-section" data-test="audit-section">
+					<h2 class="audit-title">{t.auditLogs[lang]}</h2>
+					{#if !status.audit?.ok}
+						<p class="audit-empty error">{t.auditFailed[lang]}</p>
+					{:else if (status.audit?.items?.length ?? 0) === 0}
+						<p class="audit-empty">{t.auditEmpty[lang]}</p>
+					{:else}
+						<p class="audit-total">
+							{status.audit.total} {t.auditTotal[lang]}
+						</p>
+						<div class="audit-table-wrap">
+							<table class="audit-table">
+								<thead>
+									<tr>
+										<th scope="col">{t.colTime[lang]}</th>
+										<th scope="col">{t.colAction[lang]}</th>
+										<th scope="col">{t.colCollection[lang]}</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each status.audit.items as row, i (row.createdAt ?? i)}
+										<tr>
+											<td>{formatAuditTime(row.createdAt)}</td>
+											<td class="audit-action">{row.action ?? '—'}</td>
+											<td>{row.collectionName ?? '—'}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
+				</div>
+			{/if}
+		{/snippet}
+
+		<!-- ── Tabs cấu hình (4 tab cấu hình + tab status) — DESKTOP ≥768px.
+		     Wrapper div mang data-test (Tabs.Root không forward data-test) ── -->
+		<div class="settings-tabs" data-test="settings-tabs">
+		<Tabs bind:value={activeTab} type="underline">
 			<Tabs.List>
 				<Tabs.Trigger value="general" icon="lucide:settings" data-test="tab-trigger-general">
 					{t.tabGeneral[lang]}
@@ -415,220 +640,115 @@
 
 			<!-- ── Tab General ── -->
 			<Tabs.Content value="general" data-test="tab-content-general">
-				<div class="form-grid">
-					<div class="form-field">
-						<label class="form-label" for="settings-app-name">{t.appName[lang]}</label>
-						<Input
-							id="settings-app-name"
-							bind:value={settings.general.appName}
-							disabled={!canEdit}
-							data-test="input-app-name"
-						/>
-					</div>
-					<div class="form-field">
-						<span class="form-label">{t.defaultLang[lang]}</span>
-						<Select
-							bind:value={settings.general.defaultLang}
-							options={langOptions}
-							disabled={!canEdit}
-							data-test="select-default-lang"
-						/>
-					</div>
-					<div class="form-field">
-						<label class="form-label" for="settings-timezone">{t.timezone[lang]}</label>
-						<Input
-							id="settings-timezone"
-							bind:value={settings.general.timezone}
-							disabled={!canEdit}
-							placeholder="Asia/Ho_Chi_Minh"
-							data-test="input-timezone"
-						/>
-					</div>
-				</div>
+				{@render tabGeneralContent()}
 			</Tabs.Content>
 
 			<!-- ── Tab Security ── -->
 			<Tabs.Content value="security" data-test="tab-content-security">
-				<div class="form-grid">
-					<div class="form-field">
-						<label class="form-label" for="settings-session-timeout">{t.sessionTimeout[lang]}</label>
-						<Input
-							id="settings-session-timeout"
-							type="number"
-							inputmode="numeric"
-							bind:value={sessionTimeoutDraft}
-							disabled={!canEdit}
-							data-test="input-session-timeout"
-						/>
-					</div>
-					<div class="form-field">
-						<label class="form-label" for="settings-max-login">{t.maxLoginAttempts[lang]}</label>
-						<Input
-							id="settings-max-login"
-							type="number"
-							inputmode="numeric"
-							bind:value={maxLoginAttemptsDraft}
-							disabled={!canEdit}
-							data-test="input-max-login"
-						/>
-					</div>
-					<div class="form-field">
-						<label class="form-label" for="settings-password-min">{t.passwordMinLength[lang]}</label>
-						<Input
-							id="settings-password-min"
-							type="number"
-							inputmode="numeric"
-							bind:value={passwordMinLengthDraft}
-							disabled={!canEdit}
-							data-test="input-password-min"
-						/>
-					</div>
-				</div>
+				{@render tabSecurityContent()}
 			</Tabs.Content>
 
 			<!-- ── Tab Commerce ── -->
 			<Tabs.Content value="commerce" data-test="tab-content-commerce">
-				<div class="form-grid">
-					<div class="form-field">
-						<span class="form-label">{t.currency[lang]}</span>
-						<Select
-							bind:value={settings.commerce.currency}
-							options={currencyOptions}
-							disabled={!canEdit}
-							data-test="select-currency"
-						/>
-					</div>
-					<div class="form-field">
-						<label class="form-label" for="settings-tax-rate">{t.taxRate[lang]}</label>
-						<Input
-							id="settings-tax-rate"
-							type="number"
-							inputmode="decimal"
-							bind:value={taxRateDraft}
-							disabled={!canEdit}
-							data-test="input-tax-rate"
-						/>
-					</div>
-					<div class="form-field">
-						<label class="form-label" for="settings-low-stock">{t.lowStock[lang]}</label>
-						<Input
-							id="settings-low-stock"
-							type="number"
-							inputmode="numeric"
-							bind:value={lowStockDraft}
-							disabled={!canEdit}
-							data-test="input-low-stock"
-						/>
-					</div>
-				</div>
+				{@render tabCommerceContent()}
 			</Tabs.Content>
 
 			<!-- ── Tab Appearance ── -->
 			<Tabs.Content value="appearance" data-test="tab-content-appearance">
-				<div class="form-grid">
-					<div class="form-field">
-						<span class="form-label">{t.theme[lang]}</span>
-						<Select
-							bind:value={settings.appearance.theme}
-							options={themeOptions}
-							disabled={!canEdit}
-							data-test="select-theme"
-						/>
-					</div>
-					<div class="form-field">
-						<span class="form-label">{t.density[lang]}</span>
-						<Select
-							bind:value={settings.appearance.density}
-							options={densityOptions}
-							disabled={!canEdit}
-							data-test="select-density"
-						/>
-					</div>
-				</div>
+				{@render tabAppearanceContent()}
 			</Tabs.Content>
 
 			<!-- ── Tab System Status ── -->
 			<Tabs.Content value="status" data-test="tab-content-status">
-				{#if statusLoading && !status}
-					<div class="settings-state" role="status">
-						<p>{t.statusLoading[lang]}</p>
-					</div>
-				{:else if statusError && !status}
-					<div class="settings-state error" role="alert">
-						<p class="state-title">{t.statusFailed[lang]}</p>
-						<p class="state-detail">{statusError}</p>
-						<Button color="primary" variant="outline" onClick={loadStatus}>
-							{t.retry[lang]}
-						</Button>
-					</div>
-				{:else if status}
-					<div class="status-grid" data-test="status-grid">
-						<div class="status-card">
-							<span class="status-label">{t.uptime[lang]}</span>
-							<span class="status-value" data-test="status-uptime">{formatUptime(status.uptimeSeconds)}</span>
-						</div>
-						<div class="status-card">
-							<span class="status-label">{t.memory[lang]}</span>
-							<span class="status-value" data-test="status-memory">
-								{formatMemory(status.memory?.heapUsed)} / {formatMemory(status.memory?.heapTotal)}
-							</span>
-						</div>
-						<div class="status-card">
-							<span class="status-label">{t.nodeVersion[lang]}</span>
-							<span class="status-value" data-test="status-node">{status.nodeVersion ?? '—'}</span>
-						</div>
-						<div class="status-card">
-							<span class="status-label">{t.platform[lang]}</span>
-							<span class="status-value" data-test="status-platform">{status.platform ?? '—'}</span>
-						</div>
-						<div class="status-card">
-							<span class="status-label">{t.dbStatus[lang]}</span>
-							<span class="status-value">
-								{#if status.db?.ok}
-									<Tag label={t.dbOk[lang]} color="success" variant="soft" size="sm" data-test="db-badge-ok" />
-								{:else}
-									<Tag label={t.dbError[lang]} color="error" variant="soft" size="sm" data-test="db-badge-error" />
-								{/if}
-							</span>
-						</div>
-					</div>
-
-					<!-- Audit logs gần đây (bảng nhỏ) -->
-					<div class="audit-section" data-test="audit-section">
-						<h2 class="audit-title">{t.auditLogs[lang]}</h2>
-						{#if !status.audit?.ok}
-							<p class="audit-empty error">{t.auditFailed[lang]}</p>
-						{:else if (status.audit?.items?.length ?? 0) === 0}
-							<p class="audit-empty">{t.auditEmpty[lang]}</p>
-						{:else}
-							<p class="audit-total">
-								{status.audit.total} {t.auditTotal[lang]}
-							</p>
-							<div class="audit-table-wrap">
-								<table class="audit-table">
-									<thead>
-										<tr>
-											<th scope="col">{t.colTime[lang]}</th>
-											<th scope="col">{t.colAction[lang]}</th>
-											<th scope="col">{t.colCollection[lang]}</th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each status.audit.items as row, i (row.createdAt ?? i)}
-											<tr>
-												<td>{formatAuditTime(row.createdAt)}</td>
-												<td class="audit-action">{row.action ?? '—'}</td>
-												<td>{row.collectionName ?? '—'}</td>
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-						{/if}
-					</div>
-				{/if}
+				{@render tabStatusContent()}
 			</Tabs.Content>
 		</Tabs>
+		</div>
+
+		<!-- ── Pha 3 (B5): ACCORDION mobile <768px — thay Tabs (5 trigger ngang
+		     tràn mobile). bind:value={activeTab} chia sẻ state: mở item = chọn
+		     tab, đổi breakpoint giữ mục đang xem. Wrapper div mang data-test ── -->
+		<div class="settings-accordion" data-test="settings-accordion">
+		<Accordion type="single" collapsible bind:value={activeTab}>
+			<Accordion.Item value="general">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:settings" data-test="acc-trigger-general">
+						{t.tabGeneral[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="acc-content-general">
+					{@render tabGeneralContent()}
+				</Accordion.Content>
+			</Accordion.Item>
+			<Accordion.Item value="security">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:shield" data-test="acc-trigger-security">
+						{t.tabSecurity[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="acc-content-security">
+					{@render tabSecurityContent()}
+				</Accordion.Content>
+			</Accordion.Item>
+			<Accordion.Item value="commerce">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:shopping-cart" data-test="acc-trigger-commerce">
+						{t.tabCommerce[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="acc-content-commerce">
+					{@render tabCommerceContent()}
+				</Accordion.Content>
+			</Accordion.Item>
+			<Accordion.Item value="appearance">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:palette" data-test="acc-trigger-appearance">
+						{t.tabAppearance[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="acc-content-appearance">
+					{@render tabAppearanceContent()}
+				</Accordion.Content>
+			</Accordion.Item>
+			<Accordion.Item value="status">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:activity" data-test="acc-trigger-status">
+						{t.tabStatus[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="acc-content-status">
+					{@render tabStatusContent()}
+				</Accordion.Content>
+			</Accordion.Item>
+		</Accordion>
+		</div>
+
+		<!-- ── Pha 3 (B5): ACTION BAR mobile — sticky bottom, Save + Cancel luôn
+		     trong tầm ngón tay (yêu cầu user: action buttons dưới viewport).
+		     Chỉ hiện khi có thay đổi chưa lưu + được sửa. Desktop ẩn (Save ở
+		     header như cũ) ── -->
+		{#if modified && canEdit}
+			<div class="settings-action-bar" data-test="settings-action-bar">
+				<Button
+					color="primary"
+					variant="outline"
+					onClick={handleCancel}
+					disabled={saving}
+					data-test="settings-cancel"
+				>
+					{t.cancel[lang]}
+				</Button>
+				<Button
+					color="primary"
+					onClick={handleSave}
+					disabled={saving}
+					loading={saving}
+					data-test="settings-save-bar"
+				>
+					{saving ? t.saving[lang] : t.save[lang]}
+				</Button>
+			</div>
+		{/if}
 	{/if}
 </section>
 
@@ -669,6 +789,13 @@
 		align-items: center;
 		gap: 0.75rem;
 		flex-wrap: wrap;
+
+		/* Pha 3 (B5): mobile — Save/badge header ẨN: action bar sticky dưới đáy
+		   đã có đủ Save + Cancel (yêu cầu user ưu tiên action button dưới viewport);
+		   tránh trùng 2 nút "Lưu" trên cùng 1 màn hình nhỏ. */
+		@media (max-width: 767px) {
+			display: none;
+		}
 	}
 
 	.settings-notice {
@@ -701,6 +828,73 @@
 
 		p {
 			margin: 0;
+		}
+	}
+
+	/* ── Pha 3 (B5): BREAKPOINT responsive — Tabs desktop ≥768px, Accordion
+	   mobile <768px. Cả 2 luôn render trong DOM (đơn giản, không SSR-mismatch)
+	   — CSS display toggle theo media query; state activeTab chia sẻ. ── */
+	:global(.settings-tabs) {
+		display: none;
+
+		@media (min-width: 768px) {
+			display: block;
+		}
+	}
+
+	:global(.settings-accordion) {
+		display: block;
+
+		@media (min-width: 768px) {
+			display: none;
+		}
+	}
+
+	/* ── Pha 3 (B5): ACTION BAR mobile — FIXED dính đáy viewport: user scroll
+	   form dài vẫn thấy Save/Cancel (yêu cầu: action buttons nằm dưới viewport
+	   rút ngắn thao tác). Bẫy sticky đã gặp: trang vừa khít viewport → sticky
+	   dịch bar LÊN đè item accordion cuối + KHÔNG thể scroll để lộ → dùng fixed
+	   (luôn dính đáy) + padding-bottom động :has() bên dưới cho content chỗ trống.
+	   Desktop ẩn — Save header như cũ. ── */
+	.settings-action-bar {
+		position: fixed;
+		bottom: 0.75rem;
+		/* Center theo settings-page (max-width 1280, padding 1.5rem) — fixed
+		   thoát flow nên tự tính width, không kế thừa container. */
+		left: 50%;
+		transform: translateX(-50%);
+		width: min(calc(100vw - 3rem), calc(1280px - 3rem));
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		background: var(--background, #fff);
+		border: 1px solid var(--border, hsl(0 0% 88%));
+		border-radius: var(--border-radius-lg, 0.5rem);
+		box-shadow: 0 -4px 16px rgb(0 0 0 / 0.08);
+		z-index: 10;
+
+		@media (prefers-color-scheme: dark) {
+			background: var(--background, hsl(240 5.9% 10%));
+			border-color: var(--border, hsl(240 5.9% 24%));
+		}
+
+		@media (min-width: 768px) {
+			display: none;
+		}
+	}
+
+	/* Bar fixed đè content cuối → khi bar hiện, content cần padding-bottom
+	   (bar ~66px + bottom 12px + thoáng) để scroll đáy vẫn thấy item cuối.
+	   :has() động — chưa modified (bar ẩn) KHÔNG có padding thừa.
+	   Bẫy thứ 2: mobile nội dung accordion có thể KHÔNG tràn viewport (5 item
+	   gập, 1 mở — tổng < 700px) → padding KHÔNG sinh scrollbar, bar vẫn đè.
+	   min-height bù: khi bar hiện, page cao ÍT NHẤT viewport + bar → luôn có
+	   chỗ scroll lộ item cuối. */
+	.settings-page:has(.settings-action-bar) {
+		@media (max-width: 767px) {
+			padding-bottom: 5.5rem;
+			min-height: calc(100dvh + 1rem);
 		}
 	}
 

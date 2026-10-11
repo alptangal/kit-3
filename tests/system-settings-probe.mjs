@@ -101,7 +101,16 @@ if (submitDisabled) {
 
 	// Vào /settings
 	await page.goto(`${BASE}/settings`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-	await sleep(2500);
+	// Đợi state ỔN ĐỊNH sau load (bẫy B5): SSR render nhánh {:else} với
+	// giá trị default ngay từ đầu → loadSettings onMount → loading=true →
+	// tabs UNMOUNT tạm → remount khi xong. Sleep cứng 2.5s từng fail 5/19
+	// (evaluate rơi đúng phase unmount). Poll tabs hiện LIÊN TỤC 3 lần.
+	let stableCount = 0;
+	for (let i = 0; i < 60 && stableCount < 3; i++) {
+		const present = (await page.locator('[data-test="settings-tabs"]').count()) > 0;
+		stableCount = present ? stableCount + 1 : 0;
+		if (stableCount < 3) await sleep(400);
+	}
 	const settingsUrl = page.url();
 	ok('(C) /settings KHÔNG bị redirect ngược login (session hợp lệ)', !settingsUrl.includes('/login'), `url=${settingsUrl}`);
 
