@@ -139,7 +139,11 @@
 	{/if}
 {/snippet}
 
-<nav class={configs.style} aria-label={props['aria-label'] ?? 'Breadcrumb'}>
+<nav
+	class={configs.style}
+	aria-label={props['aria-label'] ?? 'Breadcrumb'}
+	data-test={props['data-test']}
+>
 	<ol class="breadcrumb-list">
 		{#each visible as entry, i (i)}
 			<li

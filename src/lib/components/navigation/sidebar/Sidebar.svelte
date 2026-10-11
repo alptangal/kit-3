@@ -22,7 +22,12 @@
 	// Animation label: CHỈ khi chế độ BẬT (ctx.labelAnimation) VÀ user vừa expand.
 	const logoClass = $derived(!!ctx?.hideLogoWhenCollapsed ? 'sidebar-logo-hidden' : '');
 	const labelAnimActive = $derived(!!ctx?.labelAnimActive && !!ctx?.labelAnimation);
-	const showOverlay = $derived(!!ctx && ctx.isOffcanvasActive);
+	// Overlay chỉ khi offcanvas đang MỞ (mobile open / desktop offcanvas open).
+	// Trước đây chỉ check isOffcanvasActive → mobile overlay render kể cả khi
+	// sidebar đang ĐÓNG (isMobile luôn true) → fixed inset:0 che toàn trang,
+	// không click được content (phát hiện khi làm admin layout B6.1 — nút
+	// mobile-trigger trong inset header không bấm nổi).
+	const showOverlay = $derived(!!ctx && ctx.isOffcanvasActive && state.open);
 
 	// P2 resize: width inline + class 'sidebar-resizing' (tắt transition).
 	// Mobile/offcanvas: width cố định → không áp (aside dùng token --sb-width).

@@ -64,6 +64,26 @@
 		];
 		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 	});
+
+	// Rest attributes forward xuống element (pattern Button/Main.svelte restAttrs) —
+	// data-test/aria-*/title/id nếu không forward thì không bao giờ xuống DOM
+	// (probe không tìm thấy locator; bẫy Tabs.Root forward đã gặp ở B5).
+	const restAttrs = $derived.by(() => {
+		const out: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(props)) {
+			if (value === undefined) continue;
+			if (
+				key === 'data-test' ||
+				key.startsWith('data-') ||
+				key.startsWith('aria-') ||
+				key === 'title' ||
+				key === 'id'
+			) {
+				out[key] = value;
+			}
+		}
+		return out;
+	});
 </script>
 
 <!-- P3: nội dung label — có prop label + đang search → highlight <mark> các
@@ -89,7 +109,7 @@
      Snippet TRỰC TIẾP con của component (bẫy Svelte 5: không bọc trong {#if}). -->
 {#snippet menuButton()}
 	{#if isLink}
-		<a class={styleDerived} {href} aria-current={active ? 'page' : undefined}>
+		<a class={styleDerived} {href} {...restAttrs} aria-current={active ? 'page' : undefined}>
 			{#if leading}
 				<span class="leading" aria-hidden="true">{@render leading()}</span>
 			{:else if icon}
@@ -112,6 +132,7 @@
 			class={styleDerived}
 			type="button"
 			{disabled}
+			{...restAttrs}
 			aria-current={active ? 'page' : undefined}
 		>
 			{#if leading}
