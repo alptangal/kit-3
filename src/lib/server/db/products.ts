@@ -685,8 +685,11 @@ export class ProductAdminService {
 
 	static async listCategories(
 		actor: ActorContext,
-		options: { page?: number; pageSize?: number; includeDeleted?: boolean; parentId?: string | null } = {}
-	): Promise<{ success: false; messages: TranslateContent } | { success: true; categories: Record<string, unknown>[] }> {
+		options: { page?: number; pageSize?: number; includeDeleted?: boolean; parentId?: string | null; search?: string } = {}
+	): Promise<
+		| { success: false; messages: TranslateContent }
+		| { success: true; categories: Record<string, unknown>[]; total: number; page: number; pageSize: number }
+	> {
 		const denied = await this.requirePermission(actor, 'products:read');
 		if (denied) return denied;
 
@@ -710,19 +713,35 @@ export class ProductAdminService {
 			}
 		}
 
+		// Search theo tên/slug (pattern listBrands)
+		if (options.search) {
+			const term = `%${options.search.trim().toLowerCase()}%`;
+			args.push(term);
+			conditions.push(`(LOWER(name) LIKE $${args.length} OR LOWER(slug) LIKE $${args.length})`);
+		}
+
 		const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 		const selectClause = `META().id AS _id, ${CATEGORY_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')}`;
 
-		const res = await cbCategories.document.query({
-			statement: `SELECT ${selectClause} FROM ${categoriesKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
-			args,
-			readonly: true
-		});
+		// COUNT song song với data query (pattern listBrands/listUsers)
+		const [res, countRes] = await Promise.all([
+			cbCategories.document.query({
+				statement: `SELECT ${selectClause} FROM ${categoriesKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
+				args,
+				readonly: true
+			}),
+			cbCategories.document.query({
+				statement: `SELECT RAW COUNT(*) FROM ${categoriesKeyspace} ${whereClause}`,
+				args,
+				readonly: true
+			})
+		]);
 
 		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
 
 		const categories = (res.data?.results ?? []).map(sanitizeCategoryForAdmin);
-		return { success: true, categories };
+		const total = countRes.ok ? Number(countRes.data?.results?.[0] ?? 0) : categories.length;
+		return { success: true, categories, total, page, pageSize };
 	}
 
 	static async getCategoryById(

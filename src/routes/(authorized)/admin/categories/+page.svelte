@@ -1,10 +1,15 @@
 <script lang="ts">
 	// src/routes/(authorized)/admin/categories/+page.svelte
+	// B6.2: migrate sang DataTable + Pagination (pattern users/brands page).
+	// FIX BUG pre-existing: page cũ fetch GET ?params + đọc data.success/items
+	// nhưng endpoint chỉ export POST (readAdminRequest mã hoá RSA) → bảng
+	// không bao giờ render. Chuyển sang encryption.fetchSecure POST.
+	// Category KHÔNG có deletedAt trong schema (hard-delete) → không toggle
+	// "Show deleted". Tree hiển thị flatten theo depth — prefix '↳ ' ở cột
+	// Category (DataTable render là string thuần, không HTML).
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
-	import { Button } from '$components/element/button';
-	import { Input } from '$components/form/input';
-	import { Checkbox } from '$components/form/checkbox';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import { Input, Label, TextField } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
 	import { ModalHeader } from '$components/modal/Header';
@@ -12,30 +17,77 @@
 	import { ModalFooter } from '$components/modal/Footer';
 	import { Icon } from '$components/element/icon';
 	import { iconify } from '$assets/icons/iconify';
-	import { toast } from '$components/element/toast';
+	import { encryption } from '$modules/encryption';
+	import { client } from '$store/basic.svelte';
+	import type { DataTableColumn } from '$components/element/datatable';
+	import { resolveServerMessage } from '../_interface';
+	import type { Size } from '$components/interface';
 
 	// Types
 	interface CategoryListItem {
 		_id: string;
 		name: string;
 		slug: string;
-		parentId?: string;
+		parentId?: string | null;
 		status: string;
 		createdAt: string;
 		updatedAt: string;
-		deletedAt?: string | null;
 	}
+
+	// Ngôn ngữ
+	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
+
+	// Type mở (pattern users/brands page) — lang index không narrow.
+	const pageContents: { [k: string]: any } = {
+		title: { vi: 'Danh mục', en: 'Categories' },
+		subtitle: { vi: 'Quản lý danh mục sản phẩm', en: 'Manage product categories' },
+		addCategory: { vi: 'Thêm danh mục', en: 'Add Category' },
+		searchPlaceholder: { vi: 'Tìm danh mục…', en: 'Search categories…' },
+		empty: { vi: 'Chưa có danh mục', en: 'No categories found' },
+		loading: { vi: 'Đang tải…', en: 'Loading categories…' },
+		createTitle: { vi: 'Tạo danh mục', en: 'Create Category' },
+		editTitle: { vi: 'Sửa danh mục', en: 'Edit Category' },
+		nameLabel: { vi: 'Tên danh mục', en: 'Category Name' },
+		slugLabel: { vi: 'Slug', en: 'Slug' },
+		parentLabel: { vi: 'Danh mục cha', en: 'Parent Category' },
+		parentNone: { vi: 'Không có (cấp cao nhất)', en: 'None (top level)' },
+		statusLabel: { vi: 'Trạng thái', en: 'Status' },
+		cancel: { vi: 'Huỷ', en: 'Cancel' },
+		saveCreate: { vi: 'Tạo danh mục', en: 'Create Category' },
+		saveEdit: { vi: 'Lưu thay đổi', en: 'Save Changes' },
+		editAction: { vi: 'Sửa', en: 'Edit' },
+		deleteAction: { vi: 'Xoá', en: 'Delete' },
+		updated: { vi: 'Cập nhật', en: 'Updated' },
+		totalCount: { vi: '{n} danh mục', en: '{n} categories' },
+		states: {
+			loadFailed: { vi: 'Không tải được danh sách danh mục', en: 'Failed to load categories' },
+			created: { vi: 'Đã tạo danh mục', en: 'Category created' },
+			updated: { vi: 'Đã lưu thay đổi', en: 'Category updated' },
+			deleted: { vi: 'Đã xoá danh mục', en: 'Category deleted' },
+			deleteFailed: { vi: 'Không xoá được danh mục', en: 'Failed to delete category' },
+			operationFailed: { vi: 'Thao tác thất bại', en: 'Operation failed' },
+			networkError: { vi: 'Lỗi kết nối', en: 'Network error' }
+		}
+	};
+
+	// ── Cặp khoá RSA cho mọi fetchSecure trên trang ──
+	let encryptionKeys = $state<
+		| undefined
+		| { publicKey: CryptoKey; privateKey: CryptoKey }
+	>(undefined);
 
 	// State
 	let categories = $state<CategoryListItem[]>([]);
 	let loading = $state(false);
+	let loadError = $state<string | undefined>(undefined);
+	let loadedOnce = $state(false);
 	let total = $state(0);
 	let pageNumber = $state(1);
 	let pageSize = $state(20);
 	let searchQuery = $state('');
-	let showDeleted = $state(false);
-	let showCreateModal = $state(false);
-	let showEditModal = $state(false);
+	// Modal create/edit dùng chung 1 biến display (bind:display — modal tự
+	// đóng qua Escape/backdrop phải sync ngược về parent, one-way sẽ hở).
+	let modalOpen = $state(false);
 	let editingCategory = $state<CategoryListItem | null>(null);
 	let formErrors = $state<Record<string, string>>({});
 	let formSubmitting = $state(false);
@@ -48,73 +100,237 @@
 		status: 'active'
 	});
 
-	// Fetch categories
+	// Fetch categories — fetchSecure POST (endpoint mã hoá RSA).
 	async function fetchCategories() {
+		if (!encryptionKeys) return;
 		loading = true;
+		loadError = undefined;
 		try {
-			const params = new URLSearchParams({
-				page: String(pageNumber),
-				pageSize: String(pageSize),
-				includeDeleted: String(showDeleted)
-			});
-			if (searchQuery) params.set('search', searchQuery);
-
-			const res = await fetch(`/api/admin/categories/list?${params}`);
-			const data = await res.json();
-
-			if (data.success) {
-				categories = data.items as CategoryListItem[];
-				total = data.total;
-				pageNumber = data.page;
-			} else {
-				toast.error(data.messages?.en ?? 'Failed to fetch categories');
-			}
-		} catch (e) {
-			console.error('[categories] fetch error:', e);
-			toast.error('Network error');
-		} finally {
+			const response = await encryption.fetchSecure(
+				'/api/admin/categories/list',
+				{
+					method: 'POST',
+					body: {
+						page: pageNumber,
+						pageSize,
+						search: searchQuery || undefined
+					}
+				},
+				encryptionKeys
+			);
 			loading = false;
+			if (response.ok) {
+				const data = response.data as
+					| { categories?: CategoryListItem[]; total?: number; page?: number }
+					| undefined;
+				categories = data?.categories ?? [];
+				if (typeof data?.total === 'number') total = data.total;
+				if (typeof data?.page === 'number' && data.page !== pageNumber) {
+					// response gán lại page (server clamp) — chặn effect refetch
+					pendingPageApply = true;
+					pageNumber = data.page;
+				}
+				loadedOnce = true;
+			} else {
+				loadError = resolveServerMessage(response.message, lang, pageContents.states.loadFailed);
+			}
+		} catch (err) {
+			loading = false;
+			loadError = resolveServerMessage(undefined, lang, pageContents.states.loadFailed);
+			if (import.meta.env.DEV) console.error('[categories] fetch error:', err);
 		}
 	}
 
-	// Handle search
+	// Search debounce 300ms — theo dõi searchQuery bằng effect (Input không có
+	// prop oninput; bind:value là nguồn đủ). Bỏ qua lần đầu (tránh trùng onMount).
 	let searchDebounce: ReturnType<typeof setTimeout>;
-	function handleSearch(value: string) {
-		searchQuery = value;
+	let searchArmed = false;
+	$effect(() => {
+		void searchQuery;
+		if (!searchArmed) {
+			searchArmed = true;
+			return;
+		}
 		clearTimeout(searchDebounce);
 		searchDebounce = setTimeout(() => {
 			pageNumber = 1;
-			fetchCategories();
+			void fetchCategories();
 		}, 300);
+	});
+
+	// Pagination — server-side: effect theo dõi pageNumber + pageSize refetch.
+	// Chỉ chạy SAU lần đầu (tránh trùng onMount); pendingPageApply bỏ qua lần
+	// response gán lại page (chống vòng lặp fetch). Pattern users/brands page.
+	let totalPages = $derived(Math.ceil(total / pageSize) || 1);
+	let paginationArmed = false;
+	let pendingPageApply = false;
+	$effect(() => {
+		void pageNumber;
+		void pageSize;
+		if (!paginationArmed) {
+			paginationArmed = true;
+			return;
+		}
+		if (pendingPageApply) {
+			pendingPageApply = false;
+			return;
+		}
+		void fetchCategories();
+	});
+
+	// ── Tree: build depth cho từng category (parentId có thể nằm ngoài trang
+	// hiện tại — node mồ côi coi như root, depth 0). Flatten để đút vào
+	// DataTable (row = node, cột Category render prefix '↳ ' theo depth). ──
+	interface TreeRow {
+		category: CategoryListItem;
+		depth: number;
 	}
 
-	function handleShowDeletedChange(value: boolean) {
-		showDeleted = value;
-		pageNumber = 1;
-		fetchCategories();
+	function buildTreeRows(): TreeRow[] {
+		const byId = new Map<string, TreeRow>();
+		for (const c of categories) byId.set(c._id, { category: c, depth: 0 });
+
+		const roots: TreeRow[] = [];
+		for (const row of byId.values()) {
+			const parent = row.category.parentId ? byId.get(row.category.parentId) : undefined;
+			if (parent) {
+				row.depth = parent.depth + 1;
+			} else {
+				roots.push(row);
+			}
+		}
+		// Duyệt theo level: parent luôn đứng trước con. Chu trình parentId
+		// (A→B→A) không vào roots → kèm cuối để không "mất" row.
+		const out: TreeRow[] = [];
+		const walk = (rows: TreeRow[], level: number) => {
+			for (const r of rows) {
+				if (r.depth !== level) continue;
+				out.push(r);
+				const children = [...byId.values()].filter(
+					(x) => x.category.parentId === r.category._id
+				);
+				walk(children, level + 1);
+			}
+		};
+		walk(roots, 0);
+		for (const row of byId.values()) {
+			if (!out.includes(row)) out.push(row);
+		}
+		return out;
 	}
 
-	// Pagination
-	function goToPage(page: number) {
-		if (page >= 1 && page <= totalPages) {
-			pageNumber = page;
-			fetchCategories();
+	const treeRows = $derived(buildTreeRows());
+
+	// Row đút vào DataTable: row = category + _treeDepth marker (đọc trong
+	// render cột). Object mới — không đột biến dữ liệu gốc.
+	const tableRows = $derived(
+		treeRows.map(({ category, depth }) => ({
+			...category,
+			_treeDepth: depth
+		}))
+	);
+	const tableRowsAny = $derived(tableRows as unknown as Record<string, unknown>[]);
+
+	// ── B6.2: DataTable columns ──
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'category',
+			label: pageContents.title[lang],
+			accessor: (row) => (row as unknown as CategoryListItem).name,
+			render: (value, row) => {
+				const depth = (row as unknown as { _treeDepth?: number })._treeDepth ?? 0;
+				return depth > 0 ? `${'↳ '.repeat(depth)}${String(value)}` : String(value);
+			},
+			sortable: false
+		},
+		{
+			id: 'slug',
+			label: pageContents.slugLabel[lang],
+			accessor: (row) => (row as unknown as CategoryListItem).slug,
+			sortable: false
+		},
+		{
+			id: 'status',
+			label: pageContents.statusLabel[lang],
+			accessor: (row) => (row as unknown as CategoryListItem).status,
+			status: (value) => {
+				const s = String(value ?? '');
+				if (s === 'active') return 'success';
+				if (s === 'inactive') return 'default';
+				return 'default';
+			}
+		},
+		{
+			id: 'updated',
+			label: pageContents.updated[lang],
+			accessor: (row) => formatDate((row as unknown as CategoryListItem).updatedAt),
+			noHighlight: true
+		}
+	]);
+
+	// Gộp class: defaultStyles snippet là (string|undefined)[] — lọc undefined
+	// trước khi truyền vào Icon class (string[]). Helper này nằm trong script
+	// (không inline trong attribute class) vì unocss svelte-scoped parse
+	// attribute class bằng acorn — TS syntax inline làm preprocess crash.
+	function mergeIconClasses(
+		styles: ReadonlyArray<string | undefined> | undefined,
+		extra: string
+	): string[] {
+		return [...(styles ?? []).filter((c): c is string => typeof c === 'string'), extra];
+	}
+
+	function formatDate(dateStr?: string | null): string {
+		if (!dateStr) return '—';
+		try {
+			return new Date(dateStr).toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', {
+				year: 'numeric',
+				month: 'short',
+				day: 'numeric'
+			});
+		} catch {
+			return '—';
 		}
 	}
 
-	let totalPages = $derived(Math.ceil(total / pageSize) || 1);
+	// Nhãn parent hiển thị theo depth (same prefix '↳ ' như cột table).
+	function treeLabel(row: TreeRow): string {
+		return row.depth > 0 ? `${'↳ '.repeat(row.depth)}${row.category.name}` : row.category.name;
+	}
 
-	// Available parent categories (excluding self and descendants)
-	let availableParents = $derived(
-		categories
-			.filter(c => !editingCategory || c._id !== editingCategory._id)
-			.map(c => ({ value: c._id, label: c.name }))
-	);
+	// Danh sách parent khả dụng: loại chính nó + toàn bộ descendants (chọn
+	// descendant làm parent → chu trình, node rơi khỏi tree).
+	let availableParents = $derived.by(() => {
+		const options: { value: string; label: string }[] = [];
+		if (!editingCategory) {
+			for (const r of treeRows) {
+				options.push({ value: r.category._id, label: treeLabel(r) });
+			}
+			return options;
+		}
+		// Tập _id bị loại = editingCategory + descendants (BFS vòng lặp tới cố định)
+		const excluded = new Set<string>([editingCategory._id]);
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (const r of treeRows) {
+				if (r.category.parentId && excluded.has(r.category.parentId) && !excluded.has(r.category._id)) {
+					excluded.add(r.category._id);
+					changed = true;
+				}
+			}
+		}
+		for (const r of treeRows) {
+			if (!excluded.has(r.category._id)) {
+				options.push({ value: r.category._id, label: treeLabel(r) });
+			}
+		}
+		return options;
+	});
 
 	// Open create modal
 	function openCreateModal() {
 		resetForm();
-		showCreateModal = true;
+		modalOpen = true;
 	}
 
 	// Open edit modal
@@ -127,17 +343,12 @@
 			parentId: category.parentId ?? '',
 			status: category.status
 		};
-		showEditModal = true;
+		modalOpen = true;
 	}
 
 	// Reset form
 	function resetForm() {
-		formData = {
-			name: '',
-			slug: '',
-			parentId: '',
-			status: 'active'
-		};
+		formData = { name: '', slug: '', parentId: '', status: 'active' };
 		formErrors = {};
 		editingCategory = null;
 		formSubmitting = false;
@@ -153,350 +364,479 @@
 			.replace(/^-+|-+$/g, '');
 	}
 
+	// Auto-generate slug khi gõ name (Input không có prop oninput — theo dõi
+	// bằng effect; nếu user tự gõ slug khác bản auto → ngừng theo dõi).
+	// LƯU Ý: Input khi unmount (modal đóng) ghi ngược value = undefined qua
+	// bind:value (Input Main.svelte onDestroy) → guard typeof trước khi generate.
+	let autoSlugArmed = false;
+	let autoSlugFollow = true;
+	$effect(() => {
+		void formData.name;
+		void formData.slug;
+		if (!autoSlugArmed) {
+			autoSlugArmed = true;
+			return;
+		}
+		if (!autoSlugFollow) return;
+		if (typeof formData.name !== 'string' || typeof formData.slug !== 'string') return;
+		if (formData.slug && formData.slug !== generateSlug(formData.name)) {
+			// slug bị user sửa tay → ngừng auto
+			autoSlugFollow = false;
+			return;
+		}
+		formData.slug = generateSlug(formData.name);
+	});
+
 	// Validate form
 	function validateForm(): boolean {
 		formErrors = {};
 		if (!formData.name.trim()) {
 			formErrors.name = 'Category name is required';
-		}
-		if (formData.name.trim().length < 2) {
+		} else if (formData.name.trim().length < 2) {
 			formErrors.name = 'Category name must be at least 2 characters';
 		}
 		if (!formData.slug.trim()) {
 			formErrors.slug = 'Slug is required';
-		}
-		if (formData.slug.trim().length < 2) {
+		} else if (formData.slug.trim().length < 2) {
 			formErrors.slug = 'Slug must be at least 2 characters';
-		}
-		if (!/^[a-z0-9-]+$/.test(formData.slug)) {
+		} else if (!/^[a-z0-9-]+$/.test(formData.slug)) {
 			formErrors.slug = 'Slug can only contain lowercase letters, numbers, and hyphens';
 		}
 		return Object.keys(formErrors).length === 0;
 	}
 
-	// Submit form
+	// Submit form — fetchSecure POST create/update.
 	async function submitForm() {
-		if (!validateForm()) return;
+		if (!encryptionKeys || !validateForm()) return;
 
 		formSubmitting = true;
 		try {
-			const url = editingCategory
-				? `/api/admin/categories/update/${editingCategory._id}`
-				: '/api/admin/categories/create';
-
-			const res = await fetch(url, {
-				method: editingCategory ? 'PATCH' : 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(formData)
-			});
-
-			const data = await res.json();
-
-			if (data.success) {
-				toast.success(data.messages?.en ?? (editingCategory ? 'Category updated' : 'Category created'));
-				closeModals();
-				fetchCategories();
-			} else {
-				toast.error(data.messages?.en ?? 'Operation failed');
-				if (data.fieldErrors) {
-					formErrors = data.fieldErrors;
-				}
-			}
-		} catch (e) {
-			console.error('[categories] submit error:', e);
-			toast.error('Network error');
-		} finally {
+			const response = await encryption.fetchSecure(
+				editingCategory ? '/api/admin/categories/update' : '/api/admin/categories/create',
+				{
+					method: 'POST',
+					body: editingCategory
+						? {
+								documentKey: editingCategory._id,
+								name: formData.name,
+								slug: formData.slug,
+								parentId: formData.parentId || null,
+								status: formData.status
+							}
+						: {
+								name: formData.name,
+								slug: formData.slug,
+								parentId: formData.parentId || undefined,
+								status: formData.status
+							}
+				},
+				encryptionKeys
+			);
 			formSubmitting = false;
+			if (response.ok) {
+				showToast(
+					resolveServerMessage(response.message, lang, {
+						vi: editingCategory ? pageContents.states.updated.vi : pageContents.states.created.vi,
+						en: editingCategory ? pageContents.states.updated.en : pageContents.states.created.en
+					})
+				);
+				closeModals();
+				void fetchCategories();
+			} else {
+				showToast(
+					resolveServerMessage(response.message, lang, pageContents.states.operationFailed),
+					'error'
+				);
+			}
+		} catch (err) {
+			formSubmitting = false;
+			showToast(pageContents.states.networkError[lang], 'error');
+			if (import.meta.env.DEV) console.error('[categories] submit error:', err);
 		}
 	}
 
-	// Delete category
+	// Delete category — fetchSecure POST delete (documentKey trong body).
+	// Server chặn xoá khi có children hoặc đang dùng bởi product (toast error).
 	async function deleteCategory(category: CategoryListItem) {
+		if (!encryptionKeys) return;
 		if (!confirm(`Delete "${category.name}"? This action cannot be undone.`)) return;
 
 		try {
-			const res = await fetch(`/api/admin/categories/delete/${category._id}`, {
-				method: 'DELETE'
-			});
-			const data = await res.json();
-
-			if (data.success) {
-				toast.success(data.messages?.en ?? 'Category deleted');
-				fetchCategories();
+			const response = await encryption.fetchSecure(
+				'/api/admin/categories/delete',
+				{ method: 'POST', body: { documentKey: category._id } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				showToast(resolveServerMessage(response.message, lang, pageContents.states.deleted));
+				void fetchCategories();
 			} else {
-				toast.error(data.messages?.en ?? 'Failed to delete category');
+				showToast(
+					resolveServerMessage(response.message, lang, pageContents.states.deleteFailed),
+					'error'
+				);
 			}
-		} catch (e) {
-			console.error('[categories] delete error:', e);
-			toast.error('Network error');
+		} catch (err) {
+			showToast(pageContents.states.networkError[lang], 'error');
+			if (import.meta.env.DEV) console.error('[categories] delete error:', err);
 		}
+	}
+
+	// Toast chuẩn hoá — client.browser?.toasts (pattern users/brands page).
+	function showToast(text: string, tone: 'success' | 'error' = 'success') {
+		if (!client.browser) client.browser = {};
+		client.browser.toasts?.create({ title: text, color: tone });
 	}
 
 	// Close modals
 	function closeModals() {
-		showCreateModal = false;
-		showEditModal = false;
+		modalOpen = false;
 		resetForm();
 	}
 
-	// Status badge class
-	function getStatusClass(status: string) {
-		switch (status) {
-			case 'active': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-			case 'inactive': return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
-			default: return 'bg-gray-100 text-gray-800';
-		}
-	}
-
-	// Format date
-	function formatDate(dateStr: string) {
-		return new Date(dateStr).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
-	// Build tree for display
-	let categoryTree = $derived(buildCategoryTree(categories));
-
-	function buildCategoryTree(items: CategoryListItem[]): (CategoryListItem & { children?: CategoryListItem[] })[] {
-		const map = new Map<string, CategoryListItem & { children?: CategoryListItem[] }>();
-		const roots: (CategoryListItem & { children?: CategoryListItem[] })[] = [];
-
-		items.forEach(item => {
-			map.set(item._id, { ...item, children: [] });
-		});
-
-		items.forEach(item => {
-			const node = map.get(item._id)!;
-			if (item.parentId && map.has(item.parentId)) {
-				map.get(item.parentId)!.children!.push(node);
-			} else {
-				roots.push(node);
-			}
-		});
-
-		return roots;
-	}
-
 	// Initial load
-	onMount(() => {
-		fetchCategories();
-	});
-
-	// Reactive fetch on page/search changes
-	$effect(() => {
-		page.url;
-		fetchCategories();
+	onMount(async () => {
+		if (!client.browser) client.browser = {};
+		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
+		encryptionKeys = { privateKey, publicKey };
+		await fetchCategories();
 	});
 </script>
 
-{#snippet renderCategoryTree(items: (CategoryListItem & { children?: CategoryListItem[] })[], depth = 0)}
-	<div class="space-y-1">
-		{#each items as category}
-			<div class="flex items-center gap-2" style="padding-left: {depth * 1.5}rem">
-				<div class="flex items-center gap-3 w-full">
-					<span class="font-medium text-foreground">{category.name}</span>
-					<span class="text-xs text-foreground-400 font-mono">({category.slug})</span>
-					<span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full {getStatusClass(category.status)}">
-						{category.status}
-					</span>
-					<span class="text-xs text-foreground-400 ml-auto">{formatDate(category.updatedAt)}</span>
-					<div class="flex items-center gap-1">
-						<Button
-							variant="ghost"
-							size="xs"
-							icon={iconify['pencil-rounded']}
-							aria-label="Edit category"
-							onclick={() => openEditModal(category)}
-						/>
-						<Button
-							variant="ghost"
-							size="xs"
-							color="danger"
-							icon={iconify['trash-rounded']}
-							aria-label="Delete category"
-							onclick={() => deleteCategory(category)}
-						/>
-					</div>
-				</div>
-				{#if category.children && category.children.length > 0}
-					{@render renderCategoryTree(category.children, depth + 1)}
-				{/if}
-			</div>
-		{/each}
-	</div>
-{/snippet}
+<svelte:head>
+	<title>{pageContents.title[lang]}</title>
+</svelte:head>
 
-<div class="admin-categories-page p-6 space-y-6">
-	<!-- Page Header -->
-	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-		<div>
-			<h1 class="text-2xl font-bold text-foreground">Categories</h1>
-			<p class="text-foreground-400 mt-1">Manage product categories</p>
+<section class="admin-page">
+	<header class="admin-header">
+		<div class="admin-header-text">
+			<h1 class="admin-title">{pageContents.title[lang]}</h1>
+			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
-		<Button variant="solid" color="primary" onclick={openCreateModal} icon={iconify['plus-rounded']}>
-			Add Category
-		</Button>
-	</div>
+		<div class="admin-header-actions">
+			<Button color="primary" onClick={openCreateModal}>
+				{pageContents.addCategory[lang]}
+			</Button>
+		</div>
+	</header>
 
-	<!-- Filters -->
-	<div class="flex flex-col sm:flex-row gap-4 p-4 bg-background border border-border rounded-lg">
-		<div class="flex-1 min-w-[250px]">
-			<Input
-				placeholder="Search categories..."
-				value={searchQuery}
-				oninput={(e) => handleSearch((e.target as HTMLInputElement).value)}
-				size="sm"
-			>
+	<!-- ── Bộ lọc ── -->
+	<div class="admin-filters">
+		<div class="admin-search">
+			<Input placeholder={pageContents.searchPlaceholder[lang]} bind:value={searchQuery}>
 				{#snippet leading(data)}
-					<Icon icon={iconify['search-rounded']} size={data?.size ?? 'sm'} class={data?.defaultStyles} />
+					<Icon
+						icon={iconify['search-rounded']}
+						size={(data?.size ?? 'sm') as Size}
+						class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+					/>
 				{/snippet}
 			</Input>
 		</div>
-		<div class="flex gap-2 flex-wrap">
-			<Checkbox
-				checked={showDeleted}
-				onchange={(e) => handleShowDeletedChange((e.target as HTMLInputElement).checked)}
-				label="Show deleted"
-				size="sm"
-			/>
-		</div>
 	</div>
 
-	<!-- Categories Tree/Table -->
-	<div class="bg-background border border-border rounded-lg overflow-hidden">
-		{#if loading}
-			<div class="p-8 text-center text-foreground-400">Loading categories...</div>
-		{:else if categories.length === 0}
-			<div class="p-8 text-center text-foreground-400">No categories found</div>
-		{:else}
-			<div class="p-4">
-				{#each categoryTree as category}
-					{@render renderCategoryTree([category], 0)}
-				{/each}
-			</div>
+	<!-- ── Trạng thái loading/first-load error ── -->
+	{#if loadError}
+		<div class="admin-state admin-state--error" data-test="categories-load-error">{loadError}</div>
+	{/if}
 
-			<!-- Pagination -->
-			{#if totalPages > 1}
-				<div class="px-4 py-3 border-t border-border flex items-center justify-between">
-					<p class="text-sm text-foreground-400">
-						Showing {(pageNumber - 1) * pageSize + 1} to {Math.min(pageNumber * pageSize, total)} of {total} categories
-					</p>
-					<div class="flex gap-2">
-						<Button
-							variant="outline"
-							size="sm"
-							icon={iconify['chevron-left-rounded']}
-							disabled={pageNumber === 1}
-							onclick={() => goToPage(pageNumber - 1)}
-						>
-							Previous
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							icon={iconify['chevron-right-rounded']}
-							trailingIcon
-							disabled={pageNumber === totalPages}
-							onclick={() => goToPage(pageNumber + 1)}
-						>
-							Next
-						</Button>
-					</div>
+	<!-- ── Bảng categories (DataTable + snippet actions) ── -->
+	<div class="admin-table-wrap">
+		<DataTable
+			data={tableRowsAny}
+			{columns}
+			pageSize={pageSize}
+			showPagination={false}
+			loading={loading}
+			visual={{ striped: true, hoverable: true }}
+			emptyLabel={pageContents.empty[lang]}
+			loadingLabel={pageContents.loading[lang]}
+			caption={{ vi: 'Danh sách danh mục', en: 'Category list' }}
+			actionsLabel={{ vi: 'Thao tác', en: 'Actions' }}
+			data-test="categories-datatable"
+		>
+			{#snippet actionsContent(row)}
+				{@const category = row as unknown as CategoryListItem}
+				<div class="row-actions">
+					<Button variant="ghost" size="sm" onClick={() => openEditModal(category)} data-test="category-action-edit">
+						{pageContents.editAction[lang]}
+					</Button>
+					<Button
+						variant="ghost"
+						size="sm"
+						color="error"
+						onClick={() => deleteCategory(category)}
+						data-test="category-action-delete"
+					>
+						{pageContents.deleteAction[lang]}
+					</Button>
 				</div>
-			{/if}
-		{/if}
+			{/snippet}
+		</DataTable>
 	</div>
 
-	<!-- Create/Edit Modal -->
-	<Modal display={showCreateModal || showEditModal} onClose={closeModals} size="md">
+	<!-- ── Pagination server-side ── -->
+	<footer class="admin-pagination">
+		<span class="total-count">{pageContents.totalCount[lang].replace('{n}', String(total))}</span>
+		<div class="page-controls">
+			<Pagination
+				bind:page={pageNumber}
+				totalPages={totalPages}
+				loading={loading}
+				variant="compact"
+				prevLabel={{ vi: 'Trước', en: 'Previous' }}
+				nextLabel={{ vi: 'Sau', en: 'Next' }}
+				aria-label={pageContents.title[lang]}
+			/>
+			<span class="page-info">Page {pageNumber} of {totalPages}</span>
+			<label class="page-size">
+				<span>{lang === 'vi' ? 'Row/trang' : 'Rows per page'}</span>
+				<select
+					class="admin-select"
+					value={pageSize}
+					onchange={(e) => {
+						pageSize = Number((e.currentTarget as HTMLSelectElement).value);
+						pageNumber = 1;
+						// effect theo dõi pageSize tự refetch
+					}}
+				>
+					<option value={10}>10</option>
+					<option value={20}>20</option>
+					<option value={50}>50</option>
+				</select>
+			</label>
+		</div>
+	</footer>
+
+	<!-- ── Create/Edit Modal ── -->
+	<Modal bind:display={modalOpen} onClose={closeModals} size="md">
 		<ModalContainer>
 			<ModalHeader>
-				<h2 class="text-lg font-semibold text-foreground">
-					{editingCategory ? 'Edit Category' : 'Create Category'}
+				<h2 class="modal-title">
+					{editingCategory ? pageContents.editTitle[lang] : pageContents.createTitle[lang]}
 				</h2>
 			</ModalHeader>
-			<ModalBody class="space-y-4 p-6">
-				<div class="grid gap-4 sm:grid-cols-2">
-					<Input
-						label="Category Name"
-						placeholder="Enter category name"
-						value={formData.name}
-						oninput={(e) => {
-							formData.name = (e.target as HTMLInputElement).value;
-							delete formErrors.name;
-							// Auto-generate slug if empty
-							if (!formData.slug || formData.slug === generateSlug((e.target as HTMLInputElement).value)) {
-								formData.slug = generateSlug((e.target as HTMLInputElement).value);
-							}
-						}}
-						error={formErrors.name}
-						required
-					/>
-					<Input
-						label="Slug"
-						placeholder="auto-generated from name"
-						value={formData.slug}
-						oninput={(e) => { formData.slug = (e.target as HTMLInputElement).value; delete formErrors.slug; }}
-						error={formErrors.slug}
-						required
-					/>
+			<ModalBody class="modal-body">
+				<div class="grid-2">
+					<TextField name="category-name" required>
+						<Label>{pageContents.nameLabel[lang]}</Label>
+						<Input
+							bind:value={formData.name}
+							placeholder={lang === 'vi' ? 'Nhập tên danh mục' : 'Enter category name'}
+						/>
+						{#if formErrors.name}
+							<span class="field-error" role="alert">{formErrors.name}</span>
+						{/if}
+					</TextField>
+					<TextField name="category-slug" required>
+						<Label>{pageContents.slugLabel[lang]}</Label>
+						<Input bind:value={formData.slug} placeholder="auto-generated from name" />
+						{#if formErrors.slug}
+							<span class="field-error" role="alert">{formErrors.slug}</span>
+						{/if}
+					</TextField>
 				</div>
 
-				<div>
-					<label for="category-parent-id" class="block text-sm font-medium text-foreground mb-2">Parent Category</label>
-					<Input
-						id="category-parent-id"
-						type="select"
-						placeholder="None (top level)"
-						value={formData.parentId}
-						onchange={(e) => formData.parentId = (e.target as HTMLSelectElement).value}
-						options={availableParents}
-					/>
-				</div>
+				<TextField name="category-parent">
+					<Label>{pageContents.parentLabel[lang]}</Label>
+					<select
+						class="modal-select"
+						bind:value={formData.parentId}
+						aria-label={pageContents.parentLabel[lang]}
+					>
+						<option value="">{pageContents.parentNone[lang]}</option>
+						{#each availableParents as parent (parent.value)}
+							<option value={parent.value}>{parent.label}</option>
+						{/each}
+					</select>
+				</TextField>
 
-				<div class="grid gap-4 sm:grid-cols-2">
-					<Input
-						type="select"
-						label="Status"
-						value={formData.status}
-						onchange={(e) => formData.status = (e.target as HTMLSelectElement).value}
-						options={[
-							{ value: 'active', label: 'Active' },
-							{ value: 'inactive', label: 'Inactive' }
-						]}
-					/>
-				</div>
+				<TextField name="category-status">
+					<Label>{pageContents.statusLabel[lang]}</Label>
+					<select
+						class="modal-select"
+						bind:value={formData.status}
+						aria-label={pageContents.statusLabel[lang]}
+					>
+						<option value="active">Active</option>
+						<option value="inactive">Inactive</option>
+					</select>
+				</TextField>
 			</ModalBody>
-			<ModalFooter class="justify-end gap-3">
-				<Button variant="outline" onclick={closeModals} disabled={formSubmitting}>
-					Cancel
+			<ModalFooter class="modal-footer">
+				<Button variant="outline" onClick={closeModals} disabled={formSubmitting}>
+					{pageContents.cancel[lang]}
 				</Button>
 				<Button
 					variant="solid"
 					color="primary"
 					loading={formSubmitting}
-					onclick={submitForm}
+					onClick={submitForm}
 				>
-					{editingCategory ? 'Save Changes' : 'Create Category'}
+					{editingCategory ? pageContents.saveEdit[lang] : pageContents.saveCreate[lang]}
 				</Button>
 			</ModalFooter>
 		</ModalContainer>
 	</Modal>
-</div>
+</section>
 
 <style lang="scss">
-	.admin-categories-page {
-		min-height: 100vh;
+	.admin-page {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
 	}
 
-	@media (max-width: 640px) {
-		.admin-categories-page {
-			padding: 1rem;
+	.admin-header {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.admin-title {
+		font-size: 1.5rem;
+		font-weight: 700;
+		color: var(--foreground);
+	}
+
+	.admin-subtitle {
+		font-size: 0.875rem;
+		color: var(--muted);
+		margin-top: 0.25rem;
+	}
+
+	.admin-header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.admin-filters {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.admin-search {
+		flex: 1;
+		min-width: 220px;
+		max-width: 320px;
+	}
+
+	.admin-state {
+		padding: 0.75rem 1rem;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+	}
+
+	.admin-state--error {
+		background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent);
+		color: var(--danger, #ef4444);
+		border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 25%, transparent);
+	}
+
+	.admin-table-wrap {
+		overflow-x: auto;
+		border-radius: 0.75rem;
+		border: 1px solid var(--default-300);
+		background: var(--background);
+	}
+
+	/* Nút action trong cột actions DataTable (snippet actionsContent). */
+	.row-actions {
+		display: flex;
+		gap: 0.25rem;
+		justify-content: flex-end;
+	}
+
+	.admin-pagination {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding-top: 0.25rem;
+	}
+
+	.total-count {
+		font-size: 0.875rem;
+		color: var(--muted);
+	}
+
+	.page-controls {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.page-info {
+		font-size: 0.875rem;
+		color: var(--muted);
+	}
+
+	.page-size {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.875rem;
+		color: var(--muted);
+
+		select {
+			padding: 0.25rem 0.5rem;
+			border-radius: 0.375rem;
+			border: 1px solid var(--default-300);
+			background: var(--background);
+			color: var(--foreground);
+			font-size: 0.8125rem;
 		}
+	}
+
+	.modal-title {
+		font-size: 1.125rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+
+	.modal-body {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.grid-2 {
+		display: grid;
+		gap: 1rem;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+
+		@media (max-width: 640px) {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.field-error {
+		display: block;
+		font-size: 0.75rem;
+		color: var(--danger, #ef4444);
+		margin-top: 0.25rem;
+	}
+
+	.modal-select {
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--default-300);
+		background: var(--background);
+		color: var(--foreground);
+		font: inherit;
+	}
+
+	.modal-footer {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.75rem;
 	}
 </style>

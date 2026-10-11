@@ -13,9 +13,13 @@ export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
 
 	try {
-		const read = await readAdminRequest<{ page?: number; pageSize?: number; includeDeleted?: boolean; parentId?: string | null }>(
-			event
-		);
+		const read = await readAdminRequest<{
+			page?: number;
+			pageSize?: number;
+			includeDeleted?: boolean;
+			parentId?: string | null;
+			search?: string;
+		}>(event);
 		if (!read.ok) return read.response;
 		const { lang, publicKeyB64 } = read;
 
@@ -34,7 +38,8 @@ export const POST: RequestHandler = async (event) => {
 			page: read.data.page,
 			pageSize: read.data.pageSize,
 			includeDeleted: read.data.includeDeleted,
-			parentId: read.data.parentId
+			parentId: read.data.parentId,
+			search: read.data.search
 		});
 
 		if (!result.success) {
@@ -44,7 +49,12 @@ export const POST: RequestHandler = async (event) => {
 		return respond({
 			ok: true,
 			message: { vi: 'Lấy danh sách danh mục thành công', en: 'Category list fetched successfully' },
-			data: { categories: result.categories }
+			data: {
+				categories: result.categories,
+				total: result.total,
+				page: result.page,
+				pageSize: result.pageSize
+			}
 		});
 	} catch (e) {
 		console.error('[POST /api/admin/categories/list]', e);
