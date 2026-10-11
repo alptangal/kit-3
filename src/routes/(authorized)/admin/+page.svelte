@@ -1,6 +1,6 @@
 <!-- src/routes/(authorized)/admin/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
 	import { Checkbox } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
@@ -17,6 +17,7 @@
 		type RoleOption,
 		type StatusOption
 	} from './_interface';
+	import type { DataTableColumn } from '$components/element/datatable';
 
 	// ── Ngôn ngữ ──
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
@@ -99,8 +100,10 @@
 		return status?.label ?? status?.name ?? statusId;
 	}
 
-	/** Map statusId → màu badge (khớp seed user_status) */
-	function getStatusColor(statusId?: string | null): string {
+	/** Map statusId → màu badge (khớp seed user_status; B6.2 DataTable map 'error'→'danger') */
+	function getStatusColor(
+		statusId?: string | null
+	): 'success' | 'warning' | 'error' | 'default' {
 		switch (statusId) {
 			case 'status-active':
 				return 'success';
@@ -118,6 +121,42 @@
 	function isRowDeleted(row: AdminUserRow): boolean {
 		return Boolean(row.deletedAt);
 	}
+
+	// ── B6.2: DataTable columns (data-driven, status pill qua col.status) ──
+	// Server-side pagination: users[] là 1 trang của server → DataTable paging
+	// TẮT (showPagination=false, pageSize = pageSize state), Pagination element
+	// riêng bên dưới điều khiển server (bind:page + goToPage).
+	const usersAny = $derived(users as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'name',
+			label: pageContents.table.name[lang],
+			accessor: (row) => getRowName(row as unknown as AdminUserRow),
+			sortable: false
+		},
+		{
+			id: 'role',
+			label: pageContents.table.role[lang],
+			accessor: (row) => getRoleLabel((row as unknown as AdminUserRow).roleId)
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) => getStatusLabel((row as unknown as AdminUserRow).statusId),
+			status: (_value, row) => {
+				// Map statusId → DataTableStatus ('error' của badge cũ → 'danger').
+				const color = getStatusColor((row as unknown as AdminUserRow).statusId);
+				const mapped = color === 'error' ? 'danger' : color;
+				return mapped as 'default' | 'success' | 'warning' | 'danger';
+			}
+		},
+		{
+			id: 'created',
+			label: pageContents.table.created[lang],
+			accessor: (row) => formatCreated(row as unknown as AdminUserRow),
+			noHighlight: true
+		}
+	]);
 
 	function formatCreated(row: AdminUserRow): string {
 		const raw = row.createdAt;
@@ -475,93 +514,101 @@
 			<p>{includeDeleted ? pageContents.states.emptyDeleted[lang] : pageContents.states.empty[lang]}</p>
 		</div>
 	{:else}
-		<!-- ── Bảng người dùng (HTML thuần — chưa có component Table) ── -->
+		<!-- ── B6.2: bảng người dùng — DataTable (component có sẵn) ──
+		     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
+		     Pagination element bên dưới bind:page + loading điều khiển server. -->
 		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.name[lang]}</th>
-						<th scope="col">{pageContents.table.role[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.created[lang]}</th>
-						<th scope="col" class="col-actions">{pageContents.table.actions[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each users as row (getRowDocumentKey(row) || `${row.firstname ?? ''}-${row.lastname ?? ''}`)}
-						<tr class:row-deleted={includeDeleted && isRowDeleted(row)}>
-							<td class="col-name">
-								<span class="user-name">{getRowName(row)}</span>
-								{#if includeDeleted && isRowDeleted(row)}
-									<span class="deleted-badge">{pageContents.table.deletedBadge[lang]}</span>
-								{/if}
-							</td>
-							<td class="col-role">{getRoleLabel(row.roleId)}</td>
-							<td class="col-status">
-								<span class="status-badge status-{getStatusColor(row.statusId)}">
-									{getStatusLabel(row.statusId)}
-								</span>
-							</td>
-							<td class="col-created">{formatCreated(row)}</td>
-							<td class="col-actions">
-								<div class="row-actions">
-									{#if includeDeleted && isRowDeleted(row)}
-										<Button color="success" variant="outline" size="sm" onClick={() => handleRestore(row)}>
-											{pageContents.actions.restore[lang]}
-										</Button>
-									{:else}
-										<Button color="default" variant="ghost" size="sm" onClick={() => openEditModal(row)}>
-											{pageContents.actions.edit[lang]}
-										</Button>
-										<Button color="default" variant="ghost" size="sm" onClick={() => openRoleModal(row)}>
-											{pageContents.actions.changeRole[lang]}
-										</Button>
-										<Button color="default" variant="ghost" size="sm" onClick={() => openStatusModal(row)}>
-											{pageContents.actions.changeStatus[lang]}
-										</Button>
-										<Button color="default" variant="ghost" size="sm" onClick={() => openResetModal(row)}>
-											{pageContents.actions.resetPassword[lang]}
-										</Button>
-										<Button
-											color="error"
-											variant="ghost"
-											size="sm"
-											onClick={() => openDeleteModal(row)}
-										>
-											{pageContents.actions.delete[lang]}
-										</Button>
-									{/if}
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+			<DataTable
+				data={usersAny}
+				{columns}
+				pageSize={pageSize}
+				showPagination={false}
+				loading={loading}
+				visual={{ striped: true, hoverable: true }}
+				emptyLabel={pageContents.states.empty[lang]}
+				loadingLabel={pageContents.states.loading[lang]}
+				caption={{ vi: 'Danh sách người dùng', en: 'User list' }}
+				data-test="users-datatable"
+			>
+				{#snippet actionsContent(row)}
+					{@const user = row as unknown as AdminUserRow}
+					<div class="row-actions">
+						{#if includeDeleted && isRowDeleted(user)}
+							<Button
+								color="success"
+								variant="outline"
+								size="sm"
+								onClick={() => handleRestore(user)}
+								data-test="user-action-restore"
+							>
+								{pageContents.actions.restore[lang]}
+							</Button>
+						{:else}
+							<Button
+								color="default"
+								variant="ghost"
+								size="sm"
+								onClick={() => openEditModal(user)}
+								data-test="user-action-edit"
+							>
+								{pageContents.actions.edit[lang]}
+							</Button>
+							<Button
+								color="default"
+								variant="ghost"
+								size="sm"
+								onClick={() => openRoleModal(user)}
+								data-test="user-action-role"
+							>
+								{pageContents.actions.changeRole[lang]}
+							</Button>
+							<Button
+								color="default"
+								variant="ghost"
+								size="sm"
+								onClick={() => openStatusModal(user)}
+								data-test="user-action-status"
+							>
+								{pageContents.actions.changeStatus[lang]}
+							</Button>
+							<Button
+								color="default"
+								variant="ghost"
+								size="sm"
+								onClick={() => openResetModal(user)}
+								data-test="user-action-reset"
+							>
+								{pageContents.actions.resetPassword[lang]}
+							</Button>
+							<Button
+								color="error"
+								variant="ghost"
+								size="sm"
+								onClick={() => openDeleteModal(user)}
+								data-test="user-action-delete"
+							>
+								{pageContents.actions.delete[lang]}
+							</Button>
+						{/if}
+					</div>
+				{/snippet}
+			</DataTable>
 		</div>
 
-		<!-- ── Phân trang ── -->
+		<!-- ── Phân trang (server-side) ── -->
 		<footer class="admin-pagination">
 			<span class="total-count">{totalCountText}</span>
 			<div class="page-controls">
-				<Button
-					color="default"
-					variant="outline"
-					size="sm"
-					disabled={page <= 1 || loading}
-					onClick={() => goToPage(page - 1)}
-				>
-					{pageContents.pagination.prev[lang]}
-				</Button>
+				<Pagination
+					bind:page
+					totalPages={totalPages}
+					loading={loading}
+					variant="compact"
+					prevLabel={pageContents.pagination.prev[lang]}
+					nextLabel={pageContents.pagination.next[lang]}
+					aria-label={pageContents.title[lang]}
+				/>
 				<span class="page-info">{pageInfoText}</span>
-				<Button
-					color="default"
-					variant="outline"
-					size="sm"
-					disabled={page >= totalPages || loading}
-					onClick={() => goToPage(page + 1)}
-				>
-					{pageContents.pagination.next[lang]}
-				</Button>
 				<label class="page-size">
 					<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 					<select
@@ -787,96 +834,11 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			text-align: left;
-			border-bottom: 1px solid var(--default-200);
-			white-space: nowrap;
-		}
-
-		th {
-			font-weight: 600;
-			color: var(--foreground-500);
-			background: var(--default-100);
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			letter-spacing: 0.03em;
-		}
-
-		tbody tr:last-child td {
-			border-bottom: none;
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-
-		.row-deleted {
-			opacity: 0.6;
-		}
-	}
-
-	.col-name {
-		font-weight: 500;
-		color: var(--foreground);
-	}
-
-	.user-name {
-		margin-right: 0.5rem;
-	}
-
-	.deleted-badge {
-		display: inline-block;
-		font-size: 0.7rem;
-		padding: 0.1rem 0.5rem;
-		border-radius: 999px;
-		background: var(--default-200);
-		color: var(--foreground-500);
-	}
-
-	.status-badge {
-		display: inline-block;
-		font-size: 0.75rem;
-		font-weight: 500;
-		padding: 0.15rem 0.6rem;
-		border-radius: 999px;
-
-		&.status-success {
-			background: var(--success-100);
-			color: var(--success-700);
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
-	}
-
-	.col-actions {
-		text-align: right;
-	}
-
+	/* B6.2: nút action trong cột actions DataTable (snippet actionsContent). */
 	.row-actions {
 		display: flex;
 		gap: 0.25rem;
 		justify-content: flex-end;
-		flex-wrap: wrap;
 	}
 
 	.admin-pagination {

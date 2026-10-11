@@ -6,6 +6,7 @@
 // --primary (sort/selection), --content1-foreground (text chính).
 import type { BasicConfigs, BasicProps, Size } from '$components/interface';
 import type { TranslateContent } from '$interfaces/basic';
+import type { Snippet } from 'svelte';
 
 export type DataTableSortOrder = 'asc' | 'desc';
 export type DataTableDensity = 'default' | 'compact';
@@ -179,6 +180,8 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	getRowId?: (row: T, index: number) => string;
 	/** Cho phép update/delete row (PC: hover row → action buttons; mobile: tap row → expand actions). */
 	rowActions?: boolean;
+	/** B6.2: nhãn th cột actions (i18n — default 'Actions'/'Thao tác'). */
+	actionsLabel?: TranslateContent | string;
 	/** Cho phép edit cell inline (click cell → input + confirm/cancel). */
 	editable?: boolean | DataTableEditable;
 	/** Lazy load row (infinite scroll + load more). */
@@ -195,6 +198,8 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	rowDetail?: boolean | DataTableRowDetail;
 	/** Opt-in click cell → modal chi tiết + focus đúng field (đè rowDetail click). */
 	cellDetail?: boolean;
+	/** B6.2: snippet actions custom (đè nút built-in — xem actionsContent). */
+	actionsContent?: Snippet<[Record<string, unknown>, string]>;
 	/** Callback khi tạo row mới (row + rowId). */
 	onRowCreate?: (row: T, rowId: string) => void | Promise<void>;
 	/** Callback khi clone row (row gốc + row clone). */
@@ -284,6 +289,8 @@ export interface DataTableConfigs extends BasicConfigs {
 	loadingMoreText: string;
 	/** Nhãn action bar mobile (i18n). */
 	rowActionsLabel: string;
+	/** B6.2: nhãn th cột actions (thead). */
+	actionsText: string;
 	/** Create row mới bật? (cho toolbar + empty + no-results). */
 	creatable: boolean;
 	/** Nhãn nút create (i18n). */
@@ -379,6 +386,8 @@ export interface DataTableSharedState {
 	rowActions: boolean;
 	/** Mobile? (client.browser?.isMobile — tap row → expand actions). */
 	isMobile: boolean;
+	/** B6.2: snippet actions custom (đè nút built-in — undefined = built-in). */
+	actionsContent: Snippet<[Record<string, unknown>, string]> | undefined;
 	/** Chế độ sửa CẢ ROW đang mở cho rowId này (undefined nếu không). */
 	isRowEditing: (rowId: string) => boolean;
 	/** Mở row editor (PC nút ✎ / mobile nút Update). */

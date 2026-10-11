@@ -61,6 +61,8 @@
 		nextLabel,
 		getRowId,
 		rowActions,
+		actionsLabel,
+		actionsContent,
 		editable,
 		lazyLoad: lazyLoadProp,
 		visual,
@@ -121,7 +123,8 @@
 		return { enabled: false, columns: undefined as string[] | undefined, ...noLabel };
 	});
 	const editableDerived: boolean = $derived(editableCfg.enabled);
-	const rowActionsDerived: boolean = $derived(!!rowActions);
+	// B6.2: actionsContent → rowActions tự bật (snippet custom thay nút built-in).
+	const rowActionsDerived: boolean = $derived(!!rowActions || !!actionsContent);
 
 	// Lazy load config.
 	const lazyLoadEnabled: boolean = $derived(!!lazyLoadProp?.enabled);
@@ -1019,6 +1022,8 @@
 	const loadMoreText = $derived(getText(lazyLoadProp?.loadMoreLabel, { en: 'Load more', vi: 'Tải thêm' }));
 	const loadingMoreText = $derived(getText(lazyLoadProp?.loadingMoreLabel, { en: 'Loading…', vi: 'Đang tải…' }));
 	const rowActionsText = $derived(getText(undefined, { en: 'Row actions', vi: 'Thao tác row' }));
+	// B6.2: nhãn th cột actions (hiện trên thead khi rowActions bật).
+	const actionsText = $derived(getText(actionsLabel, { en: 'Actions', vi: 'Thao tác' }));
 
 	// ── LABELS wave 7 (create/export/import/copy/clone/selection tools) ──
 	const createText = $derived(getText(creatableCfg.label, { en: 'Create new row', vi: 'Tạo row mới' }));
@@ -1162,6 +1167,9 @@
 		get rowActionsLabel() {
 			return rowActionsText;
 		},
+		get actionsText() {
+			return actionsText;
+		},
 		get creatable() {
 			return creatableDerived;
 		},
@@ -1299,6 +1307,9 @@
 		},
 		get rowActions() {
 			return rowActionsDerived;
+		},
+		get actionsContent() {
+			return actionsContent;
 		},
 		get isMobile() {
 			return isMobile;

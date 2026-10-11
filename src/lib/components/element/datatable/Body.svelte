@@ -333,48 +333,54 @@
 					{/each}
 					{#if ctx.rowActions}
 						<td class="datatable-td datatable-td--actions" data-role="row-actions">
-							<div class="datatable-row-actions">
-								<button
-									type="button"
-									class="datatable-action-btn datatable-action-btn--edit"
-									aria-label={ctx.configs.updateText}
-									title={ctx.configs.updateText}
-									data-test="datatable-row-edit"
-									onclick={() => ctx.openRowEditor(rowId)}
-								>
-									<span aria-hidden="true">✎</span>
-								</button>
-								<button
-									type="button"
-									class="datatable-action-btn datatable-action-btn--copy"
-									aria-label={ctx.configs.copyText}
-									title={ctx.configs.copyText}
-									data-test="datatable-row-copy"
-									onclick={() => ctx.copyRow(rowId)}
-								>
-									<span aria-hidden="true">⧉</span>
-								</button>
-								<button
-									type="button"
-									class="datatable-action-btn datatable-action-btn--clone"
-									aria-label={ctx.configs.cloneText}
-									title={ctx.configs.cloneText}
-									data-test="datatable-row-clone"
-									onclick={() => ctx.cloneRow(rowId)}
-								>
-									<span aria-hidden="true">⎘</span>
-								</button>
-								<button
-									type="button"
-									class="datatable-action-btn datatable-action-btn--delete"
-									aria-label={ctx.configs.deleteText}
-									title={ctx.configs.deleteText}
-									data-test="datatable-row-delete"
-									onclick={() => ctx.requestDeleteRow(rowId)}
-								>
-									<span aria-hidden="true">🗑</span>
-								</button>
-							</div>
+							{#if ctx.actionsContent}
+								<!-- B6.2: snippet actions custom (đè nút built-in) — page admin
+								     truyền nút đặc thù (Edit/Role/Status/Reset/Delete/Restore). -->
+								{@render ctx.actionsContent(row, rowId)}
+							{:else}
+								<div class="datatable-row-actions">
+									<button
+										type="button"
+										class="datatable-action-btn datatable-action-btn--edit"
+										aria-label={ctx.configs.updateText}
+										title={ctx.configs.updateText}
+										data-test="datatable-row-edit"
+										onclick={() => ctx.openRowEditor(rowId)}
+									>
+										<span aria-hidden="true">✎</span>
+									</button>
+									<button
+										type="button"
+										class="datatable-action-btn datatable-action-btn--copy"
+										aria-label={ctx.configs.copyText}
+										title={ctx.configs.copyText}
+										data-test="datatable-row-copy"
+										onclick={() => ctx.copyRow(rowId)}
+									>
+										<span aria-hidden="true">⧉</span>
+									</button>
+									<button
+										type="button"
+										class="datatable-action-btn datatable-action-btn--clone"
+										aria-label={ctx.configs.cloneText}
+										title={ctx.configs.cloneText}
+										data-test="datatable-row-clone"
+										onclick={() => ctx.cloneRow(rowId)}
+									>
+										<span aria-hidden="true">⎘</span>
+									</button>
+									<button
+										type="button"
+										class="datatable-action-btn datatable-action-btn--delete"
+										aria-label={ctx.configs.deleteText}
+										title={ctx.configs.deleteText}
+										data-test="datatable-row-delete"
+										onclick={() => ctx.requestDeleteRow(rowId)}
+									>
+										<span aria-hidden="true">🗑</span>
+									</button>
+								</div>
+							{/if}
 						</td>
 					{/if}
 				</tr>
@@ -384,22 +390,29 @@
 						<td colspan={colCount}>
 							<div class="datatable-mobile-actions">
 								<span class="datatable-mobile-actions-label">{ctx.configs.rowActionsLabel}</span>
-								<button
-									type="button"
-									class="datatable-mobile-action datatable-mobile-action--update"
-									onclick={() => {
-										ctx.handleRowUpdate(row, rowId);
-									}}
-								>
-									{ctx.configs.updateText}
-								</button>
+								{#if ctx.actionsContent}
+									<!-- B6.2: snippet actions custom cho mobile (nút built-in
+									     Update/Delete gọi onRowUpdate/onRowDelete — page dùng
+									     snippet thường không truyền 2 callback đó → nút chết). -->
+									{@render ctx.actionsContent(row, rowId)}
+								{:else}
+									<button
+										type="button"
+										class="datatable-mobile-action datatable-mobile-action--update"
+										onclick={() => {
+											ctx.handleRowUpdate(row, rowId);
+										}}
+									>
+										{ctx.configs.updateText}
+									</button>
 								<button
 									type="button"
 									class="datatable-mobile-action datatable-mobile-action--delete"
 									onclick={() => ctx.requestDeleteRow(rowId)}
 								>
 									{ctx.configs.deleteText}
-				</button>
+								</button>
+								{/if}
 							</div>
 						</td>
 					</tr>
@@ -559,9 +572,15 @@
 	}
 
 	// ── Row actions column (PC: ẩn → hover row hiện; mobile: ẩn — dùng expand) ──
+	// B6.2: thoát rule ellipsis của .datatable-td (max-width:0 + overflow:hidden
+	// kẹp cột còn ~24px → snippet actionsContent 5 nút tràn đè td kế bên —
+	// elementFromPoint rơi vào td created, click nút không bao giờ tới).
 	.datatable-td--actions {
-		width: 5rem;
+		max-width: none;
+		overflow: visible;
+		text-overflow: clip;
 		white-space: nowrap;
+		text-align: right;
 	}
 
 	.datatable-row-actions {
@@ -653,6 +672,14 @@
 		align-items: center;
 		gap: 0.5rem;
 		flex-wrap: wrap;
+
+		// B6.2: snippet actionsContent (vd .row-actions của page admin) cũng
+		// phải wrap bên trong bar — mobile 375px không đủ 1 hàng cho 5 nút text.
+		> :global(.row-actions),
+		> :global(.admin-row-actions) {
+			flex-wrap: wrap;
+			justify-content: flex-start;
+		}
 	}
 
 	.datatable-mobile-actions-label {

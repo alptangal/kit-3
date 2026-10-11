@@ -131,6 +131,13 @@
 					</th>
 				{/if}
 			{/each}
+			{#if ctx.rowActions}
+				<!-- B6.2: th cột actions — tbody luôn render td cuối (built-in 4 nút
+				     hoặc snippet actionsContent) nên thead cần cột tương ứng. -->
+				<th class="datatable-th datatable-th--actions" scope="col">
+					<span class="datatable-th-label">{configs?.actionsText}</span>
+				</th>
+			{/if}
 		</tr>
 	</thead>
 {/if}
@@ -165,6 +172,19 @@
 
 	.datatable-th--check {
 		width: 2.5rem;
+	}
+
+	// B6.2: th cột actions — căn phải khớp td, không kẹp width.
+	.datatable-th--actions {
+		text-align: right;
+	}
+
+	// Mobile: ẩn th actions — mirror td (hover:none)(pointer:coarse)
+	// trong Body (td display:none) để thead/tbody cùng số cột.
+	@media (hover: none) and (pointer: coarse) {
+		.datatable-th--actions {
+			display: none;
+		}
 	}
 
 	// Class .datatable-selectall-checkbox nằm trên root Checkbox component
