@@ -323,7 +323,8 @@
 		<p class="demo-hint">
 			Nhập mã → <code>Enter</code> hoặc nút <code>+</code> → thêm vào danh sách. Nút scanner
 			→ mở camera (native BarcodeDetector hoặc polyfill zbar-wasm). Beep 1 nốt khi quét
-			được 1 mã, 2 nốt khi nhiều mã.
+			được 1 mã, 2 nốt khi nhiều mã. Mã TRÙNG → toast + card hiện có rung/tỏa sáng,
+			không thêm bản sao.
 			Đã quét: <code>{barcodeCodes.length}</code>
 		</p>
 	</section>

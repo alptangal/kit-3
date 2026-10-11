@@ -2673,10 +2673,42 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	const selectAllOnDerived = $derived(props.selectAllOn === true);
 	const formatsDerived = $derived(props.formats);
 
+	// Yêu cầu (6): mã vừa quét/nhập TRÙNG → toast + animate card hiện có (bounce
+	// + rung + tỏa sáng 900ms rồi tự gỡ, timer 1 lần dùng chung như addFlash).
+	let dupFlashCode: string | undefined = $state();
+	let dupFlashTimer: ReturnType<typeof setTimeout> | undefined;
+	function triggerDupFlash(raw: string) {
+		dupFlashCode = undefined;
+		// rAF: force reflow giữa 2 lần gắn class → animation restart đúng (card
+		// trùng đã flash lần trước cũng phải chạy lại).
+		requestAnimationFrame(() => {
+			dupFlashCode = raw;
+			if (dupFlashTimer) clearTimeout(dupFlashTimer);
+			dupFlashTimer = setTimeout(() => {
+				dupFlashCode = undefined;
+				dupFlashTimer = undefined;
+			}, 900);
+		});
+	}
+
 	function addBarcode(raw: string) {
 		if (configs.disabled || !raw?.trim()) return;
+		const code = raw.trim();
+		// Yêu cầu (6): trùng → toast + animate card (bounce/rung/tỏa sáng), KHÔNG
+		// thêm bản sao. Toast qua store global (ToastWrapper root layout) —
+		// mirror pattern admin pages dùng client.browser?.toasts?.create().
+		if ((codes ?? []).includes(code)) {
+			if (browser) {
+				client.browser?.toasts?.create({
+					title: `Mã "${code}" đã tồn tại trong danh sách`,
+					color: 'warning'
+				});
+				triggerDupFlash(code);
+			}
+			return;
+		}
 		_codesJustReset = false;
-		codes = [...(codes ?? []), raw.trim()]; // gán array MỚI (kỷ luật $bindable)
+		codes = [...(codes ?? []), code]; // gán array MỚI (kỷ luật $bindable)
 		// Yêu cầu (4): Enter/click nút add → nút add flash (pulse ring + glow +
 		// shake ~600ms) rồi tự bỏ class — guard nhiều lần gõ liên tiếp.
 		if (browser) triggerAddFlash();
@@ -2843,6 +2875,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		scanPaused = false;
 		scanResults = [];
 		lastDetectedRaw = undefined;
+		// Yêu cầu (7): blur input text — mở camera xong keyboard mobile KHÔNG còn
+		// đè overlay (activeElement dừng trigger soft keyboard), caret ẩn.
+		configs.input.text?.ref?.blur();
+		if (configs.status.focus) configs.status.focus = false;
 		// primeAudio trong gesture click — AudioContext resume trước khi beep sau
 		if (beepOnDerived) primeAudio();
 		scanOpen = true;
@@ -3038,6 +3074,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		if (addFlashTimer) {
 			clearTimeout(addFlashTimer);
 			addFlashTimer = undefined;
+		}
+		// type='barcode': hủy flash timer card trùng khi unmount
+		if (dupFlashTimer) {
+			clearTimeout(dupFlashTimer);
+			dupFlashTimer = undefined;
 		}
 		// type='file': revoke mọi objectURL còn lại (effect cleanup đã revoke phần lớn,
 		// đây là phòng thủ nếu preview build chưa kịp chạy cleanup)
@@ -3578,6 +3619,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					<li
 						class="input-barcode-card"
 						class:input-barcode-selected={selectedCodes.includes(raw)}
+						class:input-barcode-dup-flash={dupFlashCode === raw}
 						data-test="input-barcode-card"
 					>
 						{@render barcodeCard(i, raw)}

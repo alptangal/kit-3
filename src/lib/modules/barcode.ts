@@ -64,6 +64,10 @@ function getAudioCtxCtor(): typeof AudioContext | undefined {
  * Tạo + resume AudioContext trong user gesture (click nút scan) — beep sau
  * (detect loop, KHÔNG gesture) dùng context đã resume mới kêu được. Autoplay
  * policy: AudioContext tạo ngoài gesture bị suspended → oscillator im lặng.
+ * iOS Safari 15.4: resume() promise có thể chưa resolve trong gesture →
+ * playBeep sau đó phát TRƯỚC khi engine bật → im lặng. Fix: phát 1 silent
+ * buffer NGAY trong gesture (unlock) — iOS cần ≥1 buffer được "chơi" trong
+ * gesture thì mọi oscillator sau kêu được, kể cả khi resume chậm.
  */
 export function primeAudio() {
 	if (typeof window === 'undefined') return;
@@ -71,7 +75,15 @@ export function primeAudio() {
 		const Ctx = getAudioCtxCtor();
 		if (!Ctx) return;
 		if (!audioCtx) audioCtx = new Ctx();
-		if (audioCtx.state === 'suspended') void audioCtx.resume();
+		const ctx = audioCtx;
+		if (ctx.state === 'suspended') void ctx.resume();
+		// iOS unlock: silent buffer 1 sample — bắt buộc trong GESTURE (đây là
+		// nơi gọi). Kỹ thuật chuẩn iOS (silent-unlock); Chrome/desktop vô hại.
+		const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+		const src = ctx.createBufferSource();
+		src.buffer = buf;
+		src.connect(ctx.destination);
+		if (src.start) src.start(0);
 	} catch {
 		// WebAudio không dùng được → im lặng
 	}
@@ -90,8 +102,11 @@ export function playBeep(kind: 'single' | 'multiple') {
 		const Ctx = getAudioCtxCtor();
 		if (!Ctx) return;
 		if (!audioCtx) audioCtx = new Ctx();
-		if (audioCtx.state === 'suspended') void audioCtx.resume();
 		const ctx = audioCtx;
+		// iOS Safari 15.4: state 'interrupted' (riêng của iOS — KHÔNG phải
+		// 'suspended') sau khi luồng audio bị ngắt (khóa màn hình/cuộc gọi) —
+		// resume() thường đủ nhưng kèm 'suspended' cho an toàn mọi engine.
+		if (ctx.state !== 'running') void ctx.resume();
 		const now = ctx.currentTime;
 		const beep = (startAt: number, freq: number, duration: number) => {
 			const osc = ctx.createOscillator();
