@@ -13,6 +13,23 @@
 	// nghĩa là keyboard đè lên input → cần đẩy nội dung trang lên trên.
 	const OFFSET = 5;
 
+	/**
+	 * Scroll container thật của app: ancestor gần nhất có overflow auto/scroll
+	 * và nội dung tràn (app shell `div.w-full.h-full` — KHÔNG phải window).
+	 * Window scrollTo vô tác dụng ở đây → mọi compensation phải cuộn container.
+	 */
+	function findScrollContainer(el: HTMLElement): HTMLElement | null {
+		let node: HTMLElement | null = el.parentElement;
+		while (node && node !== document.body) {
+			const oy = getComputedStyle(node).overflowY;
+			if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight + 1) {
+				return node;
+			}
+			node = node.parentElement;
+		}
+		return null;
+	}
+
 	let { ...props }: KeyboardNumberProps = $props();
 	let configs: KeyboardNumberConfigs = $state({
 		// timeId khởi tạo ngay từ $state (không đợi onMount) — load handler luôn có
@@ -35,13 +52,29 @@
 							const targetRect = numberKeyboardState.target.ref.getBoundingClientRect();
 							bodyHeightBackup = document.body.style.getPropertyValue('margin-top');
 							if (kbRect.top - targetRect.bottom < OFFSET) {
-								// Keyboard đè lên input: đẩy toàn bộ nội dung trang lên trên
-								// keyboard (margin âm) + cuộn xuống để input + vùng phía trên hiện đủ.
-								document.body.style.marginTop = `-${targetRect.bottom - kbRect.top + OFFSET}px`;
+								// Keyboard đè input: cuộn SCROLL CONTAINER (không phải window —
+								// app shell là div.w-full.h-full overflow:auto, window scrollTo
+								// vô tác dụng) để input vào vùng clip phía trên keyboard.
+								const scroller = findScrollContainer(numberKeyboardState.target.ref);
+								let needMargin = targetRect.bottom - (kbRect.top - OFFSET);
+								if (scroller && needMargin > 0) {
+									// Còn chỗ cuộn → cuộn container đúng lượng thiếu; re-measure
+									// rect sau cuộn (getBoundingClientRect đổi theo scrollTop).
+									const maxTop = scroller.scrollHeight - scroller.clientHeight;
+									const room = Math.max(0, maxTop - scroller.scrollTop);
+									const scrollUp = Math.min(needMargin, room);
+									if (scrollUp > 0) {
+										scroller.scrollTop += scrollUp;
+										const newRect = numberKeyboardState.target.ref.getBoundingClientRect();
+										needMargin = newRect.bottom - (kbRect.top - OFFSET);
+									}
+								}
+								if (needMargin > 0) {
+									// Hết chỗ cuộn (input gần đáy nội dung) → margin âm đẩy cả
+									// trang lên, input + phần trên hiện trên keyboard (fallback).
+									document.body.style.marginTop = `-${needMargin}px`;
+								}
 								data.node.style.bottom = `${0}px`;
-								// Cuộn 100px quanh mốc sau khi margin đổi — bù viewport mobile
-								// (input có thể bị khuất nếu không cuộn).
-								window.scrollTo({ top: 100, behavior: 'smooth' });
 							} else if (kbRect.top - targetRect.bottom > OFFSET) {
 								// Keyboard cách input quá xa: kéo nội dung xuống gần keyboard hơn.
 								document.body.style.marginTop = `${kbRect.top - targetRect.bottom - OFFSET}px`;
@@ -144,12 +177,24 @@
 		--safe-bottom: env(safe-area-inset-bottom, 0px);
 		--safe-top: env(safe-area-inset-top, 0px);
 		padding-bottom: max(16px, env(safe-area-inset-bottom));
-		gap: var(--border-width-xs);
+		/* Yêu cầu user: nền mờ che nội dung trang phía sau (không lộ qua khe),
+		   phím KHÔNG có gap (khít nhau như bàn phím hệ thống — gap lộ nội dung
+		   gây mất tập trung). Nền đặt trên root, phím tự phủ kín root. */
+		background: var(--background, #fff);
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
+		border-top: var(--border-width, 1px) solid var(--border, hsl(0 0% 88%));
+		box-shadow: 0 -8px 24px -12px rgb(0 0 0 / 0.18);
 		position: fixed;
 		bottom: 0px;
 		z-index: 99;
 		left: 50%;
 		transform: translateX(-50%);
 		width: 100%;
+
+		@media (prefers-color-scheme: dark) {
+			background: var(--background, hsl(240 5.9% 10%));
+			border-top-color: var(--border, hsl(0 0% 24%));
+		}
 	}
 </style>

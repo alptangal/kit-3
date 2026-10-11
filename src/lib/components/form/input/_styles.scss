@@ -288,6 +288,7 @@
 		background: transparent;
 		color: var(--color);
 		min-width: 0;
+		position: relative;
 		&.input-editor-number {
 			padding-inline: 0 !important;
 		}
@@ -295,10 +296,15 @@
 			border: none;
 			outline: none;
 		}
+		/* Fix #5: visual caret — absolute theo left (px đo bằng mirror span),
+		   chỉ hiển thị khi keyboard số mở (Svelte render có điều kiện). */
 		.input-visual-cursor {
+			position: absolute;
+			top: 0;
 			border: none;
-			border-right: var(--border-width) solid var(--color-sky-600);
+			border-right: 2px solid var(--color-sky-600);
 			height: calc(100% - var(--border-width) * 2);
+			pointer-events: none;
 		}
 	}
 	// type='currency' — symbol span (prefix/suffix): muted màu phụ, không select

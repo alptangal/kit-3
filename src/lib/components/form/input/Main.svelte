@@ -206,8 +206,15 @@
 	let _disabled: undefined | boolean = $state(undefined);
 	// type='file': ref dropzone (div role=button) — focus()/DnD dùng
 	let dropzoneEl: HTMLDivElement | undefined;
-	// Visual number keyboard cleanup — gán ở showVisualNumberKb(), gọi ở window mousedown (không cần reactive)
+	// Visual number keyboard cleanup — gán ở showVisualNumberKb(), gọi ở hideVisualNumberKb()
+	// (window mousedown/focusout — không cần reactive)
 	let visualNumberKbCleaner: (() => void) | undefined;
+	// Visual cursor (Fix #5): trạng thái hiển thị + offset trái (px) đo bằng mirror span
+	// theo currentCursor — mount khi keyboard số mở, unmount khi đóng.
+	let visualCursorVisible = $state(false);
+	let visualCursorLeft = $state(0);
+	// Fix #3: ref input đang mở keyboard — focusout window capture so contains để hide.
+	let visualKbInputRef: HTMLInputElement | undefined;
 	const disabledDerived = $derived.by(() => {
 		if (disabled) return disabled;
 		return _disabled ?? formContext?.disabled;
@@ -1100,11 +1107,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 									if (client.browser?.isMobile) ev.preventDefault();
 									let index: number | undefined;
 									if (!value || !configs.input.number.ref) {
-										index = 1;
+										// cursor 0-BASED (số ký tự trước con trỏ) — chuỗi rỗng → 0.
+										// Trước đây là 1: gõ phím đầu chèn tại 1 rồi cursor += 1 = 2 trên
+										// chuỗi 1 ký tự → Del tính "không ở cuối chuỗi" → bị nuốt 1 lần.
+										index = 0;
 									} else {
 										index = calculatorCursor(e as MouseEvent, value, configs.input.number.ref);
 									}
-									configs.status.currentCursor = index ?? value?.length ?? 1;
+									configs.status.currentCursor = index ?? value?.length ?? 0;
 								}
 							}
 						},
@@ -1124,8 +1134,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 											!configs.ref?.contains(ev.target as HTMLElement) &&
 											!client.browser?.visualKeyboard?.ref?.contains(ev.target as HTMLElement)
 										) {
-											configs.status.focus = false;
-											if (visualNumberKbCleaner) visualNumberKbCleaner();
+											hideVisualNumberKb();
 										}
 									},
 									options: {
@@ -1271,11 +1280,12 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 									if (client.browser?.isMobile) ev.preventDefault();
 									let index: number | undefined;
 									if (!value || !configs.input.currency.ref) {
-										index = 1;
+										// cursor 0-BASED — chuỗi rỗng → 0 (mirror number, Del bị nuốt 1 lần).
+										index = 0;
 									} else {
 										index = calculatorCursor(e as MouseEvent, value, configs.input.currency.ref);
 									}
-									configs.status.currentCursor = index ?? value?.length ?? 1;
+									configs.status.currentCursor = index ?? value?.length ?? 0;
 								}
 							}
 						},
@@ -1295,8 +1305,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 											!configs.ref?.contains(ev.target as HTMLElement) &&
 											!client.browser?.visualKeyboard?.ref?.contains(ev.target as HTMLElement)
 										) {
-											configs.status.focus = false;
-											if (visualNumberKbCleaner) visualNumberKbCleaner();
+											hideVisualNumberKb();
 										}
 									},
 									options: {
@@ -1685,8 +1694,59 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				(configs.input.number.ref as HTMLInputElement),
 			maxLength: configs.maxLength
 		};
+		visualKbInputRef = target.ref;
+		configs.status.focus = true; // Fix #3: focus status phải true → hide-handler gate hoạt động
+		visualCursorVisible = true; // Fix #5: hiện visual cursor khi keyboard mở
 		visualNumberKbCleaner = ensureKeyboardHost(target);
 	}
+	/** Fix #3: đóng visual keyboard + dọn mọi trạng thái kèm theo (focus/cursor).
+	 *  Điểm gọi duy nhất cho mọi đường hide — window mousedown, focusout (Tab/
+	 *  blur programmatic), unmount. Idempotent (cleaner tự no-op lần 2). */
+	function hideVisualNumberKb() {
+		if (visualNumberKbCleaner) visualNumberKbCleaner();
+		visualNumberKbCleaner = undefined;
+		visualKbInputRef = undefined;
+		visualCursorVisible = false;
+		configs.status.focus = false;
+	}
+	// Fix #5: đo vị trí caret — mirror span (measureTextWidth) với prefix
+	// value.slice(0, currentCursor), cộng thêm scrollLeft của input (value dài
+	// hơn khung → input cuộn ngang, caret phải trừ theo scroll hiện tại).
+	// Chạy lại khi value HOẶC currentCursor đổi trong lúc keyboard mở.
+	$effect(() => {
+		if (!visualCursorVisible) return;
+		const ref = visualKbInputRef;
+		if (!ref) return;
+		const cursor = configs.status.currentCursor ?? value?.length ?? 0;
+		const text = (value ?? '').slice(0, cursor);
+		const textWidth = text ? measureTextWidth(text, ref) : 0;
+		// type='currency' symbol prefix đứng TRƯỚC input → caret lệch phải thêm
+		// bề rộng symbol (span flex-shrink 0). Suffix không ảnh hưởng (đứng sau).
+		const symbolW =
+			configs.type === 'currency' && currencySymbolPositionDerived == 'prefix'
+				? (ref.previousElementSibling as HTMLElement | null)?.offsetWidth ?? 0
+				: 0;
+		// editor padding-inline = 0 (input-editor-number) → offset = symbol + text;
+		// min clientWidth giữ caret trong khung khi ở cuối chuỗi dài.
+		visualCursorLeft = Math.min(symbolW + textWidth - ref.scrollLeft, ref.clientWidth);
+	});
+	// Fix #3: focusout capture trên window — bắt blur không qua mousedown (Tab,
+	// blur() programmatic). focusout bubble (khác blur) → window nhận được; so
+	// relatedTarget: rời input VÀ không vào keyboard → hide. Keyboard phím
+	// preventDefault mousedown nên click phím không tạo focusout về input.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const onFocusout = (e: FocusEvent) => {
+			if (!visualNumberKbCleaner || !visualKbInputRef) return;
+			const to = e.relatedTarget as Node | null;
+			const kbRef = client.browser?.visualKeyboard?.ref;
+			const intoKb = to instanceof Node && kbRef?.contains(to);
+			const intoInput = to instanceof Node && visualKbInputRef.contains(to);
+			if (!intoInput && !intoKb) hideVisualNumberKb();
+		};
+		window.addEventListener('focusout', onFocusout, { capture: true });
+		return () => window.removeEventListener('focusout', onFocusout, { capture: true });
+	});
 	function calculatorString(input: string): number | undefined {
 		let calculated: number;
 		try {
@@ -2986,6 +3046,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				if (item.url) URL.revokeObjectURL(item.url);
 			}
 		}
+		// number/currency: input unmount khi visual keyboard đang mở → keyboard
+		// kẹt trên màn hình vĩnh viễn (host là singleton refCount, không ai giải
+		// phóng). hideVisualNumberKb dọn cleaner + cursor + focus status (Fix #3).
+		if (visualNumberKbCleaner) {
+			hideVisualNumberKb();
+		} else if (client.browser?.visualKeyboard?.isShow && configs.status?.focus) {
+			client.browser.visualKeyboard.isShow = false;
+		}
 		[...(configs.timeId?.values() ?? [])].forEach((time) => {
 			clearTimeout(time);
 		});
@@ -3612,8 +3680,13 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				id={inputId}
 				{@attach handleEvents(configs.input.number.event)}
 			/>
-			{#if client.browser?.isMobile}
-				<div class="input-visual-cursor"></div>
+			{#if client.browser?.isMobile && visualCursorVisible}
+				<!-- Fix #5: visual caret currency — offset symbol đã gộp trong visualCursorLeft -->
+				<div
+					class="input-visual-cursor"
+					data-test="input-visual-cursor"
+					style:left={`${visualCursorLeft}px`}
+				></div>
 			{/if}
 		</div>
 	{:else if configs.type == 'currency'}
@@ -3638,8 +3711,13 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			{#if currencySymbolPositionDerived == 'suffix'}
 				<span class="input-currency-symbol" data-test="input-currency-symbol" aria-hidden="true">{currencySymbolDerived}</span>
 			{/if}
-			{#if client.browser?.isMobile}
-				<div class="input-visual-cursor"></div>
+			{#if client.browser?.isMobile && visualCursorVisible}
+				<!-- Fix #5: visual caret currency — offset theo prefix symbol (nếu có) -->
+				<div
+					class="input-visual-cursor"
+					data-test="input-visual-cursor"
+					style:left={`${visualCursorLeft}px`}
+				></div>
 			{/if}
 		</div>
 	{:else}
