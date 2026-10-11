@@ -175,10 +175,17 @@
 	}
 }
 
-/* P3: HEADER 2-ROW (brand-row trên + trigger-row dưới — demo đặt markup dọc).
-   Khi collapsed: 2 row đều căn GIỮA rail 56px (bỏ padding-inline dư — slot con
+/* P3: HEADER — Pha 3: EXPANDED brand + trigger cùng 1 row ngang (mặc định
+   flex NGANG của SidebarHeader); COLLAPSED chuyển 2-row dọc: brand-row trên,
+   trigger-row dưới, cả 2 căn GIỮA rail 56px (bỏ padding-inline dư — slot con
    tự mang padding 0.75rem phải đè bằng 0). Peek hover → về layout đầy đủ. */
 .sidebar-aside.sidebar-collapsed {
+	:global(.sidebar-header) {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.25rem;
+	}
+
 	:global(.brand-row),
 	:global(.trigger-row) {
 		justify-content: center;
@@ -193,10 +200,18 @@
 }
 
 .sidebar-aside.sidebar-collapsed:hover {
+	/* PEEK = mô phỏng expanded → header về 1 row ngang như expanded thật */
+	:global(.sidebar-header) {
+		flex-direction: row;
+	}
+
 	:global(.brand-row),
 	:global(.trigger-row) {
 		justify-content: flex-start;
 		padding-inline: 0.75rem;
+		/* reset width:100% từ rule collapsed ở trên — không thì trigger-row chiếm
+		   full rail, brand-row co còn đúng icon → brand-name width 0 */
+		width: auto;
 	}
 
 	:global(.brand-row .brand-name) {

@@ -247,26 +247,22 @@
 
 	/* Wave10: 3 section (header/content/footer) không còn padding-inline —
 	   nội dung con tự mang spacing riêng (item tự có spacing, section "flush").
-	   P3: header 2-row — brand-row (logo, row trên) + trigger-row (trigger, row
-	   dưới) dọc; collapsed: 2 row căn giữa rail 56px, padding-inline dư về 0.
-	   .sidebar-header là flex NGANG (hash scoped SidebarHeader — component chung
-	   cho mọi sidebar) → đè bằng :global + flex-direction column (bẫy scoped
-	   CSS: slot con hash khác → :global). */
-	:global(.sidebar-aside .sidebar-header) {
-		flex-direction: column;
-		align-items: stretch;
-		gap: 0.25rem;
+	   Pha 3 (user): EXPANDED → brand + trigger CÙNG 1 ROW (brand trái,
+	   trigger phải); COLLAPSED → 2 row dọc (component _styles.scss áp
+	   flex-direction: column khi .sidebar-collapsed). .sidebar-header mặc định
+	   flex NGANG của SidebarHeader — giữ nguyên, không cần đè; .brand-row
+	   chiếm phần trái (flex: 1), .trigger-row né sang phải. */
+	.brand-row {
+		display: flex;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
 	}
 
-	.brand-row,
 	.trigger-row {
 		display: flex;
 		align-items: center;
-		width: 100%;
-	}
-
-	.trigger-row {
-		padding-block: 0.25rem 0.5rem;
+		flex: none;
 	}
 
 	.brand {

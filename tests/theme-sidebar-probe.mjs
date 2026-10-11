@@ -209,6 +209,20 @@ async function main() {
 	console.log('\n=== B: Sidebar page ===');
 	await page.goto(`${BASE_URL}/ui/sidebar`, { waitUntil: 'networkidle', timeout: 30000 });
 
+	// B3b: EXPANDED (mặc định) — brand + trigger CÙNG 1 ROW (Pha 3): rect.top
+	// bằng nhau (±2px), brand bên trái (brand.left < trigger.left)
+	{
+		const brandRow0 = page.locator('[data-test="sb-brand-row"]');
+		const triggerRow0 = page.locator('[data-test="sb-trigger-row"]');
+		const bRect = await brandRow0.evaluate(el => el.getBoundingClientRect());
+		const tRect = await triggerRow0.evaluate(el => el.getBoundingClientRect());
+		check(
+			'B3b: Expanded — brand + trigger same row (y-ranges overlap, brand trái)',
+			bRect.bottom > tRect.top && tRect.bottom > bRect.top && bRect.left < tRect.left,
+			`brand=[${bRect.top}-${bRect.bottom}] trigger=[${tRect.top}-${tRect.bottom}] brandLeft=${bRect.left} triggerLeft=${tRect.left}`
+		);
+	}
+
 	// Trigger collapse (Sidebar.Trigger trong trigger-row)
 	const triggerBtn = page.locator('[data-test="sb-trigger-row"] button.sidebar-trigger');
 	await triggerBtn.waitFor({ state: 'visible', timeout: 10000 });
@@ -244,13 +258,14 @@ async function main() {
 	check('B2: Menu button width = 56px (fill full)', Math.abs(btnRect.width - 56) < 2, `got ${btnRect.width}px`);
 	check('B2b: Menu button margin ≈ 0', leftGap < 2 && rightGap < 2, `leftGap=${leftGap} rightGap=${rightGap}`);
 
-	// B3: Brand-row trên trigger-row
+	// B3: COLLAPSED → 2 row dọc: brand-row TRÊN trigger-row (Pha 3 đảo: expanded
+	// cùng row — đo expanded ở B3b phía trên, trước khi collapse)
 	const brandRow = page.locator('[data-test="sb-brand-row"]');
 	const triggerRow = page.locator('[data-test="sb-trigger-row"]');
 	const brandRect = await brandRow.evaluate(el => el.getBoundingClientRect());
 	const triggerRect = await triggerRow.evaluate(el => el.getBoundingClientRect());
 	console.log('brandRow rect', brandRect, 'triggerRect', triggerRect);
-	check('B3: Brand-row above trigger-row', brandRect.top < triggerRect.top, `brandTop=${brandRect.top} triggerTop=${triggerRect.top}`);
+	check('B3: Collapsed — brand-row above trigger-row', brandRect.top < triggerRect.top, `brandTop=${brandRect.top} triggerTop=${triggerRect.top}`);
 
 	// B4: Logo icon hiện khi collapsed (hideLogo=false)
 	const brandIcon = page.locator('[data-test="sb-brand"] .brand-icon');
