@@ -44,7 +44,8 @@ export const POST: RequestHandler = async (event) => {
 		return respond({
 			ok: true,
 			message: { vi: 'Lấy danh sách thương hiệu thành công', en: 'Brand list fetched successfully' },
-			data: { brands: result.brands }
+			// B6.2: total/page/pageSize cho pagination client (pattern users list).
+			data: { brands: result.brands, total: result.total, page: result.page, pageSize: result.pageSize }
 		});
 	} catch (e) {
 		console.error('[POST /api/admin/brands/list]', e);

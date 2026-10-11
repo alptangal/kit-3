@@ -874,7 +874,10 @@ export class ProductAdminService {
 	static async listBrands(
 		actor: ActorContext,
 		options: { page?: number; pageSize?: number; includeDeleted?: boolean; search?: string } = {}
-	): Promise<{ success: false; messages: TranslateContent } | { success: true; brands: Record<string, unknown>[] }> {
+	): Promise<
+		| { success: false; messages: TranslateContent }
+		| { success: true; brands: Record<string, unknown>[]; total: number; page: number; pageSize: number }
+	> {
 		const denied = await this.requirePermission(actor, 'products:read');
 		if (denied) return denied;
 
@@ -885,6 +888,12 @@ export class ProductAdminService {
 		const conditions: string[] = [];
 		const args: string[] = [];
 
+		// B6.2: filter deleted (trước đây listBrands bỏ qua includeDeleted —
+		// checkbox "Show deleted" của page vô tác dụng).
+		if (!options.includeDeleted) {
+			conditions.push('(deletedAt IS NULL OR deletedAt IS MISSING)');
+		}
+
 		if (options.search) {
 			args.push(`%${options.search}%`);
 			conditions.push(`name LIKE $${args.length}`);
@@ -893,16 +902,25 @@ export class ProductAdminService {
 		const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 		const selectClause = `META().id AS _id, ${BRAND_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')}`;
 
-		const res = await cbBrands.document.query({
-			statement: `SELECT ${selectClause} FROM ${brandsKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
-			args,
-			readonly: true
-		});
+		// B6.2: count song song (pattern listUsers) — pagination cần total.
+		const [countRes, dataRes] = await Promise.all([
+			cbBrands.document.query({
+				statement: `SELECT RAW COUNT(*) FROM ${brandsKeyspace} ${whereClause}`,
+				args,
+				readonly: true
+			}),
+			cbBrands.document.query({
+				statement: `SELECT ${selectClause} FROM ${brandsKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
+				args,
+				readonly: true
+			})
+		]);
 
-		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
+		if (!countRes.ok || !dataRes.ok) return { success: false, messages: adminMessages.queryFailed };
 
-		const brands = (res.data?.results ?? []).map(sanitizeBrandForAdmin);
-		return { success: true, brands };
+		const total = Number(countRes.data?.results?.[0] ?? 0);
+		const brands = (dataRes.data?.results ?? []).map(sanitizeBrandForAdmin);
+		return { success: true, brands, total, page, pageSize };
 	}
 
 	static async getBrandById(

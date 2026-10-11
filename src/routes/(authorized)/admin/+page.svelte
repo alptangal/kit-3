@@ -221,7 +221,11 @@
 					| undefined;
 				users = data?.users ?? data?.items ?? [];
 				if (typeof data?.total === 'number') total = data.total;
-				if (typeof data?.page === 'number') page = data.page;
+				if (typeof data?.page === 'number' && data.page !== page) {
+					// response gán lại page (vd server clamp) — chặn effect refetch
+					pendingPageApply = true;
+					page = data.page;
+				}
 				loadedOnce = true;
 			} else {
 				loadError = resolveServerMessage(response.message, lang, {
@@ -433,17 +437,31 @@
 	}
 
 	// ── Phân trang / filter ──
-	async function goToPage(target: number) {
-		if (target < 1 || target > totalPages || target === page || loading) return;
-		page = target;
-		await loadUsers();
-	}
+	// Pagination element chỉ có bindable page (không callback) — theo dõi
+	// page + pageSize để refetch server khi user bấm next/prev hoặc đổi page
+	// size. Chỉ chạy SAU lần đầu (tránh refetch trùng onMount); pendingPageApply
+	// bỏ qua lần đổi page do chính response gán lại (chống vòng lặp fetch).
+	let paginationArmed = false;
+	let pendingPageApply = false;
+	$effect(() => {
+		void page;
+		void pageSize;
+		if (!paginationArmed) {
+			paginationArmed = true;
+			return;
+		}
+		if (pendingPageApply) {
+			pendingPageApply = false;
+			return;
+		}
+		void loadUsers();
+	});
 
-	async function changePageSize(newSize: number) {
+	function changePageSize(newSize: number) {
 		if (newSize === pageSize) return;
 		pageSize = newSize;
 		page = 1;
-		await loadUsers();
+		// effect theo dõi pageSize tự fetch (kể cả khi page không đổi)
 	}
 
 	// Checkbox không có callback — theo dõi includeDeleted bằng $effect.
