@@ -2,6 +2,7 @@
 // FORM FIELD — mirror input: mọi đo lường chạy qua token size-*;
 // validation color semantic (color-success/error); focus = field glow (sky + indigo shadow).
 @use '$styles/sizes.scss';
+@use '$styles/theme-mixins' as *;
 
 .textarea-root {
 	--cursor: text;
@@ -10,10 +11,10 @@
 	--background: rgba(148, 163, 184, 0.12);
 	--transition-duration: var(--duration, 300ms);
 
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(63, 63, 70, 0.4);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(226, 232, 240, 0.5);
 	}
 
@@ -93,28 +94,28 @@
 	// ── Focus (field glow — mirror input .focus: border sky + indigo shadow) ──
 	&.focus > textarea {
 		border-color: var(--color-sky-500);
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 		}
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 		}
 	}
 	&.focus.color-success > textarea {
 		border-color: var(--success);
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
 		}
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
 		}
 	}
 	&.focus.color-error > textarea {
 		border-color: var(--error);
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 		}
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 		}
 	}

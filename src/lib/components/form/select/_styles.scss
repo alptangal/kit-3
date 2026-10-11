@@ -4,6 +4,7 @@
 // - Màu   → token :root (--foreground, --color-sky-500, --success, --error, --disabled-opacity, ...)
 // - Dark/light → prefers-color-scheme, focus ring + tint giống input-root
 @use '$styles/sizes.scss';
+@use '$styles/theme-mixins' as *;
 
 .select-root {
 	--cursor: pointer;
@@ -67,11 +68,11 @@
    (selector :not() nâng specificity lên (0,4,0) và đè mất --border-color của
    state focus/color-* có specificity (0,3,0)). */
 .select-root.variant-secondary .select-trigger {
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(63, 63, 70, 0.4);
 		--border-color: rgba(63, 63, 70, 0.6);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(226, 232, 240, 0.5);
 		--border-color: rgba(226, 232, 240, 0.85);
 	}
@@ -79,10 +80,10 @@
 
 /* Hover — dùng class .hover trên root (Main.svelte theo dõi mouseenter/leave) */
 .select-root.hover:not(.disabled) .select-trigger {
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(63, 63, 70, 0.6);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(226, 232, 240, 0.75);
 	}
 }
@@ -90,11 +91,11 @@
 /* Focus ring (đồng bộ với input-root.focus) — đặt SAU hover để focus thắng */
 .select-root.focus:not(.disabled) .select-trigger {
 	--border-color: var(--color-sky-500);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(63, 63, 70, 0.8);
 		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(226, 232, 240, 0.95);
 		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 	}
@@ -103,18 +104,18 @@
 /* ── variant-primary: nền sáng hơn một chút + viền sky ── */
 .select-root.variant-primary .select-trigger {
 	--border-color: var(--color-sky-500);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(39, 39, 42, 0.5);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(248, 250, 252, 0.6);
 	}
 }
 .select-root.variant-primary.hover:not(.disabled) .select-trigger {
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(39, 39, 42, 0.7);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(248, 250, 252, 0.85);
 	}
 }
@@ -125,10 +126,10 @@
 	--border-color: transparent;
 }
 .select-root.variant-ghost.hover:not(.disabled) .select-trigger {
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(63, 63, 70, 0.4);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(226, 232, 240, 0.5);
 	}
 }
@@ -137,20 +138,20 @@
 .select-root.color-success .select-trigger {
 	--color: var(--success);
 	--border-color: var(--success);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(34, 197, 94, 0.15);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(34, 197, 94, 0.12);
 	}
 }
 .select-root.color-success.focus .select-trigger {
 	--border-color: var(--success-500);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(34, 197, 94, 0.2);
 		box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(34, 197, 94, 0.15);
 		box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
 	}
@@ -160,21 +161,21 @@
 .select-root.error .select-trigger {
 	--color: var(--error);
 	--border-color: var(--error);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(239, 68, 68, 0.15);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(239, 68, 68, 0.12);
 	}
 }
 .select-root.color-error.focus .select-trigger,
 .select-root.error.focus .select-trigger {
 	--border-color: var(--error-500);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--background: rgba(239, 68, 68, 0.2);
 		box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--background: rgba(239, 68, 68, 0.15);
 		box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 	}
@@ -279,10 +280,10 @@
 	&:hover:not(.disabled) {
 		opacity: 1;
 		color: var(--error);
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			background: rgba(51, 65, 85, 0.85);
 		}
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			background: rgba(241, 245, 249, 0.95);
 		}
 	}
@@ -317,7 +318,7 @@
 	user-select: none;
 	animation: select-dropdown-appear 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		--dropdown-bg: rgba(255, 255, 255, 0.98);
 		--dropdown-border: rgba(226, 232, 240, 0.95);
 		border-color: var(--dropdown-border);
@@ -325,7 +326,7 @@
 			0 12px 28px -4px rgba(0, 0, 0, 0.1),
 			0 4px 12px -2px rgba(0, 0, 0, 0.05);
 	}
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		--dropdown-bg: rgba(24, 32, 47, 0.98);
 		--dropdown-border: rgba(51, 65, 85, 0.95);
 		border-color: var(--dropdown-border);
@@ -619,10 +620,10 @@
 
 	&:hover:not(.disabled),
 	&.highlighted {
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			background: rgba(241, 245, 249, 0.95);
 		}
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			background: rgba(51, 65, 85, 0.85);
 		}
 	}
@@ -630,18 +631,18 @@
 	&.selected {
 		color: var(--color-sky-500);
 		font-weight: 600;
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			background: rgba(224, 242, 254, 0.9);
 		}
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			background: rgba(30, 58, 85, 0.9);
 		}
 		&:hover:not(.disabled),
 		&.highlighted {
-			@media (prefers-color-scheme: light) {
+			@include theme-light {
 				background: rgba(219, 234, 254, 0.95);
 			}
-			@media (prefers-color-scheme: dark) {
+			@include theme-dark {
 				background: rgba(37, 70, 100, 0.95);
 			}
 		}
@@ -773,10 +774,10 @@
 	/* M4: trong .select-controls (row space-between với sort-bar), highlight
 	   riêng nhẹ hơn option thường để phân biệt "hành động" */
 	&.highlighted {
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			background: rgba(241, 245, 249, 0.75);
 		}
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			background: rgba(51, 65, 85, 0.6);
 		}
 	}
@@ -819,10 +820,10 @@
 	&:hover {
 		opacity: 1;
 		color: var(--error);
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			background: rgba(51, 65, 85, 0.85);
 		}
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			background: rgba(241, 245, 249, 0.95);
 		}
 	}
@@ -862,10 +863,10 @@
 }
 .select-option__action--edit:hover {
 	color: var(--color-sky-500);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		background: rgba(51, 65, 85, 0.85);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		background: rgba(224, 242, 254, 0.9);
 	}
 }
@@ -876,10 +877,10 @@
 }
 .select-option__action--delete:hover {
 	color: var(--error);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		background: rgba(127, 29, 29, 0.5);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		background: rgba(254, 226, 226, 0.9);
 	}
 }
@@ -897,10 +898,10 @@
 }
 .select-option__action--cancel:hover {
 	color: var(--foreground);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		background: rgba(51, 65, 85, 0.85);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		background: rgba(226, 232, 240, 0.9);
 	}
 }
@@ -910,10 +911,10 @@
 }
 .select-option__action--save:hover {
 	color: var(--success);
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		background: rgba(19, 78, 74, 0.5);
 	}
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		background: rgba(209, 250, 229, 0.9);
 	}
 }
@@ -922,10 +923,10 @@
 .select-option.editing {
 	gap: 0.375rem;
 	/* Đang edit: nền riêng để "đóng khung" khu vực đang sửa, phân biệt option thường */
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		background: rgba(224, 242, 254, 0.35);
 	}
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		background: rgba(30, 58, 85, 0.45);
 	}
 }
@@ -969,10 +970,10 @@
 	cursor: pointer;
 	transition: background-color 0.12s ease;
 	&:hover {
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			background: rgba(224, 242, 254, 0.6);
 		}
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			background: rgba(30, 58, 85, 0.5);
 		}
 	}
@@ -1001,7 +1002,7 @@
 	font-size: 0.75rem;
 	pointer-events: none;
 	/* Không dùng color-mix() — iOS Safari 15.0 không hỗ trợ. */
-	@media (prefers-color-scheme: light) {
+	@include theme-light {
 		background: linear-gradient(
 			to top,
 			var(--dropdown-bg, #fff) 18%,
@@ -1009,7 +1010,7 @@
 			transparent 100%
 		);
 	}
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		background: linear-gradient(
 			to top,
 			var(--dropdown-bg, #14202f) 18%,
@@ -1048,10 +1049,10 @@
 	cursor: pointer;
 	transition: background-color 0.12s ease;
 	&:hover:not(:disabled) {
-		@media (prefers-color-scheme: light) {
+		@include theme-light {
 			background: rgba(224, 242, 254, 0.8);
 		}
-		@media (prefers-color-scheme: dark) {
+		@include theme-dark {
 			background: rgba(30, 58, 85, 0.7);
 		}
 	}

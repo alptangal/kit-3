@@ -1,0 +1,31 @@
+// ── Theme-aware theo APP THEME (data-theme attr trên html), mirror ma trận
+// variables.scss — KHÔNG theo OS một mình như @media (prefers-color-scheme):
+//   dark  = OS dark (unset/'system' — trừ khi user ép light) HOẶC user ép dark
+//   light = user ép light HOẶC OS light (trừ khi ép dark)
+// Trước đây hover/tapped nghe mỗi OS → app theme ≠ OS (vd data-theme='light'
+// trên OS dark) vẫn tô màu dark: nền đen + chữ --foreground tối → mất contrast
+// (bug theme-sidebar-probe A1). :global vì :root scoped bị Svelte hash hoá
+// (html không mang hash component); phần & giữ scoped — precedent :global
+// trong navigation/sidebar/_styles.scss.
+// Dùng: @use '$styles/theme-mixins' as *; (PHẢI trước mọi rule trong file)
+// rồi @include theme-dark { ... } / @include theme-light { ... }.
+@mixin theme-dark {
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) & {
+			@content;
+		}
+	}
+	:global(:root[data-theme='dark']) & {
+		@content;
+	}
+}
+@mixin theme-light {
+	@media (prefers-color-scheme: light) {
+		:global(:root:not([data-theme='dark'])) & {
+			@content;
+		}
+	}
+	:global(:root[data-theme='light']) & {
+		@content;
+	}
+}

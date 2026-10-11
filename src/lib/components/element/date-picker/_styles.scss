@@ -3,6 +3,7 @@
 // @use '_styles.scss';). Trigger styles nằm trong Trigger.svelte (scoped riêng).
 // Token: --primary / --primary-foreground, --color-indigo-500 (focus ring),
 // --muted, --border. es2020/safari15 — KHÔNG :has().
+@use '$styles/theme-mixins' as *;
 .date-picker-panel {
 	// size map (đồng bộ trigger: cell to hơn khi trigger to)
 	--dp-day-size: 2.25rem;
@@ -173,7 +174,7 @@
 			width: calc(100% + 0.125rem);
 			margin-right: -0.125rem;
 
-			@media (prefers-color-scheme: dark) {
+			@include theme-dark {
 				background: var(--color-indigo-600);
 			}
 		}
@@ -187,7 +188,7 @@
 			width: calc(100% + 0.125rem);
 			margin-left: -0.125rem;
 
-			@media (prefers-color-scheme: dark) {
+			@include theme-dark {
 				background: var(--color-indigo-600);
 			}
 		}
@@ -207,7 +208,7 @@
 			width: calc(100% + 0.25rem);
 			margin-inline: -0.125rem;
 
-			@media (prefers-color-scheme: dark) {
+			@include theme-dark {
 				background: var(--color-indigo-950);
 			}
 
@@ -281,7 +282,7 @@
 		--dp-day-size: 2.5rem;
 	}
 
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		border-color: hsl(240 5.9% 20%);
 
 		.date-picker-footer {
@@ -298,7 +299,9 @@
 
 		.date-picker-day {
 			@media (hover: hover) and (pointer: fine) {
-				&:not(.disabled):hover {
+				// đồng bộ light (dòng 235-239): bỏ range cell khỏi hover gray —
+				// không thì gray-800 đè indigo band khi OS dark + app light
+				&:not(.disabled):not(.range-start):not(.range-end):not(.range-mid):hover {
 					background: var(--color-gray-800, hsl(0 0% 16%));
 				}
 			}

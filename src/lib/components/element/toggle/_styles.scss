@@ -9,6 +9,7 @@
 //   off-state màu → var(--foreground) (default) / var(--color-*-{ref}-500).
 // Focus ring: native button :focus-visible = indigo-500 offset 2px (CONTRACT §6).
 @use '$styles/sizes.scss';
+@use '$styles/theme-mixins' as *;
 
 // semantic → palette (đồng bộ bảng button/alert)
 $colorRefs: (
@@ -83,22 +84,22 @@ $colorRefs: (
 			@each $color, $ref in $colorRefs {
 				@if $color == 'default' {
 					&.color-default {
-						@media (prefers-color-scheme: dark) {
+						@include theme-dark {
 							background: var(--color-gray-950);
 							color: var(--foreground);
 						}
-						@media (prefers-color-scheme: light) {
+						@include theme-light {
 							background: var(--color-gray-200);
 							color: var(--foreground);
 						}
 					}
 				} @else {
 					&.color-#{$color} {
-						@media (prefers-color-scheme: dark) {
+						@include theme-dark {
 							background: var(--color-#{$ref}-950);
 							color: var(--color-#{$ref}-400);
 						}
-						@media (prefers-color-scheme: light) {
+						@include theme-light {
 							background: var(--color-#{$ref}-200);
 							color: var(--color-#{$ref}-600);
 						}
@@ -127,20 +128,20 @@ $colorRefs: (
 			@each $color, $ref in $colorRefs {
 				@if $color == 'default' {
 					&.color-default {
-						@media (prefers-color-scheme: dark) {
+						@include theme-dark {
 							background: var(--color-gray-950);
 						}
-						@media (prefers-color-scheme: light) {
+						@include theme-light {
 							background: var(--color-gray-200);
 						}
 					}
 				} @else {
 					&.color-#{$color} {
-						@media (prefers-color-scheme: dark) {
+						@include theme-dark {
 							background: var(--color-#{$ref}-950);
 							color: var(--color-#{$ref}-400);
 						}
-						@media (prefers-color-scheme: light) {
+						@include theme-light {
 							background: var(--color-#{$ref}-200);
 							color: var(--color-#{$ref}-600);
 						}
@@ -153,10 +154,10 @@ $colorRefs: (
 	// ── Hover (PC-only, không pressed): nền nhạt nhẹ (token, mirror button ghost) ──
 	@media (hover: hover) and (pointer: fine) {
 		&:hover:not(.disabled):not(.pressed) {
-			@media (prefers-color-scheme: dark) {
+			@include theme-dark {
 				background: var(--default-800, hsl(217.28, 36.07%, 17.54%));
 			}
-			@media (prefers-color-scheme: light) {
+			@include theme-light {
 				background: var(--default-100, hsl(210, 40.55%, 96.05%));
 			}
 		}
