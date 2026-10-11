@@ -172,6 +172,16 @@ export const pageContents: PageContents = {
 			en: 'Active customers'
 		}
 	},
+	filters: {
+		searchPlaceholder: {
+			vi: 'Tìm khách hàng (tên, mô tả)…',
+			en: 'Search customers (name, description)…'
+		},
+		allStatuses: {
+			vi: 'Tất cả trạng thái',
+			en: 'All Statuses'
+		}
+	},
 	pagination: {
 		prev: { vi: 'Trước', en: 'Prev' },
 		next: { vi: 'Sau', en: 'Next' },
@@ -242,6 +252,18 @@ export const pageContents: PageContents = {
 		deleteIntro: {
 			vi: 'Xoá khách {name}?',
 			en: 'Delete customer {name}?'
+		},
+		authMethod: {
+			vi: 'Phương thức xác thực',
+			en: 'Auth method'
+		},
+		mfaOn: {
+			vi: 'Bật',
+			en: 'On'
+		},
+		mfaOff: {
+			vi: 'Tắt',
+			en: 'Off'
 		}
 	},
 	toasts: {

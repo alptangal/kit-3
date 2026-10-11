@@ -583,12 +583,26 @@
 	// B6.2: thoát rule ellipsis của .datatable-td (max-width:0 + overflow:hidden
 	// kẹp cột còn ~24px → snippet actionsContent 5 nút tràn đè td kế bên —
 	// elementFromPoint rơi vào td created, click nút không bao giờ tới).
-	.datatable-td--actions {
-		max-width: none;
-		overflow: visible;
-		text-overflow: clip;
-		white-space: nowrap;
-		text-align: right;
+	// LƯU Ý specificity: rule dưới NẰM TRONG .datatable-row để compile thành
+	// `.datatable-row.svelte-x .datatable-td--actions.svelte-x` (4 classes,
+	// hòa với rule ellipsis `.datatable-row.svelte-x .datatable-td:where(...)`
+	// và thắng theo source order). Nếu viết phẳng `.datatable-td--actions`
+	// (2 classes) rule ellipsis kẹp max-width:0 thắng → nút actions bị nén
+	// 39px, text clip giữa ("imer d|nge st|e cust").
+	// width:1% + min-width:fit-content: table-layout auto co cột về đúng
+	// rộng nội dung nút (fit-content) thay vì max-width:none để cột nuốt
+	// toàn bộ phần dư (~50% bảng) đẩy pill status/data clip mép. Đo thực
+	// tế customers 6 cột: actions 406px (vừa 3 nút text), data cột đủ rộng.
+	.datatable-row {
+		.datatable-td--actions {
+			width: 1%;
+			max-width: none;
+			min-width: fit-content;
+			overflow: visible;
+			text-overflow: clip;
+			white-space: nowrap;
+			text-align: right;
+		}
 	}
 
 	.datatable-row-actions {
