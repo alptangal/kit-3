@@ -138,7 +138,11 @@ await sleep(1500);
 	let hasTable = false;
 	let url = '';
 	let crumb = '';
-	for (let i = 0; i < 50 && !hasTable; i++) {
+	// B6.2 brands page (775fd889) render loading skeleton <table> 20 row TRƯỚC khi
+	// data về → hasTable=true ngay trên /admin/brands → poll thoát sớm sai.
+	// FIX: poll yêu cầu CẢ url === '/admin' (không chỉ hasTable).
+	let urlOk = false;
+	for (let i = 0; i < 50 && !urlOk; i++) {
 		const state = await page.evaluate(() => {
 			const inset =
 				document.querySelector('[data-test="admin-breadcrumb"]')?.closest('.sidebar-inset, main') ??
@@ -153,7 +157,8 @@ await sleep(1500);
 		hasTable = state.hasTable;
 		url = state.url;
 		crumb = state.crumb;
-		if (!hasTable) await sleep(400);
+		urlOk = hasTable && url === '/admin';
+		if (!urlOk) await sleep(400);
 	}
 	ok(
 		'L6 · Inset render bảng Users (/admin) + breadcrumb đổi lại',
