@@ -14,6 +14,8 @@
 	let itemsPage = $state(3);
 	let compactPage = $state(1);
 	let activePage = $state(5);
+	let singlePageCompact = $state(1);
+	let singlePageDefault = $state(1);
 </script>
 
 <div class="page" data-test="pagination-demo">
@@ -171,6 +173,20 @@
 		<h2>Icon-only prev/next (aspect-square — label rỗng)</h2>
 		<Pagination prevIcon={iconify['arrow-left-rounded']} nextIcon={iconify['arrow-right-rounded']} prevLabel="" nextLabel="" totalPages={3} aria-label="Phân trang icon-only" />
 		<p class="demo-hint">Label rỗng + có icon → nút aspect-square (width = min-height).</p>
+	</section>
+
+	<!-- Single page (totalPages = 1 — mọi hành động đổi trang vô nghĩa) -->
+	<section class="demo" data-test="pg-single">
+		<h2>Single page (totalPages = 1 — prev/next/counter/page disabled)</h2>
+		<div class="pg-sizes">
+			<Pagination variant="compact" totalPages={1} bind:page={singlePageCompact} aria-label="Phân trang 1 trang compact" />
+			<Pagination totalPages={1} bind:page={singlePageDefault} prevLabel="‹" nextLabel="›" aria-label="Phân trang 1 trang default" />
+		</div>
+		<p class="demo-hint">
+			Chỉ 1 trang → counter không vào edit, nút số trang disabled (active giữ), prev/next disabled.
+			Compact: <code data-test="pg-single-compact-current">{singlePageCompact}</code> ·
+			Default: <code data-test="pg-single-default-current">{singlePageDefault}</code>
+		</p>
 	</section>
 </div>
 

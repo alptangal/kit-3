@@ -55,6 +55,13 @@
 
 	// ── Nút trang: active = --primary + text --background (token, không hardcode) ──
 	.pagination-page {
+		// disabled (singlePage/loading/component-level): mờ token + cursor not-allowed
+		// (prev/next + counter đã có rule riêng — thiếu rule này nút active+disabled vẫn đặc màu)
+		&:disabled {
+			opacity: var(--disabled-opacity, 0.5);
+			cursor: not-allowed;
+		}
+
 		&.active {
 			background: var(--primary);
 			color: var(--background);

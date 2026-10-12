@@ -43,6 +43,10 @@
 	const loading = $derived(props.loading ?? false);
 	// Component-level `disabled` (BasicProps) — mọi item vô hiệu khi set.
 	const disabled = $derived(!!props.disabled);
+	// totalPages = 1 → KHÔNG còn hành động đổi trang nào: prev/next/counter/page-button
+	// đều vô nghĩa (disable per-button, KHÔNG dùng root class .disabled — nó làm mờ cả
+	// counter, mất khả năng đọc trạng thái "1/1" và xung đột ngữ nghĩa với .loading).
+	const singlePage = $derived(totalPages <= 1);
 
 	// Page luôn nằm trong 1..totalPages (clamp)
 	const safePage = $derived(Math.min(Math.max(1, Math.floor(page) || 1), totalPages));
@@ -65,7 +69,7 @@
 	// Click counter / Enter/Space trên button: vào edit mode (draft = page hiện,
 	// focus + select-all input qua rAF — KHÔNG dùng autofocus, không tin cậy sau block DOM).
 	function startEdit() {
-		if (loading || disabled || editing) return;
+		if (loading || disabled || editing || singlePage) return;
 		draft = String(safePage);
 		pageAtEditStart = safePage;
 		editing = true;
@@ -210,6 +214,7 @@
 	});
 
 	function goTo(n: number) {
+		if (singlePage) return;
 		if (n < 1 || n > totalPages) return;
 		page = n;
 	}
@@ -227,7 +232,7 @@
 			type="button"
 			class="pagination-item pagination-prev"
 			class:aspect-square={prevIconOnly}
-			disabled={loading || disabled || safePage <= 1}
+			disabled={loading || disabled || safePage <= 1 || singlePage}
 			aria-label="Trang trước"
 			onclick={() => goTo(safePage - 1)}
 		>
@@ -241,7 +246,7 @@
 			type="button"
 			class="pagination-item pagination-counter"
 			data-test="counter"
-			disabled={loading || disabled}
+			disabled={loading || disabled || singlePage}
 			aria-label="{counterAria} {safePage}/{totalPages}"
 			aria-live="polite"
 			onclick={startEdit}
@@ -274,7 +279,7 @@
 			type="button"
 			class="pagination-item pagination-next"
 			class:aspect-square={nextIconOnly}
-			disabled={loading || disabled || safePage >= totalPages}
+			disabled={loading || disabled || safePage >= totalPages || singlePage}
 			aria-label="Trang sau"
 			onclick={() => goTo(safePage + 1)}
 		>
@@ -288,7 +293,7 @@
 			type="button"
 			class="pagination-item pagination-prev"
 			class:aspect-square={prevIconOnly}
-			disabled={loading || disabled || safePage <= 1}
+			disabled={loading || disabled || safePage <= 1 || singlePage}
 			aria-label="Trang trước"
 			onclick={() => goTo(safePage - 1)}
 		>
@@ -305,7 +310,7 @@
 					class="pagination-item pagination-page"
 					class:active={entry.n === safePage}
 					aria-current={entry.n === safePage ? 'page' : undefined}
-					disabled={loading || disabled}
+					disabled={loading || disabled || singlePage}
 					onclick={() => goTo(entry.n)}
 				>{entry.n}</button>
 			{:else if entry.type === 'ellipsis-start' || entry.type === 'ellipsis-end'}
@@ -317,7 +322,7 @@
 			type="button"
 			class="pagination-item pagination-next"
 			class:aspect-square={nextIconOnly}
-			disabled={loading || disabled || safePage >= totalPages}
+			disabled={loading || disabled || safePage >= totalPages || singlePage}
 			aria-label="Trang sau"
 			onclick={() => goTo(safePage + 1)}
 		>

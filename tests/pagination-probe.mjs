@@ -55,12 +55,12 @@ console.log('\n=== PC0: NAV ARIA-LABEL + BUTTONS ===');
 ok('PC0: demo root render', (await page.locator('[data-test="pagination-demo"]').count()) === 1);
 const navCount = await page.locator('[data-test="pagination-demo"] nav.pagination-root').count();
 ok(
-	'PC0: 15 nav.pagination-root (basic×4 + sibling + small + size×3 + items + compact + loading + icons + active + icon-only)',
-	navCount === 15,
+	'PC0: 17 nav.pagination-root (basic×4 + sibling + small + size×3 + items + compact + loading + icons + active + icon-only + single×2)',
+	navCount === 17,
 	String(navCount)
 );
 const labeled = await page.locator('[data-test="pagination-demo"] nav.pagination-root[aria-label]').count();
-ok('PC0: mọi nav có aria-label', labeled === 15, String(labeled));
+ok('PC0: mọi nav có aria-label', labeled === 17, String(labeled));
 const basicNav = navIn('pg-basic', 0);
 ok('PC0: basic nav có prev + next button', (await basicNav.locator('.pagination-prev, .pagination-next').count()) === 2);
 
