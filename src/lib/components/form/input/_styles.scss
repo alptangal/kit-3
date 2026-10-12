@@ -875,6 +875,10 @@
 		display: flex;
 		align-items: center;
 		padding: 0.5rem 0 0;
+		/* Touch: nút "Xóa N file đã chọn" dài tràn khung 375px → cho wrap dòng,
+		   row-gap giữ nhịp (không co nén text nhỏ hơn cỡ đọc). */
+		flex-wrap: wrap;
+		row-gap: 0.25rem;
 	}
 	.input-file-quickbar-delete {
 		display: inline-flex;
@@ -1060,6 +1064,32 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		color: var(--color);
+	}
+
+	/* Touch UX (B1): `title` không dùng được trên màn cảm ứng → ellipsis 1 dòng
+	   che mất full giá trị barcode. Media ≤767px: value TỰ XUỐNG DÒNG (clamp 2
+	   dòng) — đọc được thêm, không tap-để-xem được (inline-edit chiếm tap).
+	   Barcode card là flex row → chỉ tăng cao card, không vỡ layout.
+	   overflow-wrap: anywhere BẮT BUỘC: mã barcode là chuỗi liền không space →
+	   white-space normal không có điểm ngắt (text vẫn 1 dòng, clamp vô dụng). */
+	@media (max-width: 767px) {
+		.input-barcode-value {
+			white-space: normal;
+			overflow-wrap: anywhere;
+			display: -webkit-box;
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 2;
+			overflow: hidden;
+		}
+
+		.input-file-name {
+			white-space: normal;
+			overflow-wrap: anywhere;
+			display: -webkit-box;
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 2;
+			overflow: hidden;
+		}
 	}
 	.input-barcode-value-offset {
 		padding-left: calc(1.25rem + var(--gap-sm, 0.375rem)); // chừa chỗ ô tick absolute (mirror input-file-check)

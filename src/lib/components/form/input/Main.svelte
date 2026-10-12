@@ -35,7 +35,7 @@
 	import { getTextFieldContext } from '../textField';
 	import { Modal } from '$components/modal';
 	import type { FullAutoFill } from 'svelte/elements';
-	import { ensureBarcodeDetector, playBeep, primeAudio, type BarcodeDetectorResult } from '$modules/barcode';
+	import { ensureBarcodeDetector, playBeep, primeAudio, vibratePattern, type BarcodeDetectorResult } from '$modules/barcode';
 
 	let {
 		value = $bindable(),
@@ -2697,13 +2697,15 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		// Yêu cầu (6): trùng → toast + animate card (bounce/rung/tỏa sáng), KHÔNG
 		// thêm bản sao. Toast qua store global (ToastWrapper root layout) —
 		// mirror pattern admin pages dùng client.browser?.toasts?.create().
-		if ((codes ?? []).includes(code)) {
+			if ((codes ?? []).includes(code)) {
 			if (browser) {
 				client.browser?.toasts?.create({
 					title: `Mã "${code}" đã tồn tại trong danh sách`,
 					color: 'warning'
 				});
 				triggerDupFlash(code);
+				// Touch feedback trùng mã (warning — nhịp ngắn 40ms, song song toast)
+				vibratePattern('warning');
 			}
 			return;
 		}
@@ -2977,6 +2979,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			if (raw === lastDetectedRaw) return;
 			lastDetectedRaw = raw;
 			if (beepOnDerived) playBeep('single');
+			// Touch feedback song song beep (mobile tắt tiếng vẫn rung)
+			vibratePattern('single');
 			addBarcode(raw);
 			closeScan();
 		} else {
@@ -2986,6 +2990,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			scanFrozen = true;
 			stopDetectLoop();
 			if (beepOnDerived) playBeep('multiple');
+			// Touch feedback nhiều mã (pattern ngắt [60,60,60] — phân biệt single)
+			vibratePattern('multiple');
 			captureFreezeFrame();
 			scanResults = valid;
 		}
@@ -3015,6 +3021,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 
 	function pickScanResult(r: BarcodeDetectorResult) {
 		if (beepOnDerived) playBeep('single');
+		// Chọn 1 mã từ multi-region — vibrate single như detect thường
+		vibratePattern('single');
 		addBarcode(r.rawValue);
 		closeScan();
 	}

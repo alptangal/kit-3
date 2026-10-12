@@ -131,3 +131,31 @@ export function playBeep(kind: 'single' | 'multiple') {
 		// WebAudio không dùng được → im lặng
 	}
 }
+
+/**
+ * Rung detect/thêm mã (touch feedback song song beep — mobile không mở âm).
+ * - 'single': 1 nhịp 80ms (thêm 1 mã).
+ * - 'multiple': [60,60,60] (nhiều mã — pattern ngắt khác single để phân biệt).
+ * - 'warning': 40ms ngắn (mã trùng — nhịp nhẹ, không sốc).
+ * Guard: SSR + navigator.vibrate không có (iOS Safari) → no-op tự nhiên;
+ * prefers-reduced-motion → bỏ (khớp kỷ luật animation của dự án).
+ * Vibrate KHÔNG bị autoplay policy chặn, không cần gesture.
+ */
+export function vibratePattern(kind: 'single' | 'multiple' | 'warning') {
+	if (typeof navigator === 'undefined') return;
+	const nav = navigator as Navigator & { vibrate?: (pattern: number | number[]) => boolean };
+	if (typeof nav.vibrate !== 'function') return;
+	if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+		return;
+	}
+	try {
+		const patterns: Record<typeof kind, number | number[]> = {
+			single: 80,
+			multiple: [60, 60, 60],
+			warning: 40
+		};
+		nav.vibrate(patterns[kind]);
+	} catch {
+		// Engine không nhận → im lặng
+	}
+}
