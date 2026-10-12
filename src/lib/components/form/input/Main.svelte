@@ -1538,7 +1538,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				configs.status.focus = true;
 				return;
 			}
-			if (client.browser?.isMobile) {
+			if (client.browser?.isMobile && !client.browser?.visualKeyboard) {
+				// Mobile: focus visual input (kb ảo) — TRỪ khi kb visual number đã đo
+				// meta (visualKeyboard set): kb hệ thống KHÔNG được mở đè lên kb visual.
 				if (!client.browser.visualInput) client.createInputVisual();
 				if (client.browser.visualInput) {
 					client.browser.visualInput.focus();
@@ -1681,6 +1683,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		return index;
 	}
 	function showVisualNumberKb() {
+		// Kb hệ thống KHÔNG được mở đè kb visual: blur visual input (mỏ giữ
+		// kb hệ thống) ngay từ đầu hàm.
+		client.browser?.visualInput?.blur();
 		const target = {
 			get value() {
 				return value;
@@ -1707,6 +1712,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		visualNumberKbCleaner = undefined;
 		visualKbInputRef = undefined;
 		visualCursorVisible = false;
+		// Blur visual input (nếu còn giữ focus) — chặn kb hệ thống nhảy lên khi
+		// kb visual vừa đóng.
+		client.browser?.visualInput?.blur();
 		configs.status.focus = false;
 	}
 	// Fix #5: đo vị trí caret — mirror span (measureTextWidth) với prefix

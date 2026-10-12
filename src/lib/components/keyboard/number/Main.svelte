@@ -174,6 +174,9 @@
 <style lang="scss">
 	.keyboard-number-root {
 		@apply grid grid-cols-4;
+		/* 5 hàng ăn khít chiều cao root (AC/( )/Del/: + 4 hàng số) — phím dồn
+		   full-cell thay vì cao theo min-height cố định của Button (2.5rem). */
+		grid-template-rows: repeat(5, minmax(0, 1fr));
 		--safe-bottom: env(safe-area-inset-bottom, 0px);
 		--safe-top: env(safe-area-inset-top, 0px);
 		padding-bottom: max(16px, env(safe-area-inset-bottom));
@@ -195,6 +198,20 @@
 		@media (prefers-color-scheme: dark) {
 			background: var(--background, hsl(240 5.9% 10%));
 			border-top-color: var(--border, hsl(0 0% 24%));
+		}
+
+		/* Phím chiếm FULL CELL: Button mặc định khóa height/min-height 2.5rem →
+		   override. Hàng 1 có div bọc 2 nút ( ( ) ) — div con cũng phải stretch. */
+		:global(.button-root) {
+			height: 100%;
+			min-height: 0;
+		}
+		:global(.grid-cols-2) {
+			height: 100%;
+		}
+		:global(.grid-cols-2 > .button-root) {
+			height: 100%;
+			min-height: 0;
 		}
 	}
 </style>

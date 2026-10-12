@@ -284,6 +284,11 @@ class User {
 		inputEl.style.height = '.1px';
 		inputEl.style.bottom = '0';
 		inputEl.style.left = '0';
+		// KHÔNG readonly (cần focus thật để visualViewport đo meta kb hệ thống),
+		// chỉ loại khỏi tab order + a11y tree: kb ảo quản lý nhập, kb hệ thống
+		// không được đè lên.
+		inputEl.setAttribute('aria-hidden', 'true');
+		inputEl.tabIndex = -1;
 		document.body.appendChild(inputEl);
 		if (!this.browser) this.browser = {};
 		this.browser.visualInput = inputEl;
