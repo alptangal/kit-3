@@ -996,6 +996,13 @@
 		border-radius: calc(var(--border-radius, 0.5rem) - 4px);
 		overflow: visible;
 	}
+	/* Import-trigger (ảnh thư viện) — cùng form với scan-trigger, tách màu
+	   indigo-500 để phân biệt 2 nguồn nhập (camera = sky, ảnh = indigo). */
+	.input-barcode-import-trigger {
+		color: var(--color-indigo-500);
+		border-radius: calc(var(--border-radius, 0.5rem) - 4px);
+		overflow: visible;
+	}
 	.input-barcode-add {
 		color: var(--color-green-500);
 		/* Yêu cầu (4): flash khi vừa thêm mã (Enter/click) — pulse ring + glow +

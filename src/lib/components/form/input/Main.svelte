@@ -2680,6 +2680,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	const selectDeleteOnDerived = $derived(props.selectDeleteOn === true);
 	const selectAllOnDerived = $derived(props.selectAllOn === true);
 	const formatsDerived = $derived(props.formats);
+	// Import ảnh tĩnh (thư viện) → detect barcode/QR không cần camera
+	const importOnDerived = $derived(props.importOn === true);
 
 	// Yêu cầu (6): mã vừa quét/nhập TRÙNG → toast + animate card hiện có (bounce
 	// + rung + tỏa sáng 900ms rồi tự gỡ, timer 1 lần dùng chung như addFlash).
@@ -2852,6 +2854,19 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	let lastDetectedRaw: string | undefined;
 	// Fullscreen: cleanup listener khi đóng overlay/unmount
 	let fullscreenChangeCleanup: (() => void) | undefined;
+	// ── type='barcode': import ảnh tĩnh (thư viện) ──
+	// hidden input file (clip ẩn — mirror type='file', KHÔNG display:none vì
+	// .click() cần). Kết quả detect nhiều mã → tái dùng overlay scan (mode
+	// 'import': canvas freeze hiển thị ảnh thay video, regions map theo ảnh).
+	let importFileEl: HTMLInputElement | undefined;
+	// Overlay mode: 'camera' (getUserMedia + detect loop) | 'import' (ảnh tĩnh
+	// 1 lần → detect ngay khi mở, không loop, không pause)
+	let scanMode: 'camera' | 'import' = $state('camera');
+	// Ảnh import đang xử lý (đợi decode/detect) → hint trên overlay
+	let importBusy = $state(false);
+	// Kích thước ảnh gốc (naturalWidth/Height) — boxStyle map % theo ảnh này
+	let importImgW = 1;
+	let importImgH = 1;
 
 	async function enterOverlayFullscreen() {
 		if (!browser || !overlayEl) return;
@@ -2885,6 +2900,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		scanPaused = false;
 		scanResults = [];
 		lastDetectedRaw = undefined;
+		scanMode = 'camera';
 		// Yêu cầu (7): blur input text — mở camera xong keyboard mobile KHÔNG còn
 		// đè overlay (activeElement dừng trigger soft keyboard), caret ẩn.
 		configs.input.text?.ref?.blur();
@@ -2934,6 +2950,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		scanPaused = false;
 		scanResults = [];
 		scanError = '';
+		scanMode = 'camera';
+		importBusy = false;
 	}
 
 	// Yêu cầu (5): pause/resume — pause dừng detect loop, GIỮ stream + video;
@@ -3037,11 +3055,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 
 	/** Map bounding box (video coords) → % vị trí trên overlay (object-fit cover). */
 	function boxStyle(r: BarcodeDetectorResult) {
-		const video = videoEl;
 		const box = r.boundingBox;
-		if (!video || !box) return undefined;
-		const vw = video.videoWidth || 1;
-		const vh = video.videoHeight || 1;
+		if (!box) return undefined;
+		// Nguồn coords: ảnh import (naturalWidth/Height) hoặc video (videoWidth/Height)
+		const vw = scanMode === 'import' ? importImgW : videoEl?.videoWidth || 1;
+		const vh = scanMode === 'import' ? importImgH : videoEl?.videoHeight || 1;
 		const ow = overlayEl?.clientWidth || 1;
 		const oh = overlayEl?.clientHeight || 1;
 		// object-fit: cover → scale = max(ow/vw, oh/vh); ảnh hiển thị lớn hơn
@@ -3056,6 +3074,100 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		const width = (box.width * scale / ow) * 100;
 		const height = (box.height * scale / oh) * 100;
 		return `left:${left}%;top:${top}%;width:${width}%;height:${height}%`;
+	}
+
+	// ── Import ảnh tĩnh: chọn file → decode → detect 1 lần → semantic như
+	// detectFrame (1 mã thêm thẳng + đóng; nhiều mã mở overlay chọn vùng;
+	// 0 mã → toast). Overlay mode 'import' hiển thị canvas freeze (ảnh) +
+	// regions, KHÔNG video/pause/detect loop.
+	function openImportPicker() {
+		if (configs.disabled) return;
+		configs.input.text?.ref?.blur();
+		// primeAudio trong gesture click (mirror openScan)
+		if (beepOnDerived) primeAudio();
+		importFileEl?.click();
+	}
+
+	async function handleImportSelect(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		// Reset value ngay → chọn lại CÙNG file lần sau vẫn bung onchange
+		input.value = '';
+		if (!file) return;
+		if (configs.disabled) return;
+		if (!file.type.startsWith('image/')) {
+			if (browser) {
+				client.browser?.toasts?.create({
+					title: 'Tệp không phải ảnh — chọn ảnh chứa mã vạch/QR',
+					color: 'warning'
+				});
+			}
+			return;
+		}
+		const detector = await ensureBarcodeDetector();
+		if (!detector) {
+			if (browser) {
+				client.browser?.toasts?.create({
+					title: 'BarcodeDetector không khả dụng',
+					color: 'warning'
+				});
+			}
+			return;
+		}
+		// objectURL → <img> decode() — img là CanvasImageSource hợp lệ cho detect()
+		const url = URL.createObjectURL(file);
+		try {
+			const img = new Image();
+			img.src = url;
+			await img.decode();
+			let results: BarcodeDetectorResult[];
+			try {
+				results = (await detector.detect(img)) as BarcodeDetectorResult[];
+			} catch {
+				results = [];
+			}
+			const valid = formatsDerived?.length
+				? results.filter((r) => formatsDerived!.includes(r.format))
+				: results;
+			if (valid.length === 1) {
+				// Single: thêm thẳng + beep + đóng (không mở overlay) — mirror detectFrame
+				if (beepOnDerived) playBeep('single');
+				vibratePattern('single');
+				addBarcode(valid[0].rawValue);
+			} else if (valid.length > 1) {
+				// Multiple: mở overlay mode 'import' + freeze canvas vẽ ảnh + regions
+				importImgW = img.naturalWidth || 1;
+				importImgH = img.naturalHeight || 1;
+				scanError = '';
+				scanFrozen = false;
+				scanPaused = false;
+				scanMode = 'import';
+				scanOpen = true;
+				importBusy = true;
+				requestAnimationFrame(() => {
+					if (canvasEl) {
+						canvasEl.width = importImgW;
+						canvasEl.height = importImgH;
+						canvasEl.getContext('2d')?.drawImage(img, 0, 0);
+					}
+					scanFrozen = true; // render regions + hint sau khi canvas có ảnh
+					importBusy = false;
+					scanResults = valid;
+				});
+				if (beepOnDerived) playBeep('multiple');
+				vibratePattern('multiple');
+			} else {
+				// 0 mã: ảnh không chứa mã nhận diện được → toast (không mở overlay)
+				if (browser) {
+					client.browser?.toasts?.create({
+						title: 'Không tìm thấy mã vạch/QR trong ảnh',
+						color: 'warning'
+					});
+				}
+			}
+		} finally {
+			URL.revokeObjectURL(url);
+		}
 	}
 
 
@@ -3523,6 +3635,33 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				}}
 				{@attach handleEvents(configs.input.text.event)}
 			/>
+			{#if importOnDerived}
+				<!-- Import ảnh tĩnh từ thư viện: hidden input file (clip ẩn — mirror
+				     type='file', KHÔNG display:none vì .click()) + nút image. data-test
+				     hook DOM qua wrapper span (Button không spread props). -->
+				<input
+					type="file"
+					accept="image/*"
+					tabindex="-1"
+					aria-hidden="true"
+					style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
+					bind:this={importFileEl}
+					onchange={(e) => void handleImportSelect(e)}
+				/>
+				<span data-test="input-barcode-import-trigger" class="input-barcode-action-hook">
+					<Button
+						variant="ghost"
+						color="info"
+						size="sm"
+						aspect-square
+						class="input-barcode-import-trigger"
+						aria-label="Nhập ảnh chứa mã để nhận diện"
+						onclick={() => openImportPicker()}
+					>
+						<Icon icon="lucide:image" class="input-barcode-icon" />
+					</Button>
+				</span>
+			{/if}
 			{#if cameraOnDerived}
 				<!-- Button component (reuse) — iconify KHÔNG có icon camera → giữ SVG
 				     camera inline nhưng bọc trong Button qua children snippet.
@@ -3646,24 +3785,30 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		{#if scanOpen}
 			<!-- Overlay camera inline (KHÔNG Modal) — video + khung scan + detect loop.
 			     Multiple detect → freeze frame canvas + bounding box regions click chọn
-			     (label divided top hiển thị giá trị). -->
+			     (label divided top hiển thị giá trị). Mode 'import' (ảnh tĩnh):
+			     KHÔNG video/frame/pause — canvas freeze hiển thị ảnh import + regions. -->
 			<div
 				class="input-barcode-overlay"
 				data-test="input-barcode-overlay"
 				bind:this={overlayEl}
 				role="dialog"
 				aria-modal="true"
-				aria-label="Quét mã bằng camera"
+				aria-label={scanMode === 'import' ? 'Chọn mã trong ảnh đã nhập' : 'Quét mã bằng camera'}
 			>
-				<video
-					class="input-barcode-video"
-					bind:this={videoEl}
-					playsinline
-					muted
-				></video>
+				{#if scanMode !== 'import'}
+					<video
+						class="input-barcode-video"
+						bind:this={videoEl}
+						playsinline
+						muted
+					></video>
+				{/if}
 				<canvas class="input-barcode-freeze" bind:this={canvasEl} class:input-barcode-freeze-on={scanFrozen}></canvas>
-				{#if !scanFrozen}
+				{#if !scanFrozen && scanMode !== 'import'}
 					<div class="input-barcode-frame" aria-hidden="true"></div>
+				{/if}
+				{#if importBusy && scanMode === 'import'}
+					<div class="input-barcode-hint" data-test="input-barcode-import-busy">Đang nhận diện mã…</div>
 				{/if}
 				{#if scanError}
 					<div class="input-barcode-scan-error" data-test="input-barcode-scan-error" role="alert">{scanError}</div>
@@ -3687,27 +3832,29 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				{/if}
 				<!-- Nút pause/resume (Yêu cầu 5) + close — Button component, góc trên
 				     phải cạnh nhau. Pause dừng detect loop GIỮ stream + video; resume
-				     chạy lại interval. -->
+				     chạy lại interval. Mode 'import' KHÔNG pause (ảnh tĩnh 1 lần). -->
 				<div class="input-barcode-overlay-actions">
 					<!-- Wrapper span data-test hook DOM (Button không spread props) -->
-					<span data-test="input-barcode-overlay-pause" class="input-barcode-action-hook">
-						<Button
-							variant="ghost"
-							color="default"
-							size="sm"
-							aspect-square
-							rounded="full"
-							class="input-barcode-overlay-btn"
-							aria-label={scanPaused ? 'Tiếp tục quét' : 'Tạm dừng quét'}
-							onclick={toggleScanPause}
-						>
-							{#if scanPaused}
-								<Icon icon="lucide:play" class="input-barcode-icon" />
-							{:else}
-								<Icon icon="lucide:pause" class="input-barcode-icon" />
-							{/if}
-						</Button>
-					</span>
+					{#if scanMode !== 'import'}
+						<span data-test="input-barcode-overlay-pause" class="input-barcode-action-hook">
+							<Button
+								variant="ghost"
+								color="default"
+								size="sm"
+								aspect-square
+								rounded="full"
+								class="input-barcode-overlay-btn"
+								aria-label={scanPaused ? 'Tiếp tục quét' : 'Tạm dừng quét'}
+								onclick={toggleScanPause}
+							>
+								{#if scanPaused}
+									<Icon icon="lucide:play" class="input-barcode-icon" />
+								{:else}
+									<Icon icon="lucide:pause" class="input-barcode-icon" />
+								{/if}
+							</Button>
+						</span>
+					{/if}
 					<span data-test="input-barcode-overlay-close" class="input-barcode-action-hook">
 						<Button
 							variant="ghost"

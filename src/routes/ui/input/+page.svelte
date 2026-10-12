@@ -27,6 +27,7 @@
 
 	// ── type='barcode' (bind:codes — string[] riêng, KHÔNG dùng value string) ──
 	let barcodeCodes = $state<string[]>([]);
+	let barcodeImportCodes = $state<string[]>([]);
 	let barcodeUpdateCodes = $state<string[]>([]);
 	let barcodeSelectCodes = $state<string[]>([]);
 	let barcodeAllCodes = $state<string[]>([]);
@@ -326,6 +327,25 @@
 			được 1 mã, 2 nốt khi nhiều mã. Mã TRÙNG → toast + card hiện có rung/tỏa sáng,
 			không thêm bản sao.
 			Đã quét: <code>{barcodeCodes.length}</code>
+		</p>
+	</section>
+
+	<!-- Import photo: chọn ảnh từ thư viện → detect barcode/QR trên ảnh tĩnh -->
+	<section class="demo" data-test="ib-import">
+		<h2>type=barcode · importOn (nhập ảnh → detect mã)</h2>
+		<TextField name="ib-import">
+			<Input
+				type="barcode"
+				bind:codes={barcodeImportCodes}
+				importOn
+				beepOn
+				placeholder="Chọn ảnh chứa mã vạch/QR…"
+			/>
+		</TextField>
+		<p class="demo-hint">
+			Nút ảnh (indigo) → chọn 1 ảnh từ thư viện → detect trên ảnh tĩnh (không cần camera).
+			1 mã → thêm thẳng; nhiều mã → overlay chọn vùng như scan; 0 mã → toast cảnh báo.
+			Đã thêm: <code>{barcodeImportCodes.length}</code>
 		</p>
 	</section>
 

@@ -12,10 +12,14 @@
 // - IB9  scan mock (addInitScript mock getUserMedia): detectFrame → addBarcode + beep single → close
 // - IB10 multi-detect mock: >1 mã → freeze frame + regions click → pickScanResult + beep single → close
 // - IB11 disabled: không nhập/scanner/xóa được
+// - IB12 importOn: nút import ảnh → hidden file input → detect ảnh tĩnh (stub
+//       BarcodeDetector): 1 mã thêm thẳng; nhiều mã → overlay import + regions;
+//       0 mã → toast warning (không overlay)
 // Chạy: node tests/input-barcode-probe.mjs (dev server https://localhost:3000)
 
 import { chromium } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const BASE = `${process.env.PROBE_BASE || 'https://localhost:3000'}/ui/input`;
 const results = [];
@@ -452,6 +456,170 @@ ok('IB11c: typing + Enter → KHÔNG thêm mã (guard disabled)', ib11codes.leng
 // Screenshot: disabled section
 await section('ib-disabled').screenshot({ path: 'tests/screenshots/input-barcode/04-disabled.png' });
 console.log('Screenshot: tests/screenshots/input-barcode/04-disabled.png');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IB12: IMPORT PHOTO — chọn ảnh từ thư viện → detect barcode/QR trên ảnh tĩnh
+// Mock BarcodeDetector qua addInitScript (giống IB9): polyfill zbar-wasm cần
+// WASM + CDN — trong probe đơn giản hơn: stub window.BarcodeDetector trả kết
+// quả theo ảnh (không decode thật). 2 case: 1 mã → thêm thẳng (không overlay);
+// nhiều mã → overlay mode import + regions click chọn.
+// Chromium headless KHÔNG có native BarcodeDetector → app tự fallback polyfill
+// (zbar-wasm CDN). Để probe không phụ thuộc mạng, stub TRƯỚC khi app load.
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n=== IB12: IMPORT PHOTO (ảnh tĩnh → detect mã) ===');
+const browserM3 = await chromium.launch({ args: ['--ignore-certificate-errors'] });
+const contextM3 = await browserM3.newContext({
+	ignoreHTTPSErrors: true,
+	viewport: { width: 1280, height: 900 },
+	deviceScaleFactor: 2
+});
+// Stub BarcodeDetector: detect() trả kết quả giả theo file name marker
+// (probe gửi PNG 1x1 trắng; stub đọc marker không được → trả theo COUNTER hoặc
+// theo payload image data). Đơn giản nhất: stub trả theo thứ tự call — call 1
+// (ảnh đơn) → 1 mã; call 2 (ảnh multi) → 2 mã; sau đó → 0.
+let stubCall = 0;
+await contextM3.addInitScript(() => {
+	window.__stubResults = [];
+	class FakeDetector {
+		async detect() {
+			const r = window.__stubResults.shift() ?? [];
+			return r;
+		}
+		async getSupportedFormats() {
+			return ['qr_code', 'ean_13'];
+		}
+	}
+	window.BarcodeDetector = FakeDetector;
+});
+const pageM3 = await contextM3.newPage();
+pageM3.on('pageerror', (e) => console.log('PAGEERROR:', e.message));
+await pageM3.goto(BASE, { waitUntil: 'domcontentloaded' });
+await pageM3.waitForSelector('[data-test="ib-import"]', { timeout: 20000 });
+await pageM3.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+await sleep(400);
+
+// 12a: nút import hiện khi importOn; hidden input file accept image/*
+const ib12trigger = await pageM3.locator('[data-test="ib-import"] [data-test="input-barcode-import-trigger"]').count();
+ok('IB12a: importOn → nút import render', ib12trigger === 1, `count=${ib12trigger}`);
+const ib12file = await pageM3.evaluate(() => {
+	const wrap = document.querySelector('[data-test="ib-import"]');
+	const el = wrap?.querySelector('input[type="file"]');
+	if (!el) return null;
+	return { accept: el.getAttribute('accept'), multiple: el.multiple };
+});
+ok(
+	'IB12b: hidden input file accept=image/* không multiple',
+	!!ib12file && ib12file.accept === 'image/*' && ib12file.multiple === false,
+	JSON.stringify(ib12file)
+);
+// 12c: section khác KHÔNG có nút import (importOn off)
+const ib12noimport = await pageM3.locator('[data-test="ib-base"] [data-test="input-barcode-import-trigger"]').count();
+ok('IB12c: importOn off → KHÔNG nút import (ib-base)', ib12noimport === 0, `count=${ib12noimport}`);
+
+// 12d: chọn ảnh 1 mã → stub queue 1 result → detect → addBarcode thẳng, KHÔNG overlay
+await pageM3.evaluate(() => {
+	window.__stubResults = [
+		[{ format: 'qr_code', rawValue: 'IMPORTQRCODE', boundingBox: new DOMRect(50, 50, 200, 200), cornerPoints: [] }]
+	];
+});
+// Fixture PNG (idiom input-file-probe): viết file xuống tests/fixtures/ →
+// setInputFiles nhận PATH (payload buffer bị atob reject trong InjectedScript).
+// Ảnh 640×480 trắng tạo bằng canvas trong Chromium (PNG synth tay bằng zlib
+// từng bị 'source image cannot be decoded' — canvas PNG chắc chắn decode được).
+// 640×480 KHÔNG 1×1 — boxStyle map % theo kích thước ảnh gốc: ảnh 1px làm
+// region % bùng nổ ra ngoài viewport không click được.
+const FIXBAR = 'tests/fixtures';
+mkdirSync(FIXBAR, { recursive: true });
+const canvasPage = await contextM3.newPage();
+await canvasPage.goto('about:blank');
+const fixtureDataUrl = await canvasPage.evaluate(() => {
+	const c = document.createElement('canvas');
+	c.width = 640;
+	c.height = 480;
+	const x = c.getContext('2d');
+	x.fillStyle = '#ffffff';
+	x.fillRect(0, 0, 640, 480);
+	return c.toDataURL('image/png');
+});
+await canvasPage.close();
+const fixturePng = join(FIXBAR, 'barcode-import-640x480.png');
+writeFileSync(fixturePng, Buffer.from(fixtureDataUrl.split(',')[1], 'base64'));
+await pageM3.locator('[data-test="ib-import"] input[type="file"]').setInputFiles([fixturePng]);
+await sleep(800);
+const ib12codes1 = await pageM3.evaluate(() => {
+	const wrap = document.querySelector('[data-test="ib-import"]');
+	if (!wrap) return [];
+	const values = wrap.querySelectorAll('.input-barcode-value');
+	return Array.from(values).map((v) => v.textContent?.trim() ?? '');
+});
+ok(
+	'IB12d: 1 mã trong ảnh → thêm thẳng IMPORTQRCODE',
+	ib12codes1.length === 1 && ib12codes1[0] === 'IMPORTQRCODE',
+	`codes=${JSON.stringify(ib12codes1)}`
+);
+const ib12overlay1 = await pageM3.locator('[data-test="ib-import"] [data-test="input-barcode-overlay"]').count();
+ok('IB12e: 1 mã → KHÔNG mở overlay (thêm thẳng)', ib12overlay1 === 0, `overlay=${ib12overlay1}`);
+
+// 12f: ảnh nhiều mã → overlay mode import (freeze canvas + regions + hint), KHÔNG video/pause
+await pageM3.evaluate(() => {
+	window.__stubResults = [
+		[
+			{ format: 'qr_code', rawValue: 'MULTIA', boundingBox: new DOMRect(40, 60, 160, 160), cornerPoints: [] },
+			{ format: 'ean_13', rawValue: '8938506952146', boundingBox: new DOMRect(420, 150, 200, 80), cornerPoints: [] }
+		]
+	];
+});
+await pageM3.locator('[data-test="ib-import"] input[type="file"]').setInputFiles([fixturePng]);
+await pageM3
+	.locator('[data-test="ib-import"] .input-barcode-freeze-on')
+	.waitFor({ timeout: 8000 });
+const ib12regions = await pageM3.locator('[data-test="ib-import"] [data-test="input-barcode-region"]').count();
+ok('IB12f: nhiều mã → overlay import + 2 regions', ib12regions === 2, `regions=${ib12regions}`);
+const ib12video = await pageM3.locator('[data-test="ib-import"] .input-barcode-overlay video').count();
+ok('IB12g: overlay import KHÔNG render video', ib12video === 0, `video=${ib12video}`);
+const ib12pause = await pageM3.locator('[data-test="ib-import"] [data-test="input-barcode-overlay-pause"]').count();
+ok('IB12h: overlay import KHÔNG nút pause', ib12pause === 0, `pause=${ib12pause}`);
+
+// Screenshot: overlay import + regions
+await pageM3.locator('[data-test="ib-import"]').screenshot({ path: 'tests/screenshots/input-barcode/05-import-regions.png' });
+console.log('Screenshot: tests/screenshots/input-barcode/05-import-regions.png');
+
+// 12i: click region → add mã + đóng
+await pageM3.locator('[data-test="ib-import"] [data-test="input-barcode-region"]').first().click();
+await sleep(500);
+const ib12codes2 = await pageM3.evaluate(() => {
+	const wrap = document.querySelector('[data-test="ib-import"]');
+	if (!wrap) return [];
+	const values = wrap.querySelectorAll('.input-barcode-value');
+	return Array.from(values).map((v) => v.textContent?.trim() ?? '');
+});
+ok(
+	'IB12i: click region → 2 mã (đã có 1 + pick 1), KHÔNG trùng lặp',
+	ib12codes2.length === 2 && ib12codes2.includes('MULTIA'),
+	`codes=${JSON.stringify(ib12codes2)}`
+);
+const ib12overlay2 = await pageM3.locator('[data-test="ib-import"] [data-test="input-barcode-overlay"]').count();
+ok('IB12j: overlay import tự đóng sau pick', ib12overlay2 === 0);
+
+// 12k: ảnh 0 mã → toast warning, KHÔNG overlay, không thêm
+await pageM3.evaluate(() => {
+	window.__stubResults = [[]];
+});
+await pageM3.locator('[data-test="ib-import"] input[type="file"]').setInputFiles([fixturePng]);
+await sleep(800);
+const ib12codes3 = await pageM3.evaluate(() => {
+	const wrap = document.querySelector('[data-test="ib-import"]');
+	if (!wrap) return [];
+	const values = wrap.querySelectorAll('.input-barcode-value');
+	return Array.from(values).map((v) => v.textContent?.trim() ?? '');
+});
+ok('IB12k: 0 mã → KHÔNG thêm (vẫn 2 mã)', ib12codes3.length === 2, `codes=${JSON.stringify(ib12codes3)}`);
+const ib12toast = await pageM3.locator('.toast-root, [data-test="toast"]').count();
+ok('IB12l: 0 mã → toast warning hiện', ib12toast >= 1, `toast=${ib12toast}`);
+const ib12overlay3 = await pageM3.locator('[data-test="ib-import"] [data-test="input-barcode-overlay"]').count();
+ok('IB12m: 0 mã → KHÔNG overlay', ib12overlay3 === 0);
+
+await browserM3.close();
 
 await browser.close();
 

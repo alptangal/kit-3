@@ -164,6 +164,12 @@ export interface InputProps extends BasicProps {
 	 */
 	cameraOn?: boolean;
 	/**
+	 * Nút nhập ảnh từ thư viện (type='barcode', mặc định false): chọn 1 ảnh
+	 * (accept image/*) → detect barcode/QR trên ảnh tĩnh — 1 mã thêm thẳng,
+	 * nhiều mã mở overlay chọn vùng như scan camera.
+	 */
+	importOn?: boolean;
+	/**
 	 * Âm thanh khi detect thành công (type='barcode', mặc định false):
 	 * WebAudio oscillator — single 1 nốt 880Hz, multiple 2 nốt 880→1320Hz.
 	 */
