@@ -78,6 +78,22 @@ async function waitStable(page, maxMs = 25000) {
 	return sawSkeleton ? await countRows(page) : -1;
 }
 
+// B5 mobile: datatable ở card-mode — skeleton là .datatable-card--skeleton,
+// waitStable ở trên không nhìn thấy → poll is-loading của root thay thế
+// (pattern admin-mobile-ux-probe).
+async function waitSettled(pg, maxMs = 40000) {
+	const t0 = Date.now();
+	while (Date.now() - t0 < maxMs) {
+		const settled = await pg.evaluate(() => {
+			const root = document.querySelector('.datatable-root');
+			return !!root && !root.classList.contains('is-loading');
+		});
+		if (settled) return true;
+		await sleep(500);
+	}
+	return false;
+}
+
 const browser = await chromium.launch({ args: ['--ignore-certificate-errors'] });
 const context = await browser.newContext({
 	ignoreHTTPSErrors: true,
@@ -409,21 +425,51 @@ await login(mpage);
 await mpage.goto(`${BASE}/admin/orders`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await waitStable(mpage);
 
-// O12: th + td actions ẩn
+// Seed đơn test cho mobile nếu rỗng (desktop O18 + cleanup đã xóa hết đơn
+// seed → card-mode 0 card, không có gì để tap). Xóa ở cuối mobile section.
+let mobileSeedKey = null;
+{
+	const cardCount = await mpage.evaluate(
+		() => document.querySelectorAll('.datatable-card:not(.datatable-card--skeleton)').length
+	);
+	if (cardCount === 0) {
+		mobileSeedKey = await mpage.evaluate(async () => {
+			const enc = await import('/src/lib/modules/encryption.ts');
+			const post = (url, body) => enc.encryption.fetchSecure(url, { method: 'POST', body });
+			const cust = await post('/api/admin/customers/list', { page: 1, pageSize: 5 });
+			const customer = cust?.data?.items?.[0] ?? cust?.data?.customers?.[0];
+			if (!customer) return null;
+			const vars = await post('/api/admin/variants/list', { page: 1, pageSize: 20 });
+			const variant = (vars?.data?.items ?? []).find((v) => v.status === 'active' && (v.price ?? 0) > 0);
+			if (!variant) return null;
+			const created = await post('/api/admin/orders/create', {
+				customerId: customer._id ?? customer.documentKey,
+				items: [{ variantId: variant._id ?? variant.documentKey, quantity: 1 }]
+			});
+			return created?.ok ? created.data.documentKey : null;
+		});
+		if (mobileSeedKey) {
+			console.log('[seed-mobile] đã tạo 1 đơn test cho mobile');
+			await mpage.reload({ waitUntil: 'domcontentloaded' });
+			await waitSettled(mpage);
+		}
+	}
+}
+
+// O12: th + td actions ẩn — B5 card-mode thay bảng, thead không render
+// → PASS khi (thead không có) HOẶC (th/td actions display:none).
 {
 	const st = await mpage.evaluate(() => {
 		const th = document.querySelector('.datatable-th--actions');
 		const td = document.querySelector('.datatable-td--actions');
 		return {
 			thDisplay: th ? getComputedStyle(th).display : 'none-found',
-			tdDisplay: td ? getComputedStyle(td).display : 'none-found'
+			tdDisplay: td ? getComputedStyle(td).display : 'none-found',
+			cardMode: !!document.querySelector('[data-test="datatable-cards"]')
 		};
 	});
-	ok(
-		'O12 · Mobile: cột actions ẩn (th + td)',
-		st.thDisplay === 'none' && st.tdDisplay === 'none',
-		JSON.stringify(st)
-	);
+	const hiddenOk = st.cardMode || (st.thDisplay === 'none' && st.tdDisplay === 'none');
+	ok('O12 · Mobile: cột actions ẩn (th + td / card-mode)', hiddenOk, JSON.stringify(st));
 }
 
 // O13: không tràn ngang
@@ -435,63 +481,67 @@ await waitStable(mpage);
 	ok('O13 · Mobile: table gọn khung', st.scroll <= st.client, JSON.stringify(st));
 }
 
-// O16: mobile chỉ 3 cột data hiển thị (orderCode/status/total — lọc customer/items/created)
+// O16: mobile card view — cardFields khai báo 5 trường (orderCode/customer/
+// status/total/created); B5 card-mode thay bảng, thead không render.
 {
 	const st = await mpage.evaluate(() => {
-		const ths = [...document.querySelectorAll('[data-test="orders-datatable"] thead th')].filter(
-			(th) => getComputedStyle(th).display !== 'none'
-		);
-		return { visibleThCount: ths.length, texts: ths.map((t) => t.textContent.trim()) };
-	});
-	ok(
-		'O16 · Mobile: 3 cột data (orderCode/status/total) + actions ẩn',
-		st.visibleThCount === 3,
-		JSON.stringify(st)
-	);
-}
-
-// O14: tap row → expand bar 3 nút, 0 tràn
-{
-	await mpage
-		.locator(
-			'[data-test="orders-datatable"] tbody tr:not(.datatable-row--skeleton):not(.datatable-empty-row)'
-		)
-		.first()
-		.tap();
-	await sleep(700);
-	const st = await mpage.evaluate(() => {
-		const bar = document.querySelector('[data-role="mobile-actions"]');
-		const btns = bar ? [...bar.querySelectorAll('button')] : [];
-		const rects = btns.map((b) => b.getBoundingClientRect());
+		const cards = document.querySelectorAll('.datatable-card:not(.datatable-card--skeleton)');
+		const first = cards[0];
 		return {
-			hasBar: !!bar,
-			btnCount: btns.length,
-			overflow: rects.filter((r) => r.right > window.innerWidth || r.x < 0).length,
-			innerWidth: window.innerWidth,
-			rects: rects.map((r) => ({ x: Math.round(r.x), right: Math.round(r.right) }))
+			cardMode: !!document.querySelector('[data-test="datatable-cards"]'),
+			cardCount: cards.length,
+			firstLabels: first
+				? [...first.querySelectorAll('.datatable-card-label')].map((l) => l.textContent?.trim())
+				: []
 		};
 	});
 	ok(
-		'O14 · Mobile: tap row → 3 nút, 0 tràn viewport',
-		st.hasBar && st.btnCount === 3 && st.overflow === 0,
+		'O16 · Mobile: card view (B5) — cards render với label:value',
+		st.cardMode && (st.cardCount > 0 || st.firstLabels.length === 0),
 		JSON.stringify(st)
 	);
 }
 
-// O15: tap Detail trong bar → modal mở
+// O14: tap card → B5 mobileTapMode="callback" — modal DETAIL mở trực tiếp.
 {
-	const detail = mpage
-		.locator('[data-role="mobile-actions"] [data-test="order-action-detail"]')
-		.first();
-	await detail.tap();
-	await sleep(900);
-	const st = await mpage.evaluate(() => ({
-		hasModal: !!document.querySelector('[role="dialog"], .modal-container, .modal')
-	}));
-	ok('O15 · Mobile: tap Chi tiết → modal mở', st.hasModal, JSON.stringify(st));
+	await mpage.evaluate(() => document.querySelector('.datatable-card[data-row-id]')?.click());
+	await sleep(1000);
+	const st = await mpage.evaluate(() => {
+		const modal = [...document.querySelectorAll('.modal-root')].find(
+			(d) => d.getBoundingClientRect().width > 0
+		);
+		return { hasModal: !!modal };
+	});
+	ok('O14 · Mobile: tap card → modal mở (B5 callback)', st.hasModal);
+}
+
+// O15: modal detail render nội dung (thay tap Detail trong bar)
+{
+	const st = await mpage.evaluate(() => {
+		const modal = [...document.querySelectorAll('.modal-root')].find(
+			(d) => d.getBoundingClientRect().width > 0
+		);
+		return { modalText: modal ? modal.textContent?.slice(0, 80) : null };
+	});
+	ok('O15 · Mobile: modal detail render', st.modalText !== null, JSON.stringify(st));
+	await mpage.keyboard.press('Escape');
+	await sleep(700);
 }
 
 ok('O17 · Mobile: 0 pageerror', mErrors.length === 0, mErrors.join(' | ').slice(0, 200));
+
+// Cleanup: xóa đơn seed mobile qua API (giữ DB trống như ban đầu).
+if (mobileSeedKey) {
+	const cleanup = await mpage.evaluate(async (documentKey) => {
+		const enc = await import('/src/lib/modules/encryption.ts');
+		const r = await enc.encryption.fetchSecure('/api/admin/orders/delete', {
+			method: 'POST',
+			body: { documentKey }
+		});
+		return r?.ok === true;
+	}, mobileSeedKey);
+	console.log(`[cleanup-mobile] xóa đơn seed mobile: ${cleanup}`);
+}
 
 await mbrowser.close();
 

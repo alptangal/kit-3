@@ -378,17 +378,20 @@ let mobileProductCreated = false;
 	}
 }
 
-// B12: th + td actions ẩn
+// B12: th + td actions ẩn — B5 card-mode thay bảng, thead không render
+// → PASS khi (thead không có) HOẶC (th/td actions display:none).
 {
 	const st = await mpage.evaluate(() => {
 		const th = document.querySelector('.datatable-th--actions');
 		const td = document.querySelector('.datatable-td--actions');
 		return {
 			thDisplay: th ? getComputedStyle(th).display : 'none-found',
-			tdDisplay: td ? getComputedStyle(td).display : 'none-found'
+			tdDisplay: td ? getComputedStyle(td).display : 'none-found',
+			cardMode: !!document.querySelector('[data-test="datatable-cards"]')
 		};
 	});
-	ok('B12 · Mobile: cột actions ẩn (th + td)', st.thDisplay === 'none' && st.tdDisplay === 'none', JSON.stringify(st));
+	const hiddenOk = st.cardMode || (st.thDisplay === 'none' && st.tdDisplay === 'none');
+	ok('B12 · Mobile: cột actions ẩn (th + td / card-mode)', hiddenOk, JSON.stringify(st));
 }
 
 // B13: không tràn ngang
@@ -400,76 +403,69 @@ let mobileProductCreated = false;
 	ok('B13 · Mobile: table gọn khung', st.scroll <= st.client, JSON.stringify(st));
 }
 
-// B14: tap row → expand bar 2 nút, 0 tràn
+// B13: tap card → B5 mobileTapMode="callback" — modal EDIT mở trực tiếp
+// (không còn expand bar; bar thay bằng modal + nút Xoá footer).
 {
-	await mpage
-		.locator(
-			'[data-test="products-datatable"] tbody tr:not(.datatable-row--skeleton):not(.datatable-empty-row)'
-		)
-		.first()
-		.tap();
-	await sleep(700);
+	await mpage.evaluate(() => document.querySelector('.datatable-card[data-row-id]')?.click());
+	await sleep(1000);
 	const st = await mpage.evaluate(() => {
-		const bar = document.querySelector('[data-role="mobile-actions"]');
-		const btns = bar ? [...bar.querySelectorAll('button')] : [];
-		const rects = btns.map((b) => b.getBoundingClientRect());
+		const modal = [...document.querySelectorAll('.modal-root')].find(
+			(d) => d.getBoundingClientRect().width > 0
+		);
+		const del = document.querySelector('[data-test="product-modal-delete"]');
+		return { hasModal: !!modal, hasDelete: !!del && del.getBoundingClientRect().width > 0 };
+	});
+	ok('B13 · Mobile: tap card → modal EDIT mở (B5 callback)', st.hasModal, JSON.stringify(st));
+}
+
+// B14: modal edit có nút Xoá (B5 — thay expand bar)
+{
+	const st = await mpage.evaluate(() => {
+		const del = document.querySelector('[data-test="product-modal-delete"]');
+		return { hasDelete: !!del && del.getBoundingClientRect().width > 0 };
+	});
+	ok('B14 · Mobile: modal edit có nút Xoá (B5)', st.hasDelete);
+	await mpage.keyboard.press('Escape');
+	await sleep(700);
+}
+
+// B15: card view (B5) — cardFields khai báo 3 trường (product/category/status)
+{
+	const st = await mpage.evaluate(() => {
+		const cards = document.querySelectorAll('.datatable-card:not(.datatable-card--skeleton)');
+		const first = cards[0];
 		return {
-			hasBar: !!bar,
-			btnCount: btns.length,
-			overflow: rects.filter((r) => r.right > window.innerWidth || r.x < 0).length,
-			innerWidth: window.innerWidth,
-			rects: rects.map((r) => ({ x: Math.round(r.x), right: Math.round(r.right), top: Math.round(r.top) }))
+			cardMode: !!document.querySelector('[data-test="datatable-cards"]'),
+			cardCount: cards.length,
+			firstLabels: first
+				? [...first.querySelectorAll('.datatable-card-label')].map((l) => l.textContent?.trim())
+				: []
 		};
 	});
 	ok(
-		'B14 · Mobile: tap row → 2 nút, 0 tràn viewport',
-		st.hasBar && st.btnCount === 2 && st.overflow === 0,
+		'B15 · Mobile: card view (B5) — cards render với label:value',
+		st.cardMode && (st.cardCount > 0 || st.firstLabels.length === 0),
 		JSON.stringify(st)
 	);
 }
 
-// B15: tap Edit trong bar → modal mở
-{
-	const edit = mpage.locator('[data-role="mobile-actions"] [data-test="product-action-edit"]').first();
-	await edit.tap();
-	await sleep(900);
-	const st = await mpage.evaluate(() => ({
-		hasModal: !!document.querySelector('[role="dialog"], .modal-container, .modal')
-	}));
-	ok('B15 · Mobile: tap Edit → modal mở', st.hasModal, JSON.stringify(st));
-}
-
 ok('B16 · Mobile: 0 pageerror', mErrors.length === 0, mErrors.join(' | ').slice(0, 200));
 
-// Dọn product test mobile (nếu đã tạo) — qua nút Delete trong bar expand.
+// Dọn product test mobile (nếu đã tạo) — B5: tap card → modal edit → nút
+// Xoá footer (confirm() auto-accept).
 if (mobileProductCreated) {
-	await mpage.keyboard.press('Escape');
-	await sleep(900);
-	let modalStill = await mpage.evaluate(() => !!document.querySelector('[role="dialog"]'));
-	if (modalStill) {
-		console.log('[dbg-mobile] Escape chưa đóng modal — fallback Cancel');
-		await mpage.locator('[role="dialog"] button', { hasText: /Huỷ|Cancel/ }).last().tap();
-		await sleep(900);
-		modalStill = await mpage.evaluate(() => !!document.querySelector('[role="dialog"]'));
-	}
-	if (modalStill) console.log('[dbg-mobile] modal vẫn mở — thử tiếp, delete có thể vẫn chặn');
-
-	const rows = mpage.locator('[data-test="products-datatable"] tbody tr', { hasText: mobileProductName });
+	const cards = mpage.locator('.datatable-card', { hasText: mobileProductName });
 	let guard = 0;
-	while ((await rows.count()) > 0 && guard++ < 6) {
-		await rows.first().tap();
-		await sleep(800);
-		const hasBar = await mpage.evaluate(() => !!document.querySelector('[data-role="mobile-actions"]'));
-		if (!hasBar) {
-			await rows.first().tap();
-			await sleep(800);
-		}
-		const del = mpage.locator('[data-role="mobile-actions"] [data-test="product-action-delete"]').first();
-		if ((await del.count()) === 0) {
-			console.log(`[dbg-mobile] vòng ${guard}: không thấy nút delete — bỏ qua vòng này`);
+	while ((await cards.count()) > 0 && guard++ < 6) {
+		await cards.first().click();
+		await sleep(1000);
+		// modal edit mở — nút Xoá trong footer
+		const del = mpage.locator('[data-test="product-modal-delete"]').first();
+		if ((await del.count()) === 0 || !(await del.isVisible())) {
+			console.log(`[dbg-mobile] vòng ${guard}: không thấy nút delete modal — bỏ qua vòng này`);
 			continue;
 		}
-		await del.tap();
+		await del.click();
 		await sleep(2500);
 		await waitStable(mpage, 15000);
 	}

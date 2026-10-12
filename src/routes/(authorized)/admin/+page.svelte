@@ -546,6 +546,10 @@
 				emptyLabel={pageContents.states.empty[lang]}
 				loadingLabel={pageContents.states.loading[lang]}
 				caption={{ vi: 'Danh sách người dùng', en: 'User list' }}
+				stickyHead
+				mobileTapMode="callback"
+				onRowClick={(row) => openEditModal(row as unknown as AdminUserRow)}
+				cardFields={['name', 'role', 'status', 'created']}
 				data-test="users-datatable"
 			>
 				{#snippet actionsContent(row)}
@@ -652,6 +656,7 @@
 	{roles}
 	onCreated={refresh}
 	onUpdated={refresh}
+	onDelete={(user) => openDeleteModal(user)}
 />
 
 <!-- ── Modal đổi vai trò ── -->
@@ -820,6 +825,19 @@
 		flex-wrap: wrap;
 	}
 
+	/* B5: users page không có .admin-filters — header actions đóng vai trò filter
+	   (checkbox show deleted). Sticky dưới admin header (mobile). */
+	@media (max-width: 767px) {
+		.admin-header-actions {
+			position: sticky;
+			top: calc(var(--admin-header-h, 0px) + var(--admin-body-pad-top, 0.5rem));
+			z-index: 400;
+			background: var(--background, #fff);
+			padding-block: 0.25rem;
+			margin-block: -0.25rem;
+		}
+	}
+
 	.admin-state {
 		display: flex;
 		flex-direction: column;
@@ -850,6 +868,12 @@
 		border-radius: 0.75rem;
 		border: 1px solid var(--default-300);
 		background: var(--background);
+
+		/* B5: card mode mobile — bỏ khung bảng rỗng (card tự có border). */
+		@media (max-width: 767px) {
+			border: 0;
+			border-radius: 0;
+		}
 	}
 
 	/* B6.2: nút action trong cột actions DataTable (snippet actionsContent). */
@@ -865,6 +889,16 @@
 		align-items: center;
 		gap: 1rem;
 		flex-wrap: wrap;
+
+		/* B5: sticky đáy viewport khi list dài hơn màn hình (mobile). */
+		@media (max-width: 767px) {
+			position: sticky;
+			bottom: 0;
+			z-index: 300;
+			background: var(--background, #fff);
+			padding-block: 0.5rem;
+			margin-block: -0.25rem;
+		}
 	}
 
 	.total-count {

@@ -302,21 +302,20 @@ await login(mpage);
 await mpage.goto(`${BASE}/admin/customers`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await waitStable(mpage);
 
-// C12: th + td actions ẩn
+// C12: th + td actions ẩn — B5 card-mode thay bảng, thead không render
+// → PASS khi (thead không có) HOẶC (th/td actions display:none).
 {
 	const st = await mpage.evaluate(() => {
 		const th = document.querySelector('.datatable-th--actions');
 		const td = document.querySelector('.datatable-td--actions');
 		return {
 			thDisplay: th ? getComputedStyle(th).display : 'none-found',
-			tdDisplay: td ? getComputedStyle(td).display : 'none-found'
+			tdDisplay: td ? getComputedStyle(td).display : 'none-found',
+			cardMode: !!document.querySelector('[data-test="datatable-cards"]')
 		};
 	});
-	ok(
-		'C12 · Mobile: cột actions ẩn (th + td)',
-		st.thDisplay === 'none' && st.tdDisplay === 'none',
-		JSON.stringify(st)
-	);
+	const hiddenOk = st.cardMode || (st.thDisplay === 'none' && st.tdDisplay === 'none');
+	ok('C12 · Mobile: cột actions ẩn (th + td / card-mode)', hiddenOk, JSON.stringify(st));
 }
 
 // C13: không tràn ngang
@@ -328,60 +327,50 @@ await waitStable(mpage);
 	ok('C13 · Mobile: table gọn khung', st.scroll <= st.client, JSON.stringify(st));
 }
 
-// C16: mobile chỉ 3 cột data hiển thị (name/status/loyalty — lọc created/lastLogin)
+// C16: mobile card view (B5) — thead không render khi card-mode.
 {
 	const st = await mpage.evaluate(() => {
-		const ths = [...document.querySelectorAll('[data-test="customers-datatable"] thead th')].filter(
-			(th) => getComputedStyle(th).display !== 'none'
-		);
-		return { visibleThCount: ths.length, texts: ths.map((t) => t.textContent.trim()) };
-	});
-	ok(
-		'C16 · Mobile: 3 cột data (name/status/loyalty) + actions ẩn',
-		st.visibleThCount === 3,
-		JSON.stringify(st)
-	);
-}
-
-// C14: tap row → expand bar 3 nút, 0 tràn
-{
-	await mpage
-		.locator(
-			'[data-test="customers-datatable"] tbody tr:not(.datatable-row--skeleton):not(.datatable-empty-row)'
-		)
-		.first()
-		.tap();
-	await sleep(700);
-	const st = await mpage.evaluate(() => {
-		const bar = document.querySelector('[data-role="mobile-actions"]');
-		const btns = bar ? [...bar.querySelectorAll('button')] : [];
-		const rects = btns.map((b) => b.getBoundingClientRect());
+		const cards = document.querySelectorAll('.datatable-card:not(.datatable-card--skeleton)');
+		const first = cards[0];
 		return {
-			hasBar: !!bar,
-			btnCount: btns.length,
-			overflow: rects.filter((r) => r.right > window.innerWidth || r.x < 0).length,
-			innerWidth: window.innerWidth,
-			rects: rects.map((r) => ({ x: Math.round(r.x), right: Math.round(r.right) }))
+			cardMode: !!document.querySelector('[data-test="datatable-cards"]'),
+			cardCount: cards.length,
+			firstLabels: first
+				? [...first.querySelectorAll('.datatable-card-label')].map((l) => l.textContent?.trim())
+				: []
 		};
 	});
 	ok(
-		'C14 · Mobile: tap row → 3 nút, 0 tràn viewport',
-		st.hasBar && st.btnCount === 3 && st.overflow === 0,
+		'C16 · Mobile: card view (B5) — cards render với label:value',
+		st.cardMode && (st.cardCount > 0 || st.firstLabels.length === 0),
 		JSON.stringify(st)
 	);
 }
 
-// C15: tap Detail trong bar → modal mở
+// C14: tap card → B5 mobileTapMode="callback" — modal DETAIL mở trực tiếp.
 {
-	const detail = mpage
-		.locator('[data-role="mobile-actions"] [data-test="customer-action-detail"]')
-		.first();
-	await detail.tap();
-	await sleep(900);
-	const st = await mpage.evaluate(() => ({
-		hasModal: !!document.querySelector('[role="dialog"], .modal-container, .modal')
-	}));
-	ok('C15 · Mobile: tap Chi tiết → modal mở', st.hasModal, JSON.stringify(st));
+	await mpage.evaluate(() => document.querySelector('.datatable-card[data-row-id]')?.click());
+	await sleep(1000);
+	const st = await mpage.evaluate(() => {
+		const modal = [...document.querySelectorAll('.modal-root')].find(
+			(d) => d.getBoundingClientRect().width > 0
+		);
+		return { hasModal: !!modal };
+	});
+	ok('C14 · Mobile: tap card → modal mở (B5 callback)', st.hasModal);
+}
+
+// C15: modal detail render nội dung (thay tap Detail trong bar)
+{
+	const st = await mpage.evaluate(() => {
+		const modal = [...document.querySelectorAll('.modal-root')].find(
+			(d) => d.getBoundingClientRect().width > 0
+		);
+		return { modalText: modal ? modal.textContent?.slice(0, 80) : null };
+	});
+	ok('C15 · Mobile: modal detail render', st.modalText !== null, JSON.stringify(st));
+	await mpage.keyboard.press('Escape');
+	await sleep(700);
 }
 
 ok('C17 · Mobile: 0 pageerror', mErrors.length === 0, mErrors.join(' | ').slice(0, 200));

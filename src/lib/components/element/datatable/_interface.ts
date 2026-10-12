@@ -198,6 +198,14 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	rowDetail?: boolean | DataTableRowDetail;
 	/** Opt-in click cell → modal chi tiết + focus đúng field (đè rowDetail click). */
 	cellDetail?: boolean;
+	/** B5: hành vi tap row trên mobile ('actions' mặc định — expand bar;
+	     'callback' — gọi onRowClick; 'none' — không phản ứng). */
+	mobileTapMode?: 'actions' | 'callback' | 'none';
+	/** B5: card view tự động mobile — danh sách column.id hiển thị trên card
+	     (phần tử đầu = tiêu đề card). Chỉ áp dụng khi isMobile + có giá trị. */
+	cardFields?: string[];
+	/** B5: sticky thead khi cuộn (media ≤1024px mở overflow — desktop giữ nguyên). */
+	stickyHead?: boolean;
 	/** B6.2: snippet actions custom (đè nút built-in — xem actionsContent). */
 	actionsContent?: Snippet<[Record<string, unknown>, string]>;
 	/** Callback khi tạo row mới (row + rowId). */
@@ -333,6 +341,14 @@ export interface DataTableConfigs extends BasicConfigs {
 	rowDetailEditable: boolean;
 	/** Click cell → modal chi tiết (đè edit cell khi bật). */
 	cellDetail: boolean;
+	/** B5: hành vi tap row mobile (resolve từ prop, default 'actions'). */
+	mobileTapMode: 'actions' | 'callback' | 'none';
+	/** B5: card view mobile bật? (isMobile + cardFields có giá trị). */
+	cardMode: boolean;
+	/** B5: card fields (column.id; phần tử đầu = title). */
+	cardFields: string[];
+	/** B5: sticky thead bật? (media ≤1024 xử lý ở CSS). */
+	stickyHead: boolean;
 }
 
 /** Shared state root → sub (Head/Body/Pagination), bỏ writable store của v1. */

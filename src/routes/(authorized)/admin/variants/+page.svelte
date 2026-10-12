@@ -641,6 +641,10 @@
 			loadingLabel={pageContents.loading[lang]}
 			caption={{ vi: 'Danh sách biến thể', en: 'Variant list' }}
 			actionsLabel={{ vi: 'Thao tác', en: 'Actions' }}
+			stickyHead
+			mobileTapMode="callback"
+			onRowClick={(row) => openEditModal(row as unknown as VariantListItem)}
+			cardFields={['variant', 'sku', 'price', 'status']}
 			data-test="variants-datatable"
 		>
 			{#snippet actionsContent(row)}
@@ -865,6 +869,22 @@
 				</fieldset>
 			</ModalBody>
 			<ModalFooter class="modal-footer">
+				{#if editingVariant}
+					<!-- B5: mobile tap row mở modal edit — nút Xoá để xóa ngay từ modal. -->
+					<Button
+						variant="ghost"
+						color="error"
+						disabled={formSubmitting}
+						data-test="variant-modal-delete"
+						onClick={() => {
+							const variant = editingVariant;
+							closeModals();
+							if (variant) void deleteVariant(variant);
+						}}
+					>
+						{pageContents.deleteAction[lang]}
+					</Button>
+				{/if}
 				<Button variant="outline" onClick={closeModals} disabled={formSubmitting}>
 					{pageContents.cancel[lang]}
 				</Button>
@@ -919,6 +939,17 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 1rem;
+
+		/* B5: sticky dưới admin header (mobile — var đo bằng ResizeObserver
+		   trên .admin-inset). margin-block âm giữ nhịp gap 1rem của .admin-page. */
+		@media (max-width: 767px) {
+			position: sticky;
+			top: calc(var(--admin-header-h, 0px) + var(--admin-body-pad-top, 0.5rem));
+			z-index: 400;
+			background: var(--background, #fff);
+			padding-block: 0.25rem;
+			margin-block: -0.25rem;
+		}
 	}
 
 	.admin-search {
@@ -953,6 +984,12 @@
 		border-radius: 0.75rem;
 		border: 1px solid var(--default-300);
 		background: var(--background);
+
+		/* B5: card mode mobile — bỏ khung bảng rỗng (card tự có border). */
+		@media (max-width: 767px) {
+			border: 0;
+			border-radius: 0;
+		}
 	}
 
 	/* Nút action trong cột actions DataTable (snippet actionsContent). */
@@ -969,6 +1006,16 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 		padding-top: 0.25rem;
+
+		/* B5: sticky đáy viewport khi list dài hơn màn hình (mobile). */
+		@media (max-width: 767px) {
+			position: sticky;
+			bottom: 0;
+			z-index: 300;
+			background: var(--background, #fff);
+			padding-block: 0.5rem;
+			margin-block: -0.25rem;
+		}
 	}
 
 	.total-count {
@@ -1102,5 +1149,12 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 0.75rem;
+	}
+
+	/* B5: nút Xoá trong modal edit — đẩy sang trái (tách khỏi nhóm Cancel/Save). */
+	/* B5: :global toan phan — footer render qua ModalFooter (scope khac),
+	   anchor scoped .modal-footer khong match. */
+	:global(.modal-footer [data-test='variant-modal-delete']) {
+		margin-right: auto;
 	}
 </style>

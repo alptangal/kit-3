@@ -114,19 +114,23 @@
 
 	// ── Row click → modal chi tiết (rowDetail opt-in; không tap control/button/
 	// cell editor đang mở) ──
-	const onRowTap = (rowId: string, e: MouseEvent): void => {
-		// Mobile: tap row → expand actions (ưu tiên cũ).
-		if (ctx?.rowActions && ctx.isMobile) {
-			const target = e.target as HTMLElement;
-			// Checkbox component render div[role="checkbox"] (không phải input thật).
-			if (target.closest('input, button, a, [role="checkbox"], [data-no-tap]')) return;
-			ctx.toggleRowActions(rowId);
+	const onRowTap = (rowId: string, row: Record<string, unknown>, index: number, e: MouseEvent): void => {
+		// B5: guard chung mọi nhánh — không tap control/button/cell editor đang mở.
+		const target = e.target as HTMLElement;
+		if (target.closest('input, button, a, [role="checkbox"], [data-no-tap], .datatable-cell-editor')) return;
+		if (ctx?.isMobile) {
+			const mode = ctx.configs?.mobileTapMode ?? 'actions';
+			if (mode === 'callback') {
+				ctx.handleRowClick(row, index);
+				return;
+			}
+			if (mode === 'none') return;
+			// mode 'actions' + rowActions → expand action bar (ưu tiên cũ).
+			if (ctx.rowActions) ctx.toggleRowActions(rowId);
 			return;
 		}
-		// PC: rowDetail bật → click row mở modal (không click checkbox/button/cell editor).
-		if (ctx?.rowDetail && !ctx.isMobile) {
-			const target = e.target as HTMLElement;
-			if (target.closest('input, button, a, [role="checkbox"], [data-no-tap], .datatable-cell-editor')) return;
+		// PC: rowDetail bật → click row mở modal.
+		if (ctx?.rowDetail) {
 			ctx.openRowDetail(rowId);
 		}
 	};
@@ -195,7 +199,7 @@
 					class:row-expanded={rowExpanded}
 					class:row-editing={rowEditing}
 					data-row-id={rowId}
-					onclick={(e) => onRowTap(rowId, e)}
+					onclick={(e) => onRowTap(rowId, row, index, e)}
 				>
 					{#if configs?.selectable}
 						<td class="datatable-td datatable-td--check">

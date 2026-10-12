@@ -71,6 +71,9 @@
 		resizable,
 		rowDetail,
 		cellDetail,
+		mobileTapMode,
+		cardFields,
+		stickyHead,
 		onRowCreate,
 		onRowClone,
 		onCopy,
@@ -213,6 +216,11 @@
 	});
 	const rowDetailDerived: boolean = $derived(rowDetailCfg.enabled);
 	const cellDetailDerived: boolean = $derived(!!cellDetail && rowDetailCfg.enabled);
+
+	// ── B5: mobile tap mode + card view + sticky head ──
+	const mobileTapModeDerived: 'actions' | 'callback' | 'none' = $derived(mobileTapMode ?? 'actions');
+	const cardMode: boolean = $derived(isMobile && !!cardFields && cardFields.length > 0);
+	const cardFieldsDerived: string[] = $derived(cardFields ?? []);
 
 	// Resolve TranslateContent | string theo language (fallback en → vi)
 	const getText = (content?: TranslateContent | string, fallback?: { en: string; vi: string }): string => {
@@ -394,6 +402,42 @@
 
 	const handleRowClick = (row: Record<string, unknown>, index: number): void => {
 		onRowClick?.(row as never, idOf(row, index));
+	};
+
+	// ── B5: card view helpers (template đọc) ──
+	const getRowIdPublic = (row: Record<string, unknown>, index: number): string => idOf(row, index);
+
+	// Guard card tap giống onRowTap Body (không tap control bên trong nếu có).
+	const onCardTap = (row: Record<string, unknown>, index: number, e: Event): void => {
+		const target = e.target as HTMLElement;
+		if (target.closest('input, button, a, [role="checkbox"], [data-no-tap]')) return;
+		if (isMobile && mobileTapModeDerived === 'callback') {
+			handleRowClick(row, index);
+			return;
+		}
+		if (mobileTapModeDerived === 'actions' && rowActionsDerived) {
+			// Card mode không expand bar (bar nằm trong table) — fallback callback.
+			handleRowClick(row, index);
+			return;
+		}
+		if (mobileTapModeDerived === 'none') return;
+		handleRowClick(row, index);
+	};
+
+	// Text hiển thị cell card (render tùy + Date yyyy-mm-dd giờ địa phương).
+	const cellTextOf = (
+		value: unknown,
+		col: DataTableColumn<Record<string, unknown>>,
+		row: Record<string, unknown>
+	): string => {
+		if (col.render) return String(col.render(value, row as never, 0));
+		if (value instanceof Date) {
+			const y = value.getFullYear();
+			const m = String(value.getMonth() + 1).padStart(2, '0');
+			const d = String(value.getDate()).padStart(2, '0');
+			return `${y}-${m}-${d}`;
+		}
+		return String(value ?? '');
 	};
 
 	// ── ACTIONS edit cell / delete / row actions / lazy load ──
@@ -1227,6 +1271,18 @@
 		get cellDetail() {
 			return cellDetailDerived;
 		},
+		get mobileTapMode() {
+			return mobileTapModeDerived;
+		},
+		get cardMode() {
+			return cardMode;
+		},
+		get cardFields() {
+			return cardFieldsDerived;
+		},
+		get stickyHead() {
+			return !!stickyHead;
+		},
 		get rowDetailSaveText() {
 			return rowDetailSaveText;
 		},
@@ -1243,7 +1299,10 @@
 				this.striped ? 'striped' : undefined,
 				this.hoverable ? 'hoverable' : undefined,
 				this.bordered ? 'bordered-columns' : undefined,
-				this.editable ? 'editable' : undefined
+				this.editable ? 'editable' : undefined,
+			this.stickyHead ? 'datatable-sticky-head' : undefined,
+			this.cardMode ? 'datatable-card-mode' : undefined,
+			undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: classProp }, overwriteDefaultStyles);
 		}
@@ -1489,6 +1548,71 @@
 		</div>
 	{/if}
 
+	{#if configs.cardMode}
+		<!-- B5: card view tự động mobile (kiểu Lark) — thay table khi isMobile +
+		     cardFields khai báo. Mỗi card: title = field đầu, còn lại label:value.
+		     Tap card → cùng flow onRowTap (guard control chung). -->
+		<div class="datatable-cards" data-test="datatable-cards">
+			{#if configs.loading}
+				{#each Array.from({ length: Math.max(3, Math.min(pageSize, 8)) }) as _, si (si)}
+					<div class="datatable-card datatable-card--skeleton" aria-hidden="true">
+						<span class="datatable-skeleton datatable-card-skeleton-title"></span>
+						<span class="datatable-skeleton datatable-card-skeleton-line"></span>
+						<span class="datatable-skeleton datatable-card-skeleton-line"></span>
+					</div>
+				{/each}
+			{:else if pageRows.length === 0}
+				<div class="datatable-card-empty">{configs.emptyText}</div>
+			{:else}
+				{#each pageRows as { row, index }, ri (getRowIdPublic(row, index))}
+					{@const rowId = getRowIdPublic(row, index)}
+					{@const titleCol = columns.find((c) => c.id === cardFieldsDerived[0])}
+					{@const restCols = cardFieldsDerived
+						.slice(1)
+						.map((id) => columns.find((c) => c.id === id))
+						.filter((c): c is DataTableColumn<Record<string, unknown>> => !!c)}
+					<div
+						class="datatable-card"
+						class:alt={striped && ri % 2 === 1}
+						data-row-id={rowId}
+						role="button"
+						tabindex="0"
+						onclick={(e) => onCardTap(row, index, e)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								onCardTap(row, index, e as unknown as MouseEvent);
+							}
+						}}
+					>
+						{#if titleCol}
+							{@const value = getCellValue(row, titleCol)}
+							{@const status = titleCol.status ? titleCol.status(value, row) : undefined}
+							<span class="datatable-card-title">
+								{#if status}
+									<span class="datatable-status datatable-status--{status}">{cellTextOf(value, titleCol, row)}</span>
+								{:else}
+									{cellTextOf(value, titleCol, row)}
+								{/if}
+							</span>
+						{/if}
+						{#each restCols as col (col.id)}
+							{@const value = getCellValue(row, col)}
+							{@const status = col.status ? col.status(value, row) : undefined}
+							<span class="datatable-card-field">
+								<span class="datatable-card-label">{col.label}</span>
+								{#if status}
+									<span class="datatable-status datatable-status--{status}">{cellTextOf(value, col, row)}</span>
+								{:else}
+									<span class="datatable-card-value">{cellTextOf(value, col, row)}</span>
+								{/if}
+							</span>
+						{/each}
+					</div>
+				{/each}
+			{/if}
+		</div>
+	{:else}
 	<div class="datatable-table-wrap">
 		<table class="datatable" aria-label={ariaLabel ?? undefined}>
 			<caption class="datatable-caption">{configs.captionText}</caption>
@@ -1496,6 +1620,7 @@
 			<Body />
 		</table>
 	</div>
+	{/if}
 
 	{#if showPaginationDerived}
 		<Pagination />
@@ -1674,6 +1799,113 @@
 	.datatable-table-wrap {
 		width: 100%;
 		overflow-x: auto;
+	}
+
+	// ── B5: sticky thead (prop stickyHead) — media ≤1024 (mobile/tablet) ──
+	// .datatable-root overflow:hidden + .datatable-table-wrap overflow-x:auto
+	// tạo scroll context → sticky theo WINDOW fail. Mở overflow trong media;
+	// desktop giữ nguyên (không hồi quy).
+	@media (max-width: 1024px) {
+		.datatable-root.datatable-sticky-head {
+			overflow: visible;
+
+			.datatable-table-wrap {
+				overflow: visible;
+			}
+
+			.datatable-caption {
+				position: sticky;
+				top: var(--admin-header-h, 0px);
+				z-index: 3;
+				background: var(--content1, #fff);
+			}
+
+			.datatable-th {
+				position: sticky;
+				top: calc(var(--admin-header-h, 0px) + var(--admin-filters-h, 0px) + 1.75rem);
+				z-index: 2;
+				background: var(--content2, hsl(240 4.76% 95.88%));
+				box-shadow: 0 1px 0 var(--content3, hsl(240 5.88% 90%));
+			}
+		}
+	}
+
+	// ── B5: card view mobile (kiểu Lark) ──
+	.datatable-root.datatable-card-mode {
+		background: transparent;
+		border: 0;
+		border-radius: 0;
+	}
+
+	.datatable-cards {
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.datatable-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		padding: 0.75rem;
+		background: var(--content1, #fff);
+		border: 1px solid var(--content3, hsl(240 5.88% 90%));
+		border-radius: 0.5rem;
+		cursor: var(--cursor-interactive);
+
+		&.alt {
+			background: color-mix(in srgb, var(--content2, hsl(240 4.76% 95.88%)) 45%, transparent);
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+			outline-offset: 2px;
+		}
+	}
+
+	.datatable-card-title {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--content1-foreground, #18181b);
+		overflow-wrap: anywhere;
+	}
+
+	.datatable-card-field {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.datatable-card-label {
+		font-size: 0.75rem;
+		color: var(--muted, #71717a);
+		white-space: nowrap;
+	}
+
+	.datatable-card-value {
+		font-size: 0.8125rem;
+		color: var(--content1-foreground, #18181b);
+		text-align: right;
+		overflow-wrap: anywhere;
+	}
+
+	.datatable-card-empty {
+		padding: 2.5rem 0.75rem;
+		font-size: 0.875rem;
+		color: var(--muted, #71717a);
+		text-align: center;
+	}
+
+	.datatable-card-skeleton-title {
+		height: 0.875rem;
+		max-width: 55%;
+		margin: 0;
+	}
+
+	.datatable-card-skeleton-line {
+		height: 0.625rem;
+		max-width: 85%;
+		margin: 0;
 	}
 
 	.datatable {

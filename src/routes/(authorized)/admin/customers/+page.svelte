@@ -523,6 +523,10 @@
 			loadingLabel={pageContents.states.loading[lang]}
 			caption={{ vi: 'Danh sách khách hàng', en: 'Customer list' }}
 			actionsLabel={{ vi: 'Thao tác', en: 'Actions' }}
+			stickyHead
+			mobileTapMode="callback"
+			onRowClick={(row) => openDetailModal(row as unknown as AdminCustomerRow)}
+			cardFields={['name', 'status', 'loyalty', 'created', 'lastLogin']}
 			data-test="customers-datatable"
 		>
 			{#snippet actionsContent(row)}
@@ -779,6 +783,17 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 1rem;
+
+		/* B5: sticky dưới admin header (mobile — var đo bằng ResizeObserver
+		   trên .admin-inset). margin-block âm giữ nhịp gap 1rem của .admin-page. */
+		@media (max-width: 767px) {
+			position: sticky;
+			top: calc(var(--admin-header-h, 0px) + var(--admin-body-pad-top, 0.5rem));
+			z-index: 400;
+			background: var(--background, #fff);
+			padding-block: 0.25rem;
+			margin-block: -0.25rem;
+		}
 	}
 
 	.admin-search {
@@ -841,6 +856,16 @@
 		border: 1px solid var(--border);
 		border-radius: 0.75rem;
 		font-size: 0.875rem;
+
+		/* B5: sticky pagination mobile — luôn thấy điều khiển trang. */
+		@media (max-width: 767px) {
+			position: sticky;
+			bottom: 0;
+			z-index: 300;
+			background: var(--background, #fff);
+			padding-block: 0.5rem;
+			margin-block: -0.25rem;
+		}
 	}
 
 	.total-count {

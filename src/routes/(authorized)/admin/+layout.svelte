@@ -12,6 +12,69 @@
 
 	let { children, data }: { children: Snippet; data: App.LayoutData } = $props();
 
+	// ── B5: sticky header + đo chiều cao filters (page con) ──
+	// ResizeObserver đo .admin-inset-header + .admin-filters (page con render
+	// muộn/không có → fallback 0px) → set CSS var trên .admin-inset để sticky
+	// thead DataTable + filters sticky dùng đúng chiều cao thật (không hardcode
+	// — filters wrap nhiều dòng ở 375px).
+	let insetHeaderEl: HTMLDivElement | undefined = $state(undefined);
+	let insetEl: HTMLDivElement | undefined = $state(undefined);
+	let isScrolled: boolean = $state(false);
+
+	$effect(() => {
+		if (typeof document === 'undefined' || !insetEl) return;
+		const inset = insetEl;
+		const headerEl = insetHeaderEl;
+		const setVars = () => {
+			const h = headerEl?.getBoundingClientRect().height ?? 0;
+			// .admin-filters nằm trong body (page con) — đo khi đã render.
+			const filtersEl = inset.querySelector<HTMLElement>('.admin-filters');
+			const f = filtersEl?.getBoundingClientRect().height ?? 0;
+			inset.style.setProperty('--admin-header-h', `${Math.round(h)}px`);
+			inset.style.setProperty('--admin-filters-h', `${Math.round(f)}px`);
+		};
+		setVars();
+		const ro = new ResizeObserver(setVars);
+		ro.observe(headerEl ?? inset);
+		// MutationObserver: page con mount/unmount (SvelteKit navigate) → đo lại.
+		const mo = new MutationObserver(setVars);
+		mo.observe(inset, { childList: true, subtree: true });
+		return () => {
+			ro.disconnect();
+			mo.disconnect();
+		};
+	});
+
+	// Shrink header khi cuộn (chỉ mobile ≤767px áp dụng qua CSS): scroll
+	// container là div.w-full.h-full của Container root (window không cuộn).
+	$effect(() => {
+		if (typeof document === 'undefined') return;
+		const findScrollEl = (): HTMLElement | undefined => {
+			let cur = insetEl?.parentElement;
+			while (cur && cur !== document.body) {
+				if (getComputedStyle(cur).overflowY === 'auto') return cur;
+				cur = cur.parentElement;
+			}
+			return document.scrollingElement as HTMLElement | undefined;
+		};
+		let raf = 0;
+		const onScroll = () => {
+			if (raf) return;
+			raf = requestAnimationFrame(() => {
+				raf = 0;
+				isScrolled = (scrollEl?.scrollTop ?? window.scrollY) > 8;
+			});
+		};
+		let scrollEl = findScrollEl();
+		scrollEl?.addEventListener('scroll', onScroll, { passive: true });
+		window.addEventListener('scroll', onScroll, { passive: true });
+		return () => {
+			scrollEl?.removeEventListener('scroll', onScroll);
+			window.removeEventListener('scroll', onScroll);
+			if (raf) cancelAnimationFrame(raf);
+		};
+	});
+
 	// Brand đầu sidebar — TeamSwitcher 1 team (ứng dụng hiện đơn tenant; mở
 	// rộng đa team sau). Tên app lấy từ session user context (fallback hằng).
 	const teams = [
@@ -156,33 +219,63 @@
 	</Sidebar>
 
 	<Sidebar.Inset>
-		<div class="admin-inset-header">
-			<!-- Mobile: nút mở sidebar (aside offcanvas ẩn → trigger trong
-			     Sidebar.Header không bấm được trên mobile). Desktop ẩn — đã có
-			     trigger-row trong header sidebar (B3: cùng row với brand). -->
-			<div class="admin-mobile-trigger">
-				<Sidebar.Trigger />
+		<div class="admin-inset" bind:this={insetEl}>
+			<div
+				class="admin-inset-header"
+				class:is-scrolled={isScrolled}
+				bind:this={insetHeaderEl}
+			>
+				<!-- Mobile: nút mở sidebar (aside offcanvas ẩn → trigger trong
+				     Sidebar.Header không bấm được trên mobile). Desktop ẩn — đã có
+				     trigger-row trong header sidebar (B3: cùng row với brand). -->
+				<div class="admin-mobile-trigger">
+					<Sidebar.Trigger />
+				</div>
+				<Breadcrumb items={crumbs} data-test="admin-breadcrumb" />
 			</div>
-			<Breadcrumb items={crumbs} data-test="admin-breadcrumb" />
-		</div>
-		<Separator decorative />
-		<div class="admin-inset-body">
-			{@render children()}
+			<Separator decorative />
+			<div class="admin-inset-body">
+				{@render children()}
+			</div>
 		</div>
 	</Sidebar.Inset>
 </Sidebar.Provider>
 
 <style lang="scss">
+	.admin-inset {
+		/* B5: var sticky đo bằng ResizeObserver (fallback 0 — thead top = filters). */
+		--admin-header-h: 0px;
+		--admin-filters-h: 0px;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+
 	.admin-inset-header {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.75rem 1.5rem;
+		background: var(--background, #fff);
 
 		/* Mobile: bỏ padding-inline — tiết kiệm chiều ngang 375px (yêu cầu user,
 		   đồng bộ inset header demo /ui/sidebar). padding-block giữ. */
 		@media (max-width: 767px) {
 			padding-inline: 0.5rem;
+		}
+
+		/* B5: mobile sticky top + shrink khi cuộn (is-scrolled qua scroll listener).
+		   z-500: dưới sidebar overlay (999) — đúng khi sidebar mobile mở. */
+		@media (max-width: 767px) {
+			position: sticky;
+			top: 0;
+			z-index: 500;
+			transition: padding 200ms ease, box-shadow 200ms ease;
+
+			&.is-scrolled {
+				padding-block: 0.35rem;
+				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+			}
 		}
 	}
 
@@ -199,5 +292,11 @@
 	.admin-inset-body {
 		padding: 1.5rem;
 		min-height: 60dvh;
+
+		/* B5 (5a): mobile bỏ padding dày — viền tổng với .admin-page (1rem)
+		   còn 1.5rem thay vì 2.5rem. */
+		@media (max-width: 767px) {
+			padding: 0.5rem 0.5rem 0.75rem;
+		}
 	}
 </style>

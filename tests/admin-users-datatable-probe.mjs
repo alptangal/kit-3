@@ -262,7 +262,8 @@ await login(mpage);
 await mpage.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 const mRows = await waitTable(mpage);
 
-// U11: th actions + td actions đều ẩn (mobile media query)
+// U11: cột actions ẩn trên mobile — B5 card-mode thay bảng, thead không render
+// → PASS khi (thead không có) HOẶC (th/td actions display:none).
 {
 	const st = await mpage.evaluate(() => {
 		const th = document.querySelector('.datatable-th--actions');
@@ -270,12 +271,15 @@ const mRows = await waitTable(mpage);
 		return {
 			thDisplay: th ? getComputedStyle(th).display : 'none-found',
 			tdDisplay: td ? getComputedStyle(td).display : 'none-found',
-			thVisibleCount: document.querySelectorAll('.datatable-th--actions').length
+			thVisibleCount: document.querySelectorAll('.datatable-th--actions').length,
+			cardMode: !!document.querySelector('[data-test="datatable-cards"]')
 		};
 	});
+	const hiddenOk =
+		st.cardMode || (st.thDisplay === 'none' && st.tdDisplay === 'none');
 	ok(
-		'U11 · Mobile: cột actions ẩn (th + td display:none)',
-		st.thDisplay === 'none' && st.tdDisplay === 'none',
+		'U11 · Mobile: cột actions ẩn (th + td display:none / card-mode)',
+		hiddenOk,
 		JSON.stringify(st)
 	);
 }
@@ -289,36 +293,30 @@ const mRows = await waitTable(mpage);
 	ok('U12 · Mobile: table gọn khung (không tràn ngang)', st.scroll <= st.client, JSON.stringify(st));
 }
 
-// U13: tap row 1 → expand bar snippet 5 nút, không nút nào tràn viewport
+// U13: tap row → B5 mobileTapMode="callback" — modal EDIT mở trực tiếp
+// (không còn expand bar; bar thay bằng modal + nút Xoá footer).
 {
-	await mpage.locator('[data-test="users-datatable"] tbody tr').first().tap();
-	await sleep(700);
+	await mpage.evaluate(() => document.querySelector('.datatable-card[data-row-id]')?.click());
+	await sleep(1000);
 	const st = await mpage.evaluate(() => {
-		const bar = document.querySelector('[data-role="mobile-actions"]');
-		const btns = bar ? [...bar.querySelectorAll('button')] : [];
-		const rects = btns.map((b) => b.getBoundingClientRect());
-		return {
-			hasBar: !!bar,
-			btnCount: btns.length,
-			overflow: rects.filter((r) => r.right > window.innerWidth || r.x < 0).length
-		};
+		const modal = [...document.querySelectorAll('.modal-root')].find(
+			(d) => d.getBoundingClientRect().width > 0
+		);
+		const del = document.querySelector('[data-test="user-modal-delete"]');
+		return { hasModal: !!modal, hasDelete: !!del && del.getBoundingClientRect().width > 0 };
 	});
-	ok(
-		'U13 · Mobile: tap row → snippet 5 nút, 0 tràn viewport',
-		st.hasBar && st.btnCount === 5 && st.overflow === 0,
-		JSON.stringify(st)
-	);
+	ok('U13 · Mobile: tap row → modal EDIT mở (B5 callback)', st.hasModal, JSON.stringify(st));
 }
 
-// U14: tap nút Edit trong bar → modal mở
+// U14: modal edit có nút Xoá (B5 — thay expand bar)
 {
-	const edit = mpage.locator('[data-role="mobile-actions"] [data-test="user-action-edit"]').first();
-	await edit.tap();
-	await sleep(900);
-	const st = await mpage.evaluate(() => ({
-		hasModal: !!document.querySelector('[role="dialog"], .modal-container, .modal')
-	}));
-	ok('U14 · Mobile: tap Edit trong bar → modal mở', st.hasModal, JSON.stringify(st));
+	const st = await mpage.evaluate(() => {
+		const del = document.querySelector('[data-test="user-modal-delete"]');
+		return { hasDelete: !!del && del.getBoundingClientRect().width > 0 };
+	});
+	ok('U14 · Mobile: modal edit có nút Xoá (B5)', st.hasDelete);
+	await mpage.keyboard.press('Escape');
+	await sleep(700);
 }
 
 ok('U15 · Mobile: 0 pageerror', mErrors.length === 0, mErrors.join(' | ').slice(0, 200));

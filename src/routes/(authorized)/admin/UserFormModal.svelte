@@ -22,7 +22,8 @@
 		user = undefined,
 		roles = [],
 		onCreated,
-		onUpdated
+		onUpdated,
+		onDelete
 	}: {
 		display?: boolean;
 		mode: AdminFormMode;
@@ -30,6 +31,8 @@
 		roles?: RoleOption[];
 		onCreated?: () => void;
 		onUpdated?: () => void;
+		/** B5: mobile tap row mở modal edit — callback xóa user (nút Xoá footer). */
+		onDelete?: (user: AdminUserRow) => void;
 	} = $props();
 
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
@@ -431,6 +434,21 @@
 
 					<!-- Action buttons -->
 					<div class="modal-actions">
+						{#if !isCreate && user && onDelete}
+							<!-- B5: mobile tap row mở modal edit — nút Xoá để xóa ngay từ modal. -->
+							<Button
+								color="error"
+								variant="ghost"
+								disabled={loading}
+								data-test="user-modal-delete"
+								onClick={() => {
+									display = false;
+									onDelete?.(user);
+								}}
+							>
+								{pageContents.actions.delete[lang]}
+							</Button>
+						{/if}
 						<Button color="success" type="submit" {loading} disabled={loading || !encryptionKeys}>
 							{isCreate ? pageContents.createUser[lang] : pageContents.actions.edit[lang]}
 						</Button>
@@ -516,6 +534,11 @@
 		gap: 0.75rem;
 		justify-content: flex-end;
 		margin-top: 0.75rem;
+	}
+
+	/* B5: nút Xoá trong modal edit — đẩy sang trái (tách khỏi nhóm Cancel/Save). */
+	.modal-actions :global([data-test='user-modal-delete']) {
+		margin-right: auto;
 	}
 
 	.temp-password-box {
