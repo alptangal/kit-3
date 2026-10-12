@@ -62,6 +62,9 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'orders:read', resource: 'orders', action: 'read' },
 		{ key: 'orders:update', resource: 'orders', action: 'update' },
 		{ key: 'orders:refund', resource: 'orders', action: 'refund' },
+		// SỬA: thiếu key này nên OrderAdminService.delete luôn từ chối mọi role
+		// (endpoint + nút "Xoá đơn hàng" đã tồn tại nhưng không grant nào khớp).
+		{ key: 'orders:delete', resource: 'orders', action: 'delete' },
 
 		{ key: 'inventory:view', resource: 'inventory', action: 'read' },
 		{ key: 'inventory:adjust', resource: 'inventory', action: 'update' },
@@ -101,6 +104,8 @@ export async function seedDetailRoles(): Promise<void> {
 			'orders:read',
 			'orders:update',
 			'orders:refund',
+			// SỬA: thiếu orders:delete — nút xoá đơn hàng chết cho mọi role (xem seedPermissions).
+			'orders:delete',
 			'inventory:view',
 			'inventory:adjust',
 			'purchase_orders:create',

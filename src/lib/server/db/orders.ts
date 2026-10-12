@@ -99,10 +99,24 @@ export class OrderAdminService {
 			branchId: actor.branchId,
 			targetBranchId,
 			actorUserId: actor.userId,
-			targetUserId
+			// own_records so với người PHỤ TRÁCH đơn (staffId), không phải documentKey
+			// (SỬA: trước đây truyền documentKey — scope own_records luôn từ chối).
+			targetUserId: targetUserId ?? undefined
 		});
 		if (!allowed) return { success: false, messages: adminMessages.permissionDenied };
 		return null;
+	}
+
+	/**
+	 * Context quyền cho 1 thao tác trên 1 đơn cụ thể: branch của đơn + staffId
+	 * người phụ trách (scope own_branch / own_records đều so đúng phía này).
+	 */
+	private static async requireOrderPermission(
+		actor: ActorContext,
+		permissionKey: string,
+		order: Pick<OrderDocument, 'branchId' | 'staffId'>
+	): Promise<{ success: false; messages: TranslateContent } | null> {
+		return this.requirePermission(actor, permissionKey, order.branchId, order.staffId);
 	}
 
 	// Valid status flow: pending → confirmed → shipped → delivered
@@ -214,15 +228,18 @@ export class OrderAdminService {
 		actor: ActorContext,
 		documentKey: string
 	): Promise<{ success: false; messages: TranslateContent } | { success: true; data: Record<string, unknown> }> {
-		const denied = await this.requirePermission(actor, 'orders:read', null, documentKey);
-		if (denied) return denied;
-
 		const res = await cbOrders.document.get({ documentKey });
 		if (!res.ok || !res.data) {
 			return { success: false, messages: adminMessages.notFound };
 		}
+		const order = res.data as OrderDocument;
 
-		return { success: true, data: sanitizeOrderForAdmin({ ...res.data as OrderDocument, _id: documentKey }) };
+		// SỬA: trước đây truyền (null, documentKey) — scope own_branch luôn từ chối
+		// (targetBranchId null), own_records so sai phía (documentKey ≠ userId).
+		const denied = await this.requireOrderPermission(actor, 'orders:read', order);
+		if (denied) return denied;
+
+		return { success: true, data: sanitizeOrderForAdmin({ ...order, _id: documentKey }) };
 	}
 
 	static async create(
@@ -324,10 +341,9 @@ export class OrderAdminService {
 		const target = await cbOrders.document.get({ documentKey });
 		if (!target.ok || !target.data) return { success: false, messages: adminMessages.notFound };
 
-		const denied = await this.requirePermission(actor, 'orders:update', null, documentKey);
-		if (denied) return denied;
-
 		const order = target.data as OrderDocument;
+		const denied = await this.requireOrderPermission(actor, 'orders:update', order);
+		if (denied) return denied;
 
 		// If updating status, validate transition
 		if (data.status !== undefined) {
@@ -393,7 +409,8 @@ export class OrderAdminService {
 		const target = await cbOrders.document.get({ documentKey });
 		if (!target.ok || !target.data) return { success: false, messages: adminMessages.notFound };
 
-		const denied = await this.requirePermission(actor, 'orders:delete', null, documentKey);
+		const order = target.data as OrderDocument;
+		const denied = await this.requireOrderPermission(actor, 'orders:delete', order);
 		if (denied) return denied;
 
 		// Soft delete
@@ -417,10 +434,9 @@ export class OrderAdminService {
 		const target = await cbOrders.document.get({ documentKey });
 		if (!target.ok || !target.data) return { success: false, messages: adminMessages.notFound };
 
-		const denied = await this.requirePermission(actor, 'orders:update', null, documentKey);
-		if (denied) return denied;
-
 		const order = target.data as OrderDocument;
+		const denied = await this.requireOrderPermission(actor, 'orders:update', order);
+		if (denied) return denied;
 
 		if (!this.isValidTransition(order.status, status)) {
 			return { success: false, messages: adminMessages.invalidStatusTransition };

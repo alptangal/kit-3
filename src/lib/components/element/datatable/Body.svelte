@@ -222,6 +222,7 @@
 							class:align-right={col.align === 'right'}
 							class:cell-editing={cellEditing}
 							class:cell-editable={isCellEditable(col) && !cellEditing && !rowEditing}
+							class:datatable-td--status={!!status}
 							data-cell-id={`${rowId}:${col.id}`}
 							title={segments.length > 0 ? segments.map((seg) => seg.text).join('') : undefined}
 							onclick={(e) => onCellClick(rowId, col, value, e)}
@@ -576,6 +577,24 @@
 		&:focus-visible {
 			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
 			outline-offset: 2px;
+		}
+	}
+
+	// ── Status pill column (B6.2 orders: pill bị clip ~15px trên mobile 375) ──
+	// Rule ellipsis của .datatable-td (max-width:0 + overflow:hidden) cho phép
+	// table-layout auto nén cột status dưới min-content pill khi tổng nội dung
+	// vượt viewport — pill nền tròn bị cắt chữ ("Chờ xác nhâ|n"). Thoát ellipsis
+	// cho td có pill: min-width:fit-content ép cột giữ đúng rộng pill, text tràn
+	// chuyển sang td khác (ellipsis đúng chỗ của nó). Cùng cấp nesting với rule
+	// actions dưới đây → hòa cùng số classes, thắng theo source order.
+	.datatable-row {
+		.datatable-td--status {
+			// max-width:none bắt buộc: rule ellipsis đặt max-width:0 — table-layout
+			// auto phân phối cột theo max-width nên fit-content một mình vô hiệu
+			// (đo thực tế: max-width 0 thắng → td vẫn 86px, pill 90px tràn đè).
+			max-width: none;
+			min-width: fit-content;
+			overflow: visible;
 		}
 	}
 

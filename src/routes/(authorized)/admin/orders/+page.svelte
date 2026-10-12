@@ -1,11 +1,22 @@
 <!-- src/routes/(authorized)/admin/orders/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
-	import { Checkbox } from '$components/form';
+	// B6.2: migrate sang DataTable + Pagination (pattern customers/users/variants).
+	// Giữ nguyên: stats bar (4 card + status breakdown), 3 modal
+	// (detail/status/delete), _interface.ts (AdminOrderRow, getStatusLabel/Color,
+	// formatCurrency, formatDate, getRowDocumentKey). FIX BUG pre-existing: page
+	// cũ dùng bảng <table> thuần — thêm search + filter trạng thái (server-side
+	// nếu endpoint hỗ trợ, không thì lọc client — body vẫn gửi search/status).
+	import { onMount } from 'svelte';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import { Input } from '$components/form';
+	import { Checkbox } from '$components/form/checkbox';
 	import { Modal } from '$components/modal';
+	import { Icon } from '$components/element/icon';
+	import { iconify } from '$assets/icons/iconify';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
-	import { onMount } from 'svelte';
+	import type { DataTableColumn } from '$components/element/datatable';
+	import type { Size } from '$components/interface';
 	import {
 		getRowDocumentKey,
 		formatCurrency,
@@ -36,6 +47,8 @@
 	let page = $state(1);
 	let pageSize = $state(20);
 	let includeDeleted = $state(false);
+	let searchQuery = $state('');
+	let selectedStatus = $state('');
 	// true ngay từ đầu — tránh flash empty-state trước khi onMount kịp sinh khoá + fetch
 	let loading = $state(true);
 	let loadError = $state<string | undefined>(undefined);
@@ -68,6 +81,21 @@
 	const totalCountText = $derived(
 		pageContents.pagination.totalCount[lang].replace('{total}', String(total))
 	);
+
+	// Trạng thái đơn là enum cứng (pending/confirmed/shipped/delivered/cancelled)
+	// — không cần endpoint catalog như customers.
+	const orderStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] as const;
+
+	// Label filters — orders/_interface.ts không có nhóm `filters` (khác customers)
+	// → khai báo cục bộ theo shape TranslateContent.
+	const searchPlaceholder = {
+		vi: 'Tìm đơn hàng (mã, khách hàng)…',
+		en: 'Search orders (code, customer)…'
+	} as const;
+	const allStatusesLabel = {
+		vi: 'Tất cả trạng thái',
+		en: 'All statuses'
+	} as const;
 
 	function isRowDeleted(row: AdminOrderRow): boolean {
 		return Boolean(row.deletedAt);
@@ -102,7 +130,13 @@
 				'/api/admin/orders/list',
 				{
 					method: 'POST',
-					body: { page, pageSize, includeDeleted }
+					body: {
+						page,
+						pageSize,
+						includeDeleted,
+						search: searchQuery || undefined,
+						status: selectedStatus || undefined
+					}
 				},
 				encryptionKeys
 			);
@@ -119,7 +153,11 @@
 					| undefined;
 				orders = data?.orders ?? data?.items ?? [];
 				if (typeof data?.total === 'number') total = data.total;
-				if (typeof data?.page === 'number') page = data.page;
+				if (typeof data?.page === 'number' && data.page !== page) {
+					// response gán lại page (server clamp) — chặn effect refetch
+					pendingPageApply = true;
+					page = data.page;
+				}
 				loadedOnce = true;
 			} else {
 				loadError = resolveServerMessage(response.message, lang, {
@@ -228,19 +266,64 @@
 		}
 	}
 
-	// ── Phân trang / filter ──
-	async function goToPage(target: number) {
-		if (target < 1 || target > totalPages || target === page || loading) return;
-		page = target;
-		await loadOrders();
-	}
+	// ── Phân trang server-side ──
+	// Pagination element chỉ có bindable page — theo dõi page + pageSize để
+	// refetch. Chỉ chạy SAU lần đầu (tránh trùng onMount); pendingPageApply
+	// bỏ qua lần response gán lại page (chống vòng lặp fetch).
+	let paginationArmed = false;
+	let pendingPageApply = false;
+	$effect(() => {
+		void page;
+		void pageSize;
+		if (!paginationArmed) {
+			paginationArmed = true;
+			return;
+		}
+		if (pendingPageApply) {
+			pendingPageApply = false;
+			return;
+		}
+		void loadOrders();
+	});
 
-	async function changePageSize(newSize: number) {
+	function changePageSize(newSize: number) {
 		if (newSize === pageSize) return;
 		pageSize = newSize;
 		page = 1;
-		await loadOrders();
+		// effect theo dõi pageSize tự fetch
 	}
+
+	// ── Filters: search debounce + select status + checkbox (mỗi cái 1 effect
+	//    riêng với guard armed + last-value — pattern customers/users page) ──
+	let searchDebounce: ReturnType<typeof setTimeout>;
+	let searchArmed = false;
+	$effect(() => {
+		void searchQuery;
+		if (!searchArmed) {
+			searchArmed = true;
+			return;
+		}
+		clearTimeout(searchDebounce);
+		searchDebounce = setTimeout(() => {
+			page = 1;
+			void loadOrders();
+		}, 300);
+	});
+
+	let statusFilterArmed = false;
+	let lastStatus = '';
+	$effect(() => {
+		const current = selectedStatus;
+		if (!statusFilterArmed) {
+			statusFilterArmed = true;
+			lastStatus = current;
+			return;
+		}
+		if (current === lastStatus) return;
+		lastStatus = current;
+		page = 1;
+		void loadOrders();
+	});
 
 	let deletedToggleArmed = false;
 	let lastIncludeDeleted = false;
@@ -256,6 +339,72 @@
 		page = 1;
 		void loadOrders();
 	});
+
+	// ── B6.2: DataTable columns (status pill qua col.status — 'error' → 'danger',
+	//    'info'/'primary' giữ nguyên — DataTable hỗ trợ đủ bộ) ──
+	function orderStatusColor(status?: string | null): 'success' | 'warning' | 'danger' | 'info' | 'primary' | 'default' {
+		const color = getStatusColor(status);
+		return color === 'error' ? 'danger' : (color as 'success' | 'warning' | 'info' | 'primary' | 'default');
+	}
+
+	const ordersAny = $derived(orders as unknown as Record<string, unknown>[]);
+	const allColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'orderCode',
+			label: pageContents.table.orderCode[lang],
+			accessor: (row) => String((row as unknown as AdminOrderRow).orderCode ?? '—')
+		},
+		{
+			id: 'customer',
+			label: pageContents.table.customer[lang],
+			accessor: (row) => String((row as unknown as AdminOrderRow).customerId ?? '—')
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) => getStatusLabel((row as unknown as AdminOrderRow).status),
+			status: (_value, row) => orderStatusColor((row as unknown as AdminOrderRow).status)
+		},
+		{
+			id: 'items',
+			label: pageContents.table.items[lang],
+			accessor: (row) => String((row as unknown as AdminOrderRow).items?.length ?? 0),
+			sortable: false
+		},
+		{
+			id: 'total',
+			label: pageContents.table.total[lang],
+			accessor: (row) => {
+				const amount = (row as unknown as AdminOrderRow).totalAmount;
+				return amount != null ? formatCurrency(amount, lang) : '—';
+			},
+			noHighlight: true
+		},
+		{
+			id: 'created',
+			label: pageContents.table.created[lang],
+			accessor: (row) => formatDate((row as unknown as AdminOrderRow).createdAt, lang),
+			noHighlight: true
+		}
+	]);
+	// Mobile (375px): 6 cột bóp → giữ orderCode + status + total (đặc trưng đơn
+	// hàng), bỏ customer/items/created.
+	const isMobileViewport = $derived(client.browser?.isMobile ?? false);
+	const columns = $derived(
+		isMobileViewport
+			? allColumns.filter((c) => !['customer', 'items', 'created'].includes(c.id))
+			: allColumns
+	);
+
+	// Gộp class: defaultStyles snippet là (string|undefined)[] — lọc undefined
+	// trước khi truyền vào Icon class (string[]). Helper nằm trong script
+	// (không inline trong attribute) vì unocss parse attribute bằng acorn.
+	function mergeIconClasses(
+		styles: ReadonlyArray<string | undefined> | undefined,
+		extra: string
+	): string[] {
+		return [...(styles ?? []).filter((c): c is string => typeof c === 'string'), extra];
+	}
 
 	function fillTemplate(text: string, name: string): string {
 		return text.replace('{name}', name);
@@ -316,237 +465,221 @@
 		</div>
 	</div>
 
-	<!-- ── Trạng thái loading ── -->
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
+	<!-- ── Bộ lọc ── -->
+	<div class="admin-filters">
+		<div class="admin-search">
+			<Input placeholder={searchPlaceholder[lang]} bind:value={searchQuery}>
+				{#snippet leading(data)}
+					<Icon
+						icon={iconify['search-rounded']}
+						size={(data?.size ?? 'sm') as Size}
+						class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+					/>
+				{/snippet}
+			</Input>
 		</div>
-	{:else if loadError}
-		<div class="admin-state error" role="alert">
-			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
-			<p class="state-detail">{loadError}</p>
-			<Button color="primary" variant="outline" onClick={refresh}>
-				{pageContents.states.retry[lang]}
-			</Button>
-		</div>
-	{:else if orders.length === 0}
-		<div class="admin-state">
-			<p>{includeDeleted ? pageContents.states.emptyDeleted[lang] : pageContents.states.empty[lang]}</p>
-		</div>
-	{:else}
-		<!-- ── Bảng đơn hàng ── -->
-		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.orderCode[lang]}</th>
-						<th scope="col">{pageContents.table.customer[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.items[lang]}</th>
-						<th scope="col">{pageContents.table.total[lang]}</th>
-						<th scope="col">{pageContents.table.created[lang]}</th>
-						<th scope="col" class="col-actions">{pageContents.table.actions[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each orders as row (getRowDocumentKey(row) || `${row.orderCode ?? ''}`)}
-						<tr class:row-deleted={includeDeleted && isRowDeleted(row)}>
-							<td class="col-code">{row.orderCode ?? '—'}</td>
-							<td class="col-customer">{row.customerId ?? '—'}</td>
-							<td class="col-status">
-								<span class="status-badge status-{getStatusColor(row.status)}">
-									{getStatusLabel(row.status)}
-								</span>
-							</td>
-							<td class="col-items">
-								{#if row.items && row.items.length > 0}
-									{row.items.length} {pageContents.modals.itemsTitle[lang].split(' ')[0]}
-								{:else}
-									—
-								{/if}
-							</td>
-							<td class="col-total">{row.totalAmount != null ? formatCurrency(row.totalAmount, lang) : '—'}</td>
-							<td class="col-created">{formatDate(row.createdAt, lang)}</td>
-							<td class="col-actions">
-								<div class="row-actions">
-									{#if includeDeleted && isRowDeleted(row)}
-										<!-- Không có restore cho đơn hàng, chỉ xoá mềm -->
-									{:else}
-										<Button color="default" variant="ghost" size="sm" onClick={() => openDetailModal(row)}>
-											{pageContents.modals.detailTitle[lang]}
-										</Button>
-										<Button color="default" variant="ghost" size="sm" onClick={() => openStatusModal(row)}>
-											{pageContents.modals.statusTitle[lang]}
-										</Button>
-										<Button
-											color="error"
-											variant="ghost"
-											size="sm"
-											onClick={() => openDeleteModal(row)}
-										>
-											{pageContents.actions.delete[lang]}
-										</Button>
-									{/if}
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
+		<select
+			class="admin-select"
+			bind:value={selectedStatus}
+			aria-label={pageContents.table.status[lang]}
+		>
+			<option value="">{allStatusesLabel[lang]}</option>
+			{#each orderStatuses as status (status)}
+				<option value={status}>{getStatusLabel(status)}</option>
+			{/each}
+		</select>
+	</div>
 
-		<!-- ── Phân trang ── -->
-		<footer class="admin-pagination">
-			<span class="total-count">{totalCountText}</span>
-			<div class="page-controls">
-				<Button
-					color="default"
-					variant="outline"
-					size="sm"
-					disabled={page <= 1 || loading}
-					onClick={() => goToPage(page - 1)}
+	<!-- ── B6.2: bảng đơn hàng — DataTable (component có sẵn)
+	     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
+	     Pagination element bên dưới bind:page điều khiển server. -->
+	<div class="admin-table-wrap">
+		<DataTable
+			data={ordersAny}
+			{columns}
+			pageSize={pageSize}
+			showPagination={false}
+			loading={loading}
+			visual={{ striped: true, hoverable: true }}
+			emptyLabel={pageContents.states.empty[lang]}
+			loadingLabel={pageContents.states.loading[lang]}
+			caption={{ vi: 'Danh sách đơn hàng', en: 'Order list' }}
+			actionsLabel={pageContents.table.actions[lang]}
+			data-test="orders-datatable"
+		>
+			{#snippet actionsContent(row)}
+				{@const order = row as unknown as AdminOrderRow}
+				<div class="row-actions">
+					{#if includeDeleted && isRowDeleted(order)}
+						<!-- Không có restore cho đơn hàng, chỉ xoá mềm -->
+					{:else}
+						<Button
+							color="default"
+							variant="ghost"
+							size="sm"
+							onClick={() => openDetailModal(order)}
+							data-test="order-action-detail"
+						>
+							{pageContents.modals.detailTitle[lang]}
+						</Button>
+						<Button
+							color="default"
+							variant="ghost"
+							size="sm"
+							onClick={() => openStatusModal(order)}
+							data-test="order-action-status"
+						>
+							{pageContents.modals.statusTitle[lang]}
+						</Button>
+						<Button
+							color="error"
+							variant="ghost"
+							size="sm"
+							onClick={() => openDeleteModal(order)}
+							data-test="order-action-delete"
+						>
+							{pageContents.modals.deleteTitle[lang]}
+						</Button>
+					{/if}
+				</div>
+			{/snippet}
+		</DataTable>
+	</div>
+
+	<!-- ── Phân trang (server-side) ── -->
+	<footer class="admin-pagination">
+		<span class="total-count">{totalCountText}</span>
+		<div class="page-controls">
+			<Pagination
+				bind:page={page}
+				totalPages={totalPages}
+				loading={loading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
+			<span class="page-info">{pageInfoText}</span>
+			<label class="page-size">
+				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
+				<select
+					class="admin-select"
+					value={pageSize}
+					onchange={(e) => changePageSize(Number((e.currentTarget as HTMLSelectElement).value))}
 				>
-					{pageContents.pagination.prev[lang]}
-				</Button>
-				<span class="page-info">{pageInfoText}</span>
-				<Button
-					color="default"
-					variant="outline"
-					size="sm"
-					disabled={page >= totalPages || loading}
-					onClick={() => goToPage(page + 1)}
-				>
-					{pageContents.pagination.next[lang]}
-				</Button>
-				<label class="page-size">
-					<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
-					<select
-						class="admin-select"
-						value={pageSize}
-						onchange={(e) => changePageSize(Number((e.currentTarget as HTMLSelectElement).value))}
-					>
-						{#each [10, 20, 50, 100] as size (size)}
-							<option value={size}>{size}</option>
-						{/each}
-					</select>
-				</label>
-			</div>
-		</footer>
-	{/if}
+					{#each [10, 20, 50, 100] as size (size)}
+						<option value={size}>{size}</option>
+					{/each}
+				</select>
+			</label>
+		</div>
+	</footer>
 </section>
 
 <!-- ── Modal chi tiết đơn hàng ── -->
-{#if detailModalDisplay}
-	<Modal bind:display={detailModalDisplay} size="lg" isDimissable>
-		<Modal.Container>
-			<Modal.Container.Header>{pageContents.modals.detailTitle[lang]}</Modal.Container.Header>
-			<Modal.Container.Body>
-				{#if detailModalOrder}
-					<p class="modal-intro">
-						{fillTemplate(pageContents.modals.detailIntro[lang], detailModalOrder.orderCode ?? '')}
-					</p>
-					<div class="detail-section">
-						<h4>{pageContents.table.customer[lang]}</h4>
-						<p>{detailModalOrder.customerId ?? '—'}</p>
-					</div>
-					<div class="detail-section">
-						<h4>{pageContents.modals.itemsTitle[lang]}</h4>
-						{#if detailModalOrder.items && detailModalOrder.items.length > 0}
-							<table class="detail-items-table">
-								<thead>
-									<tr>
-										<th>{pageContents.modals.variant[lang]}</th>
-										<th>{pageContents.modals.lot[lang]}</th>
-										<th>{pageContents.modals.qty[lang]}</th>
-										<th>{pageContents.modals.price[lang]}</th>
-										<th>{pageContents.modals.subtotal[lang]}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each detailModalOrder.items as item}
-										<tr>
-											<td>{item.variantId}</td>
-											<td>{item.lotId ?? '—'}</td>
-											<td>{item.quantity}</td>
-											<td>{formatCurrency(item.price, lang)}</td>
-											<td>{formatCurrency(item.price * item.quantity, lang)}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						{:else}
-							<p>—</p>
-						{/if}
-					</div>
-					<div class="detail-section">
-						<h4>{pageContents.table.total[lang]}</h4>
-						<p class="detail-total">{detailModalOrder.totalAmount != null ? formatCurrency(detailModalOrder.totalAmount, lang) : '—'}</p>
-					</div>
-					<div class="detail-section">
-						<h4>{pageContents.table.created[lang]}</h4>
-						<p>{formatDate(detailModalOrder.createdAt, lang)}</p>
-					</div>
-				{/if}
-			</Modal.Container.Body>
-			<Modal.Container.Footer>
-				<Button color="default" variant="ghost" onClick={() => { detailModalDisplay = false; }}>
-					{pageContents.modals.cancel[lang]}
-				</Button>
-			</Modal.Container.Footer>
-		</Modal.Container>
-	</Modal>
-{/if}
-
-<!-- ── Modal đổi trạng thái ── -->
-{#if statusModalDisplay}
-	<Modal bind:display={statusModalDisplay} size="sm" isDimissable>
-		<Modal.Container>
-			<Modal.Container.Header>{pageContents.modals.statusTitle[lang]}</Modal.Container.Header>
-			<Modal.Container.Body>
+<Modal bind:display={detailModalDisplay} size="lg" isDimissable>
+	<Modal.Container>
+		<Modal.Container.Header>{pageContents.modals.detailTitle[lang]}</Modal.Container.Header>
+		<Modal.Container.Body>
+			{#if detailModalOrder}
 				<p class="modal-intro">
-					{fillTemplate(pageContents.modals.statusIntro[lang], statusModalOrder?.orderCode ?? '')}
+					{fillTemplate(pageContents.modals.detailIntro[lang], detailModalOrder.orderCode ?? '')}
 				</p>
-				<select class="admin-select" bind:value={statusModalValue} disabled={statusModalBusy}>
-					<option value="pending">{pageContents.table.status[lang]}: {getStatusLabel('pending')}</option>
-					<option value="confirmed">{pageContents.table.status[lang]}: {getStatusLabel('confirmed')}</option>
-					<option value="shipped">{pageContents.table.status[lang]}: {getStatusLabel('shipped')}</option>
-					<option value="delivered">{pageContents.table.status[lang]}: {getStatusLabel('delivered')}</option>
-					<option value="cancelled">{pageContents.table.status[lang]}: {getStatusLabel('cancelled')}</option>
-				</select>
-			</Modal.Container.Body>
-			<Modal.Container.Footer>
-				<Button color="primary" onClick={confirmChangeStatus} loading={statusModalBusy} disabled={!statusModalValue}>
-					{pageContents.modals.confirm[lang]}
-				</Button>
-				<Button color="default" variant="ghost" onClick={() => { statusModalDisplay = false; }}>
-					{pageContents.modals.cancel[lang]}
-				</Button>
-			</Modal.Container.Footer>
+				<div class="detail-section">
+					<h4>{pageContents.table.customer[lang]}</h4>
+					<p>{detailModalOrder.customerId ?? '—'}</p>
+				</div>
+				<div class="detail-section">
+					<h4>{pageContents.modals.itemsTitle[lang]}</h4>
+					{#if detailModalOrder.items && detailModalOrder.items.length > 0}
+						<table class="detail-items-table">
+							<thead>
+								<tr>
+									<th>{pageContents.modals.variant[lang]}</th>
+									<th>{pageContents.modals.lot[lang]}</th>
+									<th>{pageContents.modals.qty[lang]}</th>
+									<th>{pageContents.modals.price[lang]}</th>
+									<th>{pageContents.modals.subtotal[lang]}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each detailModalOrder.items as item}
+									<tr>
+										<td>{item.variantId}</td>
+										<td>{item.lotId ?? '—'}</td>
+										<td>{item.quantity}</td>
+										<td>{formatCurrency(item.price, lang)}</td>
+										<td>{formatCurrency(item.price * item.quantity, lang)}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					{:else}
+						<p>—</p>
+					{/if}
+				</div>
+				<div class="detail-section">
+					<h4>{pageContents.table.total[lang]}</h4>
+					<p class="detail-total">{detailModalOrder.totalAmount != null ? formatCurrency(detailModalOrder.totalAmount, lang) : '—'}</p>
+				</div>
+				<div class="detail-section">
+					<h4>{pageContents.table.created[lang]}</h4>
+					<p>{formatDate(detailModalOrder.createdAt, lang)}</p>
+				</div>
+			{/if}
+		</Modal.Container.Body>
+		<Modal.Container.Footer>
+			<Button color="default" variant="ghost" onClick={() => { detailModalDisplay = false; }}>
+				{pageContents.modals.cancel[lang]}
+			</Button>
+		</Modal.Container.Footer>
 	</Modal.Container>
 </Modal>
-{/if}
+
+<!-- ── Modal đổi trạng thái ── -->
+<Modal bind:display={statusModalDisplay} size="sm" isDimissable>
+	<Modal.Container>
+		<Modal.Container.Header>{pageContents.modals.statusTitle[lang]}</Modal.Container.Header>
+		<Modal.Container.Body>
+			<p class="modal-intro">
+				{fillTemplate(pageContents.modals.statusIntro[lang], statusModalOrder?.orderCode ?? '')}
+			</p>
+			<select class="admin-select" bind:value={statusModalValue} disabled={statusModalBusy}>
+				{#each orderStatuses as status (status)}
+					<option value={status}>{getStatusLabel(status)}</option>
+				{/each}
+			</select>
+		</Modal.Container.Body>
+		<Modal.Container.Footer>
+			<Button color="primary" onClick={confirmChangeStatus} loading={statusModalBusy} disabled={!statusModalValue}>
+				{pageContents.modals.confirm[lang]}
+			</Button>
+			<Button color="default" variant="ghost" onClick={() => { statusModalDisplay = false; }}>
+				{pageContents.modals.cancel[lang]}
+			</Button>
+		</Modal.Container.Footer>
+	</Modal.Container>
+</Modal>
 
 <!-- ── Modal xoá ── -->
-{#if deleteModalDisplay}
-	<Modal bind:display={deleteModalDisplay} size="sm" isDimissable>
-		<Modal.Container>
-			<Modal.Container.Header>{pageContents.modals.deleteTitle[lang]}</Modal.Container.Header>
-			<Modal.Container.Body>
-				<p class="modal-intro">
-					{fillTemplate(pageContents.modals.deleteIntro[lang], deleteModalOrder?.orderCode ?? '')}
-				</p>
-			</Modal.Container.Body>
-			<Modal.Container.Footer>
-				<Button color="error" onClick={confirmDelete} loading={deleteModalBusy}>
-					{pageContents.modals.confirm[lang]}
-				</Button>
-				<Button color="default" variant="ghost" onClick={() => { deleteModalDisplay = false; }}>
-					{pageContents.modals.cancel[lang]}
-				</Button>
-			</Modal.Container.Footer>
-		</Modal.Container>
-	</Modal>
-{/if}
+<Modal bind:display={deleteModalDisplay} size="sm" isDimissable>
+	<Modal.Container>
+		<Modal.Container.Header>{pageContents.modals.deleteTitle[lang]}</Modal.Container.Header>
+		<Modal.Container.Body>
+			<p class="modal-intro">
+				{fillTemplate(pageContents.modals.deleteIntro[lang], deleteModalOrder?.orderCode ?? '')}
+			</p>
+		</Modal.Container.Body>
+		<Modal.Container.Footer>
+			<Button color="error" onClick={confirmDelete} loading={deleteModalBusy}>
+				{pageContents.modals.confirm[lang]}
+			</Button>
+			<Button color="default" variant="ghost" onClick={() => { deleteModalDisplay = false; }}>
+				{pageContents.modals.cancel[lang]}
+			</Button>
+		</Modal.Container.Footer>
+	</Modal.Container>
+</Modal>
 
 <style lang="scss">
 	.admin-page {
@@ -631,89 +764,54 @@
 		font-weight: 600;
 	}
 
-	/* Table */
-	.admin-table-wrap {
-		background: var(--card);
+	/* Filters */
+	.admin-filters {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.admin-search {
+		flex: 1;
+		min-width: 220px;
+		max-width: 320px;
+	}
+
+	.admin-select {
+		padding: 0.35rem 2rem 0.35rem 0.75rem;
 		border: 1px solid var(--border);
-		border-radius: 0.75rem;
-		overflow: hidden;
-	}
-
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.875rem;
-	}
-
-	.admin-table th {
-		text-align: left;
-		padding: 0.875rem 1rem;
-		background: var(--muted);
+		border-radius: 0.5rem;
+		background: var(--background);
 		color: var(--foreground);
-		font-weight: 600;
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		border-bottom: 1px solid var(--border);
-		white-space: nowrap;
+		font-size: 0.8rem;
+		cursor: pointer;
+		appearance: none;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 0.5rem center;
 	}
 
-	.admin-table td {
-		padding: 0.875rem 1rem;
-		border-bottom: 1px solid var(--border);
-		vertical-align: middle;
+	.admin-select:focus {
+		outline: none;
+		border-color: var(--primary);
+		box-shadow: 0 0 0 2px var(--primary-100);
 	}
 
-	.admin-table tbody tr:last-child td {
-		border-bottom: none;
-	}
-
-	.admin-table tbody tr:hover td {
-		background: var(--accent);
-	}
-
-	.admin-table tbody tr.row-deleted td {
-		opacity: 0.5;
-		background: var(--muted);
-	}
-
-	.col-code {
-		font-family: monospace;
-		font-weight: 600;
-		color: var(--primary);
-	}
-
-	.col-customer {
-		font-weight: 500;
-	}
-
-	.col-status {
-		white-space: nowrap;
-	}
-
-	.col-items {
-		color: var(--muted-foreground);
-		font-size: 0.85rem;
-	}
-
-	.col-total {
-		font-weight: 600;
-		font-family: monospace;
-	}
-
-	.col-created {
-		white-space: nowrap;
-		color: var(--muted-foreground);
-	}
-
-	.col-actions {
-		white-space: nowrap;
-		width: 1%;
-	}
-
+	/* Nút action trong snippet actionsContent DataTable */
 	.row-actions {
 		display: flex;
 		gap: 0.35rem;
+		justify-content: flex-end;
+	}
+
+	/* B6.2: khung bảng — đồng bộ các page admin khác (users/brands/categories/
+	   products): scroll ngang khi min-content cột vượt viewport thay vì vỡ layout. */
+	.admin-table-wrap {
+		overflow-x: auto;
+		border-radius: 0.75rem;
+		border: 1px solid var(--default-300);
+		background: var(--background);
 	}
 
 	.status-badge {
@@ -728,9 +826,9 @@
 
 	.status-success { background: var(--success-100); color: var(--success-700); }
 	.status-warning { background: var(--warning-100, var(--default-200)); color: var(--warning-700, var(--default-700)); }
-	.status-info { background: var(--primary-100); color: var(--primary-700); }
 	.status-error { background: var(--danger-100, hsl(var(--error-h) var(--error-s) 85%)); color: var(--error); }
-	.status-primary { background: var(--primary-100); color: var(--primary-700); }
+	.status-info { background: var(--info-100, var(--default-200)); color: var(--info-700, var(--default-700)); }
+	.status-primary { background: var(--primary-100); color: var(--primary-700, var(--primary)); }
 	.status-default { background: var(--default-100); color: var(--default-700); }
 
 	/* Pagination */
@@ -777,61 +875,6 @@
 		font-size: 0.8rem;
 	}
 
-	.admin-select {
-		padding: 0.35rem 2rem 0.35rem 0.75rem;
-		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		background: var(--background);
-		color: var(--foreground);
-		font-size: 0.8rem;
-		cursor: pointer;
-		appearance: none;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-		background-repeat: no-repeat;
-		background-position: right 0.5rem center;
-	}
-
-	.admin-select:focus {
-		outline: none;
-		border-color: var(--primary);
-		box-shadow: 0 0 0 2px var(--primary-100);
-	}
-
-	/* State */
-	.admin-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
-		padding: 3rem 1.5rem;
-		text-align: center;
-		background: var(--card);
-		border: 1px solid var(--border);
-		border-radius: 0.75rem;
-		color: var(--muted-foreground);
-	}
-
-	.admin-state.error {
-		color: var(--error);
-		border-color: var(--error-100, hsl(var(--error-h) var(--error-s) 30%));
-	}
-
-	.state-title {
-		font-size: 1.1rem;
-		font-weight: 600;
-		color: var(--foreground);
-		margin: 0;
-	}
-
-	.admin-state.error .state-title {
-		color: var(--error);
-	}
-
-	.state-detail {
-		margin: 0;
-		font-size: 0.9rem;
-	}
-
 	/* Modal detail */
 	.detail-section {
 		margin-bottom: 1rem;
@@ -860,33 +903,26 @@
 	}
 
 	.detail-total {
-		font-size: 1.25rem;
+		font-size: 1.1rem;
 		font-weight: 700;
-		color: var(--primary) !important;
 	}
 
 	.detail-items-table {
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 0.8rem;
-	}
 
-	.detail-items-table th,
-	.detail-items-table td {
-		padding: 0.5rem;
-		border-bottom: 1px solid var(--border);
-		text-align: left;
-	}
+		th,
+		td {
+			padding: 0.4rem 0.5rem;
+			border-bottom: 1px solid var(--border);
+			text-align: left;
+		}
 
-	.detail-items-table th {
-		font-weight: 600;
-		color: var(--muted-foreground);
-		font-size: 0.7rem;
-		text-transform: uppercase;
-	}
-
-	.detail-items-table tbody tr:last-child td {
-		border-bottom: none;
+		th {
+			color: var(--muted-foreground);
+			font-weight: 600;
+		}
 	}
 
 	.modal-intro {
@@ -894,50 +930,10 @@
 		color: var(--muted-foreground);
 	}
 
-	.temp-password-box {
-		background: var(--muted);
-		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		padding: 1rem;
-	}
-
-	.temp-password-title {
-		margin: 0 0 0.25rem;
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.temp-password-note {
-		margin: 0 0 0.75rem;
-		font-size: 0.8rem;
-		color: var(--muted-foreground);
-	}
-
-	.temp-password-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-	}
-
-	.temp-password-value {
-		flex: 1;
-		font-family: monospace;
-		font-size: 1rem;
-		background: var(--background);
-		border: 1px solid var(--border);
-		border-radius: 0.35rem;
-		padding: 0.5rem 0.75rem;
-	}
-
 	/* Responsive */
 	@media (max-width: 768px) {
 		.admin-page {
 			padding: 1rem;
-		}
-
-		.admin-table th,
-		.admin-table td {
-			padding: 0.625rem 0.75rem;
 		}
 
 		.admin-stats {
