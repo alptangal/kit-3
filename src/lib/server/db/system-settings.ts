@@ -163,6 +163,41 @@ export class SystemSettingsService {
 		return actor.roleName === 'owner';
 	}
 
+	/**
+	 * Đọc defaults công khai (theme/density/defaultLang) — KHÔNG check quyền.
+	 * Dùng cho fallback per-user preferences sau login (mọi user đã đăng nhập
+	 * đều cần biết theme/ngôn ngữ mặc định hệ thống; không lộ security/commerce).
+	 */
+	static async getPublicDefaults(): Promise<{
+		theme: 'light' | 'dark' | 'system';
+		density: 'comfortable' | 'compact';
+		defaultLang: 'vi' | 'en';
+	}> {
+		try {
+			const res = await cbSystem.document.get({ documentKey: SETTINGS_DOCUMENT_KEY });
+			if (!res.ok || !res.data) {
+				return {
+					theme: DEFAULT_SYSTEM_SETTINGS.appearance.theme,
+					density: DEFAULT_SYSTEM_SETTINGS.appearance.density,
+					defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang
+				};
+			}
+			const raw = res.data as { settings?: SystemSettingsPatch };
+			const merged = mergeWithDefaults(raw?.settings);
+			return {
+				theme: merged.appearance.theme,
+				density: merged.appearance.density,
+				defaultLang: merged.general.defaultLang
+			};
+		} catch {
+			return {
+				theme: DEFAULT_SYSTEM_SETTINGS.appearance.theme,
+				density: DEFAULT_SYSTEM_SETTINGS.appearance.density,
+				defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang
+			};
+		}
+	}
+
 	/** Đọc settings — owner/manager (có scope 'reports:view') đều đọc được. */
 	static async list(
 		actor: ActorContext

@@ -34,7 +34,8 @@ const collectionsName = [
 	'system',
 	'refresh_tokens',
 	'token_rotation_logs',
-	'system_secrets' // <-- MỚI: dùng cho cbVault, xem clients.ts
+	'system_secrets', // <-- dùng cho cbVault, xem clients.ts
+	'user_preferences' // <-- MỚI: per-user preferences (theme/language/datatable), documentKey = userId
 ] as const;
 const fieldTypes = [
 	'string',
@@ -820,6 +821,24 @@ export const collectionSchemas = {
 			version: { type: 'number', searchable: false, sortable: false, selectable: true },
 			createdAt: { type: 'date', searchable: false, sortable: false, selectable: true },
 			rotatedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
+		}
+	},
+
+	// ===== Per-user preferences (theme/language/datatable) =====
+	// documentKey = userId (không có field ID riêng) — 1 user 1 document.
+	// Mọi field đều optional + không index: đọc theo key, không list/query theo field.
+	user_preferences: {
+		fields: {
+			// 'light' | 'dark' | 'system' — undefined = user chưa chọn (fallback hệ thống)
+			theme: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// 'vi' | 'en' — undefined = chưa chọn (fallback system defaultLang)
+			language: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// Record<routePath, { columnWidths, stickyColumns, aggregations, pageSize }>
+			datatable: { type: 'object', searchable: false, sortable: false, selectable: true },
+
+			updatedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
 		}
 	}
 } as const satisfies Record<

@@ -1,0 +1,113 @@
+// $lib/store/user-prefs.svelte.ts
+// Per-user preferences client store — nhận data từ (authorized)/+layout.server.ts,
+// resolve theo fallback chain, và cung cấp write-path cho theme/language.
+//
+// Fallback chain (user chốt):
+//   theme    = prefs.theme → system appearance.theme → localStorage cũ (migrate) → 'system'
+//   language = prefs.language → system defaultLang → navigator.language → 'en'
+//
+// Nguồn chân lý theme vẫn là profile.theme (basic.svelte.ts) — module này chỉ
+// BOOTSTRAP giá trị ban đầu (suppress persist) và đăng ký sink ghi DB qua
+// theme-persist-sink (theme-toggle/profile/settings đều đi qua 1 cửa).
+
+import { browser } from '$app/environment';
+import type { AppTheme } from '$interfaces/basic';
+import { saveUserPrefs } from '$modules/prefs-api';
+import type { DataTablePagePrefs, UserPreferences } from '$lib/server/db/user-preferences';
+// Static import an toàn (một chiều): basic.svelte KHÔNG import user-prefs —
+// sink registration đi qua theme-persist-sink module trung gian.
+import { client, profile } from '$store/basic.svelte';
+import { setThemePersistSink } from '$store/theme-persist-sink';
+
+export interface UserPrefsSystemDefaults {
+	theme: 'light' | 'dark' | 'system';
+	density: 'comfortable' | 'compact';
+	defaultLang: 'vi' | 'en';
+}
+
+export const userPrefs = $state({
+	/** layout server đã trả data chưa (chặn apply 2 lần khi nav client) */
+	loaded: false,
+	theme: undefined as AppTheme | undefined,
+	language: undefined as 'vi' | 'en' | undefined,
+	datatable: {} as Record<string, DataTablePagePrefs>
+});
+
+/** Flag chống vòng lặp: apply bootstrap → setter → persist (không mong muốn). */
+let suppressThemePersist = false;
+
+export type LayoutData = {
+	prefs?: UserPreferences;
+	system?: UserPrefsSystemDefaults;
+};
+
+/**
+ * Gọi 1 lần từ (authorized)/+layout.svelte với data của layout server:
+ * resolve theme + language theo chain, migrate localStorage cũ, đăng ký persist sink.
+ */
+export function applyUserPrefsFromLayout(data: LayoutData | undefined): void {
+	if (!browser || !data || userPrefs.loaded) return;
+	userPrefs.loaded = true;
+
+	const prefs = data.prefs ?? {};
+	const system = data.system ?? { theme: 'system', density: 'comfortable', defaultLang: 'en' };
+
+	// ── THEME ──
+	// localStorage cũ (chưa có DB bao giờ) → migrate 1 lần vào DB rồi tiếp tục dùng
+	let theme = prefs.theme;
+	const legacy = readLegacyTheme();
+	if (!theme && legacy) {
+		theme = legacy;
+		saveUserPrefs({ theme: legacy });
+	}
+	if (!theme) theme = system.theme;
+
+	userPrefs.theme = theme;
+
+	// Áp theme với suppress (setter lo animate + data-theme, KHÔNG persist lại —
+	// chống vòng apply→persist→apply), rồi đăng ký sink cho mọi lần set sau.
+	suppressThemePersist = true;
+	try {
+		profile.theme = theme;
+	} finally {
+		suppressThemePersist = false;
+	}
+
+	// đăng ký sink qua setThemePersistSink: mọi lần sau, setter theme → ghi DB
+	setThemePersistSink((t: AppTheme) => {
+		if (suppressThemePersist) return;
+		userPrefs.theme = t;
+		saveUserPrefs({ theme: t });
+	});
+
+	// ── LANGUAGE ──
+	// Thứ tự: user pref → system defaultLang → navigator → 'en'
+	// (đọc navigator trực tiếp — client.browser có thể chưa được root onMount seed)
+	const base = browser ? (navigator.language ?? 'en').slice(0, 2) : undefined;
+	const lang = prefs.language ?? system.defaultLang ?? (base === 'vi' ? 'vi' : 'en');
+	userPrefs.language = lang === 'vi' ? 'vi' : 'en';
+	if (client.browser) client.browser.language = userPrefs.language;
+}
+
+/** Đọc localStorage 'theme' cũ (chuẩn hoá giá trị) — trả undefined nếu không hợp lệ. */
+function readLegacyTheme(): AppTheme | undefined {
+	if (!browser) return undefined;
+	const raw = localStorage.getItem('theme');
+	if (raw === 'light' || raw === 'dark' || raw === 'system') return raw;
+	return undefined;
+}
+
+/**
+ * Ghi language preference (setLanguage từ UI switcher):
+ * cập nhật client.browser.language + persist DB.
+ */
+export function setLanguage(lang: 'vi' | 'en'): void {
+	userPrefs.language = lang;
+	if (client.browser) client.browser.language = lang;
+	saveUserPrefs({ language: lang });
+}
+
+/** Ghi datatable prefs 1 trang (read-merge theo key route trong server). */
+export function saveDataTablePrefs(key: string, partial: DataTablePagePrefs): void {
+	saveUserPrefs({ datatable: { [key]: partial } });
+}

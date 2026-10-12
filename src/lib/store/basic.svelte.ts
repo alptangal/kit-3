@@ -12,6 +12,10 @@ import { convertToMiliseconds, detectBrowserType } from '$modules';
 import { SvelteMap } from 'svelte/reactivity';
 import type { FlyParams } from 'svelte/transition';
 
+// Task 5: extract sang useVisualKeyboard hook — shape + reactivity giữ nguyên qua alias.
+// browser type + delay truyền qua getter closures (hook không import profile — tránh circular).
+import { callThemePersistSink } from '$store/theme-persist-sink';
+
 export const profile = $state({
 	timeId: {
 		theme: {
@@ -19,11 +23,11 @@ export const profile = $state({
 			requestAnimation: null as null | number
 		}
 	},
-	// Task 5: extract sang useVisualKeyboard hook — shape + reactivity giữ nguyên qua alias.
-	// browser type + delay truyền qua getter closures (hook không import profile — tránh circular).
 	visualKeyboard: useVisualKeyboard({
-		getBrowserType: () => profile.browser.type,
-		getDelay: () => profile.delay
+		// Return type annotated — không thì TS phải infer arrow qua `profile`
+		// ngay trong initializer của chính profile → vòng "implicitly any".
+		getBrowserType: (): Browser['type'] => profile.browser.type,
+		getDelay: (): number | undefined => profile.delay
 	}),
 	screen: {
 		height: null,
@@ -104,6 +108,10 @@ export const profile = $state({
 				themeMetaTag.setAttribute('content', bodyBackgroundColor);
 			});
 		}
+		// Per-user theme (B2): mọi đường ghi theme (theme-toggle, profile select,
+		// settings) đều qua setter này → sink do user-prefs đăng ký lưu DB.
+		// Sink null trước bootstrap (SSR/chưa login) — vô hại.
+		callThemePersistSink(val);
 	},
 	preferColor: 'dark' as AppTheme,
 	cursor: {

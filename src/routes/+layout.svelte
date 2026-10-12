@@ -103,6 +103,11 @@ import ToastWrapper from '$components/element/toast/Wrapper/Main.svelte';
 					width: window.visualViewport?.width ?? window.innerWidth,
 					height: window.visualViewport?.height ?? window.innerHeight
 				},
+				// B1 i18n: đọc navigator thật thay vì hardcode 'en' (basic.svelte.ts
+				// init 'en' chỉ là giá trị SSR-safe; user-prefs sẽ đè bằng prefs sau).
+				// App chỉ phân biệt vi/en (40+ consumers `=== 'vi' ? 'vi' : 'en'`)
+				// nên narrow ngay về 2 mã này — LanguageCode union ~180 mã thừa.
+				language: (navigator.language ?? 'en').slice(0, 2) === 'vi' ? 'vi' : 'en',
 				get isMobile() {
 					if (!this.userAgent) return undefined;
 					return detectBrowserType(this.userAgent)?.includes('desktop') ? false : true;

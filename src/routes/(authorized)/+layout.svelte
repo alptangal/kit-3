@@ -1,13 +1,13 @@
 <script lang="ts">
-	// src/routes/(authorized)/+layout.svelte
 	import type { Snippet } from 'svelte';
-	import { page } from '$app/state';
+	import { applyUserPrefsFromLayout, type LayoutData } from '$store/user-prefs.svelte';
+	import type { LayoutProps } from './$types';
 
-	// BẪY Svelte 5: {@render children()} mà KHÔNG destructured từ $props() →
-	// "ReferenceError: children is not defined" lúc SSR. Layout này từng bị lỗi
-	// tiềm ẩn từ khi tạo nhưng chưa từng render (route con luôn redirect trước
-	// vì session thiếu roleName) — chỉ lộ sau khi hooks điền đủ userId/roleName.
-	let { children }: { children: Snippet } = $props();
+	let { children, data }: LayoutProps = $props();
+
+	// B1: bootstrap per-user preferences (theme/language) 1 lần từ layout server data.
+	// Hàm tự guard (browser-only + userPrefs.loaded chống apply 2 lần khi nav client).
+	applyUserPrefsFromLayout(data as LayoutData);
 </script>
 
 <div class="authorized-layout">
