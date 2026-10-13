@@ -19,6 +19,8 @@
 	} from './_interface';
 	import type { DataTableColumn } from '$components/element/datatable';
 
+
+	import { subscribeDbChanges } from '$modules/db-realtime';
 	// ── Ngôn ngữ ──
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
 
@@ -485,6 +487,8 @@
 		return text.replace('{name}', name);
 	}
 
+	// B8 realtime: refetch list khi collection thay đổi từ client khác
+	onMount(() => subscribeDbChanges('users', () => void loadUsers()));
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();

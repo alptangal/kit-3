@@ -9,6 +9,7 @@ import {
 } from '$lib/server/admin/api';
 import { UserAdminService } from '$lib/server/db/users';
 import { invalidateGrantsCache } from '$modules/rbac/permission-checker';
+import { broadcastDbChange } from '$lib/server/db-broadcast';
 
 export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
@@ -56,6 +57,8 @@ export const POST: RequestHandler = async (event) => {
 
 		// Xoá user có thể thay đổi kết quả check quyền sau này — làm mới grants cache.
 		invalidateGrantsCache();
+
+		void broadcastDbChange({ collection: 'users', action: 'delete', by: actor?.userId });
 
 		return respond({ ok: true, message: result.messages });
 	} catch (e) {

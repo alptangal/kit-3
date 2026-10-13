@@ -15,6 +15,7 @@
  */
 
 import { browser } from '$app/environment';
+import { PUBLIC_PARTYKIT_HOST } from '$env/static/public';
 import PartySocket from 'partysocket';
 
 let cachedB64: string | undefined;
@@ -52,17 +53,25 @@ function getWsSocket(): PartySocket | null {
 	if (wsSocket) return wsSocket;
 
 	try {
-		const host = import.meta.env.PUBLIC_PARTYKIT_HOST;
+		// $env/static/public: SvelteKit statically replace lúc build (import.meta.env
+		// của Vite core chỉ expose prefix VITE_*, không thấy PUBLIC_*).
+		const host = PUBLIC_PARTYKIT_HOST;
 		if (!host) {
 			// Không cấu hình PartyKit — client chỉ dùng HTTP fallback
 			return null;
 		}
-		// https://localhost:3000 (dev) -> ws:// bị chặn mixed-content, dùng wss:// sẽ
-		// thất bại nhanh và rơi về HTTP. PUBLIC_PARTYKIT_PROTOCOL cho phép override
-		// khi có proxy TLS đằng trước partykit.
+		// Dev: page chạy https nhưng partykit dev KHÔNG có TLS (ws://localhost:1999).
+		// localhost được Chrome exempt mixed-content (secure context) nên ws vẫn nối
+		// được. Khi deploy có proxy TLS trước partykit, set PUBLIC_PARTYKIT_PROTOCOL=wss
+		// trong .env để override (đọc qua import.meta.env vì $env/static/public chỉ
+		// export biến đã khai báo).
 		const protocol =
 			(import.meta.env.PUBLIC_PARTYKIT_PROTOCOL as string | undefined) ??
-			(typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss' : 'ws');
+			(typeof location !== 'undefined' && location.hostname === 'localhost'
+				? 'ws'
+				: location.protocol === 'https:'
+					? 'wss'
+					: 'ws');
 
 		wsKeyPromise = new Promise<string | undefined>((resolve) => {
 			wsKeyResolve = resolve;

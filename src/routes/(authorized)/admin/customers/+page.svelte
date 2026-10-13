@@ -33,6 +33,7 @@
 	} from './_interface';
 	import type { Size } from '$components/interface';
 
+	import { subscribeDbChanges } from '$modules/db-realtime';
 	// ── Ngôn ngữ ──
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
 
@@ -428,6 +429,8 @@
 		return text.replace('{name}', name);
 	}
 
+	// B8 realtime: refetch list khi collection thay đổi từ client khác
+	onMount(() => subscribeDbChanges('customers', () => void loadCustomers()));
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();

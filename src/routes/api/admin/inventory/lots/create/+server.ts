@@ -9,6 +9,7 @@ import {
 } from '$lib/server/admin/api';
 import { InventoryService } from '$lib/server/db/inventory';
 import type { InventoryLot } from '$modules/schema';
+import { broadcastDbChange } from '$lib/server/db-broadcast';
 
 export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
@@ -53,6 +54,8 @@ export const POST: RequestHandler = async (event) => {
 		if (!result.success) {
 			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
 		}
+
+		void broadcastDbChange({ collection: 'inventory_lots', action: 'create', by: actor?.userId });
 
 		return respond({
 			ok: true,

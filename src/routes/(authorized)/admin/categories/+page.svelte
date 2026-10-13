@@ -23,6 +23,7 @@
 	import { resolveServerMessage } from '../_interface';
 	import type { Size } from '$components/interface';
 
+	import { subscribeDbChanges } from '$modules/db-realtime';
 	// Types
 	interface CategoryListItem {
 		_id: string;
@@ -495,6 +496,8 @@
 	}
 
 	// Initial load
+	// B8 realtime: refetch list khi collection thay đổi từ client khác
+	onMount(() => subscribeDbChanges('categories', () => void fetchCategories()));
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();

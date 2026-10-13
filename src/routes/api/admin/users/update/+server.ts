@@ -7,6 +7,7 @@ import {
 	getActorContext,
 	statusForServiceFailure
 } from '$lib/server/admin/api';
+import { broadcastDbChange } from '$lib/server/db-broadcast';
 import { UserAdminService } from '$lib/server/db/users';
 
 export const POST: RequestHandler = async (event) => {
@@ -59,6 +60,8 @@ export const POST: RequestHandler = async (event) => {
 		if (!result.success) {
 			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
 		}
+
+		void broadcastDbChange({ collection: 'users', action: 'update', by: actor?.userId });
 
 		return respond({ ok: true, message: result.messages });
 	} catch (e) {

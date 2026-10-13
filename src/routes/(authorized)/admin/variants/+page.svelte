@@ -22,6 +22,7 @@
 	import { resolveServerMessage } from '../_interface';
 	import type { Size } from '$components/interface';
 
+	import { subscribeDbChanges } from '$modules/db-realtime';
 	// Types
 	interface VariantListItem {
 		_id: string;
@@ -569,6 +570,8 @@
 	// Initial load — fetchProducts song song fetchVariants (select filter +
 	// modal cần products sớm; trước đây chạy sequential khiến modal mở lúc
 	// product list chưa về → select rỗng).
+	// B8 realtime: refetch list khi collection thay đổi từ client khác
+	onMount(() => subscribeDbChanges('variants', () => void fetchVariants()));
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();

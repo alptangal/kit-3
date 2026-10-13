@@ -7,6 +7,7 @@ import {
 	getActorContext,
 	statusForServiceFailure
 } from '$lib/server/admin/api';
+import { broadcastDbChange } from '$lib/server/db-broadcast';
 import { InventoryService } from '$lib/server/db/inventory';
 
 export const POST: RequestHandler = async (event) => {
@@ -68,6 +69,8 @@ export const POST: RequestHandler = async (event) => {
 		if (!result.success) {
 			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
 		}
+
+		void broadcastDbChange({ collection: 'inventory_stock', action: 'adjust', by: actor?.userId });
 
 		return respond({
 			ok: true,

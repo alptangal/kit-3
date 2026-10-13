@@ -7,6 +7,7 @@ import {
 	getActorContext,
 	statusForServiceFailure
 } from '$lib/server/admin/api';
+import { broadcastDbChange } from '$lib/server/db-broadcast';
 import { ProductAdminService } from '$lib/server/db/products';
 
 export const POST: RequestHandler = async (event) => {
@@ -39,6 +40,8 @@ export const POST: RequestHandler = async (event) => {
 		if (!result.success) {
 			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
 		}
+
+		void broadcastDbChange({ collection: 'brands', action: 'create', by: actor?.userId });
 
 		return respond({
 			ok: true,

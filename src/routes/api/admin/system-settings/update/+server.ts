@@ -4,6 +4,7 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { readAdminRequest, respondEncrypted, getActorContext } from '$lib/server/admin/api';
+import { broadcastDbChange } from '$lib/server/db-broadcast';
 import {
 	SystemSettingsService,
 	systemSettingsMessages,
@@ -55,6 +56,8 @@ export const POST: RequestHandler = async (event) => {
 			const denied = result.messages === systemSettingsMessages.permissionDenied;
 			return respond({ ok: false, message: result.messages }, denied ? 403 : 400);
 		}
+
+		void broadcastDbChange({ collection: 'system', action: 'update', by: actor?.userId });
 
 		return respond({ ok: true, message: result.messages });
 	} catch (e) {

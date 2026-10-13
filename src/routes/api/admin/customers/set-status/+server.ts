@@ -9,6 +9,7 @@ import {
 } from '$lib/server/admin/api';
 import { CustomerAdminService } from '$lib/server/db/customers';
 import { invalidateGrantsCache } from '$modules/rbac/permission-checker';
+import { broadcastDbChange } from '$lib/server/db-broadcast';
 
 export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
@@ -56,6 +57,8 @@ export const POST: RequestHandler = async (event) => {
 
 		// Trạng thái ảnh hưởng khả năng đăng nhập — làm mới grants cache
 		invalidateGrantsCache();
+
+		void broadcastDbChange({ collection: 'customers', action: 'set-status', by: actor?.userId });
 
 		return respond({ ok: true, message: result.messages });
 	} catch (e) {
