@@ -8,3 +8,7 @@ export * from './inventory';
 export * from './system-settings';
 export * from './orders';
 export * from './customers';
+export * from './suppliers';
+export * from './pricing';
+export * from './pos';
+export * from './stock-takes';
