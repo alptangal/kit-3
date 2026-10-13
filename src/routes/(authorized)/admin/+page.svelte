@@ -512,7 +512,8 @@
 			<Checkbox bind:checked={includeDeleted} disabled={loading}>
 				{pageContents.showDeleted[lang]}
 			</Checkbox>
-			<Button color="primary" onClick={openCreateModal} disabled={!catalogLoaded}>
+			<!-- Quy ước màu nút: create = success -->
+			<Button color="success" onClick={openCreateModal} disabled={!catalogLoaded}>
 				{pageContents.createUser[lang]}
 			</Button>
 		</div>

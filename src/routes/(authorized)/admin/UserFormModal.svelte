@@ -18,6 +18,9 @@
 	} from './_interface';
 	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
 	import DraftRestoreDialog from '../_DraftRestoreDialog.svelte';
+	import { createCloseGuard } from '$modules/close-guard.svelte';
+	// P3: dialog xác nhận khi đóng modal với form còn dirty.
+	import DirtyCloseDialog from './DirtyCloseDialog.svelte';
 
 	let {
 		display = $bindable(),
@@ -70,6 +73,21 @@
 	>(undefined);
 
 	const isCreate = $derived(mode === 'create');
+
+	// ── P3 confirm-dirty: chặn đóng modal khi form còn thay đổi chưa lưu ──
+	// markClean được gọi trong $effect reset (dưới) — snapshot() trong helper
+	// đã untrack nên không tạo dependency trong effect.
+	let dirtyCloseDisplay = $state(false);
+	const closeGuard = createCloseGuard({
+		form: () => formData,
+		openConfirm: () => (dirtyCloseDisplay = true),
+		// Đóng THẬT: form "sạch" theo guard nghĩa là user chưa gõ gì — đóng
+		// mà không cần xoá draft (chưa có gì đáng lưu).
+		close: () => {
+			dirtyCloseDisplay = false;
+			display = false;
+		}
+	});
 
 	// ── B9 draft autosave ──
 	// Flag từ system settings (page.data.system — merge từ (authorized) layout).
@@ -143,6 +161,8 @@
 		if (maybeRestoreDraft(key)) return;
 		draftFormKey = key;
 		draftAutosaveArmed = false;
+		// P3: form vừa reset sạch → baseline mới (untrack nên không track field).
+		closeGuard.markClean();
 	});
 
 	// B9 autosave draft: theo dõi formData khi modal đang mở — debounce 500ms
@@ -173,6 +193,8 @@
 		draftFormKey = pendingDraftFormKey;
 		pendingDraftFormKey = null;
 		draftAutosaveArmed = false;
+		// P3: baseline = draft đã khôi phục — user mới mở form, chưa gõ gì.
+		closeGuard.markClean();
 	}
 
 	// User chọn Bỏ qua trong dialog — clear draft vĩnh viễn.
@@ -182,6 +204,8 @@
 			draftFormKey = pendingDraftFormKey;
 			pendingDraftFormKey = null;
 			draftAutosaveArmed = false;
+			// P3: form vẫn là bản reset sạch (draft bị bỏ) → baseline mới.
+			closeGuard.markClean();
 		}
 	}
 
@@ -336,7 +360,7 @@
 	});
 </script>
 
-<Modal bind:display size="lg" isDimissable>
+<Modal bind:display size="lg" isDimissable onCloseAttempt={closeGuard.attemptClose}>
 	<Modal.Container class="user-form-modal">
 		<Modal.Container.Header class="user-form-modal-header">
 			{isCreate ? pageContents.createUser[lang] : pageContents.actions.edit[lang]}
@@ -539,7 +563,13 @@
 								{pageContents.actions.delete[lang]}
 							</Button>
 						{/if}
-						<Button color="success" type="submit" {loading} disabled={loading || !encryptionKeys}>
+						<!-- Quy ước màu nút: create = success, update/edit = primary -->
+						<Button
+							color={isCreate ? 'success' : 'primary'}
+							type="submit"
+							{loading}
+							disabled={loading || !encryptionKeys}
+						>
 							{isCreate ? pageContents.createUser[lang] : pageContents.actions.edit[lang]}
 						</Button>
 						<Button
@@ -547,7 +577,7 @@
 							variant="ghost"
 							disabled={loading}
 							onClick={() => {
-								display = false;
+								closeGuard.attemptClose();
 							}}
 						>
 							{pageContents.modals.cancel[lang]}
@@ -565,6 +595,19 @@
 	onRestore={applyDraftRestore}
 	onDiscard={discardDraft}
 	{lang}
+/>
+
+<!-- ── P3: dialog xác nhận khi đóng modal mà form còn dirty ── -->
+<DirtyCloseDialog
+	bind:open={dirtyCloseDisplay}
+	title={{ vi: 'Bỏ thay đổi?', en: 'Discard changes?' }}
+	description={{
+		vi: 'Form của bạn có thay đổi chưa lưu. Nếu bỏ bây giờ, các thay đổi này sẽ mất.',
+		en: 'Your form has unsaved changes. If you discard now, these changes will be lost.'
+	}}
+	discardLabel={{ vi: 'Bỏ thay đổi', en: 'Discard' }[lang]}
+	continueLabel={{ vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' }[lang]}
+	onDiscard={closeGuard.confirmDiscard}
 />
 
 <style lang="scss">

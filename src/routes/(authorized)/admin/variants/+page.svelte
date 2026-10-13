@@ -23,8 +23,11 @@
 	import type { Size } from '$components/interface';
 	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
 	import DraftRestoreDialog from '../../_DraftRestoreDialog.svelte';
+	import { createCloseGuard } from '$modules/close-guard.svelte';
 
 	import { subscribeDbChanges } from '$modules/db-realtime';
+	// P3: dialog xác nhận khi đóng modal với form còn dirty.
+	import DirtyCloseDialog from '../DirtyCloseDialog.svelte';
 	// Types
 	interface VariantListItem {
 		_id: string;
@@ -155,6 +158,17 @@
 		lowStockThreshold: '',
 		imageUrl: '',
 		status: 'active'
+	});
+
+	// ── P3 confirm-dirty: chặn đóng modal khi form còn thay đổi chưa lưu ──
+	// baseline cập nhật ở mọi điểm formData được set (openCreate/openEdit/
+	// applyDraftRestore/discardDraft); attemptClose so snapshot hiện tại với
+	// baseline → dirty thì mở dialog xác nhận thay vì đóng luôn.
+	let dirtyCloseDisplay = $state(false);
+	const closeGuard = createCloseGuard({
+		form: () => formData,
+		openConfirm: () => (dirtyCloseDisplay = true),
+		close: () => closeModals()
 	});
 
 	// Fetch variants — fetchSecure POST (endpoint mã hoá RSA).
@@ -414,6 +428,7 @@
 		draftFormKey = 'variants:create';
 		draftUserId = currentUserId();
 		draftAutosaveArmed = false;
+		closeGuard.markClean();
 		modalOpen = true;
 	}
 
@@ -443,6 +458,7 @@
 		draftFormKey = key;
 		draftUserId = currentUserId();
 		draftAutosaveArmed = false;
+		closeGuard.markClean();
 		modalOpen = true;
 	}
 
@@ -472,6 +488,7 @@
 		draftFormKey = pendingDraftFormKey;
 		pendingDraftFormKey = null;
 		draftAutosaveArmed = false;
+		closeGuard.markClean(); // baseline = draft đã khôi phục (user mới mở form)
 		modalOpen = true;
 	}
 
@@ -481,6 +498,7 @@
 			clearDraft(draftUserId, pendingDraftFormKey);
 			draftFormKey = pendingDraftFormKey;
 			pendingDraftFormKey = null;
+			closeGuard.markClean(); // form vừa reset (sạch)
 			modalOpen = true;
 		}
 	}
@@ -643,8 +661,11 @@
 		client.browser.toasts?.create({ title: text, color: tone });
 	}
 
-	// Close modals
+	// Close modals — ĐÓNG THẬT (programmatic, bypass guard). Dùng khi: submit
+	// ok, user xác nhận discard trong dialog, hoặc nút Xoá (delete). Nút Cancel
+	// + ESC/backdrop/× đi qua closeGuard.attemptClose (dirty → dialog xác nhận).
 	function closeModals() {
+		dirtyCloseDisplay = false;
 		modalOpen = false;
 		resetForm();
 	}
@@ -674,7 +695,8 @@
 			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
 		<div class="admin-header-actions">
-			<Button color="primary" onClick={openCreateModal}>
+			<!-- Quy ước màu nút: create = success -->
+			<Button color="success" onClick={openCreateModal}>
 				{pageContents.addVariant[lang]}
 			</Button>
 		</div>
@@ -786,7 +808,7 @@
 	</footer>
 
 	<!-- ── Create/Edit Modal ── -->
-	<Modal bind:display={modalOpen} onClose={closeModals} size="lg">
+	<Modal bind:display={modalOpen} onClose={closeModals} onCloseAttempt={closeGuard.attemptClose} size="lg">
 		<ModalContainer>
 			<ModalHeader>
 				<h2 class="modal-title">
@@ -970,12 +992,16 @@
 						{pageContents.deleteAction[lang]}
 					</Button>
 				{/if}
-				<Button variant="outline" onClick={closeModals} disabled={formSubmitting}>
+				<Button
+					variant="outline"
+					onClick={() => { closeGuard.attemptClose(); }}
+					disabled={formSubmitting}
+				>
 					{pageContents.cancel[lang]}
 				</Button>
 				<Button
 					variant="solid"
-					color="primary"
+					color={editingVariant ? 'primary' : 'success'}
 					loading={formSubmitting}
 					onClick={submitForm}
 				>
@@ -991,6 +1017,19 @@
 		onRestore={applyDraftRestore}
 		onDiscard={discardDraft}
 		{lang}
+	/>
+
+	<!-- ── P3: dialog xác nhận khi đóng modal mà form còn dirty ── -->
+	<DirtyCloseDialog
+		bind:open={dirtyCloseDisplay}
+		title={{ vi: 'Bỏ thay đổi?', en: 'Discard changes?' }}
+		description={{
+			vi: 'Form của bạn có thay đổi chưa lưu. Nếu bỏ bây giờ, các thay đổi này sẽ mất.',
+			en: 'Your form has unsaved changes. If you discard now, these changes will be lost.'
+		}}
+		discardLabel={{ vi: 'Bỏ thay đổi', en: 'Discard' }[lang]}
+		continueLabel={{ vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' }[lang]}
+		onDiscard={closeGuard.confirmDiscard}
 	/>
 </section>
 
