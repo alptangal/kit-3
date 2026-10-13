@@ -105,6 +105,9 @@
 		'/admin/promotions': 'Khuyến mãi',
 		'/admin/stock-takes': 'Kiểm kê',
 		'/admin/pos-sessions': 'Phiên POS',
+		'/admin/payments': 'Thanh toán',
+		'/admin/shipments': 'Vận chuyển',
+		'/admin/dashboard': 'Tổng quan',
 		'/settings': 'Cấu hình hệ thống'
 	};
 	const crumbs = $derived<BreadcrumbItem[]>([
@@ -125,6 +128,39 @@
 		</Sidebar.Header>
 
 		<Sidebar.Content>
+			<Sidebar.Group id="overview">
+				<Sidebar.GroupLabel>Tổng quan</Sidebar.GroupLabel>
+				<Sidebar.Menu>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Tổng quan"
+							href="/admin/dashboard"
+							active={isActive('/admin/dashboard')}
+							icon="lucide:layout-dashboard"
+							data-test="admin-nav-dashboard"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Thanh toán"
+							href="/admin/payments"
+							active={isActive('/admin/payments')}
+							icon="lucide:credit-card"
+							data-test="admin-nav-payments"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Vận chuyển"
+							href="/admin/shipments"
+							active={isActive('/admin/shipments')}
+							icon="lucide:package-check"
+							data-test="admin-nav-shipments"
+						/>
+					</Sidebar.MenuItem>
+				</Sidebar.Menu>
+			</Sidebar.Group>
+
 			<Sidebar.Group id="catalog">
 				<Sidebar.GroupLabel>Danh mục</Sidebar.GroupLabel>
 				<Sidebar.Menu>

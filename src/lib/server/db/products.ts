@@ -1062,4 +1062,80 @@ export class ProductAdminService {
 			return { success: false, messages: adminMessages.brandDeleteFailed };
 		}
 	}
+
+	// ========== STOREFRONT (Phase 5) ==========
+
+	/**
+	 * List sản phẩm công khai cho storefront — KHÔNG kiểm tra quyền (public),
+	 * chỉ trả product status 'active' và variant 'active', loại bỏ cost fields
+	 * (costPrice, createdBy… không lộ ra khách).
+	 * Trả sản phẩm kèm variants để client hiển thị giá + nút thêm vào giỏ.
+	 */
+	static async listStorefront(
+		options: { page?: number; pageSize?: number; search?: string; categoryId?: string; brandId?: string } = {}
+	): Promise<
+		| { success: false; messages: TranslateContent }
+		| { success: true; products: Record<string, unknown>[]; total: number; page: number; pageSize: number }
+	> {
+		const page = Math.max(1, options.page ?? 1);
+		const pageSize = Math.min(50, Math.max(1, options.pageSize ?? 12));
+		const offset = (page - 1) * pageSize;
+
+		const conditions: string[] = ["p.status = 'active'", '(p.deletedAt IS NULL OR p.deletedAt IS MISSING)'];
+		const args: string[] = [];
+
+		if (options.search) {
+			args.push(`%${options.search}%`);
+			conditions.push(`p.name LIKE $${args.length}`);
+		}
+		if (options.categoryId) {
+			args.push(options.categoryId);
+			conditions.push(`p.categoryId = $${args.length}`);
+		}
+		if (options.brandId) {
+			args.push(options.brandId);
+			conditions.push(`p.brandId = $${args.length}`);
+		}
+
+		const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+		// Chỉ chọn field công khai — KHÔNG có costPrice/createdBy.
+		const productFields = 'p._id AS productId, p.name, p.description, p.categoryId, p.brandId, p.imageUrl';
+
+		const [countRes, dataRes] = await Promise.all([
+			cbProducts.document.query({
+				statement: `SELECT RAW COUNT(*) FROM ${productsKeyspace} p ${whereClause}`,
+				args: [...args],
+				readonly: true
+			}),
+			cbProducts.document.query({
+				statement: `SELECT ${productFields} FROM ${productsKeyspace} p ${whereClause} ORDER BY p.createdAt DESC LIMIT ${pageSize} OFFSET ${offset}`,
+				args: [...args],
+				readonly: true
+			})
+		]);
+
+		if (!countRes.ok || !dataRes.ok) return { success: false, messages: adminMessages.queryFailed };
+
+		const total = Number(countRes.data?.results?.[0] ?? 0);
+		const products = dataRes.data?.results ?? [];
+
+		// Gắn variants active cho từng sản phẩm (giá bán từ variant).
+		const withVariants = await Promise.all(
+			products.map(async (p) => {
+				const productId = (p as { productId?: string }).productId;
+				if (!productId) return p;
+				const vRes = await cbVariants.document.query({
+					statement: `SELECT META().id AS variantId, v.sku, v.displayName, v.attributes, v.price, v.imageUrl
+						FROM ${variantsKeyspace} v
+						WHERE v.productId = $1 AND v.status = 'active' AND (v.deletedAt IS NULL OR v.deletedAt IS MISSING)`,
+					args: [productId],
+					readonly: true
+				});
+				return { ...p, variants: vRes.ok ? (vRes.data?.results ?? []) : [] };
+			})
+		);
+
+		return { success: true, products: withVariants, total, page, pageSize };
+	}
 }

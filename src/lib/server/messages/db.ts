@@ -381,3 +381,208 @@ export const customers: Record<string, TranslateContent> = {
 		en: 'System vault has not been initialized'
 	}
 };
+
+// Phase 5 — messages nghiệp vụ carts (giỏ hàng storefront). Const rời pattern
+// orders/customers — CartService tham chiếu qua identity (===).
+export const carts: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy giỏ hàng',
+		en: 'Cart not found'
+	},
+	queryFailed: {
+		vi: 'Lấy giỏ hàng thất bại',
+		en: 'Failed to fetch cart'
+	},
+	createFailed: {
+		vi: 'Tạo giỏ hàng thất bại',
+		en: 'Failed to create cart'
+	},
+	updateFailed: {
+		vi: 'Cập nhật giỏ hàng thất bại',
+		en: 'Failed to update cart'
+	},
+	deleteFailed: {
+		vi: 'Xoá giỏ hàng thất bại',
+		en: 'Failed to delete cart'
+	},
+	permissionDenied: {
+		vi: 'Bạn chỉ có thể thao tác trên giỏ hàng của chính mình',
+		en: 'You can only access your own cart'
+	},
+	variantNotFound: {
+		vi: 'Sản phẩm không tồn tại hoặc đã ngừng bán',
+		en: 'Product variant not found or unavailable'
+	},
+	itemsRequired: {
+		vi: 'Giỏ hàng cần ít nhất 1 sản phẩm',
+		en: 'Cart requires at least one item'
+	},
+	invalidQuantity: {
+		vi: 'Số lượng không hợp lệ',
+		en: 'Invalid quantity'
+	},
+	invalidPromotion: {
+		vi: 'Mã khuyến mãi không hợp lệ',
+		en: 'Invalid promotion code'
+	},
+	branchRequired: {
+		vi: 'Vui lòng chọn chi nhánh',
+		en: 'Please select a branch'
+	}
+};
+
+// Phase 5 — messages nghiệp vụ checkouts (thanh toán storefront).
+export const checkouts: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy phiên thanh toán',
+		en: 'Checkout not found'
+	},
+	queryFailed: {
+		vi: 'Lấy phiên thanh toán thất bại',
+		en: 'Failed to fetch checkout'
+	},
+	createFailed: {
+		vi: 'Tạo phiên thanh toán thất bại',
+		en: 'Failed to create checkout'
+	},
+	updateFailed: {
+		vi: 'Cập nhật phiên thanh toán thất bại',
+		en: 'Failed to update checkout'
+	},
+	permissionDenied: {
+		vi: 'Bạn chỉ có thể thao tác trên phiên thanh toán của chính mình',
+		en: 'You can only access your own checkout'
+	},
+	cartEmpty: {
+		vi: 'Giỏ hàng trống — không thể thanh toán',
+		en: 'Cart is empty — cannot checkout'
+	},
+	cartNotFound: {
+		vi: 'Giỏ hàng không tồn tại hoặc đã hết hạn',
+		en: 'Cart not found or expired'
+	},
+	invalidPaymentMethod: {
+		vi: 'Phương thức thanh toán không hợp lệ',
+		en: 'Invalid payment method'
+	},
+	invalidShippingAddress: {
+		vi: 'Địa chỉ giao hàng chưa đầy đủ',
+		en: 'Shipping address is incomplete'
+	},
+	orderCreateFailed: {
+		vi: 'Tạo đơn hàng thất bại — vui lòng thử lại',
+		en: 'Failed to create order — please try again'
+	}
+};
+
+// ===== Phase 5: Thanh toán (đối soát) =====
+export const payments: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy thanh toán',
+		en: 'Payment not found'
+	},
+	queryFailed: {
+		vi: 'Lấy danh sách thanh toán thất bại',
+		en: 'Failed to fetch payment list'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	invalidStatus: {
+		vi: 'Thanh toán không ở trạng thái chờ xử lý',
+		en: 'Payment is not in a pending state'
+	},
+	invalidMethod: {
+		vi: 'Chỉ thanh toán chuyển khoản ngân hàng mới cần đối soát thủ công',
+		en: 'Only bank transfer payments require manual reconciliation'
+	},
+	alreadyProcessed: {
+		vi: 'Thanh toán đã được xử lý trước đó',
+		en: 'Payment has already been processed'
+	},
+	reasonRequired: {
+		vi: 'Vui lòng nhập lý do đánh dấu thất bại',
+		en: 'Please provide a failure reason'
+	},
+	confirmFailed: {
+		vi: 'Xác nhận thanh toán thất bại',
+		en: 'Failed to confirm payment'
+	},
+	markFailedFailed: {
+		vi: 'Đánh dấu thanh toán thất bại lỗi',
+		en: 'Failed to mark payment as failed'
+	},
+	statusUpdated: {
+		vi: 'Cập nhật trạng thái thanh toán thành công',
+		en: 'Payment status updated successfully'
+	}
+};
+
+// ===== Phase 5: Vận chuyển =====
+export const shipments: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy vận đơn',
+		en: 'Shipment not found'
+	},
+	queryFailed: {
+		vi: 'Lấy danh sách vận đơn thất bại',
+		en: 'Failed to fetch shipment list'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	invalidStatus: {
+		vi: 'Trạng thái vận đơn không hợp lệ',
+		en: 'Invalid shipment status'
+	},
+	updateFailed: {
+		vi: 'Cập nhật trạng thái vận đơn thất bại',
+		en: 'Failed to update shipment status'
+	},
+	statusUpdated: {
+		vi: 'Cập nhật trạng thái vận đơn thành công',
+		en: 'Shipment status updated successfully'
+	}
+};
+
+// ===== Phase 5: Điều phối đơn hàng (POS + online) =====
+export const fulfillment: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy đơn hàng',
+		en: 'Order not found'
+	},
+	queryFailed: {
+		vi: 'Lấy hàng chờ xử lý đơn thất bại',
+		en: 'Failed to fetch fulfillment queue'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	invalidStatus: {
+		vi: 'Chỉ đơn ở trạng thái paid/confirmed mới có thể xử lý',
+		en: 'Only paid/confirmed orders can be fulfilled'
+	},
+	invalidPickupStatus: {
+		vi: 'Chỉ đơn click-and-collect mới có thể chuyển sang chờ nhận tại cửa hàng',
+		en: 'Only click-and-collect orders can be marked awaiting pickup'
+	},
+	fulfillFailed: {
+		vi: 'Xử lý đơn hàng thất bại',
+		en: 'Failed to fulfill order'
+	},
+	fulfilled: {
+		vi: 'Đã xử lý đơn hàng xong',
+		en: 'Order fulfilled successfully'
+	},
+	awaitingPickup: {
+		vi: 'Đã chuyển đơn sang chờ khách nhận tại cửa hàng',
+		en: 'Order marked as awaiting pickup'
+	},
+	statsFailed: {
+		vi: 'Lấy thống kê tổng quan thất bại',
+		en: 'Failed to fetch dashboard statistics'
+	}
+};

@@ -1,0 +1,850 @@
+<!-- src/routes/(authorized)/admin/payments/+page.svelte -->
+<!-- Pha 5 #35: quản trị thanh toán — đối soát chuyển khoản ngân hàng (bank_transfer).
+     List + filter status + confirm (pending → completed) + markFailed (hỏi reason).
+     Pattern theo trang promotions (fetchSecure POST encrypted, pageContents vi/en). -->
+<script lang="ts">
+	import { Button } from '$components/element';
+	import { Modal } from '$components/modal';
+	import { encryption } from '$modules/encryption';
+	import { client } from '$store/basic.svelte';
+	import { onMount } from 'svelte';
+	import { resolveServerMessage } from '../_interface';
+
+	interface PaymentRow {
+		_id?: string;
+		paymentCode?: string;
+		orderId?: string;
+		method?: string;
+		amount?: number;
+		status?: string;
+		transactionReference?: string | null;
+		notes?: string | null;
+		processedBy?: string | null;
+		createdAt?: string | null;
+	}
+
+	// ── Ngôn ngữ ──
+	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
+
+	// ── Cặp khoá RSA ──
+	let encryptionKeys = $state<
+		| undefined
+		| {
+				publicKey: CryptoKey;
+				privateKey: CryptoKey;
+		  }
+	>(undefined);
+
+	// ── Nội dung song ngữ ──
+	const pageContents: { [k: string]: any } = {
+		title: { vi: 'Thanh toán', en: 'Payments' },
+		subtitle: {
+			vi: 'Đối soát thanh toán: xác nhận chuyển khoản ngân hàng hoặc đánh dấu thất bại',
+			en: 'Payment reconciliation: confirm bank transfers or mark payments as failed'
+		},
+		filters: {
+			allStatuses: { vi: 'Tất cả trạng thái', en: 'All statuses' },
+			allMethods: { vi: 'Tất cả phương thức', en: 'All methods' }
+		},
+		table: {
+			paymentCode: { vi: 'Mã thanh toán', en: 'Payment code' },
+			orderId: { vi: 'Đơn hàng', en: 'Order' },
+			method: { vi: 'Phương thức', en: 'Method' },
+			amount: { vi: 'Số tiền', en: 'Amount' },
+			transaction: { vi: 'Mã giao dịch', en: 'Transaction ref' },
+			createdAt: { vi: 'Thời gian', en: 'Time' },
+			status: { vi: 'Trạng thái', en: 'Status' },
+			actions: { vi: 'Thao tác', en: 'Actions' }
+		},
+		methods: {
+			cash: { vi: 'Tiền mặt', en: 'Cash' },
+			credit_card: { vi: 'Thẻ tín dụng', en: 'Credit card' },
+			bank_transfer: { vi: 'Chuyển khoản', en: 'Bank transfer' },
+			e_wallet: { vi: 'Ví điện tử', en: 'E-wallet' },
+			loyalty_points: { vi: 'Điểm tích luỹ', en: 'Loyalty points' }
+		},
+		statuses: {
+			pending: { vi: 'Chờ xử lý', en: 'Pending' },
+			completed: { vi: 'Hoàn tất', en: 'Completed' },
+			failed: { vi: 'Thất bại', en: 'Failed' },
+			refunded: { vi: 'Đã hoàn tiền', en: 'Refunded' }
+		},
+		actions: {
+			confirm: { vi: 'Xác nhận đã nhận chuyển khoản', en: 'Confirm transfer received' },
+			markFailed: { vi: 'Đánh dấu thất bại', en: 'Mark as failed' }
+		},
+		states: {
+			loading: { vi: 'Đang tải dữ liệu…', en: 'Loading data…' },
+			errorTitle: { vi: 'Không tải được danh sách thanh toán', en: 'Failed to load payments' },
+			retry: { vi: 'Thử lại', en: 'Retry' },
+			empty: { vi: 'Chưa có thanh toán nào', en: 'No payments yet' }
+		},
+		pagination: {
+			prev: { vi: 'Trước', en: 'Prev' },
+			next: { vi: 'Sau', en: 'Next' },
+			pageInfo: { vi: 'Trang {page}/{total}', en: 'Page {page}/{total}' },
+			totalCount: { vi: '{total} thanh toán', en: '{total} payments' },
+			pageSizeLabel: { vi: 'Số dòng:', en: 'Rows:' }
+		},
+		confirmModal: {
+			title: { vi: 'Xác nhận nhận chuyển khoản', en: 'Confirm bank transfer' },
+			body: {
+				vi: 'Xác nhận đã nhận đủ tiền chuyển khoản cho thanh toán này? Trạng thái sẽ chuyển sang "Hoàn tất".',
+				en: 'Confirm the bank transfer for this payment has been received in full? Status will become "Completed".'
+			},
+			notes: { vi: 'Ghi chú đối soát (tuỳ chọn)', en: 'Reconciliation note (optional)' },
+			transaction: { vi: 'Mã giao dịch tham chiếu (tuỳ chọn)', en: 'Transaction reference (optional)' },
+			submit: { vi: 'Xác nhận', en: 'Confirm' }
+		},
+		failModal: {
+			title: { vi: 'Đánh dấu thanh toán thất bại', en: 'Mark payment as failed' },
+			reason: { vi: 'Lý do (bắt buộc)', en: 'Reason (required)' },
+			submit: { vi: 'Đánh dấu thất bại', en: 'Mark as failed' }
+		},
+		toasts: {
+			confirmed: { vi: 'Đã xác nhận nhận chuyển khoản', en: 'Bank transfer confirmed' },
+			markedFailed: { vi: 'Đã đánh dấu thanh toán thất bại', en: 'Payment marked as failed' },
+			failed: { vi: 'Thao tác không thành công', en: 'Action failed' },
+			requestFailed: { vi: 'Đã xảy ra lỗi không xác định', en: 'Unexpected error occurred' }
+		},
+		form: {
+			requireReason: { vi: 'Vui lòng nhập lý do', en: 'Please enter a reason' }
+		},
+		modals: {
+			cancel: { vi: 'Đóng', en: 'Close' }
+		}
+	};
+
+	const PAYMENT_STATUSES = ['pending', 'completed', 'failed', 'refunded'] as const;
+	const PAYMENT_METHODS = ['cash', 'credit_card', 'bank_transfer', 'e_wallet', 'loyalty_points'] as const;
+
+	function methodLabel(method?: string): string {
+		const key = (method ?? '') as keyof typeof pageContents.methods;
+		const label = pageContents.methods[key];
+		return label ? label[lang] : (method ?? '—');
+	}
+
+	function statusLabel(status?: string): string {
+		const key = (status ?? '') as keyof typeof pageContents.statuses;
+		const label = pageContents.statuses[key];
+		return label ? label[lang] : (status ?? '—');
+	}
+
+	function statusColor(status?: string): string {
+		switch (status) {
+			case 'completed':
+				return 'success';
+			case 'pending':
+				return 'warning';
+			case 'failed':
+				return 'error';
+			default:
+				return 'default';
+		}
+	}
+
+	// ── Danh sách ──
+	let payments = $state<PaymentRow[]>([]);
+	let total = $state(0);
+	let pageNo = $state(1);
+	let pageSize = $state(20);
+	let loading = $state(false);
+	let loadError = $state<string | undefined>(undefined);
+	let loadedOnce = $state(false);
+	let statusFilter = $state('');
+	let methodFilter = $state('');
+
+	const totalPages = $derived(Math.max(1, Math.ceil(total / pageSize)));
+
+	function formatDateTime(raw?: string | null): string {
+		if (!raw) return '—';
+		try {
+			const date = new Date(raw);
+			return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
+				year: 'numeric',
+				month: 'short',
+				day: '2-digit',
+				hour: '2-digit',
+				minute: '2-digit'
+			}).format(date);
+		} catch {
+			return '—';
+		}
+	}
+
+	function formatMoney(value?: number | null): string {
+		if (value === null || value === undefined) return '—';
+		return new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(value);
+	}
+
+	function isConfirmable(row: PaymentRow): boolean {
+		return row.method === 'bank_transfer' && row.status === 'pending';
+	}
+
+	function isMarkFailedable(row: PaymentRow): boolean {
+		return row.status === 'pending';
+	}
+
+	function showToast(text: string, color: 'success' | 'error') {
+		client.browser?.toasts?.create({ title: text, color });
+	}
+
+	// ── Gọi API ──
+	async function loadPayments() {
+		if (!encryptionKeys) return;
+		loading = true;
+		loadError = undefined;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/payments/list',
+				{
+					method: 'POST',
+					body: {
+						page: pageNo,
+						pageSize,
+						status: statusFilter || undefined,
+						method: methodFilter || undefined
+					}
+				},
+				encryptionKeys
+			);
+			loading = false;
+			if (response.ok) {
+				const data = response.data as
+					| { items?: PaymentRow[]; total?: number; page?: number }
+					| undefined;
+				payments = data?.items ?? [];
+				if (typeof data?.total === 'number') total = data.total;
+				if (typeof data?.page === 'number') pageNo = data.page;
+				loadedOnce = true;
+			} else {
+				loadError = resolveServerMessage(response.message, lang, pageContents.states.errorTitle);
+			}
+		} catch (err) {
+			loading = false;
+			loadError = resolveServerMessage(undefined, lang, pageContents.states.errorTitle);
+			if (import.meta.env.DEV) console.error('[admin/payments] load failed:', err);
+		}
+	}
+
+	// ── Phân trang / filter ──
+	async function goToPage(target: number) {
+		if (target < 1 || target > totalPages || target === pageNo || loading) return;
+		pageNo = target;
+		await loadPayments();
+	}
+
+	async function changePageSize(newSize: number) {
+		if (newSize === pageSize || loading) return;
+		pageSize = newSize;
+		pageNo = 1;
+		await loadPayments();
+	}
+
+	async function onFilterChange() {
+		if (loading) return;
+		pageNo = 1;
+		await loadPayments();
+	}
+
+	// ── Modal xác nhận chuyển khoản ──
+	let confirmModalDisplay = $state(false);
+	let confirmTarget = $state<PaymentRow | null>(null);
+	let confirmNotes = $state('');
+	let submitting = $state(false);
+	let formError = $state<string | undefined>(undefined);
+
+	function openConfirmModal(row: PaymentRow) {
+		confirmTarget = row;
+		confirmNotes = '';
+		formError = undefined;
+		confirmModalDisplay = true;
+	}
+
+	async function submitConfirm() {
+		if (submitting || !confirmTarget?._id || !encryptionKeys) return;
+		submitting = true;
+		formError = undefined;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/payments/confirm',
+				{
+					method: 'POST',
+					body: {
+						paymentId: confirmTarget._id,
+						notes: confirmNotes.trim() || undefined
+					}
+				},
+				encryptionKeys
+			);
+			submitting = false;
+			if (response.ok) {
+				showToast(
+					response.message
+						? resolveServerMessage(response.message, lang, pageContents.toasts.confirmed)
+						: pageContents.toasts.confirmed[lang],
+					'success'
+				);
+				confirmModalDisplay = false;
+				await loadPayments();
+			} else {
+				formError = resolveServerMessage(response.message, lang, pageContents.toasts.failed);
+			}
+		} catch (err) {
+			submitting = false;
+			formError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
+			if (import.meta.env.DEV) console.error('[admin/payments] confirm failed:', err);
+		}
+	}
+
+	// ── Modal đánh dấu thất bại ──
+	let failModalDisplay = $state(false);
+	let failTarget = $state<PaymentRow | null>(null);
+	let failReason = $state('');
+
+	function openFailModal(row: PaymentRow) {
+		failTarget = row;
+		failReason = '';
+		formError = undefined;
+		failModalDisplay = true;
+	}
+
+	async function submitMarkFailed() {
+		if (submitting || !failTarget?._id || !encryptionKeys) return;
+		if (!failReason.trim()) {
+			formError = pageContents.form.requireReason[lang];
+			return;
+		}
+		submitting = true;
+		formError = undefined;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/payments/mark-failed',
+				{
+					method: 'POST',
+					body: {
+						paymentId: failTarget._id,
+						reason: failReason.trim()
+					}
+				},
+				encryptionKeys
+			);
+			submitting = false;
+			if (response.ok) {
+				showToast(
+					response.message
+						? resolveServerMessage(response.message, lang, pageContents.toasts.markedFailed)
+						: pageContents.toasts.markedFailed[lang],
+					'success'
+				);
+				failModalDisplay = false;
+				await loadPayments();
+			} else {
+				formError = resolveServerMessage(response.message, lang, pageContents.toasts.failed);
+			}
+		} catch (err) {
+			submitting = false;
+			formError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
+			if (import.meta.env.DEV) console.error('[admin/payments] mark-failed error:', err);
+		}
+	}
+
+	onMount(async () => {
+		if (!client.browser) client.browser = {};
+		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
+		encryptionKeys = { privateKey, publicKey };
+		await loadPayments();
+	});
+</script>
+
+<svelte:head>
+	<title>{pageContents.title[lang]}</title>
+</svelte:head>
+
+<section class="admin-page">
+
+	<header class="admin-header">
+		<div class="admin-header-text">
+			<h1 class="admin-title">{pageContents.title[lang]}</h1>
+			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
+		</div>
+	</header>
+
+	<!-- ── Bộ lọc ── -->
+	<div class="admin-filters">
+		<select class="admin-select" bind:value={statusFilter} onchange={onFilterChange}>
+			<option value="">{pageContents.filters.allStatuses[lang]}</option>
+			{#each PAYMENT_STATUSES as status (status)}
+				<option value={status}>{statusLabel(status)}</option>
+			{/each}
+		</select>
+		<select class="admin-select" bind:value={methodFilter} onchange={onFilterChange}>
+			<option value="">{pageContents.filters.allMethods[lang]}</option>
+			{#each PAYMENT_METHODS as method (method)}
+				<option value={method}>{methodLabel(method)}</option>
+			{/each}
+		</select>
+		<Button color="default" variant="outline" size="sm" onClick={loadPayments}>
+			{pageContents.states.retry[lang]}
+		</Button>
+	</div>
+
+	{#if loading && !loadedOnce}
+		<div class="admin-state" role="status">
+			<p>{pageContents.states.loading[lang]}</p>
+		</div>
+	{:else if loadError}
+		<div class="admin-state error" role="alert">
+			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
+			<p class="state-detail">{loadError}</p>
+			<Button color="primary" variant="outline" onClick={loadPayments}>{pageContents.states.retry[lang]}</Button>
+		</div>
+	{:else if payments.length === 0}
+		<div class="admin-state">
+			<p>{pageContents.states.empty[lang]}</p>
+		</div>
+	{:else}
+		<div class="admin-table-wrap">
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th scope="col">{pageContents.table.paymentCode[lang]}</th>
+						<th scope="col">{pageContents.table.orderId[lang]}</th>
+						<th scope="col">{pageContents.table.method[lang]}</th>
+						<th scope="col">{pageContents.table.amount[lang]}</th>
+						<th scope="col">{pageContents.table.transaction[lang]}</th>
+						<th scope="col">{pageContents.table.createdAt[lang]}</th>
+						<th scope="col">{pageContents.table.status[lang]}</th>
+						<th scope="col">{pageContents.table.actions[lang]}</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each payments as row (row._id)}
+						<tr>
+							<td class="col-code">{row.paymentCode ?? '—'}</td>
+							<td class="col-wrap">{row.orderId ?? '—'}</td>
+							<td>{methodLabel(row.method)}</td>
+							<td class="col-num">{formatMoney(row.amount)}</td>
+							<td class="col-wrap">{row.transactionReference ?? '—'}</td>
+							<td>{formatDateTime(row.createdAt)}</td>
+							<td class="col-status">
+								<span class="status-badge status-{statusColor(row.status)}">{statusLabel(row.status)}</span>
+							</td>
+							<td class="col-actions">
+								{#if isConfirmable(row)}
+									<!-- Quy ước màu nút: confirm = success -->
+									<Button color="success" size="sm" onClick={() => openConfirmModal(row)}>
+										{pageContents.actions.confirm[lang]}
+									</Button>
+								{:else if isMarkFailedable(row)}
+									<!-- Quy ước màu nút: delete/mark-failed = error -->
+									<Button color="error" size="sm" onClick={() => openFailModal(row)}>
+										{pageContents.actions.markFailed[lang]}
+									</Button>
+								{:else}
+									<span class="actions-none">—</span>
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+
+	<!-- ── Phân trang ── -->
+	<footer class="admin-pagination">
+		<span class="total-count">{pageContents.pagination.totalCount[lang].replace('{total}', String(total))}</span>
+		<div class="page-controls">
+			<Button
+				color="default"
+				variant="outline"
+				size="sm"
+				disabled={pageNo <= 1}
+				onClick={() => goToPage(pageNo - 1)}
+			>
+				{pageContents.pagination.prev[lang]}
+			</Button>
+			<span class="page-info">
+				{pageContents.pagination.pageInfo[lang]
+					.replace('{page}', String(pageNo))
+					.replace('{total}', String(totalPages))}
+			</span>
+			<Button
+				color="default"
+				variant="outline"
+				size="sm"
+				disabled={pageNo >= totalPages}
+				onClick={() => goToPage(pageNo + 1)}
+			>
+				{pageContents.pagination.next[lang]}
+			</Button>
+			<label class="page-size">
+				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
+				<select
+					class="admin-select"
+					value={pageSize}
+					onchange={(e) => changePageSize(Number((e.currentTarget as HTMLSelectElement).value))}
+				>
+					{#each [10, 20, 50, 100] as size (size)}
+						<option value={size}>{size}</option>
+					{/each}
+				</select>
+			</label>
+		</div>
+	</footer>
+</section>
+
+<!-- ── Modal xác nhận chuyển khoản ── -->
+{#if confirmModalDisplay}
+	<Modal bind:display={confirmModalDisplay} size="md" isDimissable>
+		<Modal.Container>
+			<Modal.Container.Header>{pageContents.confirmModal.title[lang]}</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if formError}
+					<div class="form-error-banner" role="alert">{formError}</div>
+				{/if}
+				<p class="modal-body-text">{pageContents.confirmModal.body[lang]}</p>
+				<div class="form-grid">
+					<label class="form-field">
+						<span class="form-label">{pageContents.confirmModal.notes[lang]}</span>
+						<textarea class="admin-textarea" rows="3" bind:value={confirmNotes} disabled={submitting}></textarea>
+					</label>
+				</div>
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<!-- confirm = success -->
+				<Button color="success" onClick={submitConfirm} loading={submitting} disabled={submitting}>
+					{pageContents.confirmModal.submit[lang]}
+				</Button>
+				<Button
+					color="default"
+					variant="ghost"
+					disabled={submitting}
+					onClick={() => {
+						confirmModalDisplay = false;
+					}}
+				>
+					{pageContents.modals.cancel[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+<!-- ── Modal đánh dấu thất bại ── -->
+{#if failModalDisplay}
+	<Modal bind:display={failModalDisplay} size="md" isDimissable>
+		<Modal.Container>
+			<Modal.Container.Header>{pageContents.failModal.title[lang]}</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if formError}
+					<div class="form-error-banner" role="alert">{formError}</div>
+				{/if}
+				<div class="form-grid">
+					<label class="form-field">
+						<span class="form-label">{pageContents.failModal.reason[lang]}</span>
+						<textarea class="admin-textarea" rows="3" bind:value={failReason} disabled={submitting}></textarea>
+					</label>
+				</div>
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<!-- mark-failed = error -->
+				<Button color="error" onClick={submitMarkFailed} loading={submitting} disabled={submitting}>
+					{pageContents.failModal.submit[lang]}
+				</Button>
+				<Button
+					color="default"
+					variant="ghost"
+					disabled={submitting}
+					onClick={() => {
+						failModalDisplay = false;
+					}}
+				>
+					{pageContents.modals.cancel[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+<style lang="scss">
+	.admin-page {
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+		padding: 1.5rem;
+		max-width: 1280px;
+		margin: 0 auto;
+		width: 100%;
+
+		@media (max-width: 720px) {
+			padding: 1rem;
+		}
+	}
+
+	.admin-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-end;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.admin-title {
+		font-size: 1.75rem;
+		font-weight: 700;
+		color: var(--foreground);
+		margin: 0;
+	}
+
+	.admin-subtitle {
+		font-size: 0.9rem;
+		color: var(--foreground-500);
+		margin: 0.25rem 0 0;
+	}
+
+	.admin-filters {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		align-items: center;
+	}
+
+	.admin-select {
+		height: 2.25rem;
+		padding: 0 0.5rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
+		color: var(--foreground);
+		font-size: 0.85rem;
+		cursor: pointer;
+
+		&:disabled {
+			opacity: var(--disabled-opacity, 0.5);
+			cursor: not-allowed;
+		}
+
+		option {
+			background: var(--default-200);
+			color: var(--foreground);
+		}
+	}
+
+	.admin-input {
+		height: 2.5rem;
+		padding: 0 0.75rem;
+		border-radius: var(--field-radius, 0.75rem);
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
+		color: var(--foreground);
+		font-size: 0.9rem;
+		width: 100%;
+
+		&:disabled {
+			opacity: var(--disabled-opacity, 0.5);
+		}
+	}
+
+	.admin-textarea {
+		padding: 0.6rem 0.75rem;
+		border-radius: var(--field-radius, 0.75rem);
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
+		color: var(--foreground);
+		font-size: 0.9rem;
+		width: 100%;
+		resize: vertical;
+		font-family: inherit;
+
+		&:disabled {
+			opacity: var(--disabled-opacity, 0.5);
+		}
+	}
+
+	.admin-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 3rem 1rem;
+		color: var(--foreground-500);
+
+		&.error {
+			color: var(--error);
+		}
+
+		.state-title {
+			font-weight: 600;
+			margin: 0;
+		}
+
+		.state-detail {
+			font-size: 0.85rem;
+			margin: 0;
+		}
+
+		p {
+			margin: 0;
+		}
+	}
+
+	.admin-table-wrap {
+		overflow-x: auto;
+		border-radius: 0.75rem;
+		border: 1px solid var(--default-300);
+		background: var(--background);
+	}
+
+	.admin-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+
+		th,
+		td {
+			padding: 0.75rem 1rem;
+			border-bottom: 1px solid var(--default-200);
+			text-align: left;
+			white-space: nowrap;
+		}
+
+		th {
+			font-size: 0.8rem;
+			text-transform: uppercase;
+			font-weight: 600;
+			background: var(--default-100);
+			color: var(--foreground-500);
+		}
+
+		tbody tr:hover {
+			background: var(--default-50);
+		}
+	}
+
+	.col-code {
+		font-weight: 600;
+		color: var(--foreground);
+	}
+
+	.col-num {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.col-wrap {
+		white-space: normal;
+		min-width: 8rem;
+	}
+
+	.col-status {
+		white-space: nowrap;
+	}
+
+	.col-actions {
+		white-space: nowrap;
+	}
+
+	.actions-none {
+		color: var(--foreground-500);
+	}
+
+	.status-badge {
+		display: inline-block;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 600;
+
+		&.status-success {
+			background: var(--success-100, var(--default-200));
+			color: var(--success-700, var(--success));
+		}
+
+		&.status-warning {
+			background: var(--warning-100, var(--default-200));
+			color: var(--warning-700, var(--foreground-600));
+		}
+
+		&.status-error {
+			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
+			color: var(--error);
+		}
+
+		&.status-default {
+			background: var(--default-200);
+			color: var(--foreground-600);
+		}
+	}
+
+	.admin-pagination {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.total-count {
+		font-size: 0.85rem;
+		color: var(--foreground-500);
+	}
+
+	.page-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.page-info {
+		font-size: 0.85rem;
+		color: var(--foreground);
+		min-width: 6rem;
+		text-align: center;
+	}
+
+	.page-size {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.page-size-label {
+		font-size: 0.8rem;
+		color: var(--foreground-500);
+	}
+
+	.modal-body-text {
+		font-size: 0.9rem;
+		color: var(--foreground);
+		margin: 0 0 0.75rem;
+	}
+
+	.form-error-banner {
+		background: var(--danger-soft, hsl(358, 62.5%, 90.6%));
+		color: var(--error);
+		border-left: 3px solid var(--error);
+		border-radius: 0.5rem;
+		padding: 0.6rem 0.85rem;
+		font-size: 0.85rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.form-grid {
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.form-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.form-label {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+</style>
