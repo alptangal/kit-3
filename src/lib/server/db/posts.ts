@@ -346,6 +346,7 @@ export class PostService {
 			excerpt?: string;
 			content?: string;
 			coverImageUrl?: string;
+			authorName?: string;
 			categoryId?: string;
 			tags?: string[];
 			status?: string;

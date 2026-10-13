@@ -321,7 +321,7 @@
 						<th scope="col">{pageContents.table.description[lang]}</th>
 						<th scope="col">{pageContents.table.sortOrder[lang]}</th>
 						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col" class="col-actions">{/* actions */}</th>
+						<th scope="col" class="col-actions"><span class="visually-hidden">actions</span></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -566,6 +566,15 @@
 
 	.col-actions {
 		text-align: right;
+
+		.visually-hidden {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
+		}
 	}
 
 	.row-actions {
