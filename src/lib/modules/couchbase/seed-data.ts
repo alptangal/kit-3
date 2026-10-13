@@ -79,7 +79,15 @@ export async function seedPermissions(): Promise<void> {
 
 		{ key: 'suppliers:manage', resource: 'suppliers', action: 'manage' },
 		{ key: 'users:manage', resource: 'users', action: 'manage' },
-		{ key: 'reports:view', resource: 'reports', action: 'read' }
+		{ key: 'reports:view', resource: 'reports', action: 'read' },
+
+		// Phase 5: đối soát thanh toán / vận đơn / điều phối đơn (POS + online)
+		{ key: 'payments:read', resource: 'payments', action: 'read' },
+		{ key: 'payments:manage', resource: 'payments', action: 'manage' },
+		{ key: 'shipments:read', resource: 'shipments', action: 'read' },
+		{ key: 'shipments:manage', resource: 'shipments', action: 'manage' },
+		{ key: 'fulfillment:read', resource: 'fulfillment', action: 'read' },
+		{ key: 'fulfillment:manage', resource: 'fulfillment', action: 'manage' }
 	];
 
 	for (const p of permissions) {
@@ -115,7 +123,14 @@ export async function seedDetailRoles(): Promise<void> {
 			'stock_takes:perform',
 			'suppliers:manage',
 			'users:manage',
-			'reports:view'
+			'reports:view',
+			// Phase 5: đối soát thanh toán / vận đơn / điều phối đơn
+			'payments:read',
+			'payments:manage',
+			'shipments:read',
+			'shipments:manage',
+			'fulfillment:read',
+			'fulfillment:manage'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -134,6 +149,14 @@ export async function seedDetailRoles(): Promise<void> {
 		// Manager cũng cần quản lý user trong chi nhánh mình (vd khoá/mở tài khoản staff) —
 		// thiếu grant này thì UserAdminService.setStatus/setRole/delete/list sẽ luôn từ chối manager.
 		{ roleName: 'manager', permissionKey: 'users:manage', scope: 'own_branch' },
+
+		// Phase 5: manager xem + xử lý thanh toán/vận đơn/điều phối trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'payments:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'payments:manage', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'shipments:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'shipments:manage', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'fulfillment:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'fulfillment:manage', scope: 'own_branch' },
 
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
