@@ -60,6 +60,7 @@ const BACKUP_COLLECTIONS = [
 	'token_rotation_logs',
 	'system_secrets',
 	'user_preferences',
+	'webauthn_credentials',
 	'carts',
 	'checkouts',
 	'shipments',
