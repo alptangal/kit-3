@@ -40,4 +40,41 @@
 		min-height: 0;
 		overflow-y: auto;
 	}
+
+	// ── Form fields trong modal (P2 modal-style-field) ──
+	// Input/Select/Textarea mặc định (variant-secondary) BÁN TRONG SUỐT +
+	// border transparent → chìm vào nền modal var(--default-200), user không
+	// nhận biết được vùng nhập. Chỉnh TRONG phạm vi modal body (không đụng
+	// style component dùng nơi khác):
+	//   - nền field: surface nhô hơn nền modal (--default-100 trên default-200)
+	//   - border: viền rõ --default-400 để phân biệt cả khi field rỗng
+	// Dùng token hệ thống var(--...) → tự theo theme sáng/tối.
+	// :global bắt buộc — field là markup của trang/component khác (slot),
+	// scoped selector không match element ngoài component này.
+	.modal-body-root {
+		:global(.input-root),
+		:global(.textarea-root),
+		:global(.admin-select),
+		:global(.modal-select),
+		:global(.modal-input),
+		:global(.modal-textarea) {
+			--background: var(--default-100, #27272a);
+			border-color: var(--default-400, #52525b);
+			background: var(--default-100, #27272a);
+		}
+
+		// Input/textarea/select thô (trang cũ viết tay không bọc class).
+		:global(> input),
+		:global(> textarea),
+		:global(> select) {
+			border-color: var(--default-400, #52525b);
+			background-color: var(--default-100, #27272a);
+		}
+
+		// Focus giữ nguyên hành vi gốc (outline/glow sky) — chỉ đổi nền tĩnh.
+		:global(.input-root:focus-within),
+		:global(.textarea-root:focus-within) {
+			border-color: var(--color-sky-500, #0ea5e9);
+		}
+	}
 </style>
