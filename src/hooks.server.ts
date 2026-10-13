@@ -108,6 +108,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// API routes that don't require authentication
 	const isApiRoute = pathname.startsWith('/api/');
 
+	// Auth pages a logged-in user should not see again (reverse guard):
+	// /login, /register, /forgot-password → redirect to /admin.
+	// KHÔNG gồm /reset-password (user vừa bấm link email — cho phép mở dù
+	// đang login) và /verify-email (xác minh tài khoản mới). Chỉ trang —
+	// API login/register/forgot-password vẫn hoạt động bình thường.
+	const authPages = ['/login', '/register', '/forgot-password'];
+	const isAuthPage = !isApiRoute && authPages.some(path => pathname === path || pathname.startsWith(path + '/'));
+	if (isAuthPage && event.locals.user) {
+		return new Response(null, {
+			status: 303,
+			headers: { location: '/admin' }
+		});
+	}
+
 	// For (authorized) routes, check authentication
 	if (!isPublicPath && !isApiRoute && !event.locals.user) {
 		// Store the original URL for redirect after login
