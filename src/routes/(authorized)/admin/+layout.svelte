@@ -100,6 +100,11 @@
 		'/admin/variants': 'Biến thể',
 		'/admin/customers': 'Khách hàng',
 		'/admin/orders': 'Đơn hàng',
+		'/admin/inventory': 'Tồn kho',
+		'/admin/suppliers': 'Nhà cung cấp',
+		'/admin/promotions': 'Khuyến mãi',
+		'/admin/stock-takes': 'Kiểm kê',
+		'/admin/pos-sessions': 'Phiên POS',
 		'/settings': 'Cấu hình hệ thống'
 	};
 	const crumbs = $derived<BreadcrumbItem[]>([
@@ -172,6 +177,51 @@
 							active={isActive('/admin/orders')}
 							icon="lucide:shopping-cart"
 							data-test="admin-nav-orders"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Tồn kho"
+							href="/admin/inventory"
+							active={isActive('/admin/inventory')}
+							icon="lucide:warehouse"
+							data-test="admin-nav-inventory"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Nhà cung cấp"
+							href="/admin/suppliers"
+							active={isActive('/admin/suppliers')}
+							icon="lucide:truck"
+							data-test="admin-nav-suppliers"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Khuyến mãi"
+							href="/admin/promotions"
+							active={isActive('/admin/promotions')}
+							icon="lucide:badge-percent"
+							data-test="admin-nav-promotions"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Kiểm kê"
+							href="/admin/stock-takes"
+							active={isActive('/admin/stock-takes')}
+							icon="lucide:clipboard-list"
+							data-test="admin-nav-stock-takes"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Phiên POS"
+							href="/admin/pos-sessions"
+							active={isActive('/admin/pos-sessions')}
+							icon="lucide:calculator"
+							data-test="admin-nav-pos-sessions"
 						/>
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>

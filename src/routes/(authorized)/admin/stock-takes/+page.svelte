@@ -57,15 +57,6 @@
 			vi: 'Tạo phiếu kiểm kê, nhập số đếm thực tế và hoàn tất đối chiếu chênh lệch',
 			en: 'Create stock takes, enter counted quantities and complete variance review'
 		},
-		nav: {
-			users: { vi: 'Người dùng', en: 'Users' },
-			orders: { vi: 'Đơn hàng', en: 'Orders' },
-			inventory: { vi: 'Tồn kho', en: 'Inventory' },
-			suppliers: { vi: 'Nhà cung cấp', en: 'Suppliers' },
-			promotions: { vi: 'Khuyến mãi', en: 'Promotions' },
-			stockTakes: { vi: 'Kiểm kê', en: 'Stock takes' },
-			posSessions: { vi: 'POS', en: 'POS' }
-		},
 		filters: {
 			allStatuses: { vi: 'Tất cả trạng thái', en: 'All statuses' }
 		},
@@ -163,7 +154,6 @@
 	};
 
 	// pathname ép về string
-	const currentPath = $derived(page.url.pathname as string);
 
 	const STOCK_TAKE_STATUSES = ['draft', 'in_progress', 'completed'] as const;
 
@@ -601,16 +591,6 @@
 </svelte:head>
 
 <section class="admin-page">
-	<!-- ── Nav liên kết nhanh giữa các trang quản trị ── -->
-	<nav class="admin-nav" aria-label={lang === 'vi' ? 'Trang quản trị' : 'Admin pages'}>
-		<a href="/admin" class:active={currentPath === '/admin'}>{pageContents.nav.users[lang]}</a>
-		<a href="/admin/orders" class:active={currentPath === '/admin/orders'}>{pageContents.nav.orders[lang]}</a>
-		<a href="/admin/inventory" class:active={currentPath === '/admin/inventory'}>{pageContents.nav.inventory[lang]}</a>
-		<a href="/admin/suppliers" class:active={currentPath === '/admin/suppliers'}>{pageContents.nav.suppliers[lang]}</a>
-		<a href="/admin/promotions" class:active={currentPath === '/admin/promotions'}>{pageContents.nav.promotions[lang]}</a>
-		<a href="/admin/stock-takes" class:active={currentPath === '/admin/stock-takes'}>{pageContents.nav.stockTakes[lang]}</a>
-		<a href="/admin/pos-sessions" class:active={currentPath === '/admin/pos-sessions'}>{pageContents.nav.posSessions[lang]}</a>
-	</nav>
 
 	<header class="admin-header">
 		<div class="admin-header-text">
@@ -999,33 +979,6 @@
 
 		@media (max-width: 720px) {
 			padding: 1rem;
-		}
-	}
-
-	.admin-nav {
-		display: flex;
-		gap: 0.25rem;
-		flex-wrap: wrap;
-		border-bottom: 1px solid var(--default-200);
-		padding-bottom: 0.5rem;
-
-		a {
-			padding: 0.35rem 0.75rem;
-			border-radius: 0.5rem;
-			font-size: 0.85rem;
-			color: var(--foreground-500);
-			text-decoration: none;
-
-			&:hover {
-				background: var(--default-100);
-				color: var(--foreground);
-			}
-
-			&.active {
-				background: var(--default-200);
-				color: var(--foreground);
-				font-weight: 600;
-			}
 		}
 	}
 
