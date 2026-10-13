@@ -39,7 +39,10 @@ const ENDPOINT_CONFIGS: Record<string, RateLimitConfig> = {
 	// Admin API — prefix '/api/admin' khớp mọi route /api/admin/** qua prefix matching
 	// trong getConfig() (không đụng '/api/login' và '/api/register' vì chúng không
 	// nằm dưới prefix này)
-	'/api/admin': { maxRequests: 60, windowMs: 60_000 } // 60 req/min
+	'/api/admin': { maxRequests: 60, windowMs: 60_000 }, // 60 req/min
+	// WebAuthn public auth (options + verify) — 10 req/min chống dò challenge
+	// LƯU Ý: '/api/auth/webauthn/register/**' KHÔNG khớp prefix này (chỉ '/api/auth/webauthn/auth')
+	'/api/auth/webauthn/auth': { maxRequests: 10, windowMs: 60_000 } // 10 req/min
 };
 
 // Whitelisted paths that bypass rate limiting

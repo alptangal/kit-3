@@ -104,7 +104,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Public paths that don't require authentication
 	// '/storefront' + '/api/storefront': storefront công khai (Phase 5) —
 	// trang xem/giỏ/thanh toán vẫn đọc locals.user nếu có (cart API tự 401).
-	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/storefront', '/api/storefront'];
+	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/storefront', '/api/storefront', '/api/auth/webauthn/auth'];
 	const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
 
 	// API routes that don't require authentication

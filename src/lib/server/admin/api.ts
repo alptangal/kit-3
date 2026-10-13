@@ -113,6 +113,92 @@ export async function readAdminRequest<T>(event: RequestEvent): Promise<
 }
 
 /**
+ * Giống readAdminRequest nhưng cho endpoint PUBLIC (chưa đăng nhập, ví dụ
+ * đăng nhập passkey): KHÔNG áp rate-limit admin '/api/admin' (route tự cấu hình
+ * rate-limit riêng), chỉ kiểm tra systemVault + giải mã + lấy publicKeyB64.
+ */
+export async function readPublicEncryptedRequest<T>(event: RequestEvent): Promise<
+	| { ok: false; response: Response }
+	| { ok: true; data: T & { publicKeyB64?: string }; lang: LanguageCode; publicKeyB64: string }
+> {
+	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
+	const lang = resolveLang(event.request.headers.get('accept-language'));
+
+	// 1. Kiểm tra systemVault đã sẵn sàng
+	if (!systemVault?.privateKey || !systemVault?.publicKey || !systemVault?.indexKey) {
+		return {
+			ok: false,
+			response: json(
+				localizePayload(
+					{
+						ok: false,
+						message: {
+							vi: 'Hệ thống đang khởi tạo kho mã hoá — vui lòng thử lại sau',
+							en: 'Service unavailable — system initializing'
+						}
+					},
+					lang
+				),
+				{ status: 503 }
+			)
+		};
+	}
+
+	// 2. Giải mã request body bằng private key của server
+	let jsRaw: unknown;
+	try {
+		jsRaw = await event.request.json();
+	} catch {
+		return {
+			ok: false,
+			response: json({ message: 'Invalid JSON body', ok: false }, { status: 400 })
+		};
+	}
+
+	let decryptedText: string | undefined;
+	try {
+		decryptedText = await encryption.decryptWithPrivateKeyHybrid(
+			systemVault.privateKey,
+			jsRaw as { encryptedSessionKeyB64: string; ivB64: string; ciphertextB64: string }
+		);
+	} catch {
+		return {
+			ok: false,
+			response: json({ message: 'Decryption failed', ok: false }, { status: 400 })
+		};
+	}
+	if (!decryptedText) {
+		return {
+			ok: false,
+			response: json({ message: 'Decryption returned empty', ok: false }, { status: 400 })
+		};
+	}
+
+	// 3. Parse dữ liệu đã giải mã
+	const dataDecrypted = JSON.parse(decryptedText) as T & { publicKeyB64?: string };
+	if (!dataDecrypted.publicKeyB64) {
+		return {
+			ok: false,
+			response: json(
+				localizePayload(
+					{
+						ok: false,
+						message: {
+							vi: 'Thiếu khoá phiên client (public key)',
+							en: 'Missing session public key'
+						}
+					},
+					lang
+				),
+				{ status: 400 }
+			)
+		};
+	}
+
+	return { ok: true, data: dataDecrypted, lang, publicKeyB64: dataDecrypted.publicKeyB64 };
+}
+
+/**
  * Mã hoá payload phản hồi bằng public key phiên của client (đảm bảo chỉ client
  * ban đầu đọc được), thu gọn message về đúng 1 ngôn ngữ client trước khi mã hoá.
  */
@@ -129,6 +215,12 @@ export async function respondEncrypted(
 	);
 	return json(enc, { status });
 }
+
+/**
+ * Phản hồi mã hoá cho endpoint public (dùng publicKeyB64 client gửi trong body
+ * đã giải mã) — giống respondEncrypted nhưng tách tên cho rõ ngữ cảnh.
+ */
+export const respondPublicEncrypted = respondEncrypted;
 
 /**
  * Lấy ActorContext cho PermissionChecker/UserAdminService từ session user
