@@ -876,3 +876,193 @@ export const webauthn: Record<string, TranslateContent> = {
 		en: 'Device or browser does not support biometric sign-in'
 	}
 };
+
+// ============================================================
+// Marketing — campaigns
+// ============================================================
+export const campaigns: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy chiến dịch',
+		en: 'Campaign not found'
+	},
+	queryFailed: {
+		vi: 'Không thể truy vấn danh sách chiến dịch',
+		en: 'Failed to query campaigns'
+	},
+	createFailed: {
+		vi: 'Không thể tạo chiến dịch',
+		en: 'Failed to create campaign'
+	},
+	updateFailed: {
+		vi: 'Không thể cập nhật chiến dịch',
+		en: 'Failed to update campaign'
+	},
+	deleteFailed: {
+		vi: 'Không thể xóa chiến dịch',
+		en: 'Failed to delete campaign'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện hành động này',
+		en: 'You do not have permission to perform this action'
+	},
+	invalidStatusTransition: {
+		vi: 'Chuyển trạng thái không hợp lệ',
+		en: 'Invalid status transition'
+	},
+	promotionNotFound: {
+		vi: 'Một hoặc nhiều khuyến mãi không tồn tại',
+		en: 'One or more promotions do not exist'
+	},
+	statsFailed: {
+		vi: 'Không thể lấy thống kê chiến dịch',
+		en: 'Failed to get campaign stats'
+	},
+	created: {
+		vi: 'Đã tạo chiến dịch',
+		en: 'Campaign created'
+	},
+	updated: {
+		vi: 'Đã cập nhật chiến dịch',
+		en: 'Campaign updated'
+	},
+	deleted: {
+		vi: 'Đã xóa chiến dịch',
+		en: 'Campaign deleted'
+	},
+	launched: {
+		vi: 'Đã khởi chạy chiến dịch',
+		en: 'Campaign launched'
+	},
+	paused: {
+		vi: 'Đã tạm dừng chiến dịch',
+		en: 'Campaign paused'
+	},
+	completed: {
+		vi: 'Đã hoàn thành chiến dịch',
+		en: 'Campaign completed'
+	},
+	cancelled: {
+		vi: 'Đã hủy chiến dịch',
+		en: 'Campaign cancelled'
+	},
+	promotionsLinked: {
+		vi: 'Đã liên kết khuyến mãi',
+		en: 'Promotions linked'
+	}
+};
+
+// ============================================================
+// Social media — accounts
+// ============================================================
+export const social_accounts: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy tài khoản mạng xã hội',
+		en: 'Social account not found'
+	},
+	queryFailed: {
+		vi: 'Không thể truy vấn danh sách tài khoản',
+		en: 'Failed to query social accounts'
+	},
+	connectFailed: {
+		vi: 'Không thể kết nối tài khoản',
+		en: 'Failed to connect account'
+	},
+	updateFailed: {
+		vi: 'Không thể cập nhật tài khoản',
+		en: 'Failed to update account'
+	},
+	deleteFailed: {
+		vi: 'Không thể xóa tài khoản',
+		en: 'Failed to delete account'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện hành động này',
+		en: 'You do not have permission to perform this action'
+	},
+	tokenEncryptionFailed: {
+		vi: 'Không thể mã hóa access token',
+		en: 'Failed to encrypt access token'
+	},
+	vaultUninitialized: {
+		vi: 'Vault hệ thống chưa được khởi tạo',
+		en: 'System vault is not initialized'
+	},
+	connected: {
+		vi: 'Đã kết nối tài khoản',
+		en: 'Account connected'
+	},
+	disconnected: {
+		vi: 'Đã ngắt kết nối tài khoản',
+		en: 'Account disconnected'
+	},
+	deleted: {
+		vi: 'Đã xóa tài khoản',
+		en: 'Account deleted'
+	},
+	updated: {
+		vi: 'Đã cập nhật tài khoản',
+		en: 'Account updated'
+	}
+};
+
+// ============================================================
+// Social media — posts
+// ============================================================
+export const social_posts: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy bài đăng',
+		en: 'Social post not found'
+	},
+	queryFailed: {
+		vi: 'Không thể truy vấn danh sách bài đăng',
+		en: 'Failed to query social posts'
+	},
+	createFailed: {
+		vi: 'Không thể tạo bài đăng',
+		en: 'Failed to create social post'
+	},
+	updateFailed: {
+		vi: 'Không thể cập nhật bài đăng',
+		en: 'Failed to update social post'
+	},
+	deleteFailed: {
+		vi: 'Không thể xóa bài đăng',
+		en: 'Failed to delete social post'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện hành động này',
+		en: 'You do not have permission to perform this action'
+	},
+	invalidStatusTransition: {
+		vi: 'Chuyển trạng thái không hợp lệ',
+		en: 'Invalid status transition'
+	},
+	scheduleRequired: {
+		vi: 'Thời gian lên lịch là bắt buộc',
+		en: 'Scheduled time is required'
+	},
+	platformAccountMissing: {
+		vi: 'Không có tài khoản kết nối cho nền tảng này',
+		en: 'No connected account for this platform'
+	},
+	created: {
+		vi: 'Đã tạo bài đăng',
+		en: 'Post created'
+	},
+	deleted: {
+		vi: 'Đã xóa bài đăng',
+		en: 'Post deleted'
+	},
+	scheduled: {
+		vi: 'Đã lên lịch đăng bài',
+		en: 'Post scheduled'
+	},
+	published: {
+		vi: 'Đã đăng bài',
+		en: 'Post published'
+	},
+	cancelled: {
+		vi: 'Đã hủy bài đăng',
+		en: 'Post cancelled'
+	}
+};
