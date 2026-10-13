@@ -58,8 +58,8 @@ const PROMOTION_ADMIN_SAFE_FIELDS = [
   'createdAt'
 ] as const;
 
-const VALID_PROMOTION_TYPES = ['percentage', 'fixed_amount', 'buy_x_get_y'] as const;
-type PromotionType = typeof VALID_PROMOTION_TYPES[number];
+export const VALID_PROMOTION_TYPES = ['percentage', 'fixed_amount', 'buy_x_get_y'] as const;
+export type PromotionType = typeof VALID_PROMOTION_TYPES[number];
 
 function sanitizePromotionForAdmin(doc: any & { _id: string }) {
   const safe = { _id: doc._id } as Record<string, unknown>;

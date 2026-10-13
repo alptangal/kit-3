@@ -1,18 +1,67 @@
-import { json } from '@sveltejs/kit';
+// src/routes/api/admin/pos/sessions/list/+server.ts
 import type { RequestHandler } from './$types';
-import { readAdminRequest, respondEncrypted } from '$modules/api/request-response';
+import { json } from '@sveltejs/kit';
+import {
+	readAdminRequest,
+	respondEncrypted,
+	getActorContext,
+	statusForServiceFailure
+} from '$lib/server/admin/api';
 import { POSService } from '$lib/server/db';
 
-export const GET: RequestHandler = async (event) => {
-  const { actor, payload } = await readAdminRequest(event, ['pos:read']);
-  if (!actor) return json({ success: false, messages: payload });
+export const POST: RequestHandler = async (event) => {
+	const { locals } = event;
 
-  const result = await POSService.listSessions(actor, {
-    status: payload.status,
-    deviceId: payload.deviceId,
-    page: payload.page,
-    pageSize: payload.pageSize
-  });
+	try {
+		const read = await readAdminRequest<{
+			status?: string;
+			deviceId?: string;
+			page?: number;
+			pageSize?: number;
+		}>(event);
+		if (!read.ok) return read.response;
+		const { lang, publicKeyB64 } = read;
 
-  return respondEncrypted(event, result);
+		const respond = (payload: Parameters<typeof respondEncrypted>[1], status = 200) =>
+			respondEncrypted(publicKeyB64, payload, lang, status);
+
+		const actor = await getActorContext(locals);
+		if (!actor) {
+			return respond(
+				{
+					ok: false,
+					message: {
+						vi: 'Phiên đăng nhập đã hết hạn',
+						en: 'Session expired'
+					}
+				},
+				401
+			);
+		}
+
+		const result = await POSService.listSessions(actor, {
+			status: read.data.status,
+			deviceId: read.data.deviceId,
+			page: read.data.page,
+			pageSize: read.data.pageSize
+		});
+
+		if (!result.success) {
+			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
+		}
+
+		return respond({
+			ok: true,
+			message: { vi: 'Lấy danh sách phiên POS thành công', en: 'POS session list fetched successfully' },
+			data: {
+				items: result.items,
+				total: result.total,
+				page: result.page,
+				pageSize: result.pageSize
+			}
+		});
+	} catch (e) {
+		console.error('[POST /api/admin/pos/sessions/list]', e);
+		return json({ message: e instanceof Error ? e.message : String(e), ok: false }, { status: 500 });
+	}
 };

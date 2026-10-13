@@ -1,13 +1,65 @@
-import { json } from '@sveltejs/kit';
+// src/routes/api/admin/pos/sessions/current/+server.ts
 import type { RequestHandler } from './$types';
-import { readAdminRequest, respondEncrypted } from '$modules/api/request-response';
+import { json } from '@sveltejs/kit';
+import {
+	readAdminRequest,
+	respondEncrypted,
+	getActorContext,
+	statusForServiceFailure
+} from '$lib/server/admin/api';
 import { POSService } from '$lib/server/db';
 
-export const GET: RequestHandler = async (event) => {
-  const { actor, payload } = await readAdminRequest(event, ['pos:read']);
-  if (!actor) return json({ success: false, messages: payload });
+export const POST: RequestHandler = async (event) => {
+	const { locals } = event;
 
-  const result = await POSService.getCurrentSession(actor, payload.deviceId);
+	try {
+		const read = await readAdminRequest<{ deviceId: string }>(event);
+		if (!read.ok) return read.response;
+		const { lang, publicKeyB64 } = read;
 
-  return respondEncrypted(event, result);
+		const respond = (payload: Parameters<typeof respondEncrypted>[1], status = 200) =>
+			respondEncrypted(publicKeyB64, payload, lang, status);
+
+		const actor = await getActorContext(locals);
+		if (!actor) {
+			return respond(
+				{
+					ok: false,
+					message: {
+						vi: 'Phiên đăng nhập đã hết hạn',
+						en: 'Session expired'
+					}
+				},
+				401
+			);
+		}
+
+		if (!read.data.deviceId) {
+			return respond(
+				{
+					ok: false,
+					message: {
+						vi: 'Thiếu thông tin bắt buộc',
+						en: 'Missing required fields'
+					}
+				},
+				400
+			);
+		}
+
+		const result = await POSService.getCurrentSession(actor, read.data.deviceId);
+
+		if (!result.success) {
+			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
+		}
+
+		return respond({
+			ok: true,
+			message: { vi: 'Lấy phiên POS hiện tại thành công', en: 'Current POS session fetched successfully' },
+			data: result.session
+		});
+	} catch (e) {
+		console.error('[POST /api/admin/pos/sessions/current]', e);
+		return json({ message: e instanceof Error ? e.message : String(e), ok: false }, { status: 500 });
+	}
 };
