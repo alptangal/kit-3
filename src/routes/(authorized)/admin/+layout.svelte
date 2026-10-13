@@ -110,6 +110,11 @@
 		'/admin/fulfillment': 'Xử lý đơn',
 		'/admin/posts': 'Bài viết',
 		'/admin/post-categories': 'Danh mục bài viết',
+		'/admin/campaigns': 'Chiến dịch',
+		'/admin/social': 'Social media',
+		'/admin/notifications': 'Thông báo',
+		'/admin/messages': 'Tin nhắn',
+		'/admin/email-logs': 'Email logs',
 		'/admin/dashboard': 'Tổng quan',
 		'/settings': 'Cấu hình hệ thống'
 	};
@@ -296,6 +301,33 @@
 							data-test="admin-nav-users"
 						/>
 					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Thông báo"
+							href="/admin/notifications"
+							active={isActive('/admin/notifications')}
+							icon="lucide:bell"
+							data-test="admin-nav-notifications"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Tin nhắn"
+							href="/admin/messages"
+							active={isActive('/admin/messages')}
+							icon="lucide:message-square"
+							data-test="admin-nav-messages"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Email logs"
+							href="/admin/email-logs"
+							active={isActive('/admin/email-logs')}
+							icon="lucide:mail"
+							data-test="admin-nav-email-logs"
+						/>
+					</Sidebar.MenuItem>
 				</Sidebar.Menu>
 			</Sidebar.Group>
 
@@ -318,6 +350,30 @@
 							active={isActive('/admin/post-categories')}
 							icon="lucide:tags"
 							data-test="admin-nav-post-categories"
+						/>
+					</Sidebar.MenuItem>
+				</Sidebar.Menu>
+			</Sidebar.Group>
+
+			<Sidebar.Group id="marketing">
+				<Sidebar.GroupLabel>Marketing</Sidebar.GroupLabel>
+				<Sidebar.Menu>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Chiến dịch"
+							href="/admin/campaigns"
+							active={isActive('/admin/campaigns')}
+							icon="lucide:megaphone"
+							data-test="admin-nav-campaigns"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Social media"
+							href="/admin/social"
+							active={isActive('/admin/social')}
+							icon="lucide:share-2"
+							data-test="admin-nav-social"
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>

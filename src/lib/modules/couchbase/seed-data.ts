@@ -91,7 +91,19 @@ export async function seedPermissions(): Promise<void> {
 
 		// Phase 6: blog / tin tức
 		{ key: 'blog:read', resource: 'blog', action: 'read' },
-		{ key: 'blog:manage', resource: 'blog', action: 'manage' }
+		{ key: 'blog:manage', resource: 'blog', action: 'manage' },
+
+		// Phase 6: marketing campaigns / social media
+		{ key: 'campaigns:read', resource: 'campaigns', action: 'read' },
+		{ key: 'campaigns:manage', resource: 'campaigns', action: 'manage' },
+		{ key: 'social:read', resource: 'social', action: 'read' },
+		{ key: 'social:manage', resource: 'social', action: 'manage' },
+
+		// Phase 6: thông báo hệ thống / tin nhắn / email logs
+		{ key: 'notifications:read', resource: 'notifications', action: 'read' },
+		{ key: 'notifications:manage', resource: 'notifications', action: 'manage' },
+		{ key: 'email_logs:read', resource: 'email_logs', action: 'read' },
+		{ key: 'email_logs:manage', resource: 'email_logs', action: 'manage' }
 	];
 
 	for (const p of permissions) {
@@ -137,7 +149,17 @@ export async function seedDetailRoles(): Promise<void> {
 			'fulfillment:manage',
 			// Phase 6: blog / tin tức
 			'blog:read',
-			'blog:manage'
+			'blog:manage',
+			// Phase 6: marketing campaigns / social media
+			'campaigns:read',
+			'campaigns:manage',
+			'social:read',
+			'social:manage',
+			// Phase 6: thông báo / email logs
+			'notifications:read',
+			'notifications:manage',
+			'email_logs:read',
+			'email_logs:manage'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -169,6 +191,18 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'blog:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'blog:manage', scope: 'own_branch' },
 
+		// Phase 6: marketing campaigns / social media — manager trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'campaigns:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'campaigns:manage', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'social:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'social:manage', scope: 'own_branch' },
+
+		// Phase 6: thông báo / tin nhắn / email logs — manager đọc + quản lý trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'notifications:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'notifications:manage', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'email_logs:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'email_logs:manage', scope: 'own_branch' },
+
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'orders:create', scope: 'own_records' },
@@ -178,7 +212,9 @@ export async function seedDetailRoles(): Promise<void> {
 
 		// Customer — chỉ tạo/xem đơn của chính mình
 		{ roleName: 'customer', permissionKey: 'orders:create', scope: 'own_records' },
-		{ roleName: 'customer', permissionKey: 'orders:read', scope: 'own_records' }
+		{ roleName: 'customer', permissionKey: 'orders:read', scope: 'own_records' },
+		// Customer xem thông báo gửi cho chính mình (broadcast + personal)
+		{ roleName: 'customer', permissionKey: 'notifications:read', scope: 'own_records' }
 	];
 
 	for (const g of grants) {
