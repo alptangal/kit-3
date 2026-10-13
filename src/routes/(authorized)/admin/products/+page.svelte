@@ -20,6 +20,8 @@
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { resolveServerMessage } from '../_interface';
 	import type { Size } from '$components/interface';
+	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
+	import DraftRestoreDialog from '../../_DraftRestoreDialog.svelte';
 
 	import { subscribeDbChanges } from '$modules/db-realtime';
 	// Types
@@ -45,7 +47,9 @@
 	}
 
 	// Ngôn ngữ
-	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
+	const lang: 'vi' | 'en' = $derived(
+		client.browser?.language === 'vi' ? 'vi' : (client.browser?.language === 'en' ? 'en' : 'en')
+	);
 
 	// Type mở (pattern users/brands page) — lang index không narrow.
 	const pageContents: { [k: string]: any } = {
@@ -119,6 +123,17 @@
 	let editingProduct = $state<ProductListItem | null>(null);
 	let formErrors = $state<Record<string, string>>({});
 	let formSubmitting = $state(false);
+
+	// ── B9 draft autosave ──
+	// draftOn: flag từ system settings (getPublicDefaults → layout data.system);
+	// draftFormKey: form đang mở (đổi khi mở create/edit khác row).
+	let { data } = $props();
+	let draftOn = $derived((data as { system?: { draftRestore?: boolean } })?.system?.draftRestore !== false);
+	let draftFormKey = $state<string | null>(null);
+	let pendingDraftFormKey: string | null = null;
+	let draftRestoreDisplay = $state(false);
+	let draftUserId: string = '';
+	let draftAutosaveArmed = false;
 
 	// Form state
 	let formData = $state({
@@ -391,6 +406,10 @@
 	// Open create modal
 	function openCreateModal() {
 		resetForm();
+		if (maybeRestoreDraft('products:create')) return;
+		draftFormKey = 'products:create';
+		draftUserId = currentUserId();
+		draftAutosaveArmed = false;
 		modalOpen = true;
 	}
 
@@ -408,7 +427,51 @@
 			imageUrl: product.imageUrl ?? '',
 			status: product.status
 		};
+		const key = `products:edit:${product._id}`;
+		if (maybeRestoreDraft(key)) return;
+		draftFormKey = key;
+		draftUserId = currentUserId();
+		draftAutosaveArmed = false;
 		modalOpen = true;
+	}
+
+	// B9: đọc draft khi mở form — nếu còn bản nháp, hiện dialog hỏi khôi phục
+	// (return true = caller tạm dừng mở modal, chờ user chọn trong dialog).
+	function maybeRestoreDraft(formKey: string): boolean {
+		if (!draftOn) return false;
+		const userId = currentUserId();
+		if (!userId) return false;
+		draftUserId = userId;
+		const draft = readDraft<typeof formData>(userId, formKey);
+		if (!draft) return false;
+		pendingDraftFormKey = formKey;
+		draftRestoreDisplay = true;
+		return true;
+	}
+
+	function currentUserId(): string {
+		return (data as { user?: { userId?: string } })?.user?.userId ?? '';
+	}
+
+	// User chọn Khôi phục trong dialog — áp data + mở modal.
+	function applyDraftRestore() {
+		if (!pendingDraftFormKey) return;
+		const draft = readDraft<typeof formData>(draftUserId, pendingDraftFormKey);
+		if (draft) formData = { ...formData, ...draft };
+		draftFormKey = pendingDraftFormKey;
+		pendingDraftFormKey = null;
+		draftAutosaveArmed = false;
+		modalOpen = true;
+	}
+
+	// User chọn Bỏ qua trong dialog — clear draft vĩnh viễn.
+	function discardDraft() {
+		if (pendingDraftFormKey) {
+			clearDraft(draftUserId, pendingDraftFormKey);
+			draftFormKey = pendingDraftFormKey;
+			pendingDraftFormKey = null;
+			modalOpen = true;
+		}
 	}
 
 	// Reset form
@@ -426,6 +489,8 @@
 		formErrors = {};
 		editingProduct = null;
 		formSubmitting = false;
+		draftFormKey = null;
+		pendingDraftFormKey = null;
 	}
 
 	// Thêm dòng thuộc tính variant trống (key tạm "attribute{N}" tránh trùng)
@@ -433,6 +498,21 @@
 		const nextIndex = Object.keys(formData.variantAttributes).length + 1;
 		formData.variantAttributes = { ...formData.variantAttributes, [`attribute${nextIndex}`]: [] };
 	}
+
+	// B9 autosave draft: theo dõi formData khi modal đang mở — debounce 500ms
+	// trong saveDraft. Bỏ qua lần đầu (resetForm set rồi mới có effect đầu).
+	// LƯU Ý Svelte 5: `void formData` KHÔNG đăng ký track (chỉ đọc tham chiếu
+	// biến, không đọc property) → effect không re-run khi gõ. JSON.stringify
+	// đọc từng property (deep) → track đúng mọi thay đổi của form.
+	$effect(() => {
+		void JSON.stringify(formData);
+		if (!draftFormKey || !draftOn) return;
+		if (!draftAutosaveArmed) {
+			draftAutosaveArmed = true;
+			return;
+		}
+		saveDraft(draftUserId, draftFormKey, { ...formData });
+	});
 
 	// Validate form
 	function validateForm(): boolean {
@@ -472,6 +552,8 @@
 						en: editingProduct ? pageContents.states.updated.en : pageContents.states.created.en
 					})
 				);
+				// B9: save thành công → xoá draft (chỉ khi đúng form vừa submit).
+				if (draftFormKey && draftUserId) clearDraft(draftUserId, draftFormKey);
 				closeModals();
 				void fetchProducts();
 			} else {
@@ -842,6 +924,14 @@
 			</ModalFooter>
 		</ModalContainer>
 	</Modal>
+
+	<!-- ── B9: dialog hỏi khôi phục bản nháp ── -->
+	<DraftRestoreDialog
+		bind:display={draftRestoreDisplay}
+		onRestore={applyDraftRestore}
+		onDiscard={discardDraft}
+		{lang}
+	/>
 </section>
 
 <style lang="scss">

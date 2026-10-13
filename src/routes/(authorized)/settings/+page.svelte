@@ -1,13 +1,16 @@
 <!-- src/routes/(authorized)/settings/+page.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { Accordion, Button, Tag, Tabs } from '$components/element';
-	import { Input, Select } from '$components/form';
+	import { Input, Select, Switch } from '$components/form';
 	import type { SelectOption } from '$components/form';
 	import { encryption } from '$modules/encryption';
+	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
 	import { client } from '$store/basic.svelte';
 	import { resolveServerMessage } from '../admin/_interface';
 	import type { TranslateContent } from '$interfaces/basic';
+	import DraftRestoreDialog from '../_DraftRestoreDialog.svelte';
 
 	// ── Shape settings (đồng bộ service SystemSettingsService) ──
 	// Enum fields dùng string để bind 2 chiều với Select được (Select.value là
@@ -18,6 +21,8 @@
 		security: { sessionTimeoutMinutes: number; maxLoginAttempts: number; passwordMinLength: number };
 		commerce: { currency: string; taxRatePercent: number; lowStockThreshold: number };
 		appearance: { theme: string; density: string };
+		/** B9 draft-store: bật/tắt autosave bản nháp form toàn app. */
+		features: { draftRestore: boolean };
 	}
 	interface SystemAuditRow {
 		userId?: string;
@@ -36,7 +41,9 @@
 	}
 
 	// ── Ngôn ngữ ──
-	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
+	const lang: 'vi' | 'en' = $derived(
+		client.browser?.language === 'vi' ? 'vi' : (client.browser?.language === 'en' ? 'en' : 'en')
+	);
 
 	// ── Cặp khoá RSA cho mọi fetchSecure trên trang ──
 	let encryptionKeys = $state<
@@ -52,7 +59,8 @@
 		general: { appName: 'Kit Admin', defaultLang: 'vi', timezone: 'Asia/Ho_Chi_Minh' },
 		security: { sessionTimeoutMinutes: 30, maxLoginAttempts: 5, passwordMinLength: 8 },
 		commerce: { currency: 'VND', taxRatePercent: 10, lowStockThreshold: 10 },
-		appearance: { theme: 'system', density: 'comfortable' }
+		appearance: { theme: 'system', density: 'comfortable' },
+		features: { draftRestore: true }
 	};
 
 	let settings = $state<SystemSettings>(DEFAULT_SETTINGS);
@@ -63,6 +71,28 @@
 	let loadError = $state<string | undefined>(undefined);
 	let saving = $state(false);
 	let loadedOnce = $state(false);
+
+	// ── B9 draft autosave (formKey 'settings' — toàn trang là 1 form lớn) ──
+	const SETTINGS_DRAFT_FORM_KEY = 'settings';
+	let draftRestoreDisplay = $state(false);
+	/** Đã hỏi restore lần này chưa (chỉ hỏi 1 lần khi load trang xong). */
+	let draftAsked = false;
+
+	function currentUserId(): string {
+		return (page.data as { user?: { userId?: string } })?.user?.userId ?? '';
+	}
+
+	function applyDraftRestore() {
+		const draft = readDraft<SystemSettings>(currentUserId(), SETTINGS_DRAFT_FORM_KEY);
+		if (draft) {
+			// Merge từng group để tránh thiếu field khi schema đổi giữa các phiên.
+			settings = { ...settings, ...draft };
+		}
+	}
+
+	function discardDraft() {
+		clearDraft(currentUserId(), SETTINGS_DRAFT_FORM_KEY);
+	}
 
 	// ── Trạng thái system status ──
 	let status = $state<SystemStatus | undefined>(undefined);
@@ -124,6 +154,10 @@
 		passwordMinLength: {
 			vi: 'Độ dài mật khẩu tối thiểu',
 			en: 'Password minimum length'
+		} as TranslateContent,
+		draftRestore: {
+			vi: 'Tự lưu bản nháp form',
+			en: 'Autosave form drafts'
 		} as TranslateContent,
 		currency: { vi: 'Tiền tệ', en: 'Currency' } as TranslateContent,
 		taxRate: { vi: 'Thuế suất (%)', en: 'Tax rate (%)' } as TranslateContent,
@@ -229,12 +263,23 @@
 			if (response.ok) {
 				const data = response.data as { settings?: SystemSettings; canEdit?: boolean } | undefined;
 				if (data?.settings) {
+					// Guard features default (server bản cũ chưa có group này).
+					const loaded = {
+						...data.settings,
+						features: data.settings.features ?? { draftRestore: true }
+					};
 					// Gán object mới (không mutate) — draft copy qua $state deep
-					settings = { ...data.settings };
-					original = { ...data.settings };
+					settings = { ...loaded };
+					original = { ...loaded };
 				}
 				canEdit = Boolean(data?.canEdit);
 				loadedOnce = true;
+				// B9: sau lần load đầu — hỏi khôi phục draft nếu có (1 lần duy nhất).
+				if (!draftAsked) {
+					draftAsked = true;
+					const draft = readDraft<SystemSettings>(currentUserId(), SETTINGS_DRAFT_FORM_KEY);
+					if (draft) draftRestoreDisplay = true;
+				}
 			} else {
 				loadError = resolveServerMessage(response.message, lang, fb(t.loadFailed));
 			}
@@ -283,6 +328,23 @@
 		lowStockDraft = String(c.lowStockThreshold ?? '');
 	});
 
+	// ── B9 autosave draft toàn form settings ──
+	// Theo dõi cả settings + 5 draft string (number field gõ qua draft string).
+	// Bỏ qua khi chưa load xong (loadedOnce) hoặc khi modified=false — modified
+	// ngay sau load là false nên lần chạy effect đầu tiên tự nhiên bị chặn,
+	// KHÔNG cần flag skip-first (flag đó nuốt luôn thay đổi đầu tiên của user).
+	$effect(() => {
+		void settings;
+		void sessionTimeoutDraft;
+		void maxLoginAttemptsDraft;
+		void passwordMinLengthDraft;
+		void taxRateDraft;
+		void lowStockDraft;
+		if (!loadedOnce || !settings.features.draftRestore) return;
+		if (!modified) return;
+		saveDraft(currentUserId(), SETTINGS_DRAFT_FORM_KEY, { ...settings });
+	});
+
 	// ── Save ──
 	async function handleSave() {
 		if (!canEdit || !modified || saving || !encryptionKeys) return;
@@ -312,7 +374,9 @@
 								taxRatePercent: parseNum(taxRateDraft, settings.commerce.taxRatePercent),
 								lowStockThreshold: parseNum(lowStockDraft, settings.commerce.lowStockThreshold)
 							},
-							appearance: { ...settings.appearance }
+							appearance: { ...settings.appearance },
+							// B9: gửi cả features group (draftRestore switch).
+							features: { ...settings.features }
 						}
 					}
 				},
@@ -320,6 +384,8 @@
 			);
 			saving = false;
 			if (response.ok) {
+				// B9: save thành công → xoá draft settings.
+				clearDraft(currentUserId(), SETTINGS_DRAFT_FORM_KEY);
 				client.browser?.toasts?.create({
 					title: resolveServerMessage(response.message, lang, fb(t.saveSuccess)),
 					color: 'success'
@@ -474,6 +540,15 @@
 						bind:value={passwordMinLengthDraft}
 						disabled={!canEdit}
 						data-test="input-password-min"
+					/>
+				</div>
+				<div class="form-field">
+					<span class="form-label">{t.draftRestore[lang]}</span>
+					<Switch
+						bind:checked={settings.features.draftRestore}
+						disabled={!canEdit}
+						aria-label={t.draftRestore[lang]}
+						data-test="switch-draft-restore"
 					/>
 				</div>
 			</div>
@@ -751,6 +826,14 @@
 		{/if}
 	{/if}
 </section>
+
+<!-- ── B9: dialog hỏi khôi phục bản nháp (load trang xong, có draft) ── -->
+<DraftRestoreDialog
+	bind:display={draftRestoreDisplay}
+	onRestore={applyDraftRestore}
+	onDiscard={discardDraft}
+	{lang}
+/>
 
 <style lang="scss">
 	.settings-page {

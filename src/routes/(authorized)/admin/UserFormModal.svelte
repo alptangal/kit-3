@@ -6,6 +6,7 @@
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { pageContents } from './_interface';
 	import {
 		getRowDocumentKey,
@@ -15,6 +16,8 @@
 		type AdminUserRow,
 		type RoleOption
 	} from './_interface';
+	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
+	import DraftRestoreDialog from '../_DraftRestoreDialog.svelte';
 
 	let {
 		display = $bindable(),
@@ -35,7 +38,9 @@
 		onDelete?: (user: AdminUserRow) => void;
 	} = $props();
 
-	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
+	const lang: 'vi' | 'en' = $derived(
+		client.browser?.language === 'vi' ? 'vi' : (client.browser?.language === 'en' ? 'en' : 'en')
+	);
 
 	// ── Form State ──
 	let formData = $state<AdminUserFormData>({
@@ -66,9 +71,45 @@
 
 	const isCreate = $derived(mode === 'create');
 
+	// ── B9 draft autosave ──
+	// Flag từ system settings (page.data.system — merge từ (authorized) layout).
+	let draftOn = $derived(
+		(page.data as { system?: { draftRestore?: boolean } })?.system?.draftRestore !== false
+	);
+	let draftFormKey = $state<string | null>(null);
+	let pendingDraftFormKey: string | null = null;
+	let draftRestoreDisplay = $state(false);
+	let draftAutosaveArmed = false;
+
+	function currentUserId(): string {
+		return (page.data as { user?: { userId?: string } })?.user?.userId ?? '';
+	}
+
+	function draftKeyFor(): string {
+		return isCreate
+			? 'users:create'
+			: user
+				? `users:edit:${getRowDocumentKey(user)}`
+				: 'users:unknown';
+	}
+
+	// B9: đọc draft khi mở form — nếu còn bản nháp, hiện dialog hỏi khôi phục
+	// (return true = caller tạm dừng mở modal, chờ user chọn trong dialog).
+	function maybeRestoreDraft(formKey: string): boolean {
+		if (!draftOn) return false;
+		const userId = currentUserId();
+		if (!userId) return false;
+		const draft = readDraft<AdminUserFormData>(userId, formKey);
+		if (!draft) return false;
+		pendingDraftFormKey = formKey;
+		draftRestoreDisplay = true;
+		return true;
+	}
+
 	// Khởi tạo form mỗi khi mở modal hoặc đổi user
 	$effect(() => {
 		if (!display) return;
+		const key = draftKeyFor();
 		if (isCreate) {
 			formData = {
 				firstname: '',
@@ -98,7 +139,51 @@
 		}
 		formError = undefined;
 		tempPassword = undefined;
+		// B9: sau reset — hỏi khôi phục draft nếu có (chưa ghi đè formData).
+		if (maybeRestoreDraft(key)) return;
+		draftFormKey = key;
+		draftAutosaveArmed = false;
 	});
+
+	// B9 autosave draft: theo dõi formData khi modal đang mở — debounce 500ms
+	// trong saveDraft. Bỏ qua lần đầu (reset $effect set rồi mới có effect đầu).
+	// STRIP password: không bao giờ lưu password vào localStorage.
+	// LƯU Ý Svelte 5: `void formData` KHÔNG đăng ký track (chỉ đọc tham chiếu
+	// biến, không đọc property) → effect không re-run khi gõ. JSON.stringify
+	// đọc từng property (deep) → track đúng mọi thay đổi của form.
+	$effect(() => {
+		void JSON.stringify(formData);
+		if (!display || !draftFormKey || !draftOn) return;
+		if (!draftAutosaveArmed) {
+			draftAutosaveArmed = true;
+			return;
+		}
+		const { password: _pw, ...safeData } = formData;
+		saveDraft(currentUserId(), draftFormKey, { ...safeData });
+	});
+
+	// User chọn Khôi phục trong dialog — áp data (không đổi password/username/email).
+	function applyDraftRestore() {
+		if (!pendingDraftFormKey) return;
+		const draft = readDraft<AdminUserFormData>(currentUserId(), pendingDraftFormKey);
+		if (draft) {
+			const { password: _pw, ...safe } = draft;
+			formData = { ...formData, ...safe };
+		}
+		draftFormKey = pendingDraftFormKey;
+		pendingDraftFormKey = null;
+		draftAutosaveArmed = false;
+	}
+
+	// User chọn Bỏ qua trong dialog — clear draft vĩnh viễn.
+	function discardDraft() {
+		if (pendingDraftFormKey) {
+			clearDraft(currentUserId(), pendingDraftFormKey);
+			draftFormKey = pendingDraftFormKey;
+			pendingDraftFormKey = null;
+			draftAutosaveArmed = false;
+		}
+	}
 
 	function validateForm(): string | undefined {
 		if (!formData.firstname.trim() || !formData.lastname.trim()) {
@@ -203,10 +288,15 @@
 				const createdTemp = response.data?.user?.tempPassword ?? response.data?.tempPassword;
 				if (isCreate && typeof createdTemp === 'string' && createdTemp) {
 					tempPassword = createdTemp;
+					// B9: user đã được tạo (server-side done) — xoá draft luôn,
+					// kể cả khi modal còn mở hiển thị temp password.
+					if (draftFormKey) clearDraft(currentUserId(), draftFormKey);
 					onCreated?.();
 					return; // giữ modal mở để hiển thị temp password
 				}
 
+				// B9: save thành công → xoá draft.
+				if (draftFormKey) clearDraft(currentUserId(), draftFormKey);
 				display = false;
 				if (isCreate) onCreated?.();
 				else onUpdated?.();
@@ -468,6 +558,14 @@
 		</Modal.Container.Body>
 	</Modal.Container>
 </Modal>
+
+<!-- ── B9: dialog hỏi khôi phục bản nháp ── -->
+<DraftRestoreDialog
+	bind:display={draftRestoreDisplay}
+	onRestore={applyDraftRestore}
+	onDiscard={discardDraft}
+	{lang}
+/>
 
 <style lang="scss">
 	.name-fieldset {

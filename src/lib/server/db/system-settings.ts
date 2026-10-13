@@ -64,11 +64,16 @@ export interface SystemSettingsAppearance {
 	theme: 'light' | 'dark' | 'system';
 	density: 'comfortable' | 'compact';
 }
+export interface SystemSettingsFeatures {
+	/** Autosave bản nháp form theo user (localStorage) + dialog khôi phục khi mở lại. */
+	draftRestore: boolean;
+}
 export interface SystemSettings {
 	general: SystemSettingsGeneral;
 	security: SystemSettingsSecurity;
 	commerce: SystemSettingsCommerce;
 	appearance: SystemSettingsAppearance;
+	features: SystemSettingsFeatures;
 }
 
 export type SystemSettingsPatch = {
@@ -76,6 +81,7 @@ export type SystemSettingsPatch = {
 	security?: Partial<SystemSettingsSecurity>;
 	commerce?: Partial<SystemSettingsCommerce>;
 	appearance?: Partial<SystemSettingsAppearance>;
+	features?: Partial<SystemSettingsFeatures>;
 };
 
 /** Mặc định khi document chưa có (lần chạy đầu) */
@@ -98,6 +104,9 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
 	appearance: {
 		theme: 'system',
 		density: 'comfortable'
+	},
+	features: {
+		draftRestore: true
 	}
 };
 
@@ -107,7 +116,8 @@ function mergeWithDefaults(patch: SystemSettingsPatch | undefined): SystemSettin
 		general: { ...DEFAULT_SYSTEM_SETTINGS.general },
 		security: { ...DEFAULT_SYSTEM_SETTINGS.security },
 		commerce: { ...DEFAULT_SYSTEM_SETTINGS.commerce },
-		appearance: { ...DEFAULT_SYSTEM_SETTINGS.appearance }
+		appearance: { ...DEFAULT_SYSTEM_SETTINGS.appearance },
+		features: { ...DEFAULT_SYSTEM_SETTINGS.features }
 	};
 	if (!patch) return base;
 	if (patch.general) {
@@ -154,6 +164,11 @@ function mergeWithDefaults(patch: SystemSettingsPatch | undefined): SystemSettin
 			base.appearance.density = patch.appearance.density;
 		}
 	}
+	if (patch.features) {
+		if (typeof patch.features.draftRestore === 'boolean') {
+			base.features.draftRestore = patch.features.draftRestore;
+		}
+	}
 	return base;
 }
 
@@ -164,7 +179,7 @@ export class SystemSettingsService {
 	}
 
 	/**
-	 * Đọc defaults công khai (theme/density/defaultLang) — KHÔNG check quyền.
+	 * Đọc defaults công khai (theme/density/defaultLang/draftRestore) — KHÔNG check quyền.
 	 * Dùng cho fallback per-user preferences sau login (mọi user đã đăng nhập
 	 * đều cần biết theme/ngôn ngữ mặc định hệ thống; không lộ security/commerce).
 	 */
@@ -172,6 +187,7 @@ export class SystemSettingsService {
 		theme: 'light' | 'dark' | 'system';
 		density: 'comfortable' | 'compact';
 		defaultLang: 'vi' | 'en';
+		draftRestore: boolean;
 	}> {
 		try {
 			const res = await cbSystem.document.get({ documentKey: SETTINGS_DOCUMENT_KEY });
@@ -179,7 +195,8 @@ export class SystemSettingsService {
 				return {
 					theme: DEFAULT_SYSTEM_SETTINGS.appearance.theme,
 					density: DEFAULT_SYSTEM_SETTINGS.appearance.density,
-					defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang
+					defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang,
+					draftRestore: DEFAULT_SYSTEM_SETTINGS.features.draftRestore
 				};
 			}
 			const raw = res.data as { settings?: SystemSettingsPatch };
@@ -187,13 +204,15 @@ export class SystemSettingsService {
 			return {
 				theme: merged.appearance.theme,
 				density: merged.appearance.density,
-				defaultLang: merged.general.defaultLang
+				defaultLang: merged.general.defaultLang,
+				draftRestore: merged.features.draftRestore
 			};
 		} catch {
 			return {
 				theme: DEFAULT_SYSTEM_SETTINGS.appearance.theme,
 				density: DEFAULT_SYSTEM_SETTINGS.appearance.density,
-				defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang
+				defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang,
+				draftRestore: DEFAULT_SYSTEM_SETTINGS.features.draftRestore
 			};
 		}
 	}
@@ -250,7 +269,8 @@ export class SystemSettingsService {
 			general: { ...current.general, ...(patch.general ?? {}) },
 			security: { ...current.security, ...(patch.security ?? {}) },
 			commerce: { ...current.commerce, ...(patch.commerce ?? {}) },
-			appearance: { ...current.appearance, ...(patch.appearance ?? {}) }
+			appearance: { ...current.appearance, ...(patch.appearance ?? {}) },
+			features: { ...current.features, ...(patch.features ?? {}) }
 		});
 
 		const content = {
