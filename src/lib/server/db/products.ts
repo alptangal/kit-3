@@ -1118,12 +1118,12 @@ export class ProductAdminService {
 		if (!countRes.ok || !dataRes.ok) return { success: false, messages: adminMessages.queryFailed };
 
 		const total = Number(countRes.data?.results?.[0] ?? 0);
-		const products = dataRes.data?.results ?? [];
+		const products: Record<string, unknown>[] = dataRes.data?.results ?? [];
 
 		// Gắn variants active cho từng sản phẩm (giá bán từ variant).
 		const withVariants = await Promise.all(
 			products.map(async (p) => {
-				const productId = (p as { productId?: string }).productId;
+				const productId = typeof p.productId === 'string' ? p.productId : undefined;
 				if (!productId) return p;
 				const vRes = await cbVariants.document.query({
 					statement: `SELECT META().id AS variantId, v.sku, v.displayName, v.attributes, v.price, v.imageUrl
