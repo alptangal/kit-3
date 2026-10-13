@@ -79,6 +79,14 @@ export interface ModalProps extends Omit<BasicProps, 'size'> {
 	 * Khi `true`, ESC + nút close vẫn hoạt động; chỉ backdrop click bị chặn.
 	 */
 	preventOutsideClose?: boolean;
+	/**
+	 * Guard CHẶN đóng (confirm-when-dirty): gọi khi user yêu cầu đóng qua
+	 * Esc / click backdrop / nút × (KHÔNG gọi cho `programmatic` — code
+	 * tự set `display = false` là ý định tường minh của caller, vd submit).
+	 * Trả `false` → modal GIỮ nguyên trạng thái mở (caller tự hiện confirm);
+	 * trả `true`/`undefined` → đóng như bình thường.
+	 */
+	onCloseAttempt?: (reason: ModalCloseReason) => boolean | void;
 	transitionType?: 'fly' | 'slide' | 'fade' | 'none';
 	/** Gọi khi modal chuyển từ đóng → mở */
 	onOpen?: () => void;
@@ -110,6 +118,7 @@ export interface ModalConfigs extends Omit<BasicConfigs, 'size'> {
 	};
 	isDimissable: boolean;
 	preventOutsideClose: boolean;
+	onCloseAttempt?: (reason: ModalCloseReason) => boolean | void;
 	display?: boolean;
 	transitionType?: ModalProps['transitionType'];
 	ariaIds: {

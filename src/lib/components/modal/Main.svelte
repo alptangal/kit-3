@@ -62,6 +62,9 @@
 		get preventOutsideClose() {
 			return props.preventOutsideClose ?? false;
 		},
+		get onCloseAttempt() {
+			return props.onCloseAttempt;
+		},
 		get transitionType() {
 			return (props.transitionType as ModalConfigs['transitionType']) ?? 'fly';
 		},
@@ -108,6 +111,8 @@
 								if (target === configs.ref || !configs.children.container?.ref?.contains(target)) {
 									// Only top layer responds to backdrop click
 									if (!isTopLayer(configs.ref)) return;
+									// closeGuard: trả false → chặn đóng (confirm-when-dirty).
+									if (configs.onCloseAttempt?.('backdrop') === false) return;
 									closeReason = 'backdrop';
 									configs.display = false;
 								}
@@ -126,6 +131,8 @@
 	// Đặt closeReason TRƯỚC khi flip display (đồng bộ) → $effect edge-triggered
 	// bên dưới đọc đúng reason khi display đổi.
 	configs.closeByReason = (reason: ModalCloseReason) => {
+		// closeGuard (nút ×): trả false → chặn đóng (confirm-when-dirty).
+		if (configs.onCloseAttempt?.(reason) === false) return;
 		closeReason = reason;
 		display = false;
 	};
@@ -302,6 +309,8 @@
 			if (e.key !== 'Escape') return;
 			if (!isTopLayer(configs.ref)) return;
 			e.stopPropagation();
+			// closeGuard (Esc): trả false → chặn đóng (confirm-when-dirty).
+			if (configs.onCloseAttempt?.('escape') === false) return;
 			closeReason = 'escape';
 			configs.display = false;
 		};
