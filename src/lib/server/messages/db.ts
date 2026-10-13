@@ -586,3 +586,293 @@ export const fulfillment: Record<string, TranslateContent> = {
 		en: 'Failed to fetch dashboard statistics'
 	}
 };
+
+// ===== Thông báo hệ thống =====
+export const notifications: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy thông báo',
+		en: 'Notification not found'
+	},
+	queryFailed: {
+		vi: 'Lấy danh sách thông báo thất bại',
+		en: 'Failed to fetch notification list'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	invalidType: {
+		vi: 'Loại thông báo không hợp lệ',
+		en: 'Invalid notification type'
+	},
+	createFailed: {
+		vi: 'Tạo thông báo thất bại',
+		en: 'Failed to create notification'
+	},
+	markReadFailed: {
+		vi: 'Đánh dấu thông báo đã đọc thất bại',
+		en: 'Failed to mark notification as read'
+	},
+	deleteFailed: {
+		vi: 'Xoá thông báo thất bại',
+		en: 'Failed to delete notification'
+	}
+};
+
+// ===== Tin nhắn nội bộ =====
+export const messages: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy tin nhắn',
+		en: 'Message not found'
+	},
+	queryFailed: {
+		vi: 'Lấy danh sách tin nhắn thất bại',
+		en: 'Failed to fetch message list'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	sendFailed: {
+		vi: 'Gửi tin nhắn thất bại',
+		en: 'Failed to send message'
+	},
+	markReadFailed: {
+		vi: 'Đánh dấu tin nhắn đã đọc thất bại',
+		en: 'Failed to mark message as read'
+	},
+	deleteFailed: {
+		vi: 'Xoá tin nhắn thất bại',
+		en: 'Failed to delete message'
+	},
+	invalidRecipient: {
+		vi: 'Vui lòng chọn ít nhất một người nhận',
+		en: 'Please choose at least one recipient'
+	},
+	subjectRequired: {
+		vi: 'Vui lòng nhập tiêu đề',
+		en: 'Please provide a subject'
+	}
+};
+
+// ===== Email logs =====
+export const email_logs: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy email log',
+		en: 'Email log not found'
+	},
+	queryFailed: {
+		vi: 'Lấy danh sách email log thất bại',
+		en: 'Failed to fetch email log list'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	invalidStatus: {
+		vi: 'Email đã gửi thành công, không thể retry',
+		en: 'Email already sent, cannot retry'
+	},
+	invalidInput: {
+		vi: 'Thiếu thông tin email (người nhận/tiêu đề/template)',
+		en: 'Missing email info (recipient/subject/template)'
+	},
+	createFailed: {
+		vi: 'Ghi log email thất bại',
+		en: 'Failed to create email log'
+	},
+	retryFailed: {
+		vi: 'Retry gửi email thất bại',
+		en: 'Failed to retry email'
+	},
+	deleteFailed: {
+		vi: 'Xoá email log thất bại',
+		en: 'Failed to delete email log'
+	}
+};
+
+// ===== Phase 6: Blog / Tin tức =====
+export const posts: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy bài viết',
+		en: 'Post not found'
+	},
+	queryFailed: {
+		vi: 'Truy vấn bài viết thất bại',
+		en: 'Failed to query posts'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	createFailed: {
+		vi: 'Tạo bài viết thất bại',
+		en: 'Failed to create post'
+	},
+	updateFailed: {
+		vi: 'Cập nhật bài viết thất bại',
+		en: 'Failed to update post'
+	},
+	deleteFailed: {
+		vi: 'Xoá bài viết thất bại',
+		en: 'Failed to delete post'
+	},
+	publishFailed: {
+		vi: 'Xuất bản bài viết thất bại',
+		en: 'Failed to publish post'
+	},
+	archiveFailed: {
+		vi: 'Lưu trữ bài viết thất bại',
+		en: 'Failed to archive post'
+	},
+	slugTaken: {
+		vi: 'Đường dẫn bài viết đã tồn tại trong ngôn ngữ này',
+		en: 'A post with this slug already exists for this language'
+	},
+	invalidStatus: {
+		vi: 'Trạng thái bài viết không hợp lệ — chỉ xuất bản được từ bản nháp',
+		en: 'Invalid post status — only drafts can be published'
+	},
+	languageInvalid: {
+		vi: 'Ngôn ngữ bài viết không hợp lệ (vi hoặc en)',
+		en: 'Invalid post language (vi or en)'
+	},
+	titleRequired: {
+		vi: 'Vui lòng nhập tiêu đề bài viết',
+		en: 'Post title is required'
+	}
+};
+
+export const post_categories: Record<string, TranslateContent> = {
+	notFound: {
+		vi: 'Không tìm thấy danh mục bài viết',
+		en: 'Post category not found'
+	},
+	queryFailed: {
+		vi: 'Truy vấn danh mục bài viết thất bại',
+		en: 'Failed to query post categories'
+	},
+	permissionDenied: {
+		vi: 'Bạn không có quyền thực hiện thao tác này',
+		en: 'You do not have permission to perform this action'
+	},
+	createFailed: {
+		vi: 'Tạo danh mục bài viết thất bại',
+		en: 'Failed to create post category'
+	},
+	updateFailed: {
+		vi: 'Cập nhật danh mục bài viết thất bại',
+		en: 'Failed to update post category'
+	},
+	deleteFailed: {
+		vi: 'Xoá danh mục bài viết thất bại',
+		en: 'Failed to delete post category'
+	},
+	inUse: {
+		vi: 'Không thể xoá — vẫn còn bài viết thuộc danh mục này',
+		en: 'Cannot delete — posts still reference this category'
+	},
+	slugTaken: {
+		vi: 'Đường dẫn danh mục đã tồn tại',
+		en: 'A category with this slug already exists'
+	},
+	nameRequired: {
+		vi: 'Vui lòng nhập tên danh mục',
+		en: 'Category name is required'
+	}
+};
+
+// ── WebAuthn (passkey / biometric login) ──
+export const webauthn: Record<string, TranslateContent> = {
+	// registration
+	registerOptionsFailed: {
+		vi: 'Không thể tạo yêu cầu đăng ký thiết bị. Vui lòng thử lại.',
+		en: 'Could not create registration request. Please try again.'
+	},
+	registerVerifyFailed: {
+		vi: 'Xác minh đăng ký thiết bị thất bại',
+		en: 'Failed to verify device registration'
+	},
+	registerSuccess: {
+		vi: 'Đã đăng ký thiết bị đăng nhập sinh trắc học',
+		en: 'Biometric sign-in device registered'
+	},
+	registerAlreadyExists: {
+		vi: 'Thiết bị này đã được đăng ký trước đó',
+		en: 'This device has already been registered'
+	},
+	// authentication
+	authOptionsFailed: {
+		vi: 'Không thể tạo yêu cầu đăng nhập. Vui lòng thử lại.',
+		en: 'Could not create sign-in request. Please try again.'
+	},
+	authVerifyFailed: {
+		vi: 'Xác minh đăng nhập thất bại',
+		en: 'Sign-in verification failed'
+	},
+	authSuccess: {
+		vi: 'Đăng nhập bằng sinh trắc học thành công',
+		en: 'Biometric sign-in successful'
+	},
+	challengeExpired: {
+		vi: 'Phiên xác thực đã hết hạn. Vui lòng thử lại.',
+		en: 'Authentication session expired. Please try again.'
+	},
+	credentialNotFound: {
+		vi: 'Thiết bị này chưa được đăng ký trên hệ thống',
+		en: 'This device is not registered on the system'
+	},
+	counterMismatch: {
+		vi: 'Phát hiện dấu hiệu bất thường trên thiết bị. Đăng nhập bị từ chối.',
+		en: 'Unusual device activity detected. Sign-in rejected.'
+	},
+	userHandleMismatch: {
+		vi: 'Thiết bị không thuộc về tài khoản này',
+		en: 'Device does not belong to this account'
+	},
+	// credentials management
+	listFailed: {
+		vi: 'Không thể tải danh sách thiết bị',
+		en: 'Could not load device list'
+	},
+	renameSuccess: {
+		vi: 'Đã đổi tên thiết bị',
+		en: 'Device renamed'
+	},
+	renameFailed: {
+		vi: 'Đổi tên thiết bị thất bại',
+		en: 'Failed to rename device'
+	},
+	nameTooLong: {
+		vi: 'Tên thiết bị quá dài (tối đa 64 ký tự)',
+		en: 'Device name is too long (max 64 characters)'
+	},
+	deleteSuccess: {
+		vi: 'Đã xoá thiết bị',
+		en: 'Device removed'
+	},
+	deleteFailed: {
+		vi: 'Xoá thiết bị thất bại',
+		en: 'Failed to remove device'
+	},
+	notFound: {
+		vi: 'Không tìm thấy thiết bị',
+		en: 'Device not found'
+	},
+	notOwned: {
+		vi: 'Bạn không có quyền với thiết bị này',
+		en: 'You do not have permission for this device'
+	},
+	userIdRequired: {
+		vi: 'Thiếu thông tin người dùng',
+		en: 'Missing user information'
+	},
+	credentialIdRequired: {
+		vi: 'Thiếu thông tin thiết bị',
+		en: 'Missing device information'
+	},
+	notSupported: {
+		vi: 'Thiết bị hoặc trình duyệt không hỗ trợ đăng nhập sinh trắc học',
+		en: 'Device or browser does not support biometric sign-in'
+	}
+};

@@ -87,7 +87,11 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'shipments:read', resource: 'shipments', action: 'read' },
 		{ key: 'shipments:manage', resource: 'shipments', action: 'manage' },
 		{ key: 'fulfillment:read', resource: 'fulfillment', action: 'read' },
-		{ key: 'fulfillment:manage', resource: 'fulfillment', action: 'manage' }
+		{ key: 'fulfillment:manage', resource: 'fulfillment', action: 'manage' },
+
+		// Phase 6: blog / tin tức
+		{ key: 'blog:read', resource: 'blog', action: 'read' },
+		{ key: 'blog:manage', resource: 'blog', action: 'manage' }
 	];
 
 	for (const p of permissions) {
@@ -130,7 +134,10 @@ export async function seedDetailRoles(): Promise<void> {
 			'shipments:read',
 			'shipments:manage',
 			'fulfillment:read',
-			'fulfillment:manage'
+			'fulfillment:manage',
+			// Phase 6: blog / tin tức
+			'blog:read',
+			'blog:manage'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -157,6 +164,10 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'shipments:manage', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'fulfillment:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'fulfillment:manage', scope: 'own_branch' },
+
+		// Phase 6: blog / tin tức — manager đọc + quản lý trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'blog:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'blog:manage', scope: 'own_branch' },
 
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
