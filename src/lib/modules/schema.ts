@@ -40,7 +40,15 @@ const collectionsName = [
 	'carts',
 	'checkouts',
 	'shipments',
-	'partykit_sync_state'
+	'partykit_sync_state',
+	// Phase 6 — Content / Blog
+	'posts',
+	'post_categories',
+	// Phase 6 — Marketing
+	'campaigns',
+	// Phase 6 — Social media manager
+	'social_accounts',
+	'social_posts'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -955,6 +963,146 @@ export const collectionSchemas = {
 			status: { type: 'string', searchable: true, sortable: true, selectable: true },
 			// 'connected' | 'disconnected' | 'reconnecting'
 
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Blog / Tin tức =====
+	posts: {
+		fields: {
+			postId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// unique theo (slug, language)
+			slug: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			title: { type: 'string', searchable: true, sortable: true, selectable: true },
+			excerpt: { type: 'string', searchable: false, sortable: false, selectable: true },
+			// rich text — lưu HTML/markdown string
+			content: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			coverImageUrl: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			authorId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			authorName: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			categoryId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			tags: { type: 'array', searchable: false, sortable: false, selectable: true }, // string[]
+
+			// 'draft' | 'published' | 'archived'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			publishedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			viewCount: { type: 'number', searchable: true, sortable: true, selectable: true },
+
+			seoTitle: { type: 'string', searchable: false, sortable: false, selectable: true },
+			seoDescription: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// 'vi' | 'en'
+			language: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Danh mục bài viết =====
+	post_categories: {
+		fields: {
+			categoryId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			name: { type: 'string', searchable: true, sortable: true, selectable: true },
+			slug: { type: 'string', searchable: true, sortable: false, selectable: true },
+			description: { type: 'string', searchable: false, sortable: false, selectable: true },
+			sortOrder: { type: 'number', searchable: false, sortable: true, selectable: true },
+
+			// 'active' | 'inactive'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Chiến dịch marketing =====
+	campaigns: {
+		fields: {
+			campaignId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			name: { type: 'string', searchable: true, sortable: true, selectable: true },
+			description: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// 'promotion' | 'email' | 'push' | 'social' | 'discount_code'
+			type: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			// 'draft' | 'active' | 'paused' | 'completed' | 'cancelled'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			budget: { type: 'number', searchable: false, sortable: true, selectable: true },
+			spent: { type: 'number', searchable: false, sortable: true, selectable: true },
+
+			// liên kết tới collection promotions (mảng promotionId)
+			promotionIds: { type: 'array', searchable: false, sortable: false, selectable: true },
+
+			// [{ field, operator, value }] — vd: totalSpent > 1000000, lastOrderAt < date
+			segmentRules: { type: 'array', searchable: false, sortable: false, selectable: true },
+
+			targetCount: { type: 'number', searchable: false, sortable: true, selectable: true },
+			reachedCount: { type: 'number', searchable: false, sortable: true, selectable: true },
+
+			startAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			endAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Tài khoản mạng xã hội =====
+	social_accounts: {
+		fields: {
+			accountId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// 'facebook' | 'instagram' | 'zalo' | 'tiktok' | 'youtube' | 'twitter_x' | 'linkedin'
+			platform: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			accountName: { type: 'string', searchable: true, sortable: true, selectable: true },
+			handle: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// accessToken lưu encrypted: { ivB64, ciphertextB64 } — KHÔNG trả về client
+			accessTokenEncrypted: { type: 'object', searchable: false, sortable: false, selectable: false },
+
+			pageId: { type: 'string', searchable: false, sortable: false, selectable: true },
+			followersCount: { type: 'number', searchable: false, sortable: true, selectable: true },
+
+			// 'connected' | 'disconnected' | 'error'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			lastSyncAt: { type: 'date', searchable: false, sortable: true, selectable: true },
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Bài đăng mạng xã hội =====
+	social_posts: {
+		fields: {
+			socialPostId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			campaignId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			platform: { type: 'string', searchable: true, sortable: true, selectable: true },
+			content: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			mediaUrls: { type: 'array', searchable: false, sortable: false, selectable: true },
+			scheduledAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			publishedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+
+			// 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed' | 'cancelled'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			error: { type: 'string', searchable: false, sortable: false, selectable: true },
+			externalPostId: { type: 'string', searchable: false, sortable: false, selectable: true },
+			permalink: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
 			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
 	}
