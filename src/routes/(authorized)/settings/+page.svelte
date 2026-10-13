@@ -2,7 +2,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { Accordion, Button, Tag, Tabs } from '$components/element';
+	import { Accordion, AlertDialog, Button, Tag, Tabs } from '$components/element';
 	import { Input, Select, Switch } from '$components/form';
 	import type { SelectOption } from '$components/form';
 	import { encryption } from '$modules/encryption';
@@ -38,6 +38,18 @@
 		memory: { heapUsed: number; heapTotal: number };
 		db: { ok: boolean };
 		audit: { ok: boolean; total: number; items: SystemAuditRow[] };
+	}
+
+	// ── Backup/restore (tab 'backup') ──
+	// Shape khớp BackupService ($lib/server/db/backup.ts) qua API
+	// /api/admin/settings/backup/list | export | restore.
+	interface BackupListRow {
+		name: string;
+		count: number;
+	}
+	interface BackupRestoreSummary {
+		collections: Record<string, { upserted: number; failed: number }>;
+		totalUpserted: number;
 	}
 
 	// ── Ngôn ngữ ──
@@ -99,6 +111,18 @@
 	let statusError = $state<string | undefined>(undefined);
 	let statusLoading = $state(false);
 
+	// ── Trạng thái backup/restore ──
+	let backupItems = $state<BackupListRow[] | undefined>(undefined);
+	let backupListLoading = $state(false);
+	let backupListError = $state<string | undefined>(undefined);
+	let backupExporting = $state(false);
+	let backupRestoring = $state(false);
+	// File .json user chọn (Input type=file bind:files — 1 file duy nhất).
+	let backupFile = $state<File[]>([]);
+	// AlertDialog confirm restore — mở khi bấm "Khôi phục", Action mới gọi API.
+	let restoreConfirmOpen = $state(false);
+	let restoreConfirmMessage = $state('');
+
 	// ── Tabs ──
 	let activeTab = $state('general');
 
@@ -142,6 +166,7 @@
 		tabCommerce: { vi: 'Thương mại', en: 'Commerce' } as TranslateContent,
 		tabAppearance: { vi: 'Giao diện', en: 'Appearance' } as TranslateContent,
 		tabStatus: { vi: 'System Status', en: 'System Status' } as TranslateContent,
+		tabBackup: { vi: 'Sao lưu / Khôi phục', en: 'Backup / Restore' } as TranslateContent,
 		// field labels
 		appName: { vi: 'Tên ứng dụng', en: 'App name' } as TranslateContent,
 		defaultLang: { vi: 'Ngôn ngữ mặc định', en: 'Default language' } as TranslateContent,
@@ -187,7 +212,53 @@
 		themeDark: { vi: 'Tối', en: 'Dark' } as TranslateContent,
 		themeSystem: { vi: 'Theo hệ thống', en: 'System' } as TranslateContent,
 		densityComfortable: { vi: 'Thoáng', en: 'Comfortable' } as TranslateContent,
-		densityCompact: { vi: 'Gọn', en: 'Compact' } as TranslateContent
+		densityCompact: { vi: 'Gọn', en: 'Compact' } as TranslateContent,
+		// backup section
+		backupDesc: {
+			vi: 'Tải toàn bộ dữ liệu các collection dưới dạng 1 file JSON, hoặc khôi phục từ file backup trước đó. Khôi phục sẽ GHI ĐÈ document trùng _id (upsert) — thao tác chỉ dành cho owner.',
+			en: 'Download all collection data as a single JSON file, or restore from a previous backup file. Restore UPSERTS documents with matching _id — owner-only operation.'
+		} as TranslateContent,
+		backupCreate: { vi: 'Tạo backup & tải xuống', en: 'Create backup & download' } as TranslateContent,
+		backupCreating: { vi: 'Đang tạo backup…', en: 'Creating backup…' } as TranslateContent,
+		backupCreateSuccess: {
+			vi: 'Đã tạo backup — file đang được tải xuống',
+			en: 'Backup created — download starting'
+		} as TranslateContent,
+		backupCreateFailed: { vi: 'Tạo backup thất bại', en: 'Failed to create backup' } as TranslateContent,
+		backupListTitle: { vi: 'Collections trong scope', en: 'Collections in scope' } as TranslateContent,
+		backupListLoading: { vi: 'Đang đếm documents…', en: 'Counting documents…' } as TranslateContent,
+		backupListFailed: {
+			vi: 'Không đọc được danh sách collection',
+			en: 'Failed to list collections'
+		} as TranslateContent,
+		backupColName: { vi: 'Collection', en: 'Collection' } as TranslateContent,
+		backupColDocs: { vi: 'Số documents', en: 'Documents' } as TranslateContent,
+		backupRestoreTitle: { vi: 'Khôi phục từ file backup', en: 'Restore from backup file' } as TranslateContent,
+		backupPickFile: { vi: 'Chọn file backup (.json)', en: 'Choose backup file (.json)' } as TranslateContent,
+		backupFilePicked: { vi: 'Đã chọn', en: 'Selected' } as TranslateContent,
+		backupNoFile: { vi: 'Chưa chọn file backup', en: 'No backup file selected' } as TranslateContent,
+		backupRestore: { vi: 'Khôi phục', en: 'Restore' } as TranslateContent,
+		backupRestoring: { vi: 'Đang khôi phục…', en: 'Restoring…' } as TranslateContent,
+		backupRestoreConfirmTitle: {
+			vi: 'Xác nhận khôi phục dữ liệu',
+			en: 'Confirm data restore'
+		} as TranslateContent,
+		backupRestoreSuccess: {
+			vi: 'Khôi phục hoàn tất',
+			en: 'Restore completed'
+		} as TranslateContent,
+		backupRestoreFailed: { vi: 'Khôi phục thất bại', en: 'Restore failed' } as TranslateContent,
+		backupRestoreInvalid: {
+			vi: 'File backup không hợp lệ',
+			en: 'Invalid backup file'
+		} as TranslateContent,
+		backupFileReadFailed: {
+			vi: 'Không đọc được file đã chọn',
+			en: 'Failed to read selected file'
+		} as TranslateContent,
+		backupSummaryTitle: { vi: 'Kết quả khôi phục', en: 'Restore result' } as TranslateContent,
+		backupSummaryUpserted: { vi: 'đã ghi', en: 'upserted' } as TranslateContent,
+		backupSummaryFailed: { vi: 'lỗi', en: 'failed' } as TranslateContent
 	};
 
 	// ── Options cho Select ──
@@ -418,11 +489,173 @@
 		});
 	}
 
+	// ── Backup / Restore ──
+	// List collections + counts (gọi khi cần render tab backup lần đầu).
+	async function loadBackupList() {
+		if (!encryptionKeys || backupListLoading) return;
+		backupListLoading = true;
+		backupListError = undefined;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/settings/backup/list',
+				{ method: 'POST', body: {} },
+				encryptionKeys
+			);
+			backupListLoading = false;
+			if (response.ok) {
+				backupItems = (response.data as { items?: BackupListRow[] } | undefined)?.items ?? [];
+			} else {
+				backupListError = resolveServerMessage(response.message, lang, fb(t.backupListFailed));
+			}
+		} catch (err) {
+			backupListLoading = false;
+			backupListError = resolveServerMessage(undefined, lang, fb(t.backupListFailed));
+			if (import.meta.env.DEV) console.error('[settings] backup list failed:', err);
+		}
+	}
+
+	// Tạo backup → decrypt payload → build Blob → trigger download.
+	async function handleCreateBackup() {
+		if (!encryptionKeys || backupExporting) return;
+		backupExporting = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/settings/backup/export',
+				{ method: 'POST', body: {} },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as
+					| { filename?: string; contentBase64?: string; totalDocs?: number }
+					| undefined;
+				if (data?.contentBase64) {
+					// base64 → bytes → UTF-8 JSON text → Blob download (pattern
+					// chart/Main.svelte downloadFile).
+					const bytes = encryption.base64ToBytes(data.contentBase64);
+					const text = new TextDecoder().decode(bytes);
+					const blob = new Blob([text], { type: 'application/json' });
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = data.filename || 'backup.json';
+					document.body.appendChild(a);
+					a.click();
+					a.remove();
+					setTimeout(() => URL.revokeObjectURL(url), 1000);
+					client.browser?.toasts?.create({
+						title: `${fb(t.backupCreateSuccess).vi && t.backupCreateSuccess[lang]}${
+							data.totalDocs != null ? ` (${data.totalDocs})` : ''
+						}`,
+						color: 'success'
+					});
+				} else {
+					client.browser?.toasts?.create({
+						title: fb(t.backupCreateFailed)[lang],
+						color: 'error'
+					});
+				}
+			} else {
+				client.browser?.toasts?.create({
+					title: resolveServerMessage(response.message, lang, fb(t.backupCreateFailed)),
+					color: 'error'
+				});
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[settings] backup export failed:', err);
+			client.browser?.toasts?.create({
+				title: t.requestFailed[lang] ?? t.requestFailed.en ?? 'Error',
+				color: 'error'
+			});
+		} finally {
+			backupExporting = false;
+		}
+	}
+
+	// Bấm "Khôi phục" → đọc file → validate shape thô → mở AlertDialog confirm
+	// với số docs ước lượng. API thật chỉ gọi khi confirm (onselect Action).
+	async function handleRestoreClick() {
+		const file = backupFile[0];
+		if (!file || restoreConfirmOpen) return;
+		try {
+			const text = await file.text();
+			const parsed = JSON.parse(text) as {
+				version?: number;
+				collections?: Record<string, { count?: number; docs?: unknown[] }>;
+			};
+			if (parsed?.version !== 1 || !parsed.collections) {
+				client.browser?.toasts?.create({
+					title: fb(t.backupRestoreInvalid)[lang],
+					color: 'error'
+				});
+				return;
+			}
+			// Ước lượng tổng docs (dùng count nếu có, fallback đếm docs array).
+			let totalDocs = 0;
+			for (const group of Object.values(parsed.collections)) {
+				totalDocs += group?.count ?? group?.docs?.length ?? 0;
+			}
+			restoreConfirmMessage =
+				lang === 'vi'
+					? `Restore sẽ UPSERT ${totalDocs} documents từ file "${file.name}" — tiếp tục?`
+					: `Restore will UPSERT ${totalDocs} documents from "${file.name}" — continue?`;
+			restoreConfirmOpen = true;
+		} catch {
+			client.browser?.toasts?.create({
+				title: fb(t.backupFileReadFailed)[lang],
+				color: 'error'
+			});
+		}
+	}
+
+	// Confirm trong AlertDialog → gọi API restore → toast + summary.
+	async function handleRestoreConfirm() {
+		const file = backupFile[0];
+		if (!file || !encryptionKeys || backupRestoring) return;
+		backupRestoring = true;
+		try {
+			const text = await file.text();
+			const response = await encryption.fetchSecure(
+				'/api/admin/settings/backup/restore',
+				{ method: 'POST', body: { backup: JSON.parse(text) } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const summary = (response.data as { summary?: BackupRestoreSummary } | undefined)?.summary;
+				const failed = summary
+					? Object.values(summary.collections).reduce((s, c) => s + (c?.failed ?? 0), 0)
+					: 0;
+				client.browser?.toasts?.create({
+					title:
+						`${fb(t.backupRestoreSuccess).vi && t.backupRestoreSuccess[lang]} ` +
+						`(${summary?.totalUpserted ?? 0} ${fb(t.backupSummaryUpserted)[lang]}` +
+						(failed > 0 ? `, ${failed} ${fb(t.backupSummaryFailed)[lang]}` : '') +
+						`)`,
+					color: failed > 0 ? 'warning' : 'success'
+				});
+				// Refresh list counts (số docs có thể đổi sau restore).
+				loadBackupList();
+			} else {
+				client.browser?.toasts?.create({
+					title: resolveServerMessage(response.message, lang, fb(t.backupRestoreFailed)),
+					color: 'error'
+				});
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[settings] restore failed:', err);
+			client.browser?.toasts?.create({
+				title: t.requestFailed[lang] ?? t.requestFailed.en ?? 'Error',
+				color: 'error'
+			});
+		} finally {
+			backupRestoring = false;
+		}
+	}
+
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
-		await Promise.all([loadSettings(), loadStatus()]);
+		await Promise.all([loadSettings(), loadStatus(), loadBackupList()]);
 	});
 </script>
 
@@ -690,8 +923,86 @@
 				</div>
 			{/if}
 		{/snippet}
+		{#snippet tabBackupContent()}
+			<p class="backup-desc">{t.backupDesc[lang]}</p>
 
-		<!-- ── Tabs cấu hình (4 tab cấu hình + tab status) — DESKTOP ≥768px.
+			<!-- ── Khu backup: list collections + nút tạo backup ── -->
+			<div class="backup-section" data-test="backup-section">
+				<div class="backup-section-head">
+					<h2 class="backup-section-title">{t.backupListTitle[lang]}</h2>
+					<Button
+						color="success"
+						onClick={handleCreateBackup}
+						loading={backupExporting}
+						disabled={backupExporting || !encryptionKeys}
+						data-test="backup-create"
+					>
+						{backupExporting ? t.backupCreating[lang] : t.backupCreate[lang]}
+					</Button>
+				</div>
+				{#if backupListLoading && !backupItems}
+					<div class="settings-state" role="status">
+						<p>{t.backupListLoading[lang]}</p>
+					</div>
+				{:else if backupListError && !backupItems}
+					<div class="settings-state error" role="alert">
+						<p class="state-title">{t.backupListFailed[lang]}</p>
+						<p class="state-detail">{backupListError}</p>
+						<Button color="primary" variant="outline" onClick={loadBackupList}>
+							{t.retry[lang]}
+						</Button>
+					</div>
+				{:else if backupItems}
+					<div class="backup-table-wrap">
+						<table class="backup-table" data-test="backup-table">
+							<thead>
+								<tr>
+									<th scope="col">{t.backupColName[lang]}</th>
+									<th scope="col">{t.backupColDocs[lang]}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each backupItems as row, i (row.name)}
+									<tr data-test="backup-row-{row.name}">
+										<td class="backup-name">{row.name}</td>
+										<td>{row.count}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			</div>
+
+			<!-- ── Khu restore: chọn file + confirm + gọi API ── -->
+			<div class="backup-section" data-test="restore-section">
+				<h2 class="backup-section-title">{t.backupRestoreTitle[lang]}</h2>
+				<div class="backup-restore-row">
+					<Input
+						type="file"
+						accept=".json,application/json"
+						bind:files={backupFile}
+						data-test="backup-file-input"
+					/>
+					<Button
+						color="primary"
+						onClick={handleRestoreClick}
+						loading={backupRestoring}
+						disabled={backupFile.length === 0 || backupRestoring || !encryptionKeys}
+						data-test="backup-restore"
+					>
+						{backupRestoring ? t.backupRestoring[lang] : t.backupRestore[lang]}
+					</Button>
+				</div>
+				{#if backupFile.length > 0}
+					<p class="backup-file-name" data-test="backup-file-name">
+						{t.backupFilePicked[lang]}: {backupFile[0]?.name}
+					</p>
+				{/if}
+			</div>
+		{/snippet}
+
+		<!-- ── Tabs cấu hình (4 tab cấu hình + tab status + tab backup) — DESKTOP ≥768px.
 		     Wrapper div mang data-test (Tabs.Root không forward data-test) ── -->
 		<div class="settings-tabs" data-test="settings-tabs">
 		<Tabs bind:value={activeTab} type="underline">
@@ -710,6 +1021,9 @@
 				</Tabs.Trigger>
 				<Tabs.Trigger value="status" icon="lucide:activity" data-test="tab-trigger-status">
 					{t.tabStatus[lang]}
+				</Tabs.Trigger>
+				<Tabs.Trigger value="backup" icon="lucide:database-backup" data-test="tab-trigger-backup">
+					{t.tabBackup[lang]}
 				</Tabs.Trigger>
 			</Tabs.List>
 
@@ -736,6 +1050,11 @@
 			<!-- ── Tab System Status ── -->
 			<Tabs.Content value="status" data-test="tab-content-status">
 				{@render tabStatusContent()}
+			</Tabs.Content>
+
+			<!-- ── Tab Backup / Restore ── -->
+			<Tabs.Content value="backup" data-test="tab-content-backup">
+				{@render tabBackupContent()}
 			</Tabs.Content>
 		</Tabs>
 		</div>
@@ -795,6 +1114,16 @@
 					{@render tabStatusContent()}
 				</Accordion.Content>
 			</Accordion.Item>
+			<Accordion.Item value="backup">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:database-backup" data-test="acc-trigger-backup">
+						{t.tabBackup[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="acc-content-backup">
+					{@render tabBackupContent()}
+				</Accordion.Content>
+			</Accordion.Item>
 		</Accordion>
 		</div>
 
@@ -834,6 +1163,28 @@
 	onDiscard={discardDraft}
 	{lang}
 />
+
+<!-- ── Backup: dialog xác nhận trước khi restore (ghi đè theo _id) ── -->
+<AlertDialog bind:open={restoreConfirmOpen} data-test="backup-restore-dialog">
+	<AlertDialog.Content>
+		<AlertDialog.Header variant="danger">
+			<AlertDialog.Title>{t.backupRestoreConfirmTitle[lang]}</AlertDialog.Title>
+			<AlertDialog.Description>{restoreConfirmMessage}</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel data-test="backup-restore-cancel">
+				{t.cancel[lang]}
+			</AlertDialog.Cancel>
+			<AlertDialog.Action
+				data-test="backup-restore-confirm"
+				color="primary"
+				onselect={handleRestoreConfirm}
+			>
+				{t.backupRestore[lang]}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog>
 
 <style lang="scss">
 	.settings-page {
@@ -1117,6 +1468,97 @@
 	.audit-action {
 		font-family: var(--font-mono, ui-monospace, monospace);
 		color: var(--foreground);
+	}
+
+	/* ── Backup / Restore ── */
+	.backup-desc {
+		font-size: 0.9rem;
+		color: var(--foreground-500);
+		margin: 0;
+		padding: 0.25rem;
+	}
+
+	.backup-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 1rem 0.25rem 1.5rem;
+	}
+
+	.backup-section-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.backup-section-title {
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--foreground);
+		margin: 0;
+	}
+
+	.backup-table-wrap {
+		overflow-x: auto;
+		border-radius: 0.75rem;
+		border: 1px solid var(--default-300);
+		background: var(--background);
+	}
+
+	.backup-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.85rem;
+
+		th,
+		td {
+			padding: 0.5rem 1rem;
+			text-align: left;
+			border-bottom: 1px solid var(--default-200);
+			white-space: nowrap;
+		}
+
+		th {
+			font-weight: 600;
+			color: var(--foreground-500);
+			background: var(--default-100);
+			font-size: 0.75rem;
+			text-transform: uppercase;
+			letter-spacing: 0.03em;
+		}
+
+		tbody tr:last-child td {
+			border-bottom: none;
+		}
+
+		tbody tr:hover {
+			background: var(--default-50);
+		}
+	}
+
+	.backup-name {
+		font-family: var(--font-mono, ui-monospace, monospace);
+		color: var(--foreground);
+	}
+
+	.backup-restore-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+
+		> :first-child {
+			flex: 1 1 260px;
+		}
+	}
+
+	.backup-file-name {
+		font-size: 0.85rem;
+		color: var(--foreground-500);
+		margin: 0;
+		word-break: break-all;
 	}
 </style>
 
