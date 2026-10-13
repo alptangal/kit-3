@@ -108,6 +108,8 @@
 		'/admin/payments': 'Thanh toán',
 		'/admin/shipments': 'Vận chuyển',
 		'/admin/fulfillment': 'Xử lý đơn',
+		'/admin/posts': 'Bài viết',
+		'/admin/post-categories': 'Danh mục bài viết',
 		'/admin/dashboard': 'Tổng quan',
 		'/settings': 'Cấu hình hệ thống'
 	};
@@ -292,6 +294,30 @@
 							active={isActive('/admin')}
 							icon="lucide:shield-user"
 							data-test="admin-nav-users"
+						/>
+					</Sidebar.MenuItem>
+				</Sidebar.Menu>
+			</Sidebar.Group>
+
+			<Sidebar.Group id="content">
+				<Sidebar.GroupLabel>Nội dung</Sidebar.GroupLabel>
+				<Sidebar.Menu>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Bài viết"
+							href="/admin/posts"
+							active={isActive('/admin/posts')}
+							icon="lucide:newspaper"
+							data-test="admin-nav-posts"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Danh mục bài viết"
+							href="/admin/post-categories"
+							active={isActive('/admin/post-categories')}
+							icon="lucide:tags"
+							data-test="admin-nav-post-categories"
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
