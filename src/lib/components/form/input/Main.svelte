@@ -2679,6 +2679,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	const deleteOnDerived = $derived(props.deleteOn === true);
 	const selectDeleteOnDerived = $derived(props.selectDeleteOn === true);
 	const selectAllOnDerived = $derived(props.selectAllOn === true);
+	// Nút "Chọn tất cả" — tách prop riêng khỏi selectAllOn ("Xóa tất cả") để
+	// trang gọi có thể bật một mình (chọn nhanh rồi dùng quickbar xóa phần)
+	const selectAllButtonOnDerived = $derived(props.selectAllButtonOn === true);
 	const formatsDerived = $derived(props.formats);
 	// Import ảnh tĩnh (thư viện) → detect barcode/QR không cần camera
 	const importOnDerived = $derived(props.importOn === true);
@@ -2765,6 +2768,20 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		selectedCodes = [];
 		// Duy nhất 1 lần gán codes mới — 1 run validation (không burst)
 		codes = (codes ?? []).filter((x) => !removed.includes(x));
+	}
+
+	// ── Select-all (button "Chọn tất cả", mirror allFilesSelected/toggleAllFilesSelected) ──
+	// Chỉ trong chế độ selection (selectDeleteOn — item mới selectable). Hiện khi
+	// ≥2 mã selectable (dưới 2 nút vô nghĩa: 1 mã tick trực tiếp trên card).
+	// all → label "Bỏ chọn tất cả"; một phần → indeterminate (dot giữa).
+	const allCodesSelected = $derived.by(() => {
+		const list = codes ?? [];
+		return selectDeleteOnDerived && list.length > 0 && selectedCodes.length === list.length;
+	});
+	function toggleAllCodesSelected() {
+		if (configs.disabled || !selectDeleteOnDerived) return;
+		_codesJustReset = false;
+		selectedCodes = allCodesSelected ? [] : [...(codes ?? [])];
 	}
 
 	// Yêu cầu (3): clear-all (selectAllOn) — Có tick card (selectDeleteOn) → bấm
@@ -3728,6 +3745,29 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				     KHÔNG có tick card → selection không thể tồn tại → clear-all là
 				     nút "Xóa tất cả" nghĩa đen (hành vi prop gốc, luôn hiện khi có mã).
 				     Quickbar (selected ≥1) ẨN khi clear-all hiển thị → không trùng nút. -->
+				<!-- Select-all (chọn tất cả) — cần cả selectAllButtonOn + selectDeleteOn
+				     (chế độ selection — không tick card thì không có gì để "chọn tất cả")
+				     và ≥2 mã selectable (dưới 2 nút vô nghĩa). Đặt CẠNH clear-all trong
+				     head list, cùng phong cách ghost-xs. all → label đổi "Bỏ chọn tất cả"
+				     (indeterminate hiển thị qua count "Đã chọn X/Y" phía trái, nút nhấn =
+				     aria-pressed). -->
+				{#if selectAllButtonOnDerived && selectDeleteOnDerived && !configs.disabled && (codes?.length ?? 0) >= 2}
+					<!-- Wrapper span data-test hook DOM (Button không spread props) -->
+					<span data-test="input-barcode-select-all" class="input-barcode-action-hook">
+						<Button
+							variant="ghost"
+							color="default"
+							size="xs"
+							class="input-barcode-selectall-btn"
+							aria-label={allCodesSelected ? 'Bỏ chọn tất cả mã' : 'Chọn tất cả mã'}
+							aria-pressed={allCodesSelected}
+							onclick={toggleAllCodesSelected}
+						>
+							<Icon icon={allCodesSelected ? 'lucide:x' : 'lucide:check-check'} class="input-barcode-icon" />
+							<span>{allCodesSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}</span>
+						</Button>
+					</span>
+				{/if}
 				{#if selectAllOnDerived && (selectDeleteOnDerived ? codeSelectionMulti : (codes?.length ?? 0) > 0)}
 					<!-- Wrapper span data-test hook DOM (Button không spread props) -->
 					<span data-test="input-barcode-clear-all" class="input-barcode-action-hook">

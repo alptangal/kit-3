@@ -1162,6 +1162,23 @@
 		}
 	}
 
+	/* ── Select-all (head list barcode): nút ghost-xs Button — KHÔNG mượn
+	   .input-file-clear-all vì class đó set color error đỏ ("Chọn tất cả"
+	   không phải action phá hủy → màu mặc định của Button ghost). Chỉ cần
+	   font-size thu nhỏ cho đồng bộ clear-all; icon iconify svg 1em tự scale
+	   theo font-size cha (bài học: không set width/height svg). Rule PHẲNG —
+	   mọi selector phải nằm TRONG ngoặc :global(), lồng bên ngoài sẽ bị
+	   Svelte bọc scope hash → chết. */
+	:global(.input-barcode-selectall-btn.button-root) {
+		font-size: calc(var(--font-size) * 0.75);
+	}
+	/* Đẩy nhóm nút hành động sang phải head row (chỉ trong head list — KHÔNG
+	   đụng hook card/overlay): hook có hook đi SAU (select-all trước clear-all)
+	   → margin-left:auto; hook cuối (clear-all một mình) nhờ space-between của
+	   .input-file-previews-head tự sang phải như cũ. */
+	:global(.input-file-previews-head .input-barcode-action-hook:has(+ .input-barcode-action-hook)) {
+		margin-left: auto;
+	}
 	/* ── Camera overlay inline: video + khung scan + regions chọn ──
 	   overlay fixed inset-0 z cao; object-fit: cover → map bounding box qua
 	   boxStyle (JS, % vị trí). Freeze canvas che video khi chọn nhiều mã. */

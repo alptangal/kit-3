@@ -190,10 +190,18 @@ export interface InputProps extends BasicProps {
 	 */
 	selectDeleteOn?: boolean;
 	/**
-	 * Bật nút "Xóa tất cả" (type='barcode', mặc định `false`): hiện khi ≥1 mã,
-	 * nằm ở header row của danh sách. Click → codes = [].
+	 * Bật nút "Xóa tất cả" (type='barcode', mặc định `false`): hiện khi ≥1 mã
+	 * (không tick card) hoặc "Xóa N mã đã chọn" khi có selection ≥2, nằm ở
+	 * header row của danh sách.
 	 */
 	selectAllOn?: boolean;
+	/**
+	 * Nút "Chọn tất cả" (type='barcode', mặc định `false`): chỉ trong chế độ
+	 * selection (cần `selectDeleteOn` — không tick card thì không có gì để
+	 * "chọn tất cả"). Hiện khi ≥2 mã ở header list, cạnh nút clear-all. Click
+	 * chọn tất cả mã; khi đã chọn hết → đổi thành "Bỏ chọn tất cả".
+	 */
+	selectAllButtonOn?: boolean;
 	/**
 	 * Định dạng barcode/QR chấp nhận (type='barcode', mảng BarcodeDetector
 	 * format — vd ['qr_code', 'ean_13']). Rỗng → tất cả format được hỗ trợ.
@@ -326,6 +334,8 @@ export interface InputConfigs extends BasicConfigs {
 	selectDeleteOn?: boolean;
 	/** Nút "Xóa tất cả" ở header list (mặc định false). */
 	selectAllOn?: boolean;
+	/** Nút "Chọn tất cả" ở header list (cần selectDeleteOn; mặc định false). */
+	selectAllButtonOn?: boolean;
 	/** Định dạng barcode/QR chấp nhận (BarcodeDetector format). */
 	formats?: string[];
 	focus: () => void;

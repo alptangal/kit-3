@@ -375,11 +375,14 @@
 				type="barcode"
 				bind:codes={barcodeSelectCodes}
 				selectDeleteOn
+				selectAllButtonOn
 				placeholder="Nhập mã…"
 			/>
 		</TextField>
 		<p class="demo-hint">
-			Tick ô tròn bên trái nhiều card → thanh "Xóa N mã đã chọn" hiện → xóa hàng loạt.
+			Tick ô tròn bên trái nhiều card → nút "Xóa N mã đã chọn" hiện → xóa hàng loạt.
+			Nút "Chọn tất cả" (prop `selectAllButtonOn`) hiện khi ≥2 mã (header list) — bấm
+			chọn hết, bấm lần nữa bỏ chọn hết; chọn một phần → đếm "Đã chọn X/Y".
 			Còn: <code>{barcodeSelectCodes.length}</code>
 		</p>
 	</section>
@@ -397,7 +400,9 @@
 			/>
 		</TextField>
 		<p class="demo-hint">
-			Nút "Xóa tất cả" hiện khi ≥1 mã (bên phải header list) — click → danh sách rỗng.
+			Nút "Xóa N mã đã chọn" (header, khi chọn ≥2) / "Xóa tất cả" (khi không tick card nào).
+			Section này KHÔNG bật `selectAllButtonOn` → không có nút "Chọn tất cả" (xem
+			section selectDeleteOn ở trên).
 			Còn: <code>{barcodeAllCodes.length}</code>
 		</p>
 	</section>
