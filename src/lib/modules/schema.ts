@@ -36,6 +36,7 @@ const collectionsName = [
 	'token_rotation_logs',
 	'system_secrets', // <-- dùng cho cbVault, xem clients.ts
 	'user_preferences', // <-- MỚI: per-user preferences (theme/language/datatable), documentKey = userId
+	'webauthn_credentials', // <-- MỚI: passkey/biometric credentials (WebAuthn), credentialId searchable unique
 	// Phase 5 — Omnichannel E-commerce
 	'carts',
 	'checkouts',
@@ -278,6 +279,21 @@ export const collectionSchemas = {
 			roleTemp: { type: 'string', searchable: false, sortable: false, selectable: true },
 			userHandle: { type: 'string', searchable: false, sortable: false, selectable: true },
 			createdAt: { type: 'date', searchable: false, sortable: false, selectable: true }
+		}
+	},
+
+	webauthn_credentials: {
+		fields: {
+			credentialId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			publicKey: { type: 'string', searchable: false, sortable: false, selectable: true },
+			counter: { type: 'number', searchable: false, sortable: false, selectable: true },
+			transports: { type: 'array', searchable: false, sortable: false, selectable: true },
+			deviceType: { type: 'string', searchable: false, sortable: false, selectable: true },
+			backedUp: { type: 'boolean', searchable: false, sortable: false, selectable: true },
+			name: { type: 'string', searchable: true, sortable: false, selectable: true },
+			createdAt: { type: 'date', searchable: false, sortable: false, selectable: true },
+			lastUsedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
 		}
 	},
 
