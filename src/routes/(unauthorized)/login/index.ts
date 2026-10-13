@@ -65,5 +65,15 @@ export const pageContents: { [k: string]: TranslateContent } = {
 	register: {
 		vi: 'Tạo tài khoản',
 		en: 'Create account'
+	},
+
+	// ── Passkey (WebAuthn) ──
+	passkeyLogin: {
+		vi: 'Đăng nhập bằng sinh trắc học',
+		en: 'Sign in with biometrics'
+	},
+	passkeyOr: {
+		vi: 'hoặc',
+		en: 'or'
 	}
 };

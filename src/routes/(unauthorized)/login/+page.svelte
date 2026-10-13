@@ -15,6 +15,10 @@
 	import { getFormContext } from '$components/form/form';
 	import { AuthLayout } from '$components/layout';
 	import { encryption } from '$modules/encryption';
+	import {
+		browserSupportsWebAuthn,
+		startAuthentication
+	} from '@simplewebauthn/browser';
 	import { client } from '$store/basic.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { pageContents } from '.';
@@ -57,7 +61,10 @@ $effect(() => {
 	/** Cặp khoá RSA tạm thời để mã hoá body khi gửi lên server */
 	let encryptionKeys: undefined | { public: CryptoKey; private: CryptoKey } = $state(undefined);
 
-	// Ngôn ngữ hiện tại
+	// ── Passkey (WebAuthn) state ──
+	/** Browser hỗ trợ WebAuthn? — check ở onMount (SSR-safe) */
+	let passkeySupported = $state(false);
+	let passkeyLoading = $state(false);	// Ngôn ngữ hiện tại
 	const lang = $derived(client.browser?.language ?? 'en');
 	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
 
@@ -286,11 +293,67 @@ $effect(() => {
 		} catch {}
 	}
 
+	// ===== Đăng nhập bằng Passkey (WebAuthn) =====
+	// Username field (nếu có) được gửi kèm để server ràng buộc allowCredentials —
+	// trống → discoverable credential (authenticator tự chọn).
+	async function handlePasskeyLogin() {
+		if (passkeyLoading || !encryptionKeys) return;
+		passkeyLoading = true;
+		formError = undefined;
+		try {
+			// 1. Lấy options từ server (public endpoint, rate-limit 10 req/min)
+			const username = configs.username.value?.trim() || undefined;
+			const optRes = await encryption.fetchSecure('/api/auth/webauthn/auth/options', {
+				method: 'post',
+				body: { username }
+			});
+			if (!optRes.ok || !optRes.data?.options) {
+				formError = optRes.message?.[lang] ?? optRes.message?.en ?? 'WebAuthn options failed';
+				return;
+			}
+
+			// 2. Gọi authenticator (Touch ID / Face ID / Windows Hello / vân tay)
+			const assertion = await startAuthentication({ optionsJSON: optRes.data.options });
+
+			// 3. Verify + tạo session (server set cookie giống /api/login)
+			const verRes = await encryption.fetchSecure('/api/auth/webauthn/auth/verify', {
+				method: 'post',
+				body: { response: assertion }
+			});
+			if (!verRes.ok) {
+				formError = verRes.message?.[lang] ?? verRes.message?.en ?? 'Passkey login failed';
+				return;
+			}
+
+			client.browser?.toasts?.create({
+				title: pageContents.responseOk[lang] ?? 'Login successful',
+				color: 'success'
+			});
+
+			const redirectTo = page.url.searchParams.get('redirect') ?? '/';
+			await goto(redirectTo);
+		} catch (e) {
+			// User huỷ prompt authenticator (NotAllowedError) — không hiện lỗi to
+			const em = e instanceof Error ? e.message : String(e);
+			if (!/NotAllowed|aborted/i.test(em)) {
+				formError = em;
+			}
+		} finally {
+			passkeyLoading = false;
+		}
+	}
+
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { private: privateKey, public: publicKey };
+
+		// WebAuthn support check (SSR-safe — chỉ chạy client)
+		passkeySupported =
+			typeof window !== 'undefined' &&
+			typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
+			browserSupportsWebAuthn();
 
 		try {
 			if (typeof localStorage !== 'undefined') {
@@ -453,6 +516,24 @@ $effect(() => {
 			>
 				{pageContents.reset[lang] ?? 'Reset'}
 			</Button>
+
+			{#if passkeySupported}
+				<!-- Đăng nhập bằng Passkey (Touch ID / Face ID / Windows Hello / vân tay Android) -->
+				<div class="passkey-divider">
+					<span>{pageContents.passkeyOr[lang] ?? (lang === 'vi' ? 'hoặc' : 'or')}</span>
+				</div>
+				<Button
+					class="auth-btn-passkey"
+					color="primary"
+					variant="ghost"
+					icon="lucide:fingerprint"
+					loading={passkeyLoading}
+					disabled={passkeyLoading}
+					onclick={handlePasskeyLogin}
+				>
+					{pageContents.passkeyLogin[lang] ?? (lang === 'vi' ? 'Đăng nhập bằng sinh trắc học' : 'Sign in with biometrics')}
+				</Button>
+			{/if}
 		</div>
 	</Form>
 
@@ -570,5 +651,32 @@ $effect(() => {
 			height: 1.25rem;
 			flex-shrink: 0;
 		}
+	}
+
+	/* Passkey divider + button */
+	.passkey-divider {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		width: 100%;
+		margin-top: 0.25rem;
+		color: var(--foreground-500, #9ca3af);
+		font-size: 0.8rem;
+
+		&::before,
+		&::after {
+			content: '';
+			flex: 1;
+			height: 1px;
+			background: var(--default-300, #e5e7eb);
+		}
+	}
+
+	:global(.auth-btn-passkey) {
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+		gap: 0.5rem !important;
+		width: 100%;
 	}
 </style>
