@@ -32,6 +32,8 @@ const collectionsName = [
 	'conversations',
 	'messages',
 	'system',
+	// Email log — log gửi email (queue/sent/failed) + retry
+	'email_logs',
 	'refresh_tokens',
 	'token_rotation_logs',
 	'system_secrets', // <-- dùng cho cbVault, xem clients.ts
@@ -685,27 +687,30 @@ export const collectionSchemas = {
 		}
 	},
 	// ===== Thông báo gửi tới người dùng =====
+	// Định nghĩa lại theo NotificationService (admin notifications page):
+	// type: 'info' | 'success' | 'warning' | 'error' | 'order' | 'stock' | 'system';
+	// userId null (MISSING) = broadcast cho mọi user.
 	notifications: {
 		fields: {
-			userId: { type: 'string', searchable: true, sortable: false, selectable: true }, // Nguồn nhận
+			notificationId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true }, // null = broadcast
 
-			// 'system' | 'order' | 'inventory' | 'promotion' | 'security'
+			// 'info' | 'success' | 'warning' | 'error' | 'order' | 'stock' | 'system'
 			type: { type: 'string', searchable: true, sortable: false, selectable: true },
 
 			title: { type: 'string', searchable: true, sortable: false, selectable: true },
 			body: { type: 'string', searchable: false, sortable: false, selectable: true },
 
-			// Chứa metadata bấm vào điều hướng (vd: { targetUrl: "/orders/123", orderId: "123" })
-			data: { type: 'object', searchable: false, sortable: false, selectable: true },
+			// Link điều hướng khi bấm thông báo (tuỳ chọn)
+			link: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// true = broadcast không gắn userId
+			broadcast: { type: 'boolean', searchable: true, sortable: false, selectable: true },
 
 			isRead: { type: 'boolean', searchable: true, sortable: true, selectable: true },
 			readAt: { type: 'date', searchable: false, sortable: true, selectable: true },
 
-			// 'in_app' | 'push' | 'email' | 'sms'
-			channel: { type: 'string', searchable: true, sortable: false, selectable: true },
-
-			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
-			deletedAt: { type: 'date', searchable: false, sortable: false, selectable: false }
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
 	},
 
@@ -751,28 +756,52 @@ export const collectionSchemas = {
 	},
 
 	// ===== Chi tiết Tin nhắn =====
+	// Định nghĩa lại theo MessageService (admin messages page — thread-based, không E2EE;
+	// chat E2EE cũ chưa build nên fields contentType/contentEncrypted/mediaUrl bỏ đi).
 	messages: {
 		fields: {
-			conversationId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			messageId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			threadId: { type: 'string', searchable: true, sortable: false, selectable: true },
 			senderId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			senderName: { type: 'string', searchable: false, sortable: false, selectable: true },
 
-			// Hỗ trợ tin nhắn dạng mã hóa End-to-End (E2EE) nếu dùng chung kiến trúc Vault/Crypto hiện tại
-			// 'text' | 'image' | 'file' | 'system' | 'encrypted_payload'
-			contentType: { type: 'string', searchable: true, sortable: false, selectable: true },
+			// Danh sách userId nhận tin
+			recipientIds: { type: 'array', searchable: false, sortable: false, selectable: true },
 
-			contentEncrypted: { type: 'string', searchable: false, sortable: false, selectable: true }, // Nội dung tin nhắn mã hóa / văn bản thô
-			mediaUrl: { type: 'string', searchable: false, sortable: false, selectable: true }, // URL ảnh / file đính kèm
+			subject: { type: 'string', searchable: true, sortable: false, selectable: true },
+			body: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// Đính kèm: [{ name, url, size }]
+			attachments: { type: 'array', searchable: false, sortable: false, selectable: true },
 
 			// Mảng các userId đã đọc tin nhắn này
-			readBy: { type: 'array', searchable: false, sortable: false, selectable: true },
+			isReadBy: { type: 'array', searchable: false, sortable: false, selectable: true },
 
-			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
-			deletedAt: { type: 'date', searchable: false, sortable: false, selectable: false }
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
 	},
 	system: {
 		fields: {
 			initApp: { type: 'object', searchable: true, sortable: false, selectable: true }
+		}
+	},
+	// ===== Log gửi email (queue/sent/failed) — EmailLogService =====
+	email_logs: {
+		fields: {
+			emailId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			to: { type: 'string', searchable: false, sortable: false, selectable: true },
+			subject: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// Tên template email (vd 'verify-email', 'reset-password')
+			template: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			// 'queued' | 'sent' | 'failed'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+			error: { type: 'string', searchable: false, sortable: false, selectable: true },
+			sentAt: { type: 'date', searchable: false, sortable: true, selectable: true },
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			relatedType: { type: 'string', searchable: true, sortable: false, selectable: true },
+			relatedId: { type: 'string', searchable: true, sortable: false, selectable: true }
 		}
 	},
 	refresh_tokens: {
