@@ -107,6 +107,7 @@
 		'/admin/pos-sessions': 'Phiên POS',
 		'/admin/payments': 'Thanh toán',
 		'/admin/shipments': 'Vận chuyển',
+		'/admin/fulfillment': 'Xử lý đơn',
 		'/admin/dashboard': 'Tổng quan',
 		'/settings': 'Cấu hình hệ thống'
 	};
@@ -156,6 +157,15 @@
 							active={isActive('/admin/shipments')}
 							icon="lucide:package-check"
 							data-test="admin-nav-shipments"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Xử lý đơn"
+							href="/admin/fulfillment"
+							active={isActive('/admin/fulfillment')}
+							icon="lucide:package-open"
+							data-test="admin-nav-fulfillment"
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
