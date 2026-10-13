@@ -12,3 +12,7 @@ export * from './suppliers';
 export * from './pricing';
 export * from './pos';
 export * from './stock-takes';
+export * from './payments';
+export * from './shipments';
+export * from './fulfillment';
+export * from './backup';
