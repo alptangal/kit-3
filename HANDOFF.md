@@ -1,9 +1,8 @@
-# HANDOFF — Phase 4 Multi-branch Inventory System (worktree phase4-multi-branch-inventory)
+# HANDOFF
 
 ## 1. Mục tiêu & Phase
-- Phase: **4 — Core Retail Data Model & Operations**
-- Task hiện tại: **UI admin Phase 4** (inventory, orders, suppliers/PO, POS, promotions, stock-takes — Days 6-7) — backend HOÀN THÀNH
-- Mục tiêu: Build InventoryService (server db layer) + API routes cho tồn kho đa chi nhánh.
+- Phase: **4 — Core Retail Data Model & Operations** — BACKEND + UI ADMIN PHASE 4: xem section 8.
+- Phase 6 tính năng bán hàng hiện đại (nhập hàng/expiry/chi phí/camera/thống kê/agent catalog): **HOÀN THÀNH** — xem section 9.
 
 ## 2. Trạng thái task (theo todo list)
 | Task | Trạng thái |
@@ -75,3 +74,24 @@ Working tree clean. svelte-check 495 errors = baseline noise, 0 lỗi phase4.
 **Còn lại:** ui-checker screenshot dialog restore → commit B9 (app + tests tách commit, KHÔNG commit mongo_database_backup/ + test-results/).
 
 m03701–m03706 B9 probe re-run (CŨ — ĐÃ GIẢI QUYẾT, xem section "B9 draft-store" phía trên): DF5 crash modal intercepts là modal create brand chưa đóng giữa các bước + draft còn sau restore; instrument df5-instrument.mjs đã chạy, root cause `void formData` không track Svelte 5. KHÔNG còn mở.
+
+## 9. Đợt 6 tính năng bán hàng hiện đại — HOÀN THÀNH (2026-10-19, master d87ed1f6)
+
+3 agents song song (A nhập hàng+expiry, B chi phí+camera, C analytics+catalog) + tôi đóng backlog liên kết.
+
+| Nhóm | Kết quả | Trang admin |
+|---|---|---|
+| Nhập hàng đa kiểu | `receivePurchaseOrder` + `createQuickPurchase` (3 mode supplier/product/category) + `receiptImages` base64 ≤5 | `/admin/purchases` |
+| Hạn sử dụng | `ExpiryService.listExpiringLots` (quá hạn/≤7/≤15/≤30) + `createClearancePromotion` | `/admin/expiry` |
+| Chi phí vận hành | `ExpenseService` + collection `operating_expenses`, breakdown theo nhóm, ảnh hóa đơn nén ≤300KB | `/admin/expenses` |
+| Camera MVP | `CameraService` Hikvision ISAPI (digest RFC2617 tự viết) / Dahua CGI / Ezviz unsupported; password AES-GCM; snapshot base64 không lưu DB | `/admin/cameras` |
+| Thống kê | `AnalyticsService` (cost/supplier/volume/stock + forecast linear regression R²); collection `price_history`; 1 route `/api/admin/analytics/query` | `/admin/analytics` |
+| Agent/LLM | `GET /api/agent/schema` owner-only sinh từ collectionSchemas + `AGENT-CATALOG.md` | — |
+
+Sidebar: nhóm mới "Vận hành" (expenses/cameras) + "Nhập hàng" + "Hạn sử dụng" + "Thống kê". Permissions mới: `purchases:read/manage`, `expenses:read/manage`, `cameras:read/manage`, `analytics:read`.
+
+**Kiểm tra:** svelte-check 367/148 (baseline 366/144, 0 lỗi mới), build PASS, hook analytics `d87ed1f6` (recordFromPurchase vào receive + quick purchase).
+
+**Backlog mở:** lọc categoryId trong listExpiringLots (cần join products); seed `promotions:*` permissions rồi chuyển createClearancePromotion qua PricingService; HLS stream camera + Ezviz OpenAPI + scheduler test định kỳ; dự báo ML/seasonality; webhook/API key agent ngoài.
+
+**Bẫy đợt này:** `InventoryService.createLot` không cộng `inventory_stock` → receive tự tạo lot + upsert stock + 1 movement (tránh double-log); `@undecaf/barcode-detector-polyfill` thiếu trong package.json (build vỡ sau reinstall) — đã cài `5fcdc119`; khi Edit chuỗi return legacy trùng 2 chỗ → thêm context xung quanh.
