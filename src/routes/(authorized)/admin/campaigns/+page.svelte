@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { AlertDialog } from '$lib/components/element/alert-dialog';
 	import { encryption } from '$modules/encryption';
@@ -452,20 +453,83 @@
 		}
 	}
 
-	function prevPage() {
-		if (page > 1) {
-			page -= 1;
-			load();
-		}
-	}
-	function nextPage() {
-		if (page * pageSize < total) {
-			page += 1;
-			load();
+	const totalPages = $derived(Math.max(1, Math.ceil(total / pageSize)));
+
+	// ---------- DataTable ----------
+	// Map campaign status -> DataTableStatus ('default'|'success'|'warning'|'danger'|'info')
+	function statusColor(status: string): 'success' | 'warning' | 'danger' | 'info' | 'default' {
+		switch (status) {
+			case 'active':
+				return 'success';
+			case 'paused':
+				return 'warning';
+			case 'cancelled':
+				return 'danger';
+			case 'completed':
+				return 'info';
+			default:
+				return 'default';
 		}
 	}
 
-	const totalPages = $derived(Math.max(1, Math.ceil(total / pageSize)));
+	const itemsAny = $derived(items as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'name',
+			label: t('colName'),
+			accessor: (row) => {
+				const item = row as unknown as CampaignItem;
+				const sub = item.promotionIds?.length
+					? ` — ${t('linkedCount').replace('{count}', String(item.promotionIds.length))}`
+					: '';
+				return `${item.name}${sub}`;
+			}
+		},
+		{
+			id: 'type',
+			label: t('colType'),
+			accessor: (row) =>
+				typeLabels[(row as unknown as CampaignItem).type]?.[lang] ??
+				(row as unknown as CampaignItem).type,
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: t('colStatus'),
+			accessor: (row) =>
+				statusLabels[(row as unknown as CampaignItem).status]?.[lang] ??
+				(row as unknown as CampaignItem).status,
+			status: (_value, row) => statusColor((row as unknown as CampaignItem).status)
+		},
+		{
+			id: 'budget',
+			label: t('colBudget'),
+			accessor: (row) => {
+				const item = row as unknown as CampaignItem;
+				const sub = item.spent !== undefined ? ` (${formatCurrency(item.spent)})` : '';
+				return `${formatCurrency(item.budget)}${sub}`;
+			},
+			noHighlight: true
+		},
+		{
+			id: 'dates',
+			label: t('colDates'),
+			accessor: (row) => {
+				const item = row as unknown as CampaignItem;
+				return `${formatDate(item.startAt)} → ${formatDate(item.endAt)}`;
+			},
+			noHighlight: true
+		},
+		{
+			id: 'reached',
+			label: t('colReached'),
+			accessor: (row) => {
+				const item = row as unknown as CampaignItem;
+				return `${item.reachedCount ?? 0} / ${item.targetCount ?? 0}`;
+			},
+			noHighlight: true
+		}
+	]);
 
 	// ---------- lifecycle ----------
 	onMount(async () => {
@@ -524,104 +588,78 @@
 		</select>
 	</div>
 
-	{#if isLoading && !loadedOnce}
-		<div class="admin-state" role="status"><p>{t('loading')}</p></div>
-	{:else if errorMessage}
+	{#if errorMessage}
 		<div class="admin-state admin-state--error" role="alert">{errorMessage}</div>
-	{:else if items.length === 0}
-		<div class="admin-state">{t('empty')}</div>
 	{:else}
-		<div class="admin-table-wrap">
-			<table class="admin-table" data-test="campaigns-table">
-				<thead>
-					<tr>
-						<th>{t('colName')}</th>
-						<th>{t('colType')}</th>
-						<th>{t('colStatus')}</th>
-						<th>{t('colBudget')}</th>
-						<th>{t('colDates')}</th>
-						<th>{t('colReached')}</th>
-						<th>{t('colActions')}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each items as item (item._id)}
-						<tr data-test="campaigns-row">
-							<td class="admin-td-name">
-								{item.name}
-								{#if item.promotionIds?.length}
-									<div class="admin-td-sub">
-										{t('linkedCount').replace('{count}', String(item.promotionIds.length))}
-									</div>
-								{/if}
-							</td>
-							<td>
-								<span class="type-badge type-badge--{item.type}"
-									>{typeLabels[item.type]?.[lang] ?? item.type}</span
-								>
-							</td>
-							<td>
-								<span class="status-badge status-badge--{item.status}"
-									>{statusLabels[item.status]?.[lang] ?? item.status}</span
-								>
-							</td>
-							<td>
-								{formatCurrency(item.budget)}
-								{#if item.spent !== undefined}
-									<div class="admin-td-sub">{formatCurrency(item.spent)}</div>
-								{/if}
-							</td>
-							<td>{formatDate(item.startAt)} → {formatDate(item.endAt)}</td>
-							<td>{item.reachedCount ?? 0} / {item.targetCount ?? 0}</td>
-							<td>
-								<div class="admin-td-actions">
-									{#if item.status === 'draft'}
-										<Button size="sm" color="success" onClick={() => transition(item, 'launch')}
-											>{t('launch')}</Button
-										>
-									{/if}
-									{#if item.status === 'active'}
-										<Button size="sm" variant="outline" onClick={() => transition(item, 'pause')}
-											>{t('pause')}</Button
-										>
-									{/if}
-									{#if item.status === 'active' || item.status === 'paused'}
-										<Button size="sm" color="info" onClick={() => transition(item, 'complete')}
-											>{t('complete')}</Button
-										>
-									{/if}
-									{#if item.status === 'draft' || item.status === 'active' || item.status === 'paused'}
-										<Button size="sm" variant="ghost" onClick={() => transition(item, 'cancel')}
-											>{t('cancel')}</Button
-										>
-									{/if}
-									<Button size="sm" color="primary" variant="ghost" onClick={() => openEdit(item)}
-										>{t('edit')}</Button
-									>
-									<Button size="sm" color="error" variant="ghost" onClick={() => askDelete(item)}
-										>{t('delete')}</Button
-									>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
+	<!-- ── Bảng chiến dịch — DataTable (component có sẵn) ──
+	     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
+	     Pagination element bên dưới bind:page điều khiển server. -->
+	<div class="admin-table-wrap">
+		<DataTable
+			data={itemsAny}
+			{columns}
+			pageSize={pageSize}
+			showPagination={false}
+			loading={isLoading && !loadedOnce}
+			visual={{ striped: true, hoverable: true }}
+			emptyLabel={t('empty')}
+			loadingLabel={t('loading')}
+			caption={{ vi: 'Danh sách chiến dịch', en: 'Campaigns list' }}
+			actionsLabel={{ vi: t('colActions'), en: t('colActions') }}
+			stickyHead
+			data-test="campaigns-datatable"
+		>
+			{#snippet actionsContent(row)}
+				{@const item = row as unknown as CampaignItem}
+				<div class="row-actions">
+					{#if item.status === 'draft'}
+						<Button size="sm" color="success" onClick={() => transition(item, 'launch')}
+							>{t('launch')}</Button
+						>
+					{/if}
+					{#if item.status === 'active'}
+						<Button size="sm" variant="outline" onClick={() => transition(item, 'pause')}
+							>{t('pause')}</Button
+						>
+					{/if}
+					{#if item.status === 'active' || item.status === 'paused'}
+						<Button size="sm" color="info" onClick={() => transition(item, 'complete')}
+							>{t('complete')}</Button
+						>
+					{/if}
+					{#if item.status === 'draft' || item.status === 'active' || item.status === 'paused'}
+						<Button size="sm" variant="ghost" onClick={() => transition(item, 'cancel')}
+							>{t('cancel')}</Button
+						>
+					{/if}
+					<Button size="sm" color="primary" variant="ghost" onClick={() => openEdit(item)}
+						>{t('edit')}</Button
+					>
+					<Button size="sm" color="error" variant="ghost" onClick={() => askDelete(item)}
+						>{t('delete')}</Button
+					>
+				</div>
+			{/snippet}
+		</DataTable>
+	</div>
 
-		<div class="admin-pagination">
-			<Button size="sm" variant="outline" disabled={page <= 1} onClick={prevPage}
-				>{t('prev')}</Button
-			>
-			<span
-				>{t('pageInfo')
-					.replace('{page}', String(page))
-					.replace('{total}', String(totalPages))}</span
-			>
-			<Button size="sm" variant="outline" disabled={page >= totalPages} onClick={nextPage}
-				>{t('next')}</Button
-			>
-		</div>
+	<!-- ── Phân trang (server-side) ── -->
+	<div class="admin-pagination">
+		<Pagination
+			bind:page={page}
+			totalPages={totalPages}
+			loading={isLoading}
+			variant="compact"
+			prevLabel={t('prev')}
+			nextLabel={t('next')}
+			aria-label={t('title')}
+		/>
+		<span
+			>{t('pageInfo')
+				.replace('{page}', String(page))
+				.replace('{total}', String(totalPages))}</span
+		>
+	</div>
 	{/if}
 </section>
 
@@ -909,96 +947,12 @@
 		border-radius: 0.5rem;
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.875rem;
-
-		th,
-		td {
-			padding: 0.625rem 0.75rem;
-			text-align: left;
-			border-bottom: 1px solid var(--default-200);
-			color: var(--foreground);
-		}
-
-		th {
-			font-weight: 600;
-			background: var(--default-100);
-			white-space: nowrap;
-		}
-
-		tbody tr:hover {
-			background: var(--default-100);
-		}
-	}
-
-	.admin-td-name {
-		font-weight: 500;
-	}
-
-	.admin-td-sub {
-		font-size: 0.75rem;
-		color: var(--muted-foreground);
-		margin-top: 0.125rem;
-	}
-
-	.admin-td-actions {
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
+	.row-actions {
 		display: flex;
 		gap: 0.375rem;
-		flex-wrap: wrap;
-	}
-
-	.type-badge,
-	.status-badge {
-		display: inline-block;
-		padding: 0.125rem 0.5rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 500;
-		white-space: nowrap;
-	}
-
-	.type-badge--promotion {
-		background: color-mix(in srgb, var(--primary) 15%, transparent);
-		color: var(--primary);
-	}
-	.type-badge--email {
-		background: color-mix(in srgb, #3b82f6 15%, transparent);
-		color: #3b82f6;
-	}
-	.type-badge--push {
-		background: color-mix(in srgb, #f59e0b 15%, transparent);
-		color: #f59e0b;
-	}
-	.type-badge--social {
-		background: color-mix(in srgb, var(--success) 15%, transparent);
-		color: var(--success);
-	}
-	.type-badge--discount_code {
-		background: color-mix(in srgb, var(--secondary) 20%, transparent);
-		color: var(--secondary);
-	}
-
-	.status-badge--draft {
-		background: var(--default-200);
-		color: var(--muted-foreground);
-	}
-	.status-badge--active {
-		background: color-mix(in srgb, var(--success) 15%, transparent);
-		color: var(--success);
-	}
-	.status-badge--paused {
-		background: color-mix(in srgb, #f59e0b 15%, transparent);
-		color: #f59e0b;
-	}
-	.status-badge--completed {
-		background: color-mix(in srgb, #3b82f6 15%, transparent);
-		color: #3b82f6;
-	}
-	.status-badge--cancelled {
-		background: color-mix(in srgb, var(--error) 15%, transparent);
-		color: var(--error);
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
