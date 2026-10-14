@@ -1,6 +1,7 @@
 <!-- src/routes/(authorized)/admin/purchases/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -177,7 +178,9 @@
 		pagination: {
 			total: { vi: 'Tổng', en: 'Total' },
 			records: { vi: 'bản ghi', en: 'records' },
-			pageSize: { vi: 'Số dòng/trang', en: 'Rows per page' }
+			pageSize: { vi: 'Số dòng/trang', en: 'Rows per page' },
+			prev: { vi: 'Trước', en: 'Previous' },
+			next: { vi: 'Sau', en: 'Next' }
 		}
 	};
 
@@ -269,7 +272,7 @@
 		return label ? label[lang] : status;
 	}
 
-	function statusColor(status?: string): string {
+	function statusColor(status?: string): 'success' | 'warning' | 'danger' | 'default' {
 		switch (status) {
 			case 'received':
 				return 'success';
@@ -277,7 +280,8 @@
 			case 'partially_received':
 				return 'warning';
 			case 'cancelled':
-				return 'error';
+				// DataTableStatus không có 'error' — map sang 'danger'
+				return 'danger';
 			default:
 				return 'default';
 		}
@@ -448,17 +452,65 @@
 		void loadPurchases();
 	}
 
-	function changePage(delta: number) {
-		const next = page + delta;
-		if (next < 1 || next > totalPages) return;
-		page = next;
-		void loadPurchases();
-	}
-
 	function onPageSizeChange() {
 		page = 1;
 		void loadPurchases();
 	}
+
+	// ---------- DataTable ----------
+	const purchasesAny = $derived(purchases as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'code',
+			label: pageContents.table.code[lang],
+			accessor: (row) => (row as unknown as PurchaseRow).poCode ?? '—'
+		},
+		{
+			id: 'source',
+			label: pageContents.table.source[lang],
+			accessor: (row) => sourceLabel((row as unknown as PurchaseRow).source),
+			noHighlight: true
+		},
+		{
+			id: 'supplier',
+			label: pageContents.table.supplier[lang],
+			accessor: (row) => getSupplierLabel((row as unknown as PurchaseRow).supplierId),
+			noHighlight: true
+		},
+		{
+			id: 'branch',
+			label: pageContents.table.branch[lang],
+			accessor: (row) => getBranchLabel((row as unknown as PurchaseRow).branchId),
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) => statusLabel((row as unknown as PurchaseRow).status),
+			status: (_value, row) => statusColor((row as unknown as PurchaseRow).status)
+		},
+		{
+			id: 'items',
+			label: pageContents.table.items[lang],
+			accessor: (row) => String((row as unknown as PurchaseRow).items?.length ?? 0),
+			noHighlight: true
+		},
+		{
+			id: 'totalCost',
+			label: pageContents.table.totalCost[lang],
+			accessor: (row) => formatMoney((row as unknown as PurchaseRow).totalCost),
+			noHighlight: true
+		},
+		{
+			id: 'receivedAt',
+			label: pageContents.table.receivedAt[lang],
+			accessor: (row) => {
+				const r = row as unknown as PurchaseRow;
+				return formatDate(r.receivedAt ?? r.createdAt);
+			},
+			noHighlight: true
+		}
+	]);
 
 	// ── Nhập nhanh ──
 	function openQuickModal() {
@@ -747,75 +799,63 @@
 	</div>
 
 	<!-- ── Danh sách ── -->
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
-		</div>
-	{:else if listError}
+	{#if listError}
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{listError}</p>
 			<Button color="primary" variant="outline" onClick={() => void loadPurchases()}>{pageContents.states.retry[lang]}</Button>
 		</div>
-	{:else if purchases.length === 0}
-		<div class="admin-state">
-			<p>{pageContents.states.empty[lang]}</p>
-		</div>
 	{:else}
+		<!-- ── Bảng đơn nhập — DataTable (component có sẵn) ──
+		     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
+		     Pagination element bên dưới bind:page điều khiển server.
+		     Skeleton/empty do DataTable tự render qua loadingLabel/emptyLabel. -->
 		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.code[lang]}</th>
-						<th scope="col">{pageContents.table.source[lang]}</th>
-						<th scope="col">{pageContents.table.supplier[lang]}</th>
-						<th scope="col">{pageContents.table.branch[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.items[lang]}</th>
-						<th scope="col">{pageContents.table.totalCost[lang]}</th>
-						<th scope="col">{pageContents.table.receivedAt[lang]}</th>
-						<th scope="col" class="col-actions">{pageContents.table.actions[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each purchases as row (row._id)}
-						<tr>
-							<td class="col-code">{row.poCode ?? '—'}</td>
-							<td>{sourceLabel(row.source)}</td>
-							<td>{getSupplierLabel(row.supplierId)}</td>
-							<td>{getBranchLabel(row.branchId)}</td>
-							<td class="col-status">
-								<span class="status-badge status-{statusColor(row.status)}">{statusLabel(row.status)}</span>
-							</td>
-							<td class="col-num">{row.items?.length ?? 0}</td>
-							<td class="col-num">{formatMoney(row.totalCost)}</td>
-							<td>{formatDate(row.receivedAt ?? row.createdAt)}</td>
-							<td class="col-actions">
-								<div class="row-actions">
-									{#if row.status === 'ordered' || row.status === 'partially_received'}
-										<!-- update = primary -->
-										<Button color="primary" variant="ghost" size="sm" loading={receiveSubmitting} onClick={() => receivePO(row)}>
-											{pageContents.actions.receive[lang]}
-										</Button>
-									{/if}
-									<Button color="default" variant="ghost" size="sm" onClick={() => openDetail(row)}>
-										{pageContents.actions.detail[lang]}
-									</Button>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+			<DataTable
+				data={purchasesAny}
+				{columns}
+				pageSize={pageSize}
+				showPagination={false}
+				loading={loading && !loadedOnce}
+				visual={{ striped: true, hoverable: true }}
+				emptyLabel={pageContents.states.empty[lang]}
+				loadingLabel={pageContents.states.loading[lang]}
+				caption={{ vi: 'Danh sách đơn nhập hàng', en: 'Purchase orders list' }}
+				actionsLabel={{ vi: pageContents.table.actions[lang], en: pageContents.table.actions[lang] }}
+				stickyHead
+				data-test="purchases-datatable"
+			>
+				{#snippet actionsContent(row)}
+					{@const r = row as unknown as PurchaseRow}
+					<div class="row-actions">
+						{#if r.status === 'ordered' || r.status === 'partially_received'}
+							<!-- update = primary -->
+							<Button color="primary" variant="ghost" size="sm" loading={receiveSubmitting} onClick={() => receivePO(r)}>
+								{pageContents.actions.receive[lang]}
+							</Button>
+						{/if}
+						<Button color="default" variant="ghost" size="sm" onClick={() => openDetail(r)}>
+							{pageContents.actions.detail[lang]}
+						</Button>
+					</div>
+				{/snippet}
+			</DataTable>
 		</div>
 
-		<!-- ── Phân trang ── -->
+		<!-- ── Phân trang (server-side) ── -->
 		<div class="admin-pagination">
 			<span class="total-count">{pageContents.pagination.total[lang]} {total} {pageContents.pagination.records[lang]}</span>
 			<div class="page-controls">
-				<Button color="default" variant="outline" size="sm" disabled={page <= 1} onClick={() => changePage(-1)}>‹</Button>
+				<Pagination
+					bind:page={page}
+					totalPages={totalPages}
+					loading={loading}
+					variant="compact"
+					prevLabel={pageContents.pagination.prev[lang]}
+					nextLabel={pageContents.pagination.next[lang]}
+					aria-label={pageContents.title[lang]}
+				/>
 				<span class="page-info">{page} / {totalPages}</span>
-				<Button color="default" variant="outline" size="sm" disabled={page >= totalPages} onClick={() => changePage(1)}>›</Button>
 				<span class="page-size">
 					<span class="page-size-label">{pageContents.pagination.pageSize[lang]}</span>
 					<select class="admin-select" bind:value={pageSize} onchange={onPageSizeChange}>
@@ -1171,6 +1211,15 @@
 		background: var(--background);
 	}
 
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
+	.row-actions {
+		display: flex;
+		gap: 0.25rem;
+		width: 1%;
+		min-width: fit-content;
+	}
+
+	/* Bảng items read-only trong modal detail — giữ CSS riêng */
 	.admin-table {
 		width: 100%;
 		border-collapse: collapse;
@@ -1197,52 +1246,8 @@
 		}
 	}
 
-	.col-code {
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
 	.col-num {
 		font-variant-numeric: tabular-nums;
-	}
-
-	.col-actions {
-		text-align: right;
-	}
-
-	.row-actions {
-		display: flex;
-		gap: 0.25rem;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
 	}
 
 	.admin-pagination {
