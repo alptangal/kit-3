@@ -51,7 +51,11 @@ const collectionsName = [
 	'campaigns',
 	// Phase 6 — Social media manager
 	'social_accounts',
-	'social_posts'
+	'social_posts',
+	// Chi phí vận hành (operating expenses)
+	'operating_expenses',
+	// Camera giám sát MVP
+	'cameras'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -1146,6 +1150,57 @@ export const collectionSchemas = {
 			error: { type: 'string', searchable: false, sortable: false, selectable: true },
 			externalPostId: { type: 'string', searchable: false, sortable: false, selectable: true },
 			permalink: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Chi phí vận hành (operating expenses) =====
+	operating_expenses: {
+		fields: {
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// 'rent' | 'salary' | 'utility' | 'marketing' | 'logistics' | 'other'
+			category: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			amount: { type: 'number', searchable: true, sortable: true, selectable: true },
+			spentAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			description: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			// Ảnh hóa đơn base64 (max 3, client nén ≤300KB) — không query trực tiếp
+			receiptImages: { type: 'array', searchable: false, sortable: false, selectable: false },
+
+			createdBy: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Camera giám sát MVP =====
+	cameras: {
+		fields: {
+			name: { type: 'string', searchable: true, sortable: true, selectable: true },
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			// 'ezviz' | 'hikvision' | 'dahua' | 'other'
+			brand: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			model: { type: 'string', searchable: true, sortable: false, selectable: true },
+			host: { type: 'string', searchable: true, sortable: false, selectable: true },
+			port: { type: 'number', searchable: false, sortable: false, selectable: true },
+			channel: { type: 'number', searchable: false, sortable: false, selectable: true },
+			username: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// Mật khẩu camera lưu encrypted: { ivB64, ciphertextB64 } — KHÔNG trả về client
+			passwordEncrypted: { type: 'object', searchable: false, sortable: false, selectable: false },
+
+			// 'online' | 'offline' | 'unknown'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			lastTestedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			lastTestMessage: { type: 'string', searchable: false, sortable: false, selectable: true },
 
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
 			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
