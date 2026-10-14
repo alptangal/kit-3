@@ -527,7 +527,8 @@ export const collectionSchemas = {
 			fromBranchId: { type: 'string', searchable: true, sortable: false, selectable: true },
 			toBranchId: { type: 'string', searchable: true, sortable: false, selectable: true },
 			status: { type: 'string', searchable: true, sortable: true, selectable: true }, // 'pending' | 'in_transit' | 'completed' | 'cancelled'
-			items: { type: 'array', searchable: false, sortable: false, selectable: true }, // [{ productId, quantity, lotId? }]
+			// [{ productId, quantity, lotId? }] — service dùng variantId (schema cũ ghi productId, giữ tên field products/productId cho tương thích)
+			items: { type: 'array', searchable: false, sortable: false, selectable: true },
 			requestedBy: { type: 'string', searchable: true, sortable: false, selectable: true },
 			approvedBy: { type: 'string', searchable: false, sortable: false, selectable: true },
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
@@ -603,7 +604,11 @@ export const collectionSchemas = {
 		fields: {
 			returnCode: { type: 'string', searchable: true, sortable: false, selectable: true },
 			orderId: { type: 'string', searchable: true, sortable: false, selectable: true },
-			branchId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			// originBranchId — chi nhánh bán gốc (nơi đơn hàng được tạo); returnBranchId — chi nhánh xử lý đổi trả (nơi hoàn tồn khi completed).
+			// Tách riêng để hỗ trợ đổi trả KHÁC chi nhánh: khách mua ở A nhưng trả ở B.
+			originBranchId: { type: 'string', searchable: true, sortable: false, selectable: true }, // chi nhánh bán gốc
+			returnBranchId: { type: 'string', searchable: true, sortable: false, selectable: true }, // chi nhánh xử lý đổi trả
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true }, // DEPRECATED — giữ tương thích dữ liệu cũ, = returnBranchId
 			customerId: { type: 'string', searchable: true, sortable: false, selectable: true },
 
 			// [{ variantId, lotId?, quantity, refundUnitPrice, reason }]

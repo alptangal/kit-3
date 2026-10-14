@@ -131,6 +131,14 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'purchases:read', resource: 'purchases', action: 'read' },
 		{ key: 'purchases:manage', resource: 'purchases', action: 'manage' },
 
+		// Chuyển kho giữa các chi nhánh
+		{ key: 'transfers:read', resource: 'stock_transfers', action: 'read' },
+		{ key: 'transfers:manage', resource: 'stock_transfers', action: 'manage' },
+
+		// Đổi trả hàng
+		{ key: 'returns:read', resource: 'order_returns', action: 'read' },
+		{ key: 'returns:manage', resource: 'order_returns', action: 'manage' },
+
 		// Analytics — thống kê biến động giá / khối lượng / tồn kho
 		{ key: 'analytics:read', resource: 'analytics', action: 'read' }
 	];
@@ -211,6 +219,12 @@ export async function seedDetailRoles(): Promise<void> {
 			// Nhập hàng đa kiểu + hạn sử dụng
 			'purchases:read',
 			'purchases:manage',
+			// Chuyển kho — owner toàn quyền
+			'transfers:read',
+			'transfers:manage',
+			// Đổi trả — owner toàn quyền
+			'returns:read',
+			'returns:manage',
 			// Analytics — thống kê biến động giá / khối lượng / tồn kho
 			'analytics:read'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
@@ -277,6 +291,14 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'purchases:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'purchases:manage', scope: 'own_branch' },
 
+		// Chuyển kho — manager trong chi nhánh mình (tạo + duyệt transfer liên quan chi nhánh mình)
+		{ roleName: 'manager', permissionKey: 'transfers:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'transfers:manage', scope: 'own_branch' },
+
+		// Đổi trả — manager trong chi nhánh mình (duyệt + hoàn tất tại chi nhánh xử lý)
+		{ roleName: 'manager', permissionKey: 'returns:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'returns:manage', scope: 'own_branch' },
+
 		// Analytics — xem thống kê trong chi nhánh mình
 		{ roleName: 'manager', permissionKey: 'analytics:read', scope: 'own_branch' },
 
@@ -289,6 +311,10 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'staff', permissionKey: 'inventory:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'stock_takes:perform', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'stock_takes:read', scope: 'own_branch' },
+
+		// Chuyển kho + đổi trả — staff chỉ đọc trong chi nhánh mình
+		{ roleName: 'staff', permissionKey: 'transfers:read', scope: 'own_branch' },
+		{ roleName: 'staff', permissionKey: 'returns:read', scope: 'own_branch' },
 
 		// Customer — chỉ tạo/xem đơn của chính mình
 		{ roleName: 'customer', permissionKey: 'orders:create', scope: 'own_records' },

@@ -27,3 +27,5 @@ export * from './expenses';
 export * from './cameras';
 export * from './expiry';
 export * from './analytics';
+export * from './transfers';
+export * from './returns';
