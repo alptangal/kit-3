@@ -118,6 +118,8 @@
 		'/admin/dashboard': 'Tổng quan',
 		'/admin/expenses': 'Chi phí',
 		'/admin/cameras': 'Camera',
+		'/admin/purchases': 'Nhập hàng',
+		'/admin/expiry': 'Hạn sử dụng',
 		'/settings': 'Cấu hình hệ thống'
 	};
 	const crumbs = $derived<BreadcrumbItem[]>([
@@ -250,6 +252,24 @@
 							active={isActive('/admin/suppliers')}
 							icon="lucide:truck"
 							data-test="admin-nav-suppliers"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Nhập hàng"
+							href="/admin/purchases"
+							active={isActive('/admin/purchases')}
+							icon="lucide:package-plus"
+							data-test="admin-nav-purchases"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Hạn sử dụng"
+							href="/admin/expiry"
+							active={isActive('/admin/expiry')}
+							icon="lucide:calendar-clock"
+							data-test="admin-nav-expiry"
 						/>
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
