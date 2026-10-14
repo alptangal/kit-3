@@ -4,7 +4,8 @@
      "Chờ lấy hàng" → markAwaitingPickup (chỉ đơn click-and-collect).
      Pattern theo trang payments (fetchSecure POST encrypted, pageContents vi/en). -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -143,7 +144,7 @@
 		return label ? label[lang] : (status ?? '—');
 	}
 
-	function statusColor(status?: string): string {
+	function statusColor(status?: string): 'success' | 'warning' | 'danger' | 'default' {
 		switch (status) {
 			case 'paid':
 			case 'confirmed':
@@ -256,6 +257,49 @@
 		pageNo = 1;
 		await loadQueue();
 	}
+
+	// ── DataTable columns ──
+	const ordersAny = $derived(visibleOrders as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'orderCode',
+			label: pageContents.table.orderCode[lang],
+			accessor: (row) => (row as unknown as QueueRow).orderCode ?? '—'
+		},
+		{
+			id: 'channel',
+			label: pageContents.table.channel[lang],
+			accessor: (row) => channelLabel((row as unknown as QueueRow).channel)
+		},
+		{
+			id: 'fulfillmentMethod',
+			label: pageContents.table.fulfillmentMethod[lang],
+			accessor: (row) => methodLabel((row as unknown as QueueRow).fulfillmentMethod)
+		},
+		{
+			id: 'branchId',
+			label: pageContents.table.branchId[lang],
+			accessor: (row) => (row as unknown as QueueRow).branchId ?? '—',
+			noHighlight: true
+		},
+		{
+			id: 'totalAmount',
+			label: pageContents.table.totalAmount[lang],
+			accessor: (row) => formatMoney((row as unknown as QueueRow).totalAmount)
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) => statusLabel((row as unknown as QueueRow).status),
+			status: (_value, row) => statusColor((row as unknown as QueueRow).status)
+		},
+		{
+			id: 'createdAt',
+			label: pageContents.table.createdAt[lang],
+			accessor: (row) => formatDateTime((row as unknown as QueueRow).createdAt),
+			noHighlight: true
+		}
+	]);
 
 	// ── Điều kiện hiện nút ──
 	function isFulfillable(_row: QueueRow): boolean {
@@ -421,95 +465,70 @@
 		</Button>
 	</div>
 
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
-		</div>
-	{:else if loadError}
+	{#if loadError}
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{loadError}</p>
 			<Button color="primary" variant="outline" onClick={loadQueue}>{pageContents.states.retry[lang]}</Button>
 		</div>
-	{:else if visibleOrders.length === 0}
-		<div class="admin-state">
-			<p>{pageContents.states.empty[lang]}</p>
-		</div>
 	{:else}
-		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.orderCode[lang]}</th>
-						<th scope="col">{pageContents.table.channel[lang]}</th>
-						<th scope="col">{pageContents.table.fulfillmentMethod[lang]}</th>
-						<th scope="col">{pageContents.table.branchId[lang]}</th>
-						<th scope="col">{pageContents.table.totalAmount[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.createdAt[lang]}</th>
-						<th scope="col">{pageContents.table.actions[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each visibleOrders as row (row._id)}
-						<tr>
-							<td class="col-code">{row.orderCode ?? '—'}</td>
-							<td>{channelLabel(row.channel)}</td>
-							<td>{methodLabel(row.fulfillmentMethod)}</td>
-							<td class="col-wrap">{row.branchId ?? '—'}</td>
-							<td class="col-num">{formatMoney(row.totalAmount)}</td>
-							<td class="col-status">
-								<span class="status-badge status-{statusColor(row.status)}">{statusLabel(row.status)}</span>
-							</td>
-							<td>{formatDateTime(row.createdAt)}</td>
-							<td class="col-actions">
-								{#if isFulfillable(row)}
-									<!-- Quy ước màu nút: xử lý đơn (edit-style) = primary -->
-									<Button color="primary" size="sm" onClick={() => openFulfillModal(row)}>
-										{pageContents.actions.fulfill[lang]}
-									</Button>
-								{/if}
-								{#if isAwaitingPickupable(row)}
-									<!-- Nút phụ (secondary) cho luồng click-and-collect -->
-									<Button color="default" variant="outline" size="sm" onClick={() => openPickupModal(row)}>
-										{pageContents.actions.awaitingPickup[lang]}
-									</Button>
-								{/if}
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
+	<!-- ── Hàng chờ — DataTable (component có sẵn) ──
+	     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
+	     Pagination element bên dưới bind:page điều khiển server.
+	     channel/status lọc client-side trên visibleOrders (API chỉ nhận branchId). -->
+	<div class="admin-table-wrap">
+		<DataTable
+			data={ordersAny}
+			{columns}
+			pageSize={pageSize}
+			showPagination={false}
+			loading={loading}
+			visual={{ striped: true, hoverable: true }}
+			emptyLabel={pageContents.states.empty[lang]}
+			loadingLabel={pageContents.states.loading[lang]}
+			caption={{ vi: 'Hàng chờ xử lý đơn', en: 'Fulfillment queue' }}
+			actionsLabel={pageContents.table.actions}
+			stickyHead
+			data-test="fulfillment-datatable"
+		>
+			{#snippet actionsContent(row)}
+				{@const queueRow = row as unknown as QueueRow}
+				<div class="row-actions">
+					{#if isFulfillable(queueRow)}
+						<!-- Quy ước màu nút: xử lý đơn (edit-style) = primary -->
+						<Button color="primary" size="sm" onClick={() => openFulfillModal(queueRow)}>
+							{pageContents.actions.fulfill[lang]}
+						</Button>
+					{/if}
+					{#if isAwaitingPickupable(queueRow)}
+						<!-- Nút phụ (secondary) cho luồng click-and-collect -->
+						<Button color="default" variant="outline" size="sm" onClick={() => openPickupModal(queueRow)}>
+							{pageContents.actions.awaitingPickup[lang]}
+						</Button>
+					{/if}
+				</div>
+			{/snippet}
+		</DataTable>
+	</div>
 
-	<!-- ── Phân trang ── -->
+	<!-- ── Phân trang (server-side) ── -->
 	<footer class="admin-pagination">
 		<span class="total-count">{pageContents.pagination.totalCount[lang].replace('{total}', String(total))}</span>
 		<div class="page-controls">
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo <= 1}
-				onClick={() => goToPage(pageNo - 1)}
-			>
-				{pageContents.pagination.prev[lang]}
-			</Button>
+			<Pagination
+				bind:page={pageNo}
+				totalPages={totalPages}
+				loading={loading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
 			<span class="page-info">
 				{pageContents.pagination.pageInfo[lang]
 					.replace('{page}', String(pageNo))
 					.replace('{total}', String(totalPages))}
 			</span>
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo >= totalPages}
-				onClick={() => goToPage(pageNo + 1)}
-			>
-				{pageContents.pagination.next[lang]}
-			</Button>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -524,6 +543,7 @@
 			</label>
 		</div>
 	</footer>
+	{/if}
 </section>
 
 <!-- ── Modal đã xử lý (markFulfilled) ── -->
@@ -719,84 +739,12 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.col-code {
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.col-num {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.col-wrap {
-		white-space: normal;
-		min-width: 8rem;
-	}
-
-	.col-status {
-		white-space: nowrap;
-	}
-
-	.col-actions {
-		white-space: nowrap;
-
-		:global(.button + .button) {
-			margin-left: 0.5rem;
-		}
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
+	.row-actions {
+		display: flex;
+		gap: 0.25rem;
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
