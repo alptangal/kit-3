@@ -76,11 +76,9 @@ interface ListResult {
   pageSize: number;
 }
 
-export interface ActorContext {
-  roleName: string;
-  userId: string;
-  branchId?: string;
-}
+// ActorContext dùng chung từ users.ts — export lại để tương thích import cũ từ file này.
+import type { ActorContext } from './users';
+export type { ActorContext };
 
 export class PricingService {
   private static async requirePermission(
