@@ -1,6 +1,7 @@
 <!-- src/routes/(authorized)/admin/posts/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { AlertDialog } from '$lib/components/element/alert-dialog';
 	import { encryption } from '$modules/encryption';
@@ -141,14 +142,13 @@
 		return label ? label[lang] : (status ?? '—');
 	}
 
-	function statusColor(status?: string): string {
+	function statusColor(status?: string): 'success' | 'warning' | 'default' {
 		switch (status) {
 			case 'published':
 				return 'success';
 			case 'draft':
 				return 'warning';
 			case 'archived':
-				return 'default';
 			default:
 				return 'default';
 		}
@@ -277,6 +277,54 @@
 			void onFilterChange();
 		}, 300);
 	}
+
+	// ── DataTable columns ──
+	const postsAny = $derived(posts as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'title',
+			label: pageContents.table.title[lang],
+			// accessor gộp title + slug (DataTable cell chỉ render string)
+			accessor: (row) => {
+				const post = row as unknown as PostRow;
+				const slugPart = post.slug ? ` · /${post.slug}` : '';
+				return `${post.title ?? '—'}${slugPart}`;
+			}
+		},
+		{
+			id: 'category',
+			label: pageContents.table.category[lang],
+			accessor: (row) => categoryName((row as unknown as PostRow).categoryId),
+			noHighlight: true
+		},
+		{
+			id: 'tags',
+			label: pageContents.table.tags[lang],
+			accessor: (row) => {
+				const tags = (row as unknown as PostRow).tags;
+				return tags?.length ? tags.join(', ') : '—';
+			},
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) => statusLabel((row as unknown as PostRow).status),
+			status: (_value, row) => statusColor((row as unknown as PostRow).status)
+		},
+		{
+			id: 'views',
+			label: pageContents.table.views[lang],
+			accessor: (row) => String((row as unknown as PostRow).viewCount ?? 0),
+			noHighlight: true
+		},
+		{
+			id: 'publishedAt',
+			label: pageContents.table.publishedAt[lang],
+			accessor: (row) => formatDateTime((row as unknown as PostRow).publishedAt),
+			noHighlight: true
+		}
+	]);
 
 	// ── Modal tạo/sửa ──
 	let editModalDisplay = $state(false);
@@ -546,113 +594,76 @@
 		</Button>
 	</div>
 
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
-		</div>
-	{:else if loadError}
+	{#if loadError}
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{loadError}</p>
 			<Button color="primary" variant="outline" onClick={loadPosts}>{pageContents.states.retry[lang]}</Button>
 		</div>
-	{:else if posts.length === 0}
-		<div class="admin-state">
-			<p>{pageContents.states.empty[lang]}</p>
-		</div>
 	{:else}
-		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.title[lang]}</th>
-						<th scope="col">{pageContents.table.category[lang]}</th>
-						<th scope="col">{pageContents.table.tags[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.views[lang]}</th>
-						<th scope="col">{pageContents.table.publishedAt[lang]}</th>
-						<th scope="col" class="col-actions"><span class="visually-hidden">actions</span></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each posts as row (row._id ?? row.postId)}
-						<tr>
-							<td class="col-title">
-								<span class="post-title">{row.title ?? '—'}</span>
-								<span class="post-slug">/{row.slug ?? ''}</span>
-							</td>
-							<td>{categoryName(row.categoryId)}</td>
-							<td class="col-tags">
-								{#if row.tags?.length}
-									{#each row.tags as tag (tag)}
-										<span class="tag-badge">{tag}</span>
-									{/each}
-								{:else}
-									—
-								{/if}
-							</td>
-							<td class="col-status">
-								<span class="status-badge status-{statusColor(row.status)}">{statusLabel(row.status)}</span>
-							</td>
-							<td class="col-num">{row.viewCount ?? 0}</td>
-							<td>{formatDateTime(row.publishedAt)}</td>
-							<td class="col-actions">
-								<div class="row-actions">
-									<!-- Quy ước: edit = primary -->
-									<Button color="primary" variant="ghost" size="sm" onClick={() => openEditModal(row)}>
-										{pageContents.actions.edit[lang]}
-									</Button>
-									{#if row.status !== 'published'}
-										<!-- publish = secondary (outline) -->
-										<Button color="default" variant="outline" size="sm" onClick={() => publishPost(row)}>
-											{pageContents.actions.publish[lang]}
-										</Button>
-									{/if}
-									{#if row.status !== 'archived'}
-										<Button color="default" variant="outline" size="sm" onClick={() => archivePost(row)}>
-											{pageContents.actions.archive[lang]}
-										</Button>
-									{/if}
-									<!-- delete = error -->
-									<Button color="error" variant="ghost" size="sm" onClick={() => askDeletePost(row)}>
-										{pageContents.actions.delete[lang]}
-									</Button>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
+	<!-- ── Bảng bài viết — DataTable (component có sẵn) ──
+	     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
+	     Pagination element bên dưới bind:page điều khiển server. -->
+	<div class="admin-table-wrap">
+		<DataTable
+			data={postsAny}
+			{columns}
+			pageSize={pageSize}
+			showPagination={false}
+			loading={loading}
+			visual={{ striped: true, hoverable: true }}
+			emptyLabel={pageContents.states.empty[lang]}
+			loadingLabel={pageContents.states.loading[lang]}
+			caption={{ vi: 'Danh sách bài viết', en: 'Posts list' }}
+			actionsLabel={pageContents.table.actions}
+			stickyHead
+			data-test="posts-datatable"
+		>
+			{#snippet actionsContent(row)}
+				{@const post = row as unknown as PostRow}
+				<div class="row-actions">
+					<!-- Quy ước: edit = primary -->
+					<Button color="primary" variant="ghost" size="sm" onClick={() => openEditModal(post)}>
+						{pageContents.actions.edit[lang]}
+					</Button>
+					{#if post.status !== 'published'}
+						<!-- publish = secondary (outline) -->
+						<Button color="default" variant="outline" size="sm" onClick={() => publishPost(post)}>
+							{pageContents.actions.publish[lang]}
+						</Button>
+					{/if}
+					{#if post.status !== 'archived'}
+						<Button color="default" variant="outline" size="sm" onClick={() => archivePost(post)}>
+							{pageContents.actions.archive[lang]}
+						</Button>
+					{/if}
+					<!-- delete = error -->
+					<Button color="error" variant="ghost" size="sm" onClick={() => askDeletePost(post)}>
+						{pageContents.actions.delete[lang]}
+					</Button>
+				</div>
+			{/snippet}
+		</DataTable>
+	</div>
 
-	<!-- ── Phân trang ── -->
+	<!-- ── Phân trang (server-side) ── -->
 	<footer class="admin-pagination">
 		<span class="total-count">{pageContents.pagination.totalCount[lang].replace('{total}', String(total))}</span>
 		<div class="page-controls">
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo <= 1}
-				onClick={() => goToPage(pageNo - 1)}
-			>
-				{pageContents.pagination.prev[lang]}
-			</Button>
+			<Pagination
+				bind:page={pageNo}
+				totalPages={totalPages}
+				loading={loading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
 			<span class="page-info">
 				{pageContents.pagination.pageInfo[lang]
 					.replace('{page}', String(pageNo))
 					.replace('{total}', String(totalPages))}
 			</span>
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo >= totalPages}
-				onClick={() => goToPage(pageNo + 1)}
-			>
-				{pageContents.pagination.next[lang]}
-			</Button>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -667,6 +678,7 @@
 			</label>
 		</div>
 	</footer>
+	{/if}
 </section>
 
 <!-- ── Modal tạo/sửa bài viết ── -->
@@ -901,113 +913,12 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.col-title {
-		white-space: normal;
-		min-width: 14rem;
-
-		.post-title {
-			display: block;
-			font-weight: 600;
-			color: var(--foreground);
-		}
-
-		.post-slug {
-			display: block;
-			font-size: 0.75rem;
-			color: var(--foreground-500);
-		}
-	}
-
-	.col-tags {
-		white-space: normal;
-		max-width: 14rem;
-
-		.tag-badge {
-			display: inline-block;
-			padding: 0.1rem 0.5rem;
-			margin: 0.1rem 0.2rem 0.1rem 0;
-			border-radius: 999px;
-			font-size: 0.7rem;
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
-	}
-
-	.col-num {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.col-status {
-		white-space: nowrap;
-	}
-
-	.col-actions {
-		text-align: right;
-
-		.visually-hidden {
-			position: absolute;
-			width: 1px;
-			height: 1px;
-			overflow: hidden;
-			clip: rect(0 0 0 0);
-			white-space: nowrap;
-		}
-	}
-
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
 	.row-actions {
-		display: inline-flex;
+		display: flex;
 		gap: 0.25rem;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
