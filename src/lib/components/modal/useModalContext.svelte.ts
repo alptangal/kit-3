@@ -7,6 +7,7 @@ import type {
 	ModalFooterConfigs
 } from './_interface';
 import { client } from '$store/basic.svelte';
+import type { MetaBrowser } from '$interfaces/basic';
 import { SvelteMap } from 'svelte/reactivity';
 import { fly, fade, slide } from 'svelte/transition';
 
@@ -90,7 +91,9 @@ export interface PortalReturn {
 }
 export function createModalPortal(node: HTMLElement): PortalReturn {
 	if (typeof document === 'undefined' || !node) return { destroy() {} };
-	if (!client.browser) (client as unknown as Record<string, unknown>).browser = {} as typeof client.browser;
+	client.browser ??= {
+		layers: new SvelteMap()
+	} as MetaBrowser;
 	if (!client.browser.layers) client.browser.layers = new SvelteMap();
 	const layers = client.browser.layers;
 	node.classList.add('layer');
@@ -188,7 +191,7 @@ export function prefersReducedMotion(): boolean {
 export function resolveTransition(
 	variant: ModalTransition | undefined,
 	placement: string | undefined,
-	browserTransition: typeof client.browser.transition | undefined
+	browserTransition: NonNullable<typeof client.browser>['transition'] | undefined
 ): { name: ModalTransition; params: TransitionParams } {
 	// Reduced-motion: tắt mọi chuyển động (mở/đóng modal không "bay").
 	if (prefersReducedMotion()) return { name: 'none', params: {} };
@@ -196,17 +199,17 @@ export function resolveTransition(
 	if (v === 'none') return { name: 'none', params: {} };
 	if (v === 'fade') {
 		const base = browserTransition?.fade ?? {};
-		return { name: 'fade', params: { duration: base.duration ?? 220 } };
+		return { name: 'fade', params: { duration: base?.duration ?? 220 } };
 	}
 	if (v === 'slide') {
 		const base = browserTransition?.fly ?? {};
-		const duration = base.duration ?? 280;
+		const duration = base?.duration ?? 280;
 		if (placement === 'top') return { name: 'fly', params: { y: -30, duration } };
 		if (placement === 'bottom') return { name: 'fly', params: { y: 30, duration } };
 		return { name: 'fly', params: { y: 20, duration } };
 	}
 	const base = browserTransition?.fly ?? {};
-	const duration = base.duration ?? 300;
+	const duration = base?.duration ?? 300;
 	if (placement === 'top') return { name: 'fly', params: { y: -30, duration } };
 	if (placement === 'bottom') return { name: 'fly', params: { y: 30, duration } };
 	return { name: 'fly', params: { y: 24, duration } };
