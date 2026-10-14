@@ -23,3 +23,5 @@ export * from './posts';
 export * from './webauthn';
 export * from './campaigns';
 export * from './social';
+export * from './expenses';
+export * from './cameras';
