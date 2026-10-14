@@ -2,7 +2,7 @@
 <!-- Tin nhắn nội bộ: 2 cột — danh sách thread bên trái (search + phân trang),
      panel hội thoại bên phải; compose modal gửi tin. -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, Pagination } from '$components/element';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -465,28 +465,17 @@
 							</li>
 						{/each}
 					</ul>
+					<!-- ── Phân trang (server-side) — Pagination element đồng bộ hệ thống ── -->
 					<div class="threads-pagination">
-						<Button
-							color="default"
-							variant="outline"
-							size="sm"
-							disabled={pageNo <= 1}
-							onClick={() => goToPage(pageNo - 1)}
-						>
-							{pageContents.pagination.prev[lang]}
-						</Button>
-						<span class="page-info">
-							{pageNo}/{totalPages}
-						</span>
-						<Button
-							color="default"
-							variant="outline"
-							size="sm"
-							disabled={pageNo >= totalPages}
-							onClick={() => goToPage(pageNo + 1)}
-						>
-							{pageContents.pagination.next[lang]}
-						</Button>
+						<Pagination
+							bind:page={pageNo}
+							totalPages={totalPages}
+							loading={loading}
+							variant="compact"
+							prevLabel={pageContents.pagination.prev[lang]}
+							nextLabel={pageContents.pagination.next[lang]}
+							aria-label={pageContents.title[lang]}
+						/>
 					</div>
 				{/if}
 			</div>
@@ -851,11 +840,6 @@
 		gap: 0.6rem;
 		margin-top: auto;
 		padding-top: 0.5rem;
-	}
-
-	.page-info {
-		font-size: 0.8rem;
-		color: var(--foreground);
 	}
 
 	.panel-col {
