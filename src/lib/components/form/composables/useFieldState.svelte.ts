@@ -28,13 +28,10 @@ export function useFieldState(options: FieldStateOptions) {
 	const validationColor = $derived.by<Color>(() => {
 		if (options.color) return options.color;
 		const isValid = options.getValidationIsValid?.();
-		if (isValid !== undefined && isValid !== 'pending') {
+		if (typeof isValid === 'boolean') {
 			return isValid ? 'success' : 'error';
 		}
-		if (options.required || options.inputType === 'email') {
-			if (isValid === false) return 'error';
-			if (isValid === true) return 'success';
-		}
+		// isValid là 'pending' | undefined tại đây — không thể true/false nữa
 		return options.color ?? 'default';
 	});
 

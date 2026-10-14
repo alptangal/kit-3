@@ -15,87 +15,101 @@
 		get size() {
 			return props.size ?? client.browser?.size ?? 'md';
 		},
-		event: {
-			load: {
-				handler() {
-					if (props.onLoad)
-						props.onLoad({
-							ref: configs.ref,
-							get width() {
-								return this.ref?.offsetWidth;
-							},
-							get height() {
-								return this.ref?.offsetHeight;
+		get event() {
+			return [
+				{
+					events: {
+						load: {
+							handler() {
+								if (props.onLoad)
+									props.onLoad({
+										ref: configs.ref,
+										get width() {
+											return this.ref?.offsetWidth;
+										},
+										get height() {
+											return this.ref?.offsetHeight;
+										}
+									});
 							}
-						});
+						}
+					}
 				}
-			}
+			];
 		},
 		canvas: {
 			ref: undefined as undefined | HTMLCanvasElement,
-			event: {
-				load: {
-					handler(_, data) {
-						if (data?.node instanceof HTMLCanvasElement) {
-							const elTempColor = document.querySelector(
-								`[data-color="${configs.ref?.getAttribute('data-color')}"]`
-							);
-							const elTempSize = document.querySelector(
-								`[data-size="${configs.ref?.getAttribute('data-size')}"]`
-							);
-							if (elTempColor && elTempSize) {
-								const color = getComputedStyle(elTempColor).getPropertyValue('--color');
-								let size: undefined | string | number =
-									getComputedStyle(elTempSize).getPropertyValue('--font-size');
-								let borderWidth: undefined | string | number =
-									getComputedStyle(elTempSize).getPropertyValue('--border-width');
-								let padding: undefined | string | number =
-									getComputedStyle(elTempSize).getPropertyValue('--padding');
-								if (size.includes('calc')) {
-									size = resolveCalcToPx(size, document.documentElement);
-								} else if (size.includes('rem')) {
-									size =
-										parseFloat(size) *
-										parseFloat(getComputedStyle(document.documentElement).fontSize);
-								} else {
-									size = parseFloat(size);
+			get event() {
+				return [
+					{
+						events: {
+							load: {
+								handler(
+									_: Event | MouseEvent | TouchEvent | KeyboardEvent | undefined,
+									data?: { node?: HTMLElement | Window | Document | Body | VisualViewport }
+								) {
+									if (data?.node instanceof HTMLCanvasElement) {
+										const elTempColor = document.querySelector(
+											`[data-color="${configs.ref?.getAttribute('data-color')}"]`
+										);
+										const elTempSize = document.querySelector(
+											`[data-size="${configs.ref?.getAttribute('data-size')}"]`
+										);
+										if (elTempColor && elTempSize) {
+											const color = getComputedStyle(elTempColor).getPropertyValue('--color');
+											let size: undefined | string | number =
+												getComputedStyle(elTempSize).getPropertyValue('--font-size');
+											let borderWidth: undefined | string | number =
+												getComputedStyle(elTempSize).getPropertyValue('--border-width');
+											let padding: undefined | string | number =
+												getComputedStyle(elTempSize).getPropertyValue('--padding');
+											if (size.includes('calc')) {
+												size = resolveCalcToPx(size, document.documentElement);
+											} else if (size.includes('rem')) {
+												size =
+													parseFloat(size) *
+													parseFloat(getComputedStyle(document.documentElement).fontSize);
+											} else {
+												size = parseFloat(size);
+											}
+											if (borderWidth.includes('calc')) {
+												borderWidth = resolveCalcToPx(borderWidth, document.documentElement);
+											} else if (borderWidth.includes('rem')) {
+												borderWidth =
+													parseFloat(borderWidth) *
+													parseFloat(getComputedStyle(document.documentElement).fontSize);
+											} else {
+												borderWidth = parseFloat(borderWidth);
+											}
+											if (padding.includes('calc')) {
+												padding = resolveCalcToPx(padding, document.documentElement);
+											} else if (padding.includes('rem')) {
+												padding =
+													parseFloat(padding) *
+													parseFloat(getComputedStyle(document.documentElement).fontSize);
+											} else {
+												padding = parseFloat(padding);
+											}
+											if (!size || !borderWidth) return;
+											const ctx = data.node.getContext('2d');
+											if (!ctx) return;
+											data.node.width = size;
+											data.node.height = size;
+											ctx.beginPath();
+											ctx.arc(size / 2, size / 2, size / 2 - borderWidth, 0, Math.PI / 2);
+											ctx.strokeStyle = color; // màu viền
+											ctx.lineWidth = borderWidth;
+											ctx.stroke();
+										}
+									}
+								},
+								options: {
+									delay: 1000
 								}
-								if (borderWidth.includes('calc')) {
-									borderWidth = resolveCalcToPx(borderWidth, document.documentElement);
-								} else if (borderWidth.includes('rem')) {
-									borderWidth =
-										parseFloat(borderWidth) *
-										parseFloat(getComputedStyle(document.documentElement).fontSize);
-								} else {
-									borderWidth = parseFloat(borderWidth);
-								}
-								if (padding.includes('calc')) {
-									console.log(padding);
-									padding = resolveCalcToPx(padding, document.documentElement);
-								} else if (padding.includes('rem')) {
-									padding =
-										parseFloat(padding) *
-										parseFloat(getComputedStyle(document.documentElement).fontSize);
-								} else {
-									padding = parseFloat(padding);
-								}
-								if (!size || !borderWidth) return;
-								const ctx = data.node.getContext('2d');
-								if (!ctx) return;
-								data.node.width = size;
-								data.node.height = size;
-								ctx.beginPath();
-								ctx.arc(size / 2, size / 2, size / 2 - borderWidth, 0, Math.PI / 2);
-								ctx.strokeStyle = color; // màu viền
-								ctx.lineWidth = borderWidth;
-								ctx.stroke();
 							}
 						}
-					},
-					options: {
-						delay: 1000
 					}
-				}
+				];
 			},
 			get style() {
 				const defaultStyles: string[] = ['loading-rotate-canvas'];
@@ -131,12 +145,12 @@
 	data-size={configs.size}
 	data-color={props.color ?? 'default'}
 	class={configs.style}
-	{@attach handleEvents([{ events: [configs.event ?? {}] }])}
+	{@attach handleEvents(configs.event)}
 >
 	<canvas
 		bind:this={configs.canvas.ref}
 		class={configs.canvas.style}
-		{@attach handleEvents([{ events: [configs.canvas.event ?? {}] }])}
+		{@attach handleEvents(configs.canvas.event)}
 	></canvas>
 </svelte:element>
 

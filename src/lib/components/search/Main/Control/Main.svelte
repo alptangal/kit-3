@@ -13,16 +13,22 @@
 		get size() {
 			return props.size ?? searchMainCtx?.size ?? client.browser?.size;
 		},
-		event: {
-			load: {
-				handler() {
-					if (searchMainCtx?.insertNode) {
-						searchMainCtx.insertNode({
-							ref: configs.ref
-						});
+		get event() {
+			return [
+				{
+					events: {
+						load: {
+							handler() {
+								if (searchMainCtx?.insertNode) {
+									searchMainCtx.insertNode({
+										ref: configs.ref
+									});
+								}
+							}
+						}
 					}
 				}
-			}
+			];
 		}
 	});
 </script>
@@ -31,7 +37,7 @@
 	this={props.as ?? 'div'}
 	bind:this={configs.ref}
 	data-size={configs.size}
-	{@attach handleEvents([{ events: [configs.event ?? {}] }])}
+	{@attach handleEvents(configs.event)}
 >
 	control
 </svelte:element>

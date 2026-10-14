@@ -37,3 +37,7 @@ export type {
 	ModalFooterProps,
 	ModalCloseReason
 } from './_interface';
+
+// Container con nằm trên nhánh Modal.Container — Header/Body/Footer truy cập
+// qua Modal.Container.* (TS không infer nested Object.assign đầy đủ).
+export type { ModalContainerConfigs } from './_interface';

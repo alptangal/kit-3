@@ -11,6 +11,8 @@ export interface SearchMainRootConfigs extends BasicConfigs {
 		direction?: Direction;
 	};
 	mode?: 'compact' | 'normal';
+	/** Cache mode set runtime (set mode đọc ghi qua getter mode). */
+	_mode?: 'compact' | 'normal';
 	timeId?: Map<string, number | NodeJS.Timeout>;
 	modal?: {
 		status?: {

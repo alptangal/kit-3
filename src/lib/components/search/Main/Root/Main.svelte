@@ -57,19 +57,25 @@
 		},
 		value: undefined,
 		ref: undefined,
-		event: {
-			mouseover: {
-				handler() {
-					if (configs.status) configs.status.hover = true;
-				}
-			},
-			mouseleave: {
-				handler() {
-					if (configs.status) configs.status.hover = false;
-				}
-			},
-			load: {
-				handler(_, data) {
+		get event() {
+			return [
+				{
+					events: {
+						mouseover: {
+							handler() {
+								if (configs.status) configs.status.hover = true;
+							}
+						},
+						mouseleave: {
+							handler() {
+								if (configs.status) configs.status.hover = false;
+							}
+						},
+						load: {
+							handler(
+								_: Event | MouseEvent | TouchEvent | KeyboardEvent | undefined,
+								data?: { node?: HTMLElement | Window | Document | Body | VisualViewport }
+							) {
 					if (data?.node instanceof HTMLElement) {
 						function detectMode(openModal?: boolean) {
 							if (!configs.timeId) configs.timeId = new Map();
@@ -83,7 +89,11 @@
 										if (configs.mode == 'compact') return;
 										if (data.node.clientWidth < data.node.scrollWidth) {
 											configs.mode = 'compact';
-											if (openModal) configs.modal.status.display = true;
+											if (openModal) {
+												if (!configs.modal) configs.modal = { status: { display: false } };
+												if (!configs.modal.status) configs.modal.status = {};
+												configs.modal.status.display = true;
+											}
 										}
 										const childrens = data.node.children;
 										const mustSwitchToCompact = some(
@@ -112,6 +122,9 @@
 					}
 				}
 			}
+					}
+				}
+			];
 		},
 		get style() {
 			const defaultStyles: string[] = ['search-main-root'];
@@ -141,25 +154,25 @@
 			configs.childrens.set(data.ref, data);
 			// console.log([...configs.childrens.entries()]);
 		},
-		onKeyup(value) {
+		onKeyup(value?: number | string) {
 			configs.value = value;
 		},
-		onKeydown(value) {
+		onKeydown(value?: number | string) {
 			configs.value = value;
 		},
-		onBlur(value) {
+		onBlur(value?: number | string) {
 			configs.value = value;
 		},
-		onFocus(value) {
+		onFocus(value?: number | string) {
 			configs.value = value;
 		},
-		onEnter(value) {
+		onEnter(value?: number | string) {
 			configs.value = value;
 		},
-		onChange(value) {
+		onChange(value?: number | string) {
 			configs.value = value;
 		},
-		onClear(value) {
+		onClear(value?: number | string) {
 			configs.value = value;
 		}
 	});
@@ -173,7 +186,7 @@
 	data-size={configs.size}
 	data-hover={configs.status?.hover}
 	data-direction={configs.status?.direction ?? 'ltr'}
-	{@attach handleEvents([{ events: [configs.event ?? {}] }])}
+	{@attach handleEvents(configs.event)}
 >
 	{#if configs.mode == 'normal' || !configs.mode}
 		{@render children?.()}

@@ -6,6 +6,8 @@ export interface LabelProps extends BasicProps {
 	hiddenRequiredIndicator?: boolean;
 	size?: Size;
 	color?: Color;
+	/** Gắn label với field theo id (attribute `for`). Mặc định tự sinh từ context name. */
+	for?: string;
 }
 export interface LabelConfigs extends BasicConfigs {
 	color: Color;

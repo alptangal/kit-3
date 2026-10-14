@@ -1,5 +1,4 @@
-import type { BasicComponent, BasicConfigs, BasicProps } from '$components/interface';
-import type { Color } from '$interfaces/basic';
+import type { BasicComponent, BasicConfigs, BasicProps, Color } from '$components/interface';
 
 export interface LoadingRotateProps extends BasicProps {
 	color?: Color;

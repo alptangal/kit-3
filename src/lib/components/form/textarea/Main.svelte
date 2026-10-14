@@ -12,6 +12,7 @@
 	import { setTextareaContext, defaultValidation } from './index';
 	import type { TextareaConfigs, TextareaProps } from './_interface';
 	import type { ValidationFull } from '../input/_interface';
+	import type { TranslateContent } from '$interfaces/basic';
 
 	let { value = $bindable(), children, ...props }: TextareaProps = $props();
 	const formContext = getFormContext();

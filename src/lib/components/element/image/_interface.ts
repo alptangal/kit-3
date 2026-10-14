@@ -41,4 +41,7 @@ export interface ImageProps extends BasicProps {
 	onError?: (e: Event) => void;
 }
 
-export interface ImageConfigs extends BasicConfigs {}
+export interface ImageConfigs extends Omit<BasicConfigs, 'status'> {
+	/** Vòng đời nạp hiện tại ('loading' | 'loaded' | 'error') — readonly getter từ state component. */
+	readonly status?: ImageLoadState;
+}

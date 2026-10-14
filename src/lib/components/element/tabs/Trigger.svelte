@@ -31,7 +31,10 @@
 	$effect(() => {
 		if (!ctx || !el) return;
 		ctx.register(value, el);
-		return () => ctx.unregister(value, el);
+		return () => {
+			// el narrow không giữ trong closure — guard lại
+			if (el) ctx.unregister(value, el);
+		};
 	});
 
 	const styleDerived = $derived.by(() =>

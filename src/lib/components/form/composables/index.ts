@@ -3,7 +3,7 @@
  */
 
 export { useFieldValidation } from './useFieldValidation.svelte';
-export type { FieldValidationConfig } from './useFieldValidation.svelte';
+export type { UseFieldValidationConfig } from './useFieldValidation.svelte';
 
 export { useFieldState } from './useFieldState.svelte';
 export type { FieldStateOptions } from './useFieldState.svelte';

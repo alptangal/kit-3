@@ -51,4 +51,7 @@ export interface InputOtpConfigs extends Omit<BasicConfigs, 'status' | 'value'> 
 		messages?: Map<string, { content?: TranslateContent; kind: 'valid' | 'invalid' }>;
 	};
 	reset: () => void;
+	/** Có mặt để union `FormConfigs.childrens` đồng nhất (form đọc .loading / .focus).
+	 *  OTP dùng roving tabindex giữa các ô — focus() tập trung ô đầu tiên (có thể undefined). */
+	focus?: () => void;
 }

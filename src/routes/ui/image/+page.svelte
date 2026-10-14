@@ -106,7 +106,9 @@
 				variant="outline"
 				color="info"
 				data-test="crossfade-toggle"
-				onClick={() => (cfSrc = cfSrc === imgA ? imgB : imgA)}
+				onClick={() => {
+					cfSrc = cfSrc === imgA ? imgB : imgA;
+				}}
 			>
 				Đổi src
 			</Button>

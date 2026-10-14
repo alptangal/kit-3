@@ -164,9 +164,13 @@
 	$effect(() => {
 		const childInput = configs.children?.input;
 		if (childInput) {
-			// Sync value
-			if (childInput.value !== undefined && configs.value !== childInput.value) {
-				configs.value = childInput.value;
+			// Sync value — BasicConfigs.value rộng string|number; TextField hẹp string
+			if (
+				childInput.value !== undefined &&
+				childInput.value !== null &&
+				configs.value !== childInput.value
+			) {
+				configs.value = typeof childInput.value === 'number' ? String(childInput.value) : childInput.value;
 			}
 			// Expose child's validation state
 			if (childInput.validation) {

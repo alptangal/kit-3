@@ -8,14 +8,22 @@
 
 	let { children, ...props }: WindowProps = $props();
 	let configs: WindowConfigs = $state({
-		event: {
-			load(e) {
-				if (configs.ref) {
-					const randomId = uuid.v7();
-					client.browser.windows.set(props.name ?? randomId, { ref: configs.ref });
-					console.log(client.browser.windows);
+		get event() {
+			return [
+				{
+					events: {
+						load: {
+							handler(e?: Event | MouseEvent | TouchEvent | KeyboardEvent) {
+								if (configs.ref) {
+									const randomId = uuid.v7();
+									client.browser?.windows?.set(props.name ?? randomId, { ref: configs.ref });
+									console.log(client.browser?.windows);
+								}
+							}
+						}
+					}
 				}
-			}
+			];
 		}
 	});
 
@@ -30,7 +38,7 @@
 <svelte:element
 	this={props.as ?? 'div'}
 	bind:this={configs.ref}
-	{@attach handleEvents([{ events: [configs.event ?? {}] }])}
+	{@attach handleEvents(configs.event)}
 >
 	{@render children?.()}
 </svelte:element>

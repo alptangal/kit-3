@@ -113,13 +113,9 @@
 			required={true}
 			clearable={true}
 			validation={{
-				required: {
-					isValid: (val) => Boolean(val),
-					message: {
-						valid: 'Hợp lệ',
-						invalid: 'Vui lòng chọn một quốc gia'
-					}
-				}
+				change: [
+					(val?: string | boolean | string[] | File[]) => Boolean(val)
+				]
 			}}
 		/>
 		<p class="text-sm text-muted">Value: {requiredValue || 'none'}</p>

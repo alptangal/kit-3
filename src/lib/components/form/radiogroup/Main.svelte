@@ -156,7 +156,8 @@
 				name,
 				setTimeout(async () => {
 					const validator = defaultValidation.required(configs.name);
-					const rs = (await validator.isValid(current)) as boolean;
+					// current là string|null (value ?? null) — isValid không nhận null → undefined
+					const rs = (await validator.isValid(current ?? undefined)) as boolean;
 					if (!configs.validation.messages) configs.validation.messages = new SvelteMap();
 					configs.validation.isValid = rs;
 					configs.validation.messages.set('required', {

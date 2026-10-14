@@ -1,5 +1,4 @@
-import type { BasicConfigs, BasicProps } from '$components/interface';
-import type { Color } from '$interfaces/basic';
+import type { BasicConfigs, BasicProps, Color } from '$components/interface';
 
 export interface SkeletonButtonProps extends BasicProps {
 	color?: Color;

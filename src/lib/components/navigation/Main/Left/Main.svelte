@@ -13,20 +13,26 @@
       get style(){
         return styleSynced({})
       },
-      event:{
-        load:{
-        handler(){
-          if(navivationMainCtx.addNode && configs.ref){
-            navivationMainCtx.addNode({ref:configs.ref,position:'left'})
+      get event(){
+        return [
+          {
+            events:{
+              load:{
+                handler(){
+                  if(navivationMainCtx.addNode && configs.ref){
+                    navivationMainCtx.addNode({ref:configs.ref,position:'left'})
+                  }
+                },
+                options:{
+                  delay:3000
+                }
+              }
+            }
           }
-        },
-        options:{
-          delay:3000
-        }
-      }},
-      childrens:undefined as undefined|HTMLElement[]
+        ];
+      }
     })
 </script>
-<svelte:element this={props.as??'div'} bind:this={configs.ref} class={configs.style} {@attach handleEvents([{events:[configs.event??{}]}])}>
+<svelte:element this={props.as??'div'} bind:this={configs.ref} class={configs.style} {@attach handleEvents(configs.event)}>
     {@render children?.()}
 </svelte:element>

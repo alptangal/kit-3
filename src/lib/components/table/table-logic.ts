@@ -33,7 +33,7 @@ export interface TableActions<T> {
 
 export function createTableState<T>(
   initialRows: T[] = [],
-  initialColumns: TableColumn<T> = [],
+  initialColumns: TableColumn<T>[] = [],
   pageSize: number = 10,
   getRowId: (row: T, index: number) => string = (_, i) => String(i)
 ): TableState<T> & TableActions<T> {

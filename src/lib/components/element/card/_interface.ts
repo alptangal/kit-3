@@ -8,6 +8,8 @@ export type CardElevation = 'none' | 'border' | 'raised';
 export interface CardRootProps extends BasicProps {
 	/** Elevation: 'border' (1px border + radius, mặc định) / 'raised' (thêm box-shadow) / 'none' (trong suốt). */
 	elevation?: CardElevation;
+	/** aria-label cho screen reader khi as != 'div'. */
+	'aria-label'?: string;
 }
 
 export interface CardRootConfigs extends BasicConfigs {

@@ -74,7 +74,7 @@
     <p class="description">Interactive table with sorting, pagination, and row selection:</p>
 
     <Table data={sampleData} columns={columns} pageSize={5} sortable={true} selectable={true}>
-      {#snippet children(tableProps)}
+      {#snippet children(tableProps: Record<string, unknown>)}
         <table class="demo-table">
           <TableHead
             onSelectAll={handleSelectAll}

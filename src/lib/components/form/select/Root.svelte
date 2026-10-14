@@ -78,7 +78,7 @@
 	}
 </script>
 
-<div class="select-root" role="region" {disabled} onkeydown={(e) => handleKeyDown(e)}>
+<div class="select-root" role="region" aria-disabled={disabled} onkeydown={(e) => handleKeyDown(e)}>
 	{@render children?.()}
 </div>
 
