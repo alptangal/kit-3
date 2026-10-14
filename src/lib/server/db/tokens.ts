@@ -50,6 +50,8 @@ export interface RefreshTokenDocument {
 	tokenHash: string;
 	familyId: string;
 	generation: number;
+	/** DPoP key thumbprint — khoá công khai bind với token này (cnf.jkt). */
+	jkt?: string;
 	expiresAt: string;
 	isRevoked: boolean;
 	revokedAt?: string | null;
@@ -206,6 +208,7 @@ export async function rotateRefreshToken(
 			tokenHash: newTokenHash,
 			familyId: oldDoc.familyId,
 			generation: newGeneration,
+			jkt: newTokenData.jkt,
 			expiresAt: new Date(newTokenData.expiresAt * 1000).toISOString(),
 			isRevoked: false,
 			revokedAt: null,
@@ -315,6 +318,7 @@ export async function createRefreshToken(data: {
 		tokenHash,
 		familyId,
 		generation: 1,
+		jkt: data.jkt,
 		expiresAt: new Date(data.expiresAt * 1000).toISOString(),
 		isRevoked: false,
 		revokedAt: null,

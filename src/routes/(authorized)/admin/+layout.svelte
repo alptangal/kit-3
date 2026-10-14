@@ -9,8 +9,9 @@
 	import { page } from '$app/state';
 	import { Breadcrumb, Sidebar, TeamSwitcher } from '$components/navigation';
 	import { Separator } from '$components/element';
+	import type { LayoutData } from '$store/user-prefs.svelte';
 
-	let { children, data }: { children: Snippet; data: App.LayoutData } = $props();
+	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
 	// ── B5: sticky header + đo chiều cao filters (page con) ──
 	// ResizeObserver đo .admin-inset-header + .admin-filters (page con render
