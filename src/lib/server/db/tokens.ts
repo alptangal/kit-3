@@ -2,11 +2,48 @@
 // Refresh token management for DPoP-bound authentication
 
 import { cbData } from '$modules/couchbase/clients';
-import { encryption } from '$modules/encryption';
 import { systemVault } from '$store/initSystemVault';
 import type { TranslateContent } from '$interfaces/basic';
 
 const cbRefreshTokens = cbData('refresh_tokens');
+
+// ============================================================
+// Mã hoá deviceName/deviceType (copy pattern social.ts/cameras.ts:
+// AES-GCM với key từ systemVault.indexKey — không import để tránh coupling)
+// ============================================================
+
+let cachedAesKey: CryptoKey | null = null;
+
+async function getDeviceAesKey(): Promise<CryptoKey> {
+	if (cachedAesKey) return cachedAesKey;
+	const indexKey = (systemVault as unknown as { indexKey: Uint8Array | ArrayBuffer }).indexKey;
+	if (!indexKey) {
+		throw new Error('vault-not-initialized');
+	}
+	const raw = indexKey instanceof Uint8Array ? indexKey : new Uint8Array(indexKey as ArrayBuffer);
+	cachedAesKey = await crypto.subtle.importKey('raw', raw as BufferSource, 'AES-GCM', false, [
+		'encrypt',
+		'decrypt'
+	]);
+	return cachedAesKey;
+}
+
+async function encryptDeviceField(
+	plaintext: string
+): Promise<{ ivB64: string; ciphertextB64: string }> {
+	const key = await getDeviceAesKey();
+	const iv = crypto.getRandomValues(new Uint8Array(12));
+	const encoded = new TextEncoder().encode(plaintext);
+	const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+	return {
+		ivB64: btoa(String.fromCharCode(...iv)),
+		ciphertextB64: btoa(
+			Array.from(new Uint8Array(ciphertext))
+				.map((b) => String.fromCharCode(b))
+				.join('')
+		)
+	};
+}
 
 export interface RefreshTokenDocument {
 	userId: string;
@@ -175,22 +212,10 @@ export async function rotateRefreshToken(
 			revokedReason: null,
 			deviceId: newTokenData.deviceId,
 			deviceNameEncrypted: newTokenData.deviceName
-				? (await encryption.encryptData(
-					await encryption.unlockVault('', { // placeholder, we need the DEK from somewhere
-						dekIvB64: '',
-						saltB64: '',
-						wrappedDekB64: ''
-					})
-				)).ciphertextB64
+				? JSON.stringify(await encryptDeviceField(newTokenData.deviceName))
 				: null,
 			deviceTypeEncrypted: newTokenData.deviceType
-				? (await encryption.encryptData(
-					await encryption.unlockVault('', {
-						dekIvB64: '',
-						saltB64: '',
-						wrappedDekB64: ''
-					})
-				)).ciphertextB64
+				? JSON.stringify(await encryptDeviceField(newTokenData.deviceType))
 				: null,
 			ipAddress: newTokenData.ipAddress,
 			userAgent: newTokenData.userAgent,
@@ -296,22 +321,10 @@ export async function createRefreshToken(data: {
 		revokedReason: null,
 		deviceId: data.deviceId,
 		deviceNameEncrypted: data.deviceName
-			? (await encryption.encryptData(
-				await encryption.unlockVault('', {
-					dekIvB64: '',
-					saltB64: '',
-					wrappedDekB64: ''
-				})
-			)).ciphertextB64
+			? JSON.stringify(await encryptDeviceField(data.deviceName))
 			: null,
 		deviceTypeEncrypted: data.deviceType
-			? (await encryption.encryptData(
-				await encryption.unlockVault('', {
-					dekIvB64: '',
-					saltB64: '',
-					wrappedDekB64: ''
-				})
-			)).ciphertextB64
+			? JSON.stringify(await encryptDeviceField(data.deviceType))
 			: null,
 		ipAddress: data.ipAddress,
 		userAgent: data.userAgent,

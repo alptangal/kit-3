@@ -257,7 +257,7 @@ export class Users {
 	 * Dùng email làm khóa chính vì email là định danh duy nhất ưu tiên.
 	 * Format: `users::${base64url(emailBlindIndex)}`
 	 */
-	private static makeDocumentKey(emailBlindIndex: string): string {
+	static makeDocumentKey(emailBlindIndex: string): string {
 		return `${collectionName}::${this.encodeDocumentKey(emailBlindIndex)}`;
 	}
 
