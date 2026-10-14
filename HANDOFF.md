@@ -95,3 +95,13 @@ Sidebar: nhóm mới "Vận hành" (expenses/cameras) + "Nhập hàng" + "Hạn 
 **Backlog mở:** lọc categoryId trong listExpiringLots (cần join products); seed `promotions:*` permissions rồi chuyển createClearancePromotion qua PricingService; HLS stream camera + Ezviz OpenAPI + scheduler test định kỳ; dự báo ML/seasonality; webhook/API key agent ngoài.
 
 **Bẫy đợt này:** `InventoryService.createLot` không cộng `inventory_stock` → receive tự tạo lot + upsert stock + 1 movement (tránh double-log); `@undecaf/barcode-detector-polyfill` thiếu trong package.json (build vỡ sau reinstall) — đã cài `5fcdc119`; khi Edit chuỗi return legacy trùng 2 chỗ → thêm context xung quanh.
+
+## 10. Sửa lỗi svelte-check + UI trực quan — XONG (2026-10-20, master 81d1041d)
+
+**svelte-check: 367 → 195 errors** (12 commits). 195 còn lại là noise có chủ đích: `_old`/`Main_` ~110, test files ~24, 4 layout cũ (MenuBar/NavigationBar/FooterEnhanced/AppShell — đã vô hiệu hóa export trong `layout/index.ts` vì không còn caller). Build PASS.
+
+**2 bug runtime thật (81d1041d):**
+1. Login vỡ hoàn toàn: `public-key/+server.ts` cast `'system_secrets'` sai — vault thật ở env `cb_collectionName_vault` ('vaults') → CollectionNotFound → client không lấy được RSA key. Fix theo pattern initSystemVault.ts:20.
+2. Seed thiếu 9 permission key services dùng: `inventory:read/:manage`, `stock_takes:read/:manage`, `suppliers:read`, `pos:read/:manage`, `promotions:read/:manage` (mismatch do service Phase 4 + seed viết riêng). Đã sửa seed-data.ts + seed trực tiếp DB qua N1QL UPSERT (20/20 grants). Backlog cũ "seed promotions:*" ĐÃ ĐÓNG.
+
+**UI check 10/10 trang admin ĐẠT** (ui-checker, ảnh v3 trong tests/_ui-shots/): purchases/expiry/expenses/cameras/analytics/inventory/suppliers/promotions/pos-sessions/stock-takes — hết Loading, đúng empty state hoặc dữ liệu thật (inventory 8+ dòng, suppliers 11+, pos 1 phiên Open). Bẫy: chụp sau networkidle 3.5s vẫn quá sớm (5/10 trang còn Loading) → phải poll body text hết "Loading" rồi chụp; ui-checker max 8 ảnh/prompt → chia 5 ảnh/đợt.
