@@ -2,7 +2,8 @@
 <!-- Quản trị thông báo hệ thống: list + filter type/isRead + markRead/markAllRead +
      tạo broadcast (admin only) + xoá. Pattern theo trang payments. -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -129,7 +130,7 @@
 		return label ? label[lang] : (type ?? '—');
 	}
 
-	function typeColor(type?: string): string {
+	function typeColor(type?: string): 'success' | 'warning' | 'danger' | 'default' {
 		switch (type) {
 			case 'success':
 			case 'order':
@@ -138,7 +139,8 @@
 			case 'stock':
 				return 'warning';
 			case 'error':
-				return 'error';
+				// DataTableStatus không có 'error' — map sang 'danger'
+				return 'danger';
 			default:
 				return 'default';
 		}
@@ -234,6 +236,53 @@
 		pageNo = 1;
 		await loadNotifications();
 	}
+
+	// ── DataTable columns ──
+	const notificationsAny = $derived(notifications as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'title',
+			label: pageContents.table.title[lang],
+			accessor: (row) => (row as unknown as NotificationRow).title ?? '—'
+		},
+		{
+			id: 'body',
+			label: pageContents.table.body[lang],
+			accessor: (row) => (row as unknown as NotificationRow).body ?? '—',
+			noHighlight: true
+		},
+		{
+			id: 'type',
+			label: pageContents.table.type[lang],
+			accessor: (row) => typeLabel((row as unknown as NotificationRow).type),
+			status: (_value, row) => typeColor((row as unknown as NotificationRow).type)
+		},
+		{
+			id: 'recipient',
+			label: pageContents.table.recipient[lang],
+			accessor: (row) => {
+				const n = row as unknown as NotificationRow;
+				return n.broadcast ? pageContents.broadcastLabel[lang] : (n.userId ?? '—');
+			},
+			noHighlight: true
+		},
+		{
+			id: 'createdAt',
+			label: pageContents.table.createdAt[lang],
+			accessor: (row) => formatDateTime((row as unknown as NotificationRow).createdAt),
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) =>
+				(row as unknown as NotificationRow).isRead
+					? pageContents.statuses.read[lang]
+					: pageContents.statuses.unread[lang],
+			status: (_value, row) =>
+				(row as unknown as NotificationRow).isRead ? 'default' : 'warning'
+		}
+	]);
 
 	// ── Đánh dấu đã đọc ──
 	let mutating = $state(false);
@@ -430,100 +479,67 @@
 		</Button>
 	</div>
 
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
-		</div>
-	{:else if loadError}
+	{#if loadError}
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{loadError}</p>
 			<Button color="primary" variant="outline" onClick={loadNotifications}>{pageContents.states.retry[lang]}</Button>
 		</div>
-	{:else if notifications.length === 0}
-		<div class="admin-state">
-			<p>{pageContents.states.empty[lang]}</p>
-		</div>
 	{:else}
-		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.title[lang]}</th>
-						<th scope="col">{pageContents.table.body[lang]}</th>
-						<th scope="col">{pageContents.table.type[lang]}</th>
-						<th scope="col">{pageContents.table.recipient[lang]}</th>
-						<th scope="col">{pageContents.table.createdAt[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.actions[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each notifications as row (row._id)}
-						<tr class:row-unread={!row.isRead}>
-							<td class="col-title">
-								{row.title ?? '—'}
-								{#if row.link}
-									<a class="row-link" href={row.link}>{row.link}</a>
-								{/if}
-							</td>
-							<td class="col-wrap">{row.body ?? '—'}</td>
-							<td class="col-status">
-								<span class="status-badge status-{typeColor(row.type)}">{typeLabel(row.type)}</span>
-							</td>
-							<td class="col-recipient">{row.broadcast ? pageContents.broadcastLabel[lang] : (row.userId ?? '—')}</td>
-							<td>{formatDateTime(row.createdAt)}</td>
-							<td class="col-status">
-								<span class="status-badge status-{row.isRead ? 'default' : 'warning'}">
-									{row.isRead ? pageContents.statuses.read[lang] : pageContents.statuses.unread[lang]}
-								</span>
-							</td>
-							<td class="col-actions">
-								{#if !row.isRead}
-									<!-- mark-read = primary -->
-									<Button color="primary" size="sm" onClick={() => markRead(row)}>
-										{pageContents.actions.markRead[lang]}
-									</Button>
-								{/if}
-								<!-- delete = error -->
-								<Button color="error" variant="outline" size="sm" onClick={() => openDeleteModal(row)}>
-									{pageContents.actions.delete[lang]}
-								</Button>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
+	<!-- ── Bảng thông báo — DataTable (component có sẵn) ──
+	     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
+	     Pagination element bên dưới bind:page điều khiển server. -->
+	<div class="admin-table-wrap">
+		<DataTable
+			data={notificationsAny}
+			{columns}
+			pageSize={pageSize}
+			showPagination={false}
+			loading={loading}
+			visual={{ striped: true, hoverable: true }}
+			emptyLabel={pageContents.states.empty[lang]}
+			loadingLabel={pageContents.states.loading[lang]}
+			caption={{ vi: 'Danh sách thông báo', en: 'Notification list' }}
+			actionsLabel={pageContents.table.actions}
+			stickyHead
+			data-test="notifications-datatable"
+		>
+			{#snippet actionsContent(row)}
+				{@const notification = row as unknown as NotificationRow}
+				<div class="row-actions">
+					{#if !notification.isRead}
+						<!-- mark-read = primary -->
+						<Button color="primary" size="sm" onClick={() => markRead(notification)}>
+							{pageContents.actions.markRead[lang]}
+						</Button>
+					{/if}
+					<!-- delete = error -->
+					<Button color="error" variant="outline" size="sm" onClick={() => openDeleteModal(notification)}>
+						{pageContents.actions.delete[lang]}
+					</Button>
+				</div>
+			{/snippet}
+		</DataTable>
+	</div>
 
-	<!-- ── Phân trang ── -->
+	<!-- ── Phân trang (server-side) ── -->
 	<footer class="admin-pagination">
 		<span class="total-count">{pageContents.pagination.totalCount[lang].replace('{total}', String(total))}</span>
 		<div class="page-controls">
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo <= 1}
-				onClick={() => goToPage(pageNo - 1)}
-			>
-				{pageContents.pagination.prev[lang]}
-			</Button>
+			<Pagination
+				bind:page={pageNo}
+				totalPages={totalPages}
+				loading={loading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
 			<span class="page-info">
 				{pageContents.pagination.pageInfo[lang]
 					.replace('{page}', String(pageNo))
 					.replace('{total}', String(totalPages))}
 			</span>
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo >= totalPages}
-				onClick={() => goToPage(pageNo + 1)}
-			>
-				{pageContents.pagination.next[lang]}
-			</Button>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -538,6 +554,7 @@
 			</label>
 		</div>
 	</footer>
+	{/if}
 </section>
 
 <!-- ── Modal tạo thông báo ── -->
@@ -762,100 +779,12 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.row-unread {
-		font-weight: 600;
-	}
-
-	.col-title {
-		font-weight: 600;
-		color: var(--foreground);
-		min-width: 10rem;
-	}
-
-	.row-link {
-		display: block;
-		font-size: 0.75rem;
-		font-weight: 400;
-		color: var(--primary);
-		word-break: break-all;
-	}
-
-	.col-recipient {
-		max-width: 12rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.col-wrap {
-		white-space: normal;
-		min-width: 12rem;
-		max-width: 22rem;
-	}
-
-	.col-status {
-		white-space: nowrap;
-	}
-
-	.col-actions {
-		white-space: nowrap;
-
-		:global(button + button) {
-			margin-left: 0.4rem;
-		}
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
+	.row-actions {
+		display: flex;
+		gap: 0.25rem;
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
