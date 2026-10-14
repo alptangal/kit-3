@@ -6,7 +6,6 @@ import { cb_bucketName, cb_scopeName } from '$env/static/private';
 import { cbData } from '$modules/couchbase/clients';
 import type { Product, ProductVariant, Category, Brand } from '$modules/schema';
 import { PermissionChecker } from '$modules/rbac/permission-checker';
-import { products as productMessages } from '../messages/db';
 
 const cbProducts = cbData('products');
 const cbVariants = cbData('product_variants');
@@ -318,7 +317,7 @@ export class ProductAdminService {
 			categoryId?: string;
 			brandId?: string;
 			hasVariants: boolean;
-			variantAttributes?: Record<string, string[]>; // { size: ['S','M','L'], color: ['red','blue'] }
+			variantAttributes?: unknown[]; // [{ name: 'size', options: ['S','M','L'] }] — khớp schema 'array'
 			imageUrl?: string;
 			status?: string;
 		}
@@ -377,7 +376,7 @@ export class ProductAdminService {
 			categoryId?: string | null;
 			brandId?: string | null;
 			hasVariants?: boolean;
-			variantAttributes?: Record<string, string[]> | null;
+			variantAttributes?: unknown[] | null;
 			imageUrl?: string | null;
 			status?: string;
 		}

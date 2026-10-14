@@ -1264,6 +1264,10 @@ export type InferCollection<CN extends CollectionName> = {
 	[K in RequiredKeys<FieldsOf<CN>>]: InferFieldType<FieldsOf<CN>[K]>;
 } & { [K in OptionalKeys<FieldsOf<CN>>]?: InferFieldType<FieldsOf<CN>[K]> | null };
 export type User = InferCollection<'users'>;
+export type Product = InferCollection<'products'>;
+export type ProductVariant = InferCollection<'product_variants'>;
+export type Category = InferCollection<'categories'>;
+export type Brand = InferCollection<'brands'>;
 export type InventoryStock = InferCollection<'inventory_stock'>;
 export type InventoryLot = InferCollection<'inventory_lots'>;
 export type StockMovement = InferCollection<'stock_movements'>;

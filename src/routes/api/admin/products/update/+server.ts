@@ -21,7 +21,7 @@ export const POST: RequestHandler = async (event) => {
 			categoryId?: string | null;
 			brandId?: string | null;
 			hasVariants?: boolean;
-			variantAttributes?: Record<string, string[]> | null;
+			variantAttributes?: unknown[] | null;
 			imageUrl?: string | null;
 			status?: string;
 		}>(event);
