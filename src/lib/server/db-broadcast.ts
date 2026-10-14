@@ -30,6 +30,9 @@ export type DbChangeCollection =
 	| 'users'
 	| 'inventory_lots'
 	| 'inventory_stock'
+	// Chuyển kho + đổi trả (Phase 3 vertical slices)
+	| 'stock_transfers'
+	| 'order_returns'
 	| 'system';
 
 /** Hành động gây thay đổi — chỉ để log/debug, client v1 refetch mọi event. */
