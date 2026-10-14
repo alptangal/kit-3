@@ -1,6 +1,7 @@
 <!-- src/routes/(authorized)/admin/suppliers/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -187,7 +188,7 @@
 		return label ? label[lang] : (status ?? '—');
 	}
 
-	function poStatusColor(status?: string): string {
+	function poStatusColor(status?: string): 'success' | 'warning' | 'danger' | 'default' {
 		switch (status) {
 			case 'received':
 				return 'success';
@@ -195,7 +196,7 @@
 			case 'partially_received':
 				return 'warning';
 			case 'cancelled':
-				return 'error';
+				return 'danger';
 			default:
 				return 'default';
 		}
@@ -273,6 +274,30 @@
 			: Math.max(1, Math.ceil(posTotal / pageSize))
 	);
 	const currentPage = $derived(activeTab === 'suppliers' ? suppliersPage : posPage);
+
+	// Bind 2 chiều cho Pagination element: đồng bộ theo tab đang mở.
+	// Pattern customers: effect armed-guard theo dõi page → refetch (tránh trùng onMount).
+	let currentPagingPage = $state(1);
+	let pagingArmed = false;
+	$effect(() => {
+		void currentPagingPage;
+		if (!pagingArmed) {
+			pagingArmed = true;
+			return;
+		}
+		void refreshPaging();
+	});
+	async function refreshPaging() {
+		if (activeTab === 'suppliers') {
+			if (suppliersPage === currentPagingPage) return;
+			suppliersPage = currentPagingPage;
+			await loadSuppliers();
+		} else {
+			if (posPage === currentPagingPage) return;
+			posPage = currentPagingPage;
+			await loadPOs();
+		}
+	}
 	const totalCountText = $derived(
 		activeTab === 'suppliers'
 			? pageContents.pagination.totalCountSuppliers[lang].replace('{total}', String(suppliersTotal))
@@ -430,6 +455,9 @@
 	function switchTab(tab: 'suppliers' | 'purchase-orders') {
 		if (activeTab === tab) return;
 		activeTab = tab;
+		// Đồng bộ paginator sang state page của tab mới (không refetch —
+		// refreshPaging đã guard cùng-value)
+		currentPagingPage = tab === 'suppliers' ? suppliersPage : posPage;
 		if (tab === 'suppliers' && !suppliersLoadedOnce) void loadSuppliers();
 		if (tab === 'purchase-orders' && !posLoadedOnce) void loadPOs();
 	}
@@ -440,24 +468,12 @@
 	}
 
 	// ── Phân trang / filter ──
-	async function goToPage(target: number) {
-		if (target < 1 || target > totalPages || target === currentPage) return;
-		if (activeTab === 'suppliers') {
-			if (suppliersLoading) return;
-			suppliersPage = target;
-			await loadSuppliers();
-		} else {
-			if (posLoading) return;
-			posPage = target;
-			await loadPOs();
-		}
-	}
-
 	async function changePageSize(newSize: number) {
 		if (newSize === pageSize) return;
 		pageSize = newSize;
 		suppliersPage = 1;
 		posPage = 1;
+		currentPagingPage = 1;
 		if (activeTab === 'suppliers') await loadSuppliers();
 		else await loadPOs();
 	}
@@ -467,6 +483,82 @@
 		posPage = 1;
 		await refresh();
 	}
+
+	// ---------- DataTable columns ----------
+	const suppliersAny = $derived(suppliers as unknown as Record<string, unknown>[]);
+	const supplierColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'name',
+			label: pageContents.supplierTable.name[lang],
+			accessor: (row) => (row as unknown as SupplierRow).name ?? '—'
+		},
+		{
+			id: 'contact',
+			label: pageContents.supplierTable.contact[lang],
+			accessor: (row) => (row as unknown as SupplierRow).contactPerson ?? '—'
+		},
+		{
+			id: 'address',
+			label: pageContents.supplierTable.address[lang],
+			accessor: (row) => (row as unknown as SupplierRow).address ?? '—',
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.supplierTable.status[lang],
+			accessor: (row) => {
+				const status = (row as unknown as SupplierRow).status;
+				return status === 'active' ? (lang === 'vi' ? 'Đang hoạt động' : 'Active') : (status ?? '—');
+			},
+			status: (_value, row) =>
+				(row as unknown as SupplierRow).status === 'active' ? 'success' : 'default'
+		},
+		{
+			id: 'createdAt',
+			label: pageContents.supplierTable.createdAt[lang],
+			accessor: (row) => formatDate((row as unknown as SupplierRow).createdAt),
+			noHighlight: true
+		}
+	]);
+
+	const posAny = $derived(pos as unknown as Record<string, unknown>[]);
+	const poColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'code',
+			label: pageContents.poTable.code[lang],
+			accessor: (row) => (row as unknown as PurchaseOrderRow).poCode ?? '—'
+		},
+		{
+			id: 'supplier',
+			label: pageContents.poTable.supplier[lang],
+			accessor: (row) => getSupplierLabel((row as unknown as PurchaseOrderRow).supplierId),
+			noHighlight: true
+		},
+		{
+			id: 'branch',
+			label: pageContents.poTable.branch[lang],
+			accessor: (row) => getBranchLabel((row as unknown as PurchaseOrderRow).branchId),
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.poTable.status[lang],
+			accessor: (row) => poStatusLabel((row as unknown as PurchaseOrderRow).status),
+			status: (_value, row) => poStatusColor((row as unknown as PurchaseOrderRow).status)
+		},
+		{
+			id: 'totalCost',
+			label: pageContents.poTable.totalCost[lang],
+			accessor: (row) => formatMoney((row as unknown as PurchaseOrderRow).totalCost),
+			noHighlight: true
+		},
+		{
+			id: 'expectedAt',
+			label: pageContents.poTable.expectedAt[lang],
+			accessor: (row) => formatDate((row as unknown as PurchaseOrderRow).expectedAt),
+			noHighlight: true
+		}
+	]);
 
 	// ── Modal tạo nhà cung cấp ──
 	function openSupplierModal() {
@@ -738,134 +830,86 @@
 
 	<!-- ── Tab SUPPLIERS ── -->
 	{#if activeTab === 'suppliers'}
-		{#if suppliersLoading && !suppliersLoadedOnce}
-			<div class="admin-state" role="status">
-				<p>{pageContents.states.loading[lang]}</p>
-			</div>
-		{:else if suppliersError}
+		{#if suppliersError}
 			<div class="admin-state error" role="alert">
 				<p class="state-title">{pageContents.states.errorTitleSuppliers[lang]}</p>
 				<p class="state-detail">{suppliersError}</p>
 				<Button color="primary" variant="outline" onClick={loadSuppliers}>{pageContents.states.retry[lang]}</Button>
 			</div>
-		{:else if suppliers.length === 0}
-			<div class="admin-state">
-				<p>{pageContents.states.emptySuppliers[lang]}</p>
-			</div>
 		{:else}
+			<!-- DataTable — server-side paging: paging trong DataTable TẮT -->
 			<div class="admin-table-wrap">
-				<table class="admin-table">
-					<thead>
-						<tr>
-							<th scope="col">{pageContents.supplierTable.name[lang]}</th>
-							<th scope="col">{pageContents.supplierTable.contact[lang]}</th>
-							<th scope="col">{pageContents.supplierTable.address[lang]}</th>
-							<th scope="col">{pageContents.supplierTable.status[lang]}</th>
-							<th scope="col">{pageContents.supplierTable.createdAt[lang]}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each suppliers as row (row._id)}
-							<tr>
-								<td class="col-code">{row.name ?? '—'}</td>
-								<td>{row.contactPerson ?? '—'}</td>
-								<td class="col-wrap">{row.address ?? '—'}</td>
-								<td class="col-status">
-									<span class="status-badge status-{row.status === 'active' ? 'success' : 'default'}">
-										{row.status === 'active' ? (lang === 'vi' ? 'Đang hoạt động' : 'Active') : (row.status ?? '—')}
-									</span>
-								</td>
-								<td>{formatDate(row.createdAt)}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+				<DataTable
+					data={suppliersAny}
+					columns={supplierColumns}
+					pageSize={pageSize}
+					showPagination={false}
+					loading={suppliersLoading && !suppliersLoadedOnce}
+					visual={{ striped: true, hoverable: true }}
+					emptyLabel={pageContents.states.emptySuppliers[lang]}
+					loadingLabel={pageContents.states.loading[lang]}
+					caption={{ vi: 'Danh sách nhà cung cấp', en: 'Suppliers list' }}
+					stickyHead
+					data-test="suppliers-datatable"
+				/>
 			</div>
 		{/if}
 	{:else}
 		<!-- ── Tab PURCHASE ORDERS ── -->
-		{#if posLoading && !posLoadedOnce}
-			<div class="admin-state" role="status">
-				<p>{pageContents.states.loading[lang]}</p>
-			</div>
-		{:else if posError}
+		{#if posError}
 			<div class="admin-state error" role="alert">
 				<p class="state-title">{pageContents.states.errorTitlePOs[lang]}</p>
 				<p class="state-detail">{posError}</p>
 				<Button color="primary" variant="outline" onClick={loadPOs}>{pageContents.states.retry[lang]}</Button>
 			</div>
-		{:else if pos.length === 0}
-			<div class="admin-state">
-				<p>{pageContents.states.emptyPOs[lang]}</p>
-			</div>
 		{:else}
 			<div class="admin-table-wrap">
-				<table class="admin-table">
-					<thead>
-						<tr>
-							<th scope="col">{pageContents.poTable.code[lang]}</th>
-							<th scope="col">{pageContents.poTable.supplier[lang]}</th>
-							<th scope="col">{pageContents.poTable.branch[lang]}</th>
-							<th scope="col">{pageContents.poTable.status[lang]}</th>
-							<th scope="col">{pageContents.poTable.totalCost[lang]}</th>
-							<th scope="col">{pageContents.poTable.expectedAt[lang]}</th>
-							<th scope="col" class="col-actions">{pageContents.poTable.actions[lang]}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each pos as row (row._id)}
-							<tr>
-								<td class="col-code">{row.poCode ?? '—'}</td>
-								<td>{getSupplierLabel(row.supplierId)}</td>
-								<td>{getBranchLabel(row.branchId)}</td>
-								<td class="col-status">
-									<span class="status-badge status-{poStatusColor(row.status)}">{poStatusLabel(row.status)}</span>
-								</td>
-								<td class="col-num">{formatMoney(row.totalCost)}</td>
-								<td>{formatDate(row.expectedAt)}</td>
-								<td class="col-actions">
-									<div class="row-actions">
-										<!-- update/edit = primary -->
-										<Button color="primary" variant="ghost" size="sm" onClick={() => openStatusModal(row)}>
-											{pageContents.actions.updateStatus[lang]}
-										</Button>
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+				<DataTable
+					data={posAny}
+					columns={poColumns}
+					pageSize={pageSize}
+					showPagination={false}
+					loading={posLoading && !posLoadedOnce}
+					visual={{ striped: true, hoverable: true }}
+					emptyLabel={pageContents.states.emptyPOs[lang]}
+					loadingLabel={pageContents.states.loading[lang]}
+					caption={{ vi: 'Danh sách đơn mua hàng', en: 'Purchase orders list' }}
+					actionsLabel={{ vi: pageContents.poTable.actions[lang], en: pageContents.poTable.actions[lang] }}
+					stickyHead
+					data-test="purchase-orders-datatable"
+				>
+					{#snippet actionsContent(row)}
+						{@const po = row as unknown as PurchaseOrderRow}
+						<div class="row-actions">
+							<!-- update/edit = primary -->
+							<Button color="primary" variant="ghost" size="sm" onClick={() => openStatusModal(po)}>
+								{pageContents.actions.updateStatus[lang]}
+							</Button>
+						</div>
+					{/snippet}
+				</DataTable>
 			</div>
 		{/if}
 	{/if}
 
-	<!-- ── Phân trang ── -->
+	<!-- ── Phân trang (server-side, dùng chung 2 tab) ── -->
 	<footer class="admin-pagination">
 		<span class="total-count">{totalCountText}</span>
 		<div class="page-controls">
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={currentPage <= 1}
-				onClick={() => goToPage(currentPage - 1)}
-			>
-				{pageContents.pagination.prev[lang]}
-			</Button>
+			<Pagination
+				bind:page={currentPagingPage}
+				totalPages={totalPages}
+				loading={activeTab === 'suppliers' ? suppliersLoading : posLoading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
 			<span class="page-info">
 				{pageContents.pagination.pageInfo[lang]
 					.replace('{page}', String(currentPage))
 					.replace('{total}', String(totalPages))}
 			</span>
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={currentPage >= totalPages}
-				onClick={() => goToPage(currentPage + 1)}
-			>
-				{pageContents.pagination.next[lang]}
-			</Button>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -1214,83 +1258,12 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.col-code {
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.col-num {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.col-wrap {
-		white-space: normal;
-		min-width: 12rem;
-	}
-
-	.col-actions {
-		text-align: right;
-	}
-
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
 	.row-actions {
 		display: flex;
 		gap: 0.25rem;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
