@@ -105,6 +105,7 @@
 		'/admin/suppliers': 'Nhà cung cấp',
 		'/admin/promotions': 'Khuyến mãi',
 		'/admin/stock-takes': 'Kiểm kê',
+		'/admin/pos': 'Bán hàng POS',
 		'/admin/pos-sessions': 'Phiên POS',
 		'/admin/payments': 'Thanh toán',
 		'/admin/shipments': 'Vận chuyển',
@@ -319,6 +320,15 @@
 							active={isActive('/admin/stock-takes')}
 							icon="lucide:clipboard-list"
 							data-test="admin-nav-stock-takes"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Bán hàng POS"
+							href="/admin/pos"
+							active={isActive('/admin/pos')}
+							icon="lucide:scan-barcode"
+							data-test="admin-nav-pos-terminal"
 						/>
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
