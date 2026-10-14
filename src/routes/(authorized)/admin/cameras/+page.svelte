@@ -7,6 +7,7 @@
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
 	import { resolveServerMessage } from '../_interface';
+	import type { TranslateContent } from '$interfaces/basic';
 
 	interface CameraRow {
 		_id?: string;
@@ -430,9 +431,17 @@
 			);
 			testingId = undefined;
 			if (response.ok) {
-				const data = response.data as { status?: string; testMessage?: string } | undefined;
+				const data = response.data as
+					| { status?: string; testMessage?: TranslateContent | string }
+					| undefined;
+				const detail = data?.testMessage
+					? resolveServerMessage(data.testMessage, lang, {
+							vi: 'Đã kiểm tra kết nối',
+							en: 'Connection tested'
+						})
+					: '';
 				showToast(
-					`${statusLabel(data?.status)}${data?.testMessage ? ` — ${data.testMessage}` : ''}`,
+					`${statusLabel(data?.status)}${detail ? ` — ${detail}` : ''}`,
 					data?.status === 'online' ? 'success' : 'error'
 				);
 				await loadCameras();
