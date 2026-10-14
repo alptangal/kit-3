@@ -43,9 +43,9 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		const pRes = await cbProducts.document.query({
-			statement: `SELECT p._id AS productId, p.name, p.description, p.categoryId, p.brandId, p.imageUrl
+			statement: `SELECT META(p).id AS productId, p.name, p.description, p.categoryId, p.brandId, p.imageUrl
 				FROM ${productsKeyspace} p
-				WHERE p._id = $1 AND p.status = 'active' AND (p.deletedAt IS NULL OR p.deletedAt IS MISSING)
+				WHERE META(p).id = $1 AND p.status = 'active' AND (p.deletedAt IS NULL OR p.deletedAt IS MISSING)
 				LIMIT 1`,
 			args: [productId],
 			readonly: true
@@ -71,9 +71,9 @@ export const POST: RequestHandler = async (event) => {
 		const categoryId = typeof product.categoryId === 'string' ? product.categoryId : undefined;
 		if (categoryId) {
 			const rRes = await cbProducts.document.query({
-				statement: `SELECT p._id AS productId, p.name, p.description, p.categoryId, p.brandId, p.imageUrl
+				statement: `SELECT META(p).id AS productId, p.name, p.description, p.categoryId, p.brandId, p.imageUrl
 					FROM ${productsKeyspace} p
-					WHERE p.categoryId = $1 AND p._id != $2 AND p.status = 'active'
+					WHERE p.categoryId = $1 AND META(p).id != $2 AND p.status = 'active'
 						AND (p.deletedAt IS NULL OR p.deletedAt IS MISSING)
 					ORDER BY p.createdAt DESC LIMIT 4`,
 				args: [categoryId, productId],

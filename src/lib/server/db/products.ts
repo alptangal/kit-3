@@ -1097,7 +1097,7 @@ export class ProductAdminService {
 		const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
 		// Chỉ chọn field công khai — KHÔNG có costPrice/createdBy.
-		const productFields = 'p._id AS productId, p.name, p.description, p.categoryId, p.brandId, p.imageUrl';
+		const productFields = 'META(p).id AS productId, p.name, p.description, p.categoryId, p.brandId, p.imageUrl';
 
 		const [countRes, dataRes] = await Promise.all([
 			cbProducts.document.query({
@@ -1118,20 +1118,39 @@ export class ProductAdminService {
 		const products: Record<string, unknown>[] = dataRes.data?.results ?? [];
 
 		// Gắn variants active cho từng sản phẩm (giá bán từ variant).
-		const withVariants = await Promise.all(
-			products.map(async (p) => {
-				const productId = typeof p.productId === 'string' ? p.productId : undefined;
-				if (!productId) return p;
-				const vRes = await cbVariants.document.query({
-					statement: `SELECT META().id AS variantId, v.sku, v.displayName, v.attributes, v.price, v.imageUrl
-						FROM ${variantsKeyspace} v
-						WHERE v.productId = $1 AND v.status = 'active' AND (v.deletedAt IS NULL OR v.deletedAt IS MISSING)`,
-					args: [productId],
-					readonly: true
-				});
-				return { ...p, variants: vRes.ok ? (vRes.data?.results ?? []) : [] };
-			})
-		);
+		// DUY NHẤT 1 query batch `WHERE v.productId IN $1` rồi group theo productId —
+		// KHÔNG fan-out từng product: couchbase cloud drop kết nối khi ~24 query
+		// song song (đã đo: 4/24 fetch failed → API 500).
+		const productIds = products
+			.map((p) => (typeof p.productId === 'string' ? p.productId : undefined))
+			.filter((id): id is string => !!id);
+
+		const variantsByProduct = new Map<string, Record<string, unknown>[]>();
+		if (productIds.length) {
+			const vRes = await cbVariants.document.query({
+				statement: `SELECT META().id AS variantId, v.productId, v.sku, v.displayName, v.attributes, v.price, v.imageUrl
+					FROM ${variantsKeyspace} v
+					WHERE v.productId IN $1 AND v.status = 'active' AND (v.deletedAt IS NULL OR v.deletedAt IS MISSING)`,
+				args: [productIds],
+				readonly: true
+			});
+			if (vRes.ok) {
+				for (const v of (vRes.data?.results ?? []) as Record<string, unknown>[]) {
+					const key = typeof v.productId === 'string' ? v.productId : '';
+					if (!key) continue;
+					const list = variantsByProduct.get(key) ?? [];
+					// bỏ field productId trung gian — client chỉ cần danh sách variants
+					const { productId: _pid, ...variant } = v;
+					list.push(variant);
+					variantsByProduct.set(key, list);
+				}
+			}
+		}
+
+		const withVariants = products.map((p) => ({
+			...p,
+			variants: (typeof p.productId === 'string' ? variantsByProduct.get(p.productId) : undefined) ?? []
+		}));
 
 		return { success: true, products: withVariants, total, page, pageSize };
 	}

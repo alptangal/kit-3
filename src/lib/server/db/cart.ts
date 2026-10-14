@@ -35,7 +35,9 @@ export interface CartDocument {
 	_id?: string;
 	documentKey?: string;
 	userId: string;
-	branchId: string;
+	// null = giỏ online không gắn chi nhánh vật lý (khách mua ở storefront
+	// không thuộc branch nào — giống OrderDocument.branchId: string | null).
+	branchId: string | null;
 	items: CartItem[];
 	subtotal: number;
 	discountAmount: number;
@@ -110,9 +112,9 @@ export class CartService {
 		const denied = this.checkAccess(actor, userId);
 		if (denied) return { success: false, messages: denied };
 
-		if (!branchId) {
-			return { success: false, messages: cartMessages.branchRequired };
-		}
+		// branchId null = giỏ online của khách không thuộc chi nhánh — hợp lệ.
+		// (Trước đây chặn null → khách storefront không gắn branch không thêm
+		// được hàng: "Vui lòng chọn chi nhánh". POS vẫn truyền branchId như cũ.)
 
 		const existing = await this.findCart(userId);
 		if (existing) {
@@ -123,7 +125,7 @@ export class CartService {
 		const documentKey = `cart::${userId}`;
 		const doc: Omit<CartDocument, '_id' | 'documentKey'> = {
 			userId,
-			branchId,
+			branchId: branchId ?? null,
 			items: [],
 			subtotal: 0,
 			discountAmount: 0,
