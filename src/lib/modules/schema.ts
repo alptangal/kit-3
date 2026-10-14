@@ -1270,6 +1270,7 @@ export type StockMovement = InferCollection<'stock_movements'>;
 export type Branch = InferCollection<'branches'>;
 export type OperatingExpense = InferCollection<'operating_expenses'>;
 export type Camera = InferCollection<'cameras'>;
+export type PriceHistory = InferCollection<'price_history'>;
 
 // const collectionSchemasVault = {
 // 	system_secrets: {
