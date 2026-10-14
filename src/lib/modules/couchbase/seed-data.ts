@@ -113,7 +113,10 @@ export async function seedPermissions(): Promise<void> {
 
 		// Nhập hàng đa kiểu + hạn sử dụng
 		{ key: 'purchases:read', resource: 'purchases', action: 'read' },
-		{ key: 'purchases:manage', resource: 'purchases', action: 'manage' }
+		{ key: 'purchases:manage', resource: 'purchases', action: 'manage' },
+
+		// Analytics — thống kê biến động giá / khối lượng / tồn kho
+		{ key: 'analytics:read', resource: 'analytics', action: 'read' }
 	];
 
 	for (const p of permissions) {
@@ -177,7 +180,9 @@ export async function seedDetailRoles(): Promise<void> {
 			'cameras:manage',
 			// Nhập hàng đa kiểu + hạn sử dụng
 			'purchases:read',
-			'purchases:manage'
+			'purchases:manage',
+			// Analytics — thống kê biến động giá / khối lượng / tồn kho
+			'analytics:read'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -230,6 +235,9 @@ export async function seedDetailRoles(): Promise<void> {
 		// Nhập hàng đa kiểu + hạn sử dụng — manager trong chi nhánh mình
 		{ roleName: 'manager', permissionKey: 'purchases:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'purchases:manage', scope: 'own_branch' },
+
+		// Analytics — xem thống kê trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'analytics:read', scope: 'own_branch' },
 
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
