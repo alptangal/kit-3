@@ -5,12 +5,22 @@ import { cb_bucketName, cb_scopeName } from '$env/static/private';
 import { cbData } from '$modules/couchbase/clients';
 import type { InferCollection } from '$modules/schema';
 import { PermissionChecker } from '$modules/rbac/permission-checker';
+import { InventoryService } from './inventory';
 
 const cbSuppliers = cbData('suppliers');
 const cbPurchaseOrders = cbData('purchase_orders');
+const cbVariants = cbData('product_variants');
+const cbCategories = cbData('categories');
+const cbInventoryStock = cbData('inventory_stock');
+const cbInventoryLots = cbData('inventory_lots');
+const cbStockMovementsRef = cbData('stock_movements');
 
 const suppliersKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`suppliers\``;
 const purchaseOrdersKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`purchase_orders\``;
+const variantsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`product_variants\``;
+const categoriesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`categories\``;
+const inventoryStockKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_stock\``;
+const inventoryLotsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_lots\``;
 
 const supplierAdminMessages = {
   notFound: {
@@ -45,6 +55,38 @@ const supplierAdminMessages = {
     vi: 'Danh sách mục PO không hợp lệ',
     en: 'Invalid PO items'
   } as TranslateContent,
+  poNotReceivable: {
+    vi: 'Phiếu nhập không ở trạng thái có thể nhận hàng',
+    en: 'Purchase order is not in a receivable state'
+  } as TranslateContent,
+  invalidQuickPurchase: {
+    vi: 'Thông tin phiếu nhập nhanh không hợp lệ',
+    en: 'Invalid quick purchase data'
+  } as TranslateContent,
+  invalidMode: {
+    vi: 'Kiểu nhập hàng không hợp lệ',
+    en: 'Invalid purchase mode'
+  } as TranslateContent,
+  invalidReceiptImages: {
+    vi: 'Ảnh hóa đơn không hợp lệ (tối đa 5 ảnh)',
+    en: 'Invalid receipt images (max 5)'
+  } as TranslateContent,
+  invalidExpiryDates: {
+    vi: 'Ngày sản xuất / hạn sử dụng không hợp lệ',
+    en: 'Invalid manufactured / expiry dates'
+  } as TranslateContent,
+  receiveFailed: {
+    vi: 'Nhận hàng thất bại',
+    en: 'Failed to receive purchase order'
+  } as TranslateContent,
+  categoryNotFound: {
+    vi: 'Không tìm thấy thể loại',
+    en: 'Category not found'
+  } as TranslateContent,
+  variantNotFound: {
+    vi: 'Không tìm thấy sản phẩm trong phiếu',
+    en: 'Variant not found in purchase'
+  } as TranslateContent,
 } as const;
 
 const SUPPLIER_ADMIN_SAFE_FIELDS = [
@@ -67,9 +109,14 @@ const PO_ADMIN_SAFE_FIELDS = [
   'approvedBy',
   'expectedAt',
   'receivedAt',
+  'source',
+  'note',
   'createdAt',
   'updatedAt'
 ] as const;
+
+// Ảnh hóa đơn chỉ trả qua get (không trả trong list — payload lớn)
+type ReceiptImageDoc = { _id: string; receiptImages?: string[] };
 
 const VALID_PO_STATUSES = ['draft', 'ordered', 'partially_received', 'received', 'cancelled'] as const;
 type POStatus = typeof VALID_PO_STATUSES[number];
@@ -109,6 +156,34 @@ type POItem = {
   unitCost: number;
   lotNumber?: string;
   expiresAt?: string;
+};
+
+type QuickPurchaseMode = 'supplier' | 'product' | 'category';
+
+type QuickPurchaseItem = {
+  variantId: string;
+  quantity: number;
+  unitCost: number;
+  lotNumber?: string;
+  expiresAt?: string;
+  manufacturedAt?: string;
+};
+
+export type QuickPurchaseInput = {
+  mode: QuickPurchaseMode;
+  supplierId?: string;
+  categoryId?: string;
+  branchId: string;
+  items: QuickPurchaseItem[];
+  totalCost: number;
+  receiptImages?: string[];
+  note?: string;
+  // expiryMode: nhập trực tiếp ISO hoặc theo số ngày
+  expiryMode?: 'direct' | 'days';
+  manufacturedAt?: string;
+  expiresAt?: string;
+  manufacturedDaysAgo?: number;
+  expiresInDays?: number;
 };
 
 export class SupplierService {
@@ -369,6 +444,8 @@ export class SupplierService {
       status: 'draft' as POStatus,
       items: poData.items,
       totalCost: poData.totalCost,
+      // Mặc định 'order' — phiếu tạo qua luồng PO duyệt trước
+      source: 'order' as string,
       createdBy: actor.userId,
       approvedBy: null,
       expectedAt: poData.expectedAt,
@@ -445,5 +522,374 @@ export class SupplierService {
 
     const updatedPO = (updateRes as any).data;
     return { success: true, po: sanitizePOForAdmin({...updatedPO, _id: poId}) };
+  }
+
+  /**
+   * Get a purchase order including receiptImages (payload lớn — chỉ endpoint get dùng).
+   */
+  static async getPurchaseOrderWithImages(
+    actor: ActorContext,
+    poId: string
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { po: Record<string, unknown> & ReceiptImageDoc })> {
+    const scope = await PermissionChecker.getScope(actor.roleName, 'purchases:read');
+    if (!scope) return { success: false, messages: supplierAdminMessages.permissionDenied };
+
+    const res = await cbPurchaseOrders.document.get({ documentKey: poId });
+
+    if (!res.ok) {
+      return { success: false, messages: supplierAdminMessages.poNotFound };
+    }
+
+    const po = (res as any).data;
+
+    if (scope === 'own_branch' && actor.branchId && po.branchId !== actor.branchId) {
+      return { success: false, messages: supplierAdminMessages.permissionDenied };
+    }
+
+    const poWithImages = sanitizePOForAdmin({ ...po, _id: poId }) as Record<string, unknown> & ReceiptImageDoc;
+    poWithImages.receiptImages = Array.isArray(po.receiptImages) ? po.receiptImages : [];
+
+    return { success: true, po: poWithImages };
+  }
+
+  // ========== NHẬN HÀNG + NHẬP NHANH ==========
+
+  /**
+   * Tạo inventory lot cho 1 dòng nhận hàng + cộng tồn kho.
+   *
+   * QUYẾT ĐỊNH KIẾN TRÚC (đã khảo sát InventoryService):
+   * - createLot() CHỈ tạo doc inventory_lots + log stock movement — KHÔNG cộng inventory_stock.
+   * - adjustStock() yêu cầu doc inventory_stock đã tồn tại (getStock → notFound nếu chưa có).
+   * → Flow chuẩn: tạo lot qua cbInventoryLots trực tiếp (tránh double movement log của createLot),
+   *   sau đó đảm bảo doc inventory_stock tồn tại (upsert) rồi mới cộng số dư theo N1QL điều kiện.
+   * Luôn tạo lot kể cả variant không trackLot (lotNumber tự sinh) — thống nhất truy vết nguồn gốc.
+   */
+  private static async receiveItemToStock(params: {
+    actor: ActorContext;
+    poId: string;
+    poCode: string;
+    item: { variantId: string; quantity: number; lotNumber?: string; manufacturedAt?: string | null; expiresAt?: string | null };
+    branchId: string;
+    supplierId: string;
+    now: string;
+  }): Promise<boolean> {
+    const { actor, poId, poCode, item, branchId, supplierId, now } = params;
+
+    const lotNumber = item.lotNumber?.trim() || `${poCode}_${Date.now()}`;
+    const lotId = `${item.variantId}_${branchId}_${lotNumber}_${Date.now()}`;
+
+    const lot = {
+      variantId: item.variantId,
+      branchId,
+      lotNumber,
+      quantityOnHand: item.quantity,
+      manufacturedAt: item.manufacturedAt ?? null,
+      expiresAt: item.expiresAt ?? null,
+      receivedAt: now,
+      supplierId,
+      status: 'active',
+      createdAt: now
+    };
+
+    const createRes = await cbInventoryLots.document.create({
+      documentKey: lotId,
+      content: lot
+    });
+    if (!createRes.ok) return false;
+
+    // Stock movement 'receive' gắn referenceType purchase_order (truy vết về PO)
+    await cbStockMovementsRef.document.create({
+      documentKey: `${item.variantId}_${branchId}_${Date.now()}_rcv${Math.random().toString(36).substring(2, 6)}`,
+      content: {
+        variantId: item.variantId,
+        branchId,
+        lotId: lotId,
+        type: 'receive',
+        quantity: item.quantity,
+        quantityBefore: null,
+        quantityAfter: null,
+        referenceType: 'purchase_order',
+        referenceId: poId,
+        performedBy: actor.userId,
+        note: `Received via ${poCode}`,
+        createdAt: now
+      }
+    });
+
+    // Cộng inventory_stock: đảm bảo doc tồn tại trước (upsert khi chưa có)
+    const getStockRes = await cbInventoryStock.document.get({ documentKey: `stock_${item.variantId}_${branchId}` });
+    if (!getStockRes.ok) {
+      await cbInventoryStock.document.create({
+        documentKey: `stock_${item.variantId}_${branchId}`,
+        content: {
+          variantId: item.variantId,
+          branchId,
+          quantityOnHand: item.quantity,
+          quantityReserved: 0,
+          updatedAt: now
+        }
+      });
+      return true;
+    }
+
+    // Đã có doc → cộng dồn bằng N1QL (điều kiện đọc-lại số cũ chống race)
+    const incRes = await cbInventoryStock.document.query({
+      statement: `
+        UPDATE ${inventoryStockKeyspace}
+        SET quantityOnHand = quantityOnHand + $3, updatedAt = $4
+        WHERE META().id = $1 AND variantId = $2
+      `,
+      args: [`stock_${item.variantId}_${branchId}`, item.variantId, item.quantity, now],
+      readonly: false
+    });
+    if (!incRes.ok) return false;
+
+    return true;
+  }
+
+  /**
+   * Nhận hàng cho PO: set status='received' + tạo lot + cộng kho cho từng item.
+   * Chỉ cho phép nhận khi status là 'ordered' hoặc 'partially_received'.
+   */
+  static async receivePurchaseOrder(
+    actor: ActorContext,
+    poId: string,
+    receivedItems?: Array<{ variantId: string; quantity: number; lotNumber?: string; manufacturedAt?: string | null; expiresAt?: string | null }>
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { po: Record<string, unknown> })> {
+    const permError = await this.requirePermission(actor, 'purchases:manage');
+    if (permError) return permError;
+
+    const getRes = await cbPurchaseOrders.document.get({ documentKey: poId });
+    if (!getRes.ok) {
+      return { success: false, messages: supplierAdminMessages.poNotFound };
+    }
+
+    const po = (getRes as any).data;
+
+    if (actor.branchId && po.branchId !== actor.branchId) {
+      const scope = await PermissionChecker.getScope(actor.roleName, 'purchases:manage');
+      if (scope === 'own_branch') {
+        return { success: false, messages: supplierAdminMessages.permissionDenied };
+      }
+    }
+
+    if (po.status !== 'ordered' && po.status !== 'partially_received') {
+      return { success: false, messages: supplierAdminMessages.poNotReceivable };
+    }
+
+    const now = new Date().toISOString();
+    const items: POItem[] = Array.isArray(po.items) ? po.items : [];
+    const overrides = Array.isArray(receivedItems) ? receivedItems : [];
+
+    let allOk = true;
+    for (const item of items) {
+      const override = overrides.find((o) => o.variantId === item.variantId);
+      const merged = {
+        variantId: item.variantId,
+        quantity: Number(override?.quantity ?? item.quantity) || 0,
+        lotNumber: override?.lotNumber ?? item.lotNumber,
+        manufacturedAt: override?.manufacturedAt ?? null,
+        expiresAt: override?.expiresAt ?? item.expiresAt ?? null
+      };
+      if (merged.quantity <= 0) continue;
+      const ok = await this.receiveItemToStock({
+        actor,
+        poId,
+        poCode: po.poCode ?? poId,
+        item: merged,
+        branchId: po.branchId,
+        supplierId: po.supplierId,
+        now
+      });
+      if (!ok) allOk = false;
+    }
+
+    // Update status PO sang received kèm receivedAt
+    const updateRes = await cbPurchaseOrders.document.update({
+      documentKey: poId,
+      content: {
+        ...po,
+        status: 'received' as POStatus,
+        approvedBy: po.approvedBy ?? actor.userId,
+        receivedAt: now,
+        updatedAt: now
+      }
+    });
+
+    if (!updateRes.ok) {
+      return { success: false, messages: supplierAdminMessages.updateFailed };
+    }
+
+    if (!allOk) {
+      // PO vẫn đánh dấu received nhưng có lot/kho tạo lỗi — báo success kèm cảnh báo qua log
+      console.warn(`[SupplierService.receivePurchaseOrder] partial failure creating lots for PO ${poId}`);
+    }
+
+    const updatedPO = (updateRes as any).data;
+    return { success: true, po: sanitizePOForAdmin({...updatedPO, _id: poId}) };
+  }
+
+  /**
+   * Tính manufacturedAt/expiresAt theo expiryMode:
+   * - 'direct': dùng ngày client gửi (ISO).
+   * - 'days': manufacturedAt = now − manufacturedDaysAgo; expiresAt = manufacturedAt + expiresInDays
+   *   (hoặc expiresAt = now + expiresInDays nếu không có manufactured).
+   */
+  private static resolveQuickExpiry(input: QuickPurchaseInput): { manufacturedAt: string | null; expiresAt: string | null } | null {
+    const mode = input.expiryMode ?? 'direct';
+    if (mode === 'days') {
+      const mDays = Number(input.manufacturedDaysAgo ?? 0);
+      const eDays = Number(input.expiresInDays ?? 0);
+      if (!Number.isFinite(mDays) || !Number.isFinite(eDays) || eDays <= 0) return null;
+      const manufactured = new Date(Date.now() - mDays * 24 * 60 * 60 * 1000);
+      const base = input.manufacturedDaysAgo != null && mDays >= 0 ? manufactured : new Date();
+      const expires = new Date(base.getTime() + eDays * 24 * 60 * 60 * 1000);
+      return { manufacturedAt: manufactured.toISOString(), expiresAt: expires.toISOString() };
+    }
+    // direct
+    const m = input.manufacturedAt ? new Date(input.manufacturedAt) : null;
+    const e = input.expiresAt ? new Date(input.expiresAt) : null;
+    if (m && isNaN(m.getTime())) return null;
+    if (e && isNaN(e.getTime())) return null;
+    if (m && e && e.getTime() <= m.getTime()) return null;
+    return {
+      manufacturedAt: m ? m.toISOString() : null,
+      expiresAt: e ? e.toISOString() : null
+    };
+  }
+
+  /**
+   * Nhập nhanh đa kiểu — KHÔNG qua PO duyệt trước:
+   * - mode 'supplier': nhập theo NCC đã chọn.
+   * - mode 'product': nhập thẳng 1-nhiều variant.
+   * - mode 'category': chọn category — server xác thực category tồn tại, items đã lọc sẵn phía UI.
+   *
+   * Tạo purchase_orders doc với status='received' ngay + source='quick' + receiptImages,
+   * rồi chạy luôn receive flow (tạo lot + cộng kho).
+   */
+  static async createQuickPurchase(
+    actor: ActorContext,
+    input: QuickPurchaseInput
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { po: Record<string, unknown> })> {
+    const permError = await this.requirePermission(actor, 'purchases:manage', input.branchId);
+    if (permError) return permError;
+
+    if (!['supplier', 'product', 'category'].includes(input.mode)) {
+      return { success: false, messages: supplierAdminMessages.invalidMode };
+    }
+
+    if (!input.items || input.items.length === 0) {
+      return { success: false, messages: supplierAdminMessages.invalidQuickPurchase };
+    }
+
+    for (const item of input.items) {
+      if (!item.variantId || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 || !Number.isFinite(Number(item.unitCost)) || Number(item.unitCost) < 0) {
+        return { success: false, messages: supplierAdminMessages.invalidQuickPurchase };
+      }
+    }
+
+    // mode 'supplier' bắt buộc có supplierId
+    if (input.mode === 'supplier' && !input.supplierId) {
+      return { success: false, messages: supplierAdminMessages.invalidQuickPurchase };
+    }
+
+    // mode 'category' — xác thực category tồn tại
+    if (input.mode === 'category' && input.categoryId) {
+      const catRes = await cbCategories.document.get({ documentKey: input.categoryId });
+      if (!catRes.ok) {
+        return { success: false, messages: supplierAdminMessages.categoryNotFound };
+      }
+    }
+
+    // receiptImages: base64 data URL, tối đa 5
+    if (input.receiptImages != null) {
+      if (!Array.isArray(input.receiptImages) || input.receiptImages.length > 5) {
+        return { success: false, messages: supplierAdminMessages.invalidReceiptImages };
+      }
+      for (const img of input.receiptImages) {
+        if (typeof img !== 'string' || !img.startsWith('data:image/')) {
+          return { success: false, messages: supplierAdminMessages.invalidReceiptImages };
+        }
+      }
+    }
+
+    // Tính hạn sử dụng
+    const expiry = this.resolveQuickExpiry(input);
+    if (!expiry) {
+      return { success: false, messages: supplierAdminMessages.invalidExpiryDates };
+    }
+
+    const now = new Date().toISOString();
+    const poCode = `QN-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+    const poId = `${input.branchId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    const items: POItem[] = input.items.map((item) => ({
+      variantId: item.variantId,
+      quantity: Number(item.quantity),
+      unitCost: Number(item.unitCost),
+      lotNumber: item.lotNumber?.trim() || undefined,
+      expiresAt: item.expiresAt || expiry.expiresAt || undefined
+    }));
+
+    const po = {
+      poCode,
+      supplierId: input.supplierId ?? null,
+      branchId: input.branchId,
+      status: 'received' as POStatus,
+      items,
+      totalCost: Number(input.totalCost) || items.reduce((s, it) => s + it.quantity * it.unitCost, 0),
+      createdBy: actor.userId,
+      approvedBy: actor.userId,
+      expectedAt: now,
+      receivedAt: now,
+      source: 'quick' as string,
+      note: input.note?.trim() || null,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const createRes = await cbPurchaseOrders.document.create({
+      documentKey: poId,
+      content: po
+    });
+
+    if (!createRes.ok) {
+      return { success: false, messages: supplierAdminMessages.createFailed };
+    }
+
+    // Lưu ảnh hóa đơn (nếu có) — tách khỏi doc chính để list không kéo payload lớn
+    if (input.receiptImages && input.receiptImages.length > 0) {
+      await cbPurchaseOrders.document.update({
+        documentKey: poId,
+        content: { ...po, receiptImages: input.receiptImages, updatedAt: now }
+      });
+    }
+
+    // Chạy receive flow: tạo lot + cộng kho cho từng item
+    let allOk = true;
+    for (const item of items) {
+      const ok = await this.receiveItemToStock({
+        actor,
+        poId,
+        poCode,
+        item: {
+          variantId: item.variantId,
+          quantity: item.quantity,
+          lotNumber: item.lotNumber,
+          manufacturedAt: expiry.manufacturedAt,
+          expiresAt: item.expiresAt || expiry.expiresAt
+        },
+        branchId: input.branchId,
+        supplierId: po.supplierId ?? '',
+        now
+      });
+      if (!ok) allOk = false;
+    }
+
+    if (!allOk) {
+      console.warn(`[SupplierService.createQuickPurchase] partial failure creating lots for quick purchase ${poId}`);
+    }
+
+    return { success: true, po: sanitizePOForAdmin({...po, _id: poId}) };
   }
 }
