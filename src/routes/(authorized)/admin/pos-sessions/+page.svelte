@@ -1,6 +1,7 @@
 <!-- src/routes/(authorized)/admin/pos-sessions/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -149,7 +150,7 @@
 		return label ? label[lang] : (status ?? '—');
 	}
 
-	function statusColor(status?: string): string {
+	function statusColor(status?: string): 'success' | 'default' {
 		switch (status) {
 			case 'open':
 				return 'success';
@@ -269,6 +270,19 @@
 		await loadSessions();
 	}
 
+	// Pagination element bind:page — đổi trang server qua effect armed-guard
+	// (chạy sau lần arm đầu, tránh load trùng lúc mount — onMount đã gọi loadSessions)
+	let pageArmed = $state(false);
+	$effect(() => {
+		void pageNo;
+		if (!pageArmed) {
+			pageArmed = true;
+			return;
+		}
+		if (loading) return;
+		void goToPage(pageNo);
+	});
+
 	async function changePageSize(newSize: number) {
 		if (newSize === pageSize || loading) return;
 		pageSize = newSize;
@@ -281,6 +295,80 @@
 		pageNo = 1;
 		await loadSessions();
 	}
+
+	// ---------- DataTable ----------
+	const sessionsAny = $derived(sessions as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'device',
+			label: pageContents.table.device[lang],
+			accessor: (row) => (row as unknown as PosSessionRow).deviceId ?? '—'
+		},
+		{
+			id: 'branch',
+			label: pageContents.table.branch[lang],
+			accessor: (row) => getBranchLabel((row as unknown as PosSessionRow).branchId),
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) => statusLabel((row as unknown as PosSessionRow).status),
+			status: (_v, row) => statusColor((row as unknown as PosSessionRow).status)
+		},
+		{
+			id: 'opening',
+			label: pageContents.table.opening[lang],
+			accessor: (row) => formatMoney((row as unknown as PosSessionRow).openingBalance),
+			noHighlight: true
+		},
+		{
+			id: 'sales',
+			label: pageContents.table.sales[lang],
+			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalSales),
+			noHighlight: true
+		},
+		{
+			id: 'returns',
+			label: pageContents.table.returns[lang],
+			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalReturns),
+			noHighlight: true
+		},
+		{
+			id: 'expenses',
+			label: pageContents.table.expenses[lang],
+			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalExpenses),
+			noHighlight: true
+		},
+		{
+			id: 'cash',
+			label: pageContents.table.cash[lang],
+			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalCash),
+			noHighlight: true
+		},
+		{
+			id: 'variance',
+			label: pageContents.table.variance[lang],
+			accessor: (row) => {
+				const r = row as unknown as PosSessionRow;
+				if (r.variance === null || r.variance === undefined) return '—';
+				return `${r.variance > 0 ? '+' : ''}${formatMoney(r.variance)}`;
+			},
+			status: (_v, row) => {
+				const v = (row as unknown as PosSessionRow).variance ?? 0;
+				if (v < 0) return 'danger';
+				if (v > 0) return 'success';
+				return 'default';
+			},
+			noHighlight: true
+		},
+		{
+			id: 'opened',
+			label: pageContents.table.opened[lang],
+			accessor: (row) => formatDateTime((row as unknown as PosSessionRow).openedAt),
+			noHighlight: true
+		}
+	]);
 
 	// ── Modal mở phiên ──
 	let openModalDisplay = $state(false);
@@ -510,103 +598,67 @@
 		</Button>
 	</div>
 
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
-		</div>
-	{:else if loadError}
+	{#if loadError}
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{loadError}</p>
 			<Button color="primary" variant="outline" onClick={loadSessions}>{pageContents.states.retry[lang]}</Button>
 		</div>
-	{:else if sessions.length === 0}
-		<div class="admin-state">
-			<p>{pageContents.states.empty[lang]}</p>
-		</div>
 	{:else}
+		<!-- ── Bảng phiên POS — DataTable (component có sẵn) ──
+		     Server-side paging: paging trong DataTable TẮT, footer Pagination điều khiển server. -->
 		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.device[lang]}</th>
-						<th scope="col">{pageContents.table.branch[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.opening[lang]}</th>
-						<th scope="col">{pageContents.table.sales[lang]}</th>
-						<th scope="col">{pageContents.table.returns[lang]}</th>
-						<th scope="col">{pageContents.table.expenses[lang]}</th>
-						<th scope="col">{pageContents.table.cash[lang]}</th>
-						<th scope="col">{pageContents.table.variance[lang]}</th>
-						<th scope="col">{pageContents.table.opened[lang]}</th>
-						<th scope="col" class="col-actions">{pageContents.table.actions[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each sessions as row (row._id)}
-						<tr>
-							<td class="col-code">{row.deviceId ?? '—'}</td>
-							<td>{getBranchLabel(row.branchId)}</td>
-							<td class="col-status">
-								<span class="status-badge status-{statusColor(row.status)}">{statusLabel(row.status)}</span>
-							</td>
-							<td class="col-num">{formatMoney(row.openingBalance)}</td>
-							<td class="col-num">{formatMoney(row.totalSales)}</td>
-							<td class="col-num">{formatMoney(row.totalReturns)}</td>
-							<td class="col-num">{formatMoney(row.totalExpenses)}</td>
-							<td class="col-num">{formatMoney(row.totalCash)}</td>
-							<td class="col-num" class:variance-negative={(row.variance ?? 0) < 0} class:variance-positive={(row.variance ?? 0) > 0}>
-								{row.variance === null || row.variance === undefined ? '—' : `${row.variance > 0 ? '+' : ''}${formatMoney(row.variance)}`}
-							</td>
-							<td>{formatDateTime(row.openedAt)}</td>
-							<td class="col-actions">
-								<div class="row-actions">
-									{#if row.status === 'open'}
-										<!-- update/edit = primary -->
-										<Button color="primary" variant="ghost" size="sm" onClick={() => openTotalsModal(row)}>
-											{pageContents.actions.updateTotals[lang]}
-										</Button>
-										<!-- close session là thao tác kết thúc → error -->
-										<Button color="error" variant="ghost" size="sm" onClick={() => openCloseModal(row)}>
-											{pageContents.actions.closeSession[lang]}
-										</Button>
-									{/if}
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+			<DataTable
+				data={sessionsAny}
+				{columns}
+				pageSize={pageSize}
+				showPagination={false}
+				loading={loading && !loadedOnce}
+				visual={{ striped: true, hoverable: true }}
+				emptyLabel={pageContents.states.empty[lang]}
+				loadingLabel={pageContents.states.loading[lang]}
+				caption={{ vi: 'Danh sách phiên POS', en: 'POS sessions list' }}
+				actionsLabel={pageContents.table.actions[lang]}
+				stickyHead
+				data-test="pos-sessions-datatable"
+			>
+				{#snippet actionsContent(row)}
+					{@const r = row as unknown as PosSessionRow}
+					<div class="row-actions">
+						{#if r.status === 'open'}
+							<!-- update/edit = primary -->
+							<Button color="primary" variant="ghost" size="sm" onClick={() => openTotalsModal(r)}>
+								{pageContents.actions.updateTotals[lang]}
+							</Button>
+							<!-- close session là thao tác kết thúc → error -->
+							<Button color="error" variant="ghost" size="sm" onClick={() => openCloseModal(r)}>
+								{pageContents.actions.closeSession[lang]}
+							</Button>
+						{/if}
+					</div>
+				{/snippet}
+			</DataTable>
 		</div>
 	{/if}
 
-	<!-- ── Phân trang ── -->
+	<!-- ── Phân trang (server-side) ── -->
 	<footer class="admin-pagination">
 		<span class="total-count">{pageContents.pagination.totalCount[lang].replace('{total}', String(total))}</span>
 		<div class="page-controls">
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo <= 1}
-				onClick={() => goToPage(pageNo - 1)}
-			>
-				{pageContents.pagination.prev[lang]}
-			</Button>
+			<Pagination
+				bind:page={pageNo}
+				totalPages={totalPages}
+				loading={loading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
 			<span class="page-info">
 				{pageContents.pagination.pageInfo[lang]
 					.replace('{page}', String(pageNo))
 					.replace('{total}', String(totalPages))}
 			</span>
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo >= totalPages}
-				onClick={() => goToPage(pageNo + 1)}
-			>
-				{pageContents.pagination.next[lang]}
-			</Button>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -901,92 +953,12 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.col-code {
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.col-num {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.col-actions {
-		text-align: right;
-	}
-
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
 	.row-actions {
 		display: flex;
 		gap: 0.25rem;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-	}
-
-	.col-status {
-		white-space: nowrap;
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
-	}
-
-	.variance-positive {
-		color: var(--success, var(--foreground));
-		font-weight: 600;
-	}
-
-	.variance-negative {
-		color: var(--error);
-		font-weight: 600;
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
@@ -1053,17 +1025,6 @@
 	.form-grid {
 		display: grid;
 		gap: 0.75rem;
-	}
-
-	.form-grid-2,
-	.form-grid-3 {
-		display: grid;
-		gap: 0.75rem;
-		grid-template-columns: 1fr 1fr;
-
-		@media (max-width: 680px) {
-			grid-template-columns: 1fr;
-		}
 	}
 
 	.form-grid-3 {
