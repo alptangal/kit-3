@@ -273,8 +273,8 @@
 				encryptionKeys
 			);
 			if (response.ok) {
-				const data = response.data as { branches?: BranchOption[] } | undefined;
-				branches = data?.branches ?? [];
+				// Route trả data = mảng branch trực tiếp (xem /api/admin/inventory/branches)
+				branches = (response.data as BranchOption[] | undefined) ?? [];
 			}
 		} catch (err) {
 			if (import.meta.env.DEV) console.error('[admin/returns] loadBranches failed:', err);
