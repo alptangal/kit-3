@@ -1,6 +1,7 @@
 <!-- src/routes/(authorized)/admin/inventory/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -164,14 +165,14 @@
 		return label ? label[lang] : (status ?? '—');
 	}
 
-	function lotStatusColor(status?: string): string {
+	function lotStatusColor(status?: string): 'success' | 'warning' | 'danger' | 'default' {
 		switch (status) {
 			case 'active':
 				return 'success';
 			case 'quarantined':
 				return 'warning';
 			case 'expired':
-				return 'error';
+				return 'danger';
 			default:
 				return 'default';
 		}
@@ -403,6 +404,39 @@
 	}
 
 	// ── Phân trang / filter ──
+	// Pagination element bind:page — mỗi tab có trang riêng; state trung gian
+	// currentPagingPage + effect armed-guard sync theo activeTab (pattern suppliers)
+	let currentPagingPage = $state(1);
+	let pagingArmed = $state(false);
+
+	$effect(() => {
+		// Theo dõi tab + trang riêng của tab → sync currentPagingPage khi đổi tab
+		void activeTab;
+		void stockPage;
+		void lotsPage;
+		currentPagingPage = activeTab === 'stock' ? stockPage : lotsPage;
+	});
+
+	$effect(() => {
+		void currentPagingPage;
+		if (!pagingArmed) {
+			pagingArmed = true;
+			return;
+		}
+		// User bấm Pagination → đẩy về trang tab đang mở (nếu khác mới load)
+		if (activeTab === 'stock') {
+			if (currentPagingPage !== stockPage && !stockLoading) {
+				stockPage = currentPagingPage;
+				void loadStock();
+			}
+		} else {
+			if (currentPagingPage !== lotsPage && !lotsLoading) {
+				lotsPage = currentPagingPage;
+				void loadLots();
+			}
+		}
+	});
+
 	async function goToPage(target: number) {
 		if (target < 1 || target > totalPages || target === currentPage) return;
 		if (activeTab === 'stock') {
@@ -430,6 +464,77 @@
 		lotsPage = 1;
 		await refresh();
 	}
+
+	// ---------- DataTable ----------
+	const stockAny = $derived(stock as unknown as Record<string, unknown>[]);
+	const lotsAny = $derived(lots as unknown as Record<string, unknown>[]);
+	const stockColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'variant',
+			label: pageContents.stockTable.variant[lang],
+			accessor: (row) => getVariantLabel((row as unknown as StockRow).variantId)
+		},
+		{
+			id: 'branch',
+			label: pageContents.stockTable.branch[lang],
+			accessor: (row) => getBranchLabel((row as unknown as StockRow).branchId),
+			noHighlight: true
+		},
+		{
+			id: 'onHand',
+			label: pageContents.stockTable.onHand[lang],
+			accessor: (row) => String((row as unknown as StockRow).quantityOnHand ?? 0),
+			noHighlight: true
+		},
+		{
+			id: 'reserved',
+			label: pageContents.stockTable.reserved[lang],
+			accessor: (row) => String((row as unknown as StockRow).quantityReserved ?? 0),
+			noHighlight: true
+		},
+		{
+			id: 'updated',
+			label: pageContents.stockTable.updated[lang],
+			accessor: (row) => formatDate((row as unknown as StockRow).updatedAt),
+			noHighlight: true
+		}
+	]);
+	const lotColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'lotNumber',
+			label: pageContents.lotsTable.lotNumber[lang],
+			accessor: (row) => (row as unknown as LotRow).lotNumber ?? '—'
+		},
+		{
+			id: 'variant',
+			label: pageContents.lotsTable.variant[lang],
+			accessor: (row) => getVariantLabel((row as unknown as LotRow).variantId)
+		},
+		{
+			id: 'branch',
+			label: pageContents.lotsTable.branch[lang],
+			accessor: (row) => getBranchLabel((row as unknown as LotRow).branchId),
+			noHighlight: true
+		},
+		{
+			id: 'quantity',
+			label: pageContents.lotsTable.quantity[lang],
+			accessor: (row) => String((row as unknown as LotRow).quantityOnHand ?? 0),
+			noHighlight: true
+		},
+		{
+			id: 'expires',
+			label: pageContents.lotsTable.expires[lang],
+			accessor: (row) => formatDate((row as unknown as LotRow).expiresAt),
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.lotsTable.status[lang],
+			accessor: (row) => lotStatusLabel((row as unknown as LotRow).status),
+			status: (_v, row) => lotStatusColor((row as unknown as LotRow).status)
+		}
+	]);
 
 	// ── Modal điều chỉnh tồn kho ──
 	function openAdjustModal(row: StockRow) {
@@ -660,132 +765,88 @@
 		</Button>
 	</div>
 
-	<!-- ── Tab STOCK ── -->
+	<!-- ── Tab STOCK — DataTable (component có sẵn) ──
+	     Server-side paging: paging trong DataTable TẮT, footer Pagination điều khiển server. -->
 	{#if activeTab === 'stock'}
-		{#if stockLoading && !stockLoadedOnce}
-			<div class="admin-state" role="status">
-				<p>{pageContents.states.loading[lang]}</p>
-			</div>
-		{:else if stockError}
+		{#if stockError}
 			<div class="admin-state error" role="alert">
 				<p class="state-title">{pageContents.states.errorTitleStock[lang]}</p>
 				<p class="state-detail">{stockError}</p>
 				<Button color="primary" variant="outline" onClick={loadStock}>{pageContents.states.retry[lang]}</Button>
 			</div>
-		{:else if stock.length === 0}
-			<div class="admin-state">
-				<p>{pageContents.states.emptyStock[lang]}</p>
-			</div>
 		{:else}
 			<div class="admin-table-wrap">
-				<table class="admin-table">
-					<thead>
-						<tr>
-							<th scope="col">{pageContents.stockTable.variant[lang]}</th>
-							<th scope="col">{pageContents.stockTable.branch[lang]}</th>
-							<th scope="col">{pageContents.stockTable.onHand[lang]}</th>
-							<th scope="col">{pageContents.stockTable.reserved[lang]}</th>
-							<th scope="col">{pageContents.stockTable.updated[lang]}</th>
-							<th scope="col" class="col-actions">{pageContents.stockTable.actions[lang]}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each stock as row (row._id)}
-							<tr>
-								<td class="col-code">{getVariantLabel(row.variantId)}</td>
-								<td>{getBranchLabel(row.branchId)}</td>
-								<td class="col-num">{row.quantityOnHand ?? 0}</td>
-								<td class="col-num">{row.quantityReserved ?? 0}</td>
-								<td>{formatDate(row.updatedAt)}</td>
-								<td class="col-actions">
-									<div class="row-actions">
-										<!-- update/edit = primary -->
-										<Button color="primary" variant="ghost" size="sm" onClick={() => openAdjustModal(row)}>
-											{pageContents.actions.adjust[lang]}
-										</Button>
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+				<DataTable
+					data={stockAny}
+					columns={stockColumns}
+					pageSize={pageSize}
+					showPagination={false}
+					loading={stockLoading && !stockLoadedOnce}
+					visual={{ striped: true, hoverable: true }}
+					emptyLabel={pageContents.states.emptyStock[lang]}
+					loadingLabel={pageContents.states.loading[lang]}
+					caption={{ vi: 'Tồn kho theo biến thể', en: 'Stock by variant' }}
+					actionsLabel={pageContents.stockTable.actions[lang]}
+					stickyHead
+					data-test="inventory-stock-datatable"
+				>
+					{#snippet actionsContent(row)}
+						{@const r = row as unknown as StockRow}
+						<div class="row-actions">
+							<!-- update/edit = primary -->
+							<Button color="primary" variant="ghost" size="sm" onClick={() => openAdjustModal(r)}>
+								{pageContents.actions.adjust[lang]}
+							</Button>
+						</div>
+					{/snippet}
+				</DataTable>
 			</div>
 		{/if}
 	{:else}
-		<!-- ── Tab LOTS ── -->
-		{#if lotsLoading && !lotsLoadedOnce}
-			<div class="admin-state" role="status">
-				<p>{pageContents.states.loading[lang]}</p>
-			</div>
-		{:else if lotsError}
+		<!-- ── Tab LOTS — DataTable ── -->
+		{#if lotsError}
 			<div class="admin-state error" role="alert">
 				<p class="state-title">{pageContents.states.errorTitleLots[lang]}</p>
 				<p class="state-detail">{lotsError}</p>
 				<Button color="primary" variant="outline" onClick={loadLots}>{pageContents.states.retry[lang]}</Button>
 			</div>
-		{:else if lots.length === 0}
-			<div class="admin-state">
-				<p>{pageContents.states.emptyLots[lang]}</p>
-			</div>
 		{:else}
 			<div class="admin-table-wrap">
-				<table class="admin-table">
-					<thead>
-						<tr>
-							<th scope="col">{pageContents.lotsTable.lotNumber[lang]}</th>
-							<th scope="col">{pageContents.lotsTable.variant[lang]}</th>
-							<th scope="col">{pageContents.lotsTable.branch[lang]}</th>
-							<th scope="col">{pageContents.lotsTable.quantity[lang]}</th>
-							<th scope="col">{pageContents.lotsTable.expires[lang]}</th>
-							<th scope="col">{pageContents.lotsTable.status[lang]}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each lots as row (row._id)}
-							<tr>
-								<td class="col-code">{row.lotNumber ?? '—'}</td>
-								<td>{getVariantLabel(row.variantId)}</td>
-								<td>{getBranchLabel(row.branchId)}</td>
-								<td class="col-num">{row.quantityOnHand ?? 0}</td>
-								<td>{formatDate(row.expiresAt)}</td>
-								<td class="col-status">
-									<span class="status-badge status-{lotStatusColor(row.status)}">{lotStatusLabel(row.status)}</span>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+				<DataTable
+					data={lotsAny}
+					columns={lotColumns}
+					pageSize={pageSize}
+					showPagination={false}
+					loading={lotsLoading && !lotsLoadedOnce}
+					visual={{ striped: true, hoverable: true }}
+					emptyLabel={pageContents.states.emptyLots[lang]}
+					loadingLabel={pageContents.states.loading[lang]}
+					caption={{ vi: 'Danh sách lô hàng', en: 'Lots list' }}
+					stickyHead
+					data-test="inventory-lots-datatable"
+				/>
 			</div>
 		{/if}
 	{/if}
 
-	<!-- ── Phân trang ── -->
+	<!-- ── Phân trang (server-side, shared giữa 2 tab) ── -->
 	<footer class="admin-pagination">
 		<span class="total-count">{totalCountText}</span>
 		<div class="page-controls">
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={currentPage <= 1}
-				onClick={() => goToPage(currentPage - 1)}
-			>
-				{pageContents.pagination.prev[lang]}
-			</Button>
+			<Pagination
+				bind:page={currentPagingPage}
+				totalPages={totalPages}
+				loading={activeTab === 'stock' ? stockLoading : lotsLoading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
 			<span class="page-info">
 				{pageContents.pagination.pageInfo[lang]
 					.replace('{page}', String(currentPage))
 					.replace('{total}', String(totalPages))}
 			</span>
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={currentPage >= totalPages}
-				onClick={() => goToPage(currentPage + 1)}
-			>
-				{pageContents.pagination.next[lang]}
-			</Button>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -1093,78 +1154,12 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.col-code {
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.col-num {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.col-actions {
-		text-align: right;
-	}
-
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
 	.row-actions {
 		display: flex;
 		gap: 0.25rem;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
