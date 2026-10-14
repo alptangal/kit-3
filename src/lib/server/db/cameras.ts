@@ -658,7 +658,7 @@ export class CameraService {
 				vi: 'Ezviz không có HTTP local API công khai — vui lòng dùng Ezviz OpenAPI (chưa hỗ trợ trong MVP)',
 				en: 'Ezviz has no public local HTTP API — please use Ezviz OpenAPI (not supported in MVP)'
 			};
-			await this.persistTestResult(cameraId, existing, 'unknown', message.en);
+			await this.persistTestResult(cameraId, existing, 'unknown', message.en ?? '');
 			return {
 				success: true,
 				status: 'unsupported',
@@ -672,7 +672,7 @@ export class CameraService {
 
 		if (!result.ok) {
 			const message = result.errorMessage ?? cameraMessages.testFailed;
-			await this.persistTestResult(cameraId, existing, 'offline', message.en);
+			await this.persistTestResult(cameraId, existing, 'offline', message.en ?? '');
 			return {
 				success: true,
 				status: 'offline',
@@ -700,7 +700,7 @@ export class CameraService {
 			vi: `Kết nối thành công${model ? ` — model ${model}` : ''}`,
 			en: `Connection successful${model ? ` — model ${model}` : ''}`
 		};
-		await this.persistTestResult(cameraId, existing, 'online', message.en);
+		await this.persistTestResult(cameraId, existing, 'online', message.en ?? '');
 
 		const updatedDoc = {
 			...existing,
