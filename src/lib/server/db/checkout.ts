@@ -305,6 +305,61 @@ export class CheckoutService {
 	}
 
 	/**
+	 * Danh sách đơn hàng của chính customer (storefront /store/account) —
+	 * query orders WHERE customerId = userId, mới nhất trước. Permission-free
+	 * (actor luôn là chính chủ) — KHÔNG dùng OrderAdminService.list vì nó gate
+	 * 'orders:read' mà customer không có.
+	 */
+	static async listMyOrders(
+		actor: ActorContext,
+		userId: string,
+		options: { page?: number; pageSize?: number } = {}
+	): Promise<
+		| { success: false; messages: TranslateContent }
+		| { success: true; orders: Record<string, unknown>[]; total: number; page: number; pageSize: number }
+	> {
+		const denied = this.checkAccess(actor, userId);
+		if (denied) return { success: false, messages: denied };
+
+		const page = Math.max(1, options.page ?? 1);
+		const pageSize = Math.min(50, Math.max(1, options.pageSize ?? 10));
+		const offset = (page - 1) * pageSize;
+
+		const conditions = ['customerId = $1', '(deletedAt IS NULL OR deletedAt IS MISSING)'];
+		const args = [userId];
+
+		const [countRes, dataRes] = await Promise.all([
+			cbOrders.document.query({
+				statement: `SELECT RAW COUNT(*) FROM ${ordersKeyspace} WHERE ${conditions.join(' AND ')}`,
+				args: [...args],
+				readonly: true
+			}),
+			cbOrders.document.query({
+				statement: `SELECT META().id AS orderId, orderCode, status, items, totalAmount, branchId, createdAt, updatedAt
+					FROM ${ordersKeyspace}
+					WHERE ${conditions.join(' AND ')}
+					ORDER BY createdAt DESC
+					LIMIT ${pageSize} OFFSET ${offset}`,
+				args: [...args],
+				readonly: true
+			})
+		]);
+
+		if (!countRes.ok || !dataRes.ok) {
+			return { success: false, messages: checkoutMessages.queryFailed };
+		}
+
+		const total = Number(countRes.data?.results?.[0] ?? 0);
+		return {
+			success: true,
+			orders: dataRes.data?.results ?? [],
+			total,
+			page,
+			pageSize
+		};
+	}
+
+	/**
 	 * Xem 1 checkout (chủ sở hữu hoặc admin).
 	 */
 	static async getCheckout(
