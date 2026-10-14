@@ -109,7 +109,11 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'expenses:read', resource: 'expenses', action: 'read' },
 		{ key: 'expenses:manage', resource: 'expenses', action: 'manage' },
 		{ key: 'cameras:read', resource: 'cameras', action: 'read' },
-		{ key: 'cameras:manage', resource: 'cameras', action: 'manage' }
+		{ key: 'cameras:manage', resource: 'cameras', action: 'manage' },
+
+		// Nhập hàng đa kiểu + hạn sử dụng
+		{ key: 'purchases:read', resource: 'purchases', action: 'read' },
+		{ key: 'purchases:manage', resource: 'purchases', action: 'manage' }
 	];
 
 	for (const p of permissions) {
@@ -170,7 +174,10 @@ export async function seedDetailRoles(): Promise<void> {
 			'expenses:read',
 			'expenses:manage',
 			'cameras:read',
-			'cameras:manage'
+			'cameras:manage',
+			// Nhập hàng đa kiểu + hạn sử dụng
+			'purchases:read',
+			'purchases:manage'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -219,6 +226,10 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'expenses:manage', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'cameras:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'cameras:manage', scope: 'own_branch' },
+
+		// Nhập hàng đa kiểu + hạn sử dụng — manager trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'purchases:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'purchases:manage', scope: 'own_branch' },
 
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
