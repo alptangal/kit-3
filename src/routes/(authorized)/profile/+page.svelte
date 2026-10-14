@@ -119,6 +119,14 @@
 			vi: 'Đăng ký thiết bị thất bại',
 			en: 'Device registration failed'
 		},
+		passkeyRenameFailed: {
+			vi: 'Đổi tên thiết bị thất bại',
+			en: 'Device rename failed'
+		},
+		passkeyDeleteFailed: {
+			vi: 'Xoá thiết bị thất bại',
+			en: 'Device deletion failed'
+		},
 		passkeyRenameSuccess: {
 			vi: 'Đã đổi tên thiết bị',
 			en: 'Device renamed'
@@ -247,10 +255,10 @@
 				toast(msg('passkeyRenameSuccess'), undefined, 'success');
 				renamingId = undefined;
 			} else {
-				toast(msg('passkeyRenameFailed' as never), res.message?.[lang] ?? res.message?.en, 'error');
+				toast(msg('passkeyRenameFailed'), res.message?.[lang] ?? res.message?.en, 'error');
 			}
 		} catch (e) {
-			toast(msg('passkeyRenameFailed' as never), e instanceof Error ? e.message : String(e), 'error');
+			toast(msg('passkeyRenameFailed'), e instanceof Error ? e.message : String(e), 'error');
 		}
 	}
 
@@ -271,10 +279,10 @@
 				credentials = credentials.filter((c) => c.credentialId !== cred.credentialId);
 				toast(msg('passkeyDeleteSuccess'), undefined, 'success');
 			} else {
-				toast(msg('passkeyDeleteFailed' as never), res.message?.[lang] ?? res.message?.en, 'error');
+				toast(msg('passkeyDeleteFailed'), res.message?.[lang] ?? res.message?.en, 'error');
 			}
 		} catch (e) {
-			toast(msg('passkeyDeleteFailed' as never), e instanceof Error ? e.message : String(e), 'error');
+			toast(msg('passkeyDeleteFailed'), e instanceof Error ? e.message : String(e), 'error');
 		} finally {
 			deleteTarget = undefined;
 			deleteDialogOpen = false;
