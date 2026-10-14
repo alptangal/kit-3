@@ -30,6 +30,7 @@
 	} from './_interface';
 
 	import { subscribeDbChanges } from '$modules/db-realtime';
+	import type { DataTableStatus } from '$components/element/datatable';
 	// ── Ngôn ngữ ──
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : (client.browser?.language ?? 'en'));
 
@@ -89,6 +90,7 @@
 
 	// Label filters — orders/_interface.ts không có nhóm `filters` (khác customers)
 	// → khai báo cục bộ theo shape TranslateContent.
+	// Index bằng `lang as 'vi' | 'en'` (browser.language là BCP-47 rộng hơn).
 	const searchPlaceholder = {
 		vi: 'Tìm đơn hàng (mã, khách hàng)…',
 		en: 'Search orders (code, customer)…'
@@ -97,6 +99,7 @@
 		vi: 'Tất cả trạng thái',
 		en: 'All statuses'
 	} as const;
+	const filterLang = $derived(lang === 'vi' ? 'vi' : 'en');
 
 	function isRowDeleted(row: AdminOrderRow): boolean {
 		return Boolean(row.deletedAt);
@@ -343,9 +346,11 @@
 
 	// ── B6.2: DataTable columns (status pill qua col.status — 'error' → 'danger',
 	//    'info'/'primary' giữ nguyên — DataTable hỗ trợ đủ bộ) ──
-	function orderStatusColor(status?: string | null): 'success' | 'warning' | 'danger' | 'info' | 'primary' | 'default' {
+	function orderStatusColor(status?: string | null): DataTableStatus {
 		const color = getStatusColor(status);
-		return color === 'error' ? 'danger' : (color as 'success' | 'warning' | 'info' | 'primary' | 'default');
+		if (color === 'error') return 'danger';
+		if (color === 'primary') return 'info'; // 'primary' không thuộc DataTableStatus — map về info
+		return color as DataTableStatus;
 	}
 
 	const ordersAny = $derived(orders as unknown as Record<string, unknown>[]);
@@ -471,7 +476,7 @@
 	<!-- ── Bộ lọc ── -->
 	<div class="admin-filters">
 		<div class="admin-search">
-			<Input placeholder={searchPlaceholder[lang]} bind:value={searchQuery}>
+			<Input placeholder={searchPlaceholder[filterLang]} bind:value={searchQuery}>
 				{#snippet leading(data)}
 					<Icon
 						icon={iconify['search-rounded']}
@@ -486,7 +491,7 @@
 			bind:value={selectedStatus}
 			aria-label={pageContents.table.status[lang]}
 		>
-			<option value="">{allStatusesLabel[lang]}</option>
+			<option value="">{allStatusesLabel[filterLang]}</option>
 			{#each orderStatuses as status (status)}
 				<option value={status}>{getStatusLabel(status)}</option>
 			{/each}

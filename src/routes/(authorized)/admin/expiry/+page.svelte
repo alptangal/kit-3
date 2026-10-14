@@ -499,7 +499,7 @@
 					<Button color="success" onClick={submitPromotion} loading={promoSubmitting} disabled={promoSubmitting}>
 						{pageContents.actions.submit[lang]}
 					</Button>
-					<Button color="default" variant="ghost" disabled={promoSubmitting} onclick={() => (promoModalDisplay = false)}>
+					<Button color="default" variant="ghost" disabled={promoSubmitting} onclick={() => { promoModalDisplay = false; }}>
 						{pageContents.actions.cancel[lang]}
 					</Button>
 				</Modal.Container.Footer>

@@ -190,7 +190,10 @@ export class POSService {
       returnsToAdd?: number;
       expensesToAdd?: number;
     }
-  ): Promise<{ success: false; messages: TranslateContent } | { success: true }> {
+  ): Promise<
+    | { success: false; messages: TranslateContent }
+    | { success: true; session: Record<string, unknown> }
+  > {
     const permError = await this.requirePermission(actor, 'pos:manage');
     if (permError) return permError;
 
@@ -225,7 +228,19 @@ export class POSService {
       return { success: false, messages: posAdminMessages.updateFailed };
     }
 
-    return { success: true };
+    return {
+      success: true,
+      session: {
+        sessionId,
+        deviceId: session.deviceId,
+        status: session.status,
+        openingBalance: session.openingBalance,
+        totalSales: updatedTotalSales,
+        totalReturns: updatedTotalReturns,
+        totalExpenses: updatedTotalExpenses,
+        totalCash: updatedTotalCash
+      }
+    };
   }
 
   /**

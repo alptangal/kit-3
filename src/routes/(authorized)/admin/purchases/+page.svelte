@@ -972,7 +972,7 @@
 					<Button color="success" onClick={submitQuick} loading={quickSubmitting} disabled={quickSubmitting}>
 						{pageContents.actions.submit[lang]}
 					</Button>
-					<Button color="default" variant="ghost" disabled={quickSubmitting} onclick={() => (quickModalDisplay = false)}>
+					<Button color="default" variant="ghost" disabled={quickSubmitting} onclick={() => { quickModalDisplay = false; }}>
 						{pageContents.actions.cancel[lang]}
 					</Button>
 				</Modal.Container.Footer>
