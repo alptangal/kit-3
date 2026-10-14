@@ -116,6 +116,7 @@
 		'/admin/messages': 'Tin nhắn',
 		'/admin/email-logs': 'Email logs',
 		'/admin/dashboard': 'Tổng quan',
+		'/admin/analytics': 'Thống kê',
 		'/admin/expenses': 'Chi phí',
 		'/admin/cameras': 'Camera',
 		'/admin/purchases': 'Nhập hàng',
@@ -177,6 +178,15 @@
 							active={isActive('/admin/fulfillment')}
 							icon="lucide:package-open"
 							data-test="admin-nav-fulfillment"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Thống kê"
+							href="/admin/analytics"
+							active={isActive('/admin/analytics')}
+							icon="lucide:trending-up"
+							data-test="admin-nav-analytics"
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
