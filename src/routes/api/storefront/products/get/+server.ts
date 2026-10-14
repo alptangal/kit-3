@@ -81,7 +81,7 @@ export const POST: RequestHandler = async (event) => {
 			});
 			if (rRes.ok && rRes.data?.results?.length) {
 				related = await Promise.all(
-					rRes.data.results.map(async (rp) => ({
+					(rRes.data.results as Record<string, unknown>[]).map(async (rp) => ({
 						...rp,
 						variants: await loadVariants(String(rp.productId))
 					}))

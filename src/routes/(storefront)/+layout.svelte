@@ -8,6 +8,7 @@
 	import { STOREFRONT_CONTENTS, sf } from './_interface';
 	import type { Snippet } from 'svelte';
 	import type { LayoutProps } from './$types';
+	import { page as pageStore } from '$app/state';
 
 	let { children }: LayoutProps & { children: Snippet } = $props();
 
@@ -18,6 +19,10 @@
 
 	const t = STOREFRONT_CONTENTS;
 
+	// session user từ +layout.server.ts (null khi anonymous).
+	const user = $derived(pageStore.data?.user as { userId?: string } | null | undefined);
+	const isLoggedIn = $derived(!!user?.userId);
+
 	let configs = $state({
 		ref: undefined as undefined | HTMLElement,
 		get style() {
@@ -25,8 +30,6 @@
 			return styleSynced({ defaultStyles });
 		}
 	});
-
-	const user = $derived(undefined); // session hiển thị ở các trang con qua load data (backlog: gọn layout này)
 </script>
 
 <div bind:this={configs.ref} class={configs.style}>
@@ -37,10 +40,22 @@
 			</a>
 			<nav class="storefront-nav">
 				<a href="/store/products" class="storefront-nav-link">{sf(t.layout.navProducts, lang)}</a>
+				<a href="/store/search" class="storefront-nav-link storefront-nav-search" aria-label={sf(t.layout.navSearch, lang)}>
+					{sf(t.layout.navSearch, lang)}
+				</a>
 				<a href="/store/cart" class="storefront-nav-link storefront-nav-cart">
 					{sf(t.layout.navCart, lang)}
 				</a>
-				<a href="/login" class="storefront-nav-link">{sf(t.layout.navAccount, lang)}</a>
+				{#if isLoggedIn}
+					<a href="/store/account" class="storefront-nav-link storefront-nav-account">
+						{sf(t.layout.navAccount, lang)}
+					</a>
+					<a href="/store/account" class="storefront-nav-link storefront-nav-orders">
+						{sf(t.layout.navOrders, lang)}
+					</a>
+				{:else}
+					<a href="/login" class="storefront-nav-link">{sf(t.layout.navAccount, lang)}</a>
+				{/if}
 			</nav>
 		</div>
 	</header>

@@ -165,16 +165,20 @@
 	{:else}
 		<div class="products-grid">
 			{#each products as p (p.productId)}
-				<article class="product-card">
-					<div class="product-thumb">
-						{#if p.imageUrl}
-							<img src={p.imageUrl} alt={p.name ?? ''} loading="lazy" />
-						{:else}
-							<div class="product-thumb-placeholder">{(p.name ?? '?').slice(0, 1).toUpperCase()}</div>
-						{/if}
-					</div>
+				<article class="product-card" data-product-id={p.productId}>
+					<a class="product-thumb-link" href="/store/products/{encodeURIComponent(p.productId)}">
+						<div class="product-thumb">
+							{#if p.imageUrl}
+								<img src={p.imageUrl} alt={p.name ?? ''} loading="lazy" />
+							{:else}
+								<div class="product-thumb-placeholder">{(p.name ?? '?').slice(0, 1).toUpperCase()}</div>
+							{/if}
+						</div>
+					</a>
 					<div class="product-body">
-						<h3 class="product-name">{p.name}</h3>
+						<a class="product-name-link" href="/store/products/{encodeURIComponent(p.productId)}">
+							<h3 class="product-name">{p.name}</h3>
+						</a>
 						{#if p.description}
 							<p class="product-desc">{p.description}</p>
 						{/if}
@@ -254,6 +258,17 @@
 		background: var(--card, #fff);
 		display: flex;
 		flex-direction: column;
+	}
+
+	.product-thumb-link {
+		display: block;
+		text-decoration: none;
+		color: inherit;
+	}
+
+	.product-name-link {
+		text-decoration: none;
+		color: inherit;
 	}
 
 	.product-thumb {

@@ -7,8 +7,10 @@ export const STOREFRONT_CONTENTS = {
 	layout: {
 		brand: { vi: 'Cửa hàng', en: 'Store' },
 		navProducts: { vi: 'Sản phẩm', en: 'Products' },
+		navSearch: { vi: 'Tìm kiếm', en: 'Search' },
 		navCart: { vi: 'Giỏ hàng', en: 'Cart' },
 		navAccount: { vi: 'Tài khoản', en: 'Account' },
+		navOrders: { vi: 'Đơn hàng của tôi', en: 'My orders' },
 		navAdmin: { vi: 'Trang quản trị', en: 'Admin' },
 		footerNote: { vi: 'Cửa hàng trực tuyến — xây dựng trên hệ thống quản lý bán hàng.', en: 'Online store — powered by the sales management system.' }
 	},
@@ -86,6 +88,64 @@ export const STOREFRONT_CONTENTS = {
 		subtitle: { vi: 'Cảm ơn bạn đã mua hàng. Đơn của bạn đang được xử lý.', en: 'Thanks for your purchase. Your order is being processed.' },
 		orderCode: { vi: 'Mã đơn hàng', en: 'Order code' },
 		continueShopping: { vi: 'Tiếp tục mua sắm', en: 'Continue shopping' }
+	},
+	account: {
+		title: { vi: 'Tài khoản của tôi', en: 'My account' },
+		greeting: { vi: 'Xin chào', en: 'Hello' },
+		infoTitle: { vi: 'Thông tin tài khoản', en: 'Account information' },
+		username: { vi: 'Tên đăng nhập', en: 'Username' },
+		email: { vi: 'Email', en: 'Email' },
+		phone: { vi: 'Số điện thoại', en: 'Phone number' },
+		notProvided: { vi: 'Chưa cập nhật', en: 'Not provided' },
+		ordersTitle: { vi: 'Đơn hàng của tôi', en: 'My orders' },
+		ordersEmpty: { vi: 'Bạn chưa có đơn hàng nào.', en: 'You have no orders yet.' },
+		orderCode: { vi: 'Mã đơn', en: 'Order' },
+		orderStatus: { vi: 'Trạng thái', en: 'Status' },
+		orderTotal: { vi: 'Tổng tiền', en: 'Total' },
+		orderDate: { vi: 'Ngày đặt', en: 'Date' },
+		orderItems: { vi: 'Sản phẩm', en: 'Items' },
+		viewDetails: { vi: 'Xem chi tiết', en: 'View details' },
+		hideDetails: { vi: 'Ẩn chi tiết', en: 'Hide details' },
+		loadFailed: { vi: 'Không tải được đơn hàng', en: 'Failed to load orders' },
+		loginRequired: { vi: 'Bạn cần đăng nhập để xem tài khoản.', en: 'Please log in to view your account.' },
+		login: { vi: 'Đăng nhập', en: 'Log in' },
+		logout: { vi: 'Đăng xuất', en: 'Log out' },
+		continueShopping: { vi: 'Tiếp tục mua sắm', en: 'Continue shopping' }
+	},
+	search: {
+		title: { vi: 'Tìm kiếm', en: 'Search' },
+		searchPlaceholder: { vi: 'Nhập tên sản phẩm…', en: 'Search products…' },
+		searchButton: { vi: 'Tìm', en: 'Search' },
+		resultsFor: { vi: 'Kết quả cho', en: 'Results for' },
+		empty: { vi: 'Không tìm thấy sản phẩm nào.', en: 'No products found.' },
+		emptyHint: { vi: 'Thử từ khoá khác hoặc xem tất cả sản phẩm.', en: 'Try a different keyword or browse all products.' },
+		browseAll: { vi: 'Xem tất cả sản phẩm', en: 'Browse all products' },
+		loadFailed: { vi: 'Không tải được sản phẩm', en: 'Failed to load products' },
+		addToCart: { vi: 'Thêm vào giỏ', en: 'Add to cart' },
+		from: { vi: 'Từ', en: 'From' },
+		resultCount: { vi: 'sản phẩm', en: 'products' }
+	},
+	home: {
+		featuredTitle: { vi: 'Sản phẩm mới', en: 'New arrivals' },
+		featuredSubtitle: { vi: 'Những sản phẩm mới nhất trong cửa hàng.', en: 'The latest products in our store.' },
+		viewAll: { vi: 'Xem tất cả', en: 'View all' },
+		addToCart: { vi: 'Thêm vào giỏ', en: 'Add to cart' },
+		from: { vi: 'Từ', en: 'From' },
+		loadFailed: { vi: 'Không tải được sản phẩm', en: 'Failed to load products' },
+		viewDetails: { vi: 'Xem chi tiết', en: 'View details' }
+	},
+	detail: {
+		backToProducts: { vi: '← Quay lại sản phẩm', en: '← Back to products' },
+		addToCart: { vi: 'Thêm vào giỏ', en: 'Add to cart' },
+		variantLabel: { vi: 'Phiên bản', en: 'Variant' },
+		quantity: { vi: 'Số lượng', en: 'Quantity' },
+		outOfStock: { vi: 'Hết hàng', en: 'Out of stock' },
+		notFound: { vi: 'Không tìm thấy sản phẩm', en: 'Product not found' },
+		loadFailed: { vi: 'Không tải được sản phẩm', en: 'Failed to load product' },
+		addedToCart: { vi: 'Đã thêm vào giỏ hàng', en: 'Added to cart' },
+		relatedTitle: { vi: 'Sản phẩm liên quan', en: 'Related products' },
+		from: { vi: 'Từ', en: 'From' },
+		goToCart: { vi: 'Xem giỏ hàng', en: 'Go to cart' }
 	}
 } as const;
 
