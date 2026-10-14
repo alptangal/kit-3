@@ -6,6 +6,7 @@ import { cbData } from '$modules/couchbase/clients';
 import type { InferCollection } from '$modules/schema';
 import { PermissionChecker } from '$modules/rbac/permission-checker';
 import { InventoryService } from './inventory';
+import { AnalyticsService } from './analytics';
 
 const cbSuppliers = cbData('suppliers');
 const cbPurchaseOrders = cbData('purchase_orders');
@@ -727,6 +728,14 @@ export class SupplierService {
     }
 
     const updatedPO = (updateRes as any).data;
+    // Hook analytics: ghi lịch sử giá nhập (best-effort, không ảnh hưởng kết quả nhận hàng)
+    void AnalyticsService.recordFromPurchase(
+      actor,
+      items.map((i) => ({ variantId: i.variantId, quantity: i.quantity, unitCost: Number(i.unitCost) || 0 })),
+      'purchase_order',
+      poId,
+      po.branchId
+    ).catch(() => {});
     return { success: true, po: sanitizePOForAdmin({...updatedPO, _id: poId}) };
   }
 
@@ -892,6 +901,15 @@ export class SupplierService {
     if (!allOk) {
       console.warn(`[SupplierService.createQuickPurchase] partial failure creating lots for quick purchase ${poId}`);
     }
+
+    // Hook analytics: ghi lịch sử giá nhập (best-effort, không ảnh hưởng kết quả nhập nhanh)
+    void AnalyticsService.recordFromPurchase(
+      actor,
+      items.map((i) => ({ variantId: i.variantId, quantity: i.quantity, unitCost: i.unitCost })),
+      'quick_purchase',
+      poId,
+      input.branchId
+    ).catch(() => {});
 
     return { success: true, po: sanitizePOForAdmin({...po, _id: poId}) };
   }
