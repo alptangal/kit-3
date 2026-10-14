@@ -41,7 +41,7 @@ export function useButton(
 	const sizeData = useButtonSize(size);
 	const roundedClasses = useButtonRounded(rounded);
 	const aspectClasses = useButtonAspectSquare(aspectSquare);
-	const stateData = useButtonState({ ...configs, tooltip, transitionDisabled }, loading, disabled);
+	const stateData = useButtonState({ ...configs, tooltip, transitionDisabled }, loading ?? false, disabled);
 
 	// Combine all classes
 	const allDefaultStyles: (string | undefined)[] = [

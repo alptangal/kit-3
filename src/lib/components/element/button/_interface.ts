@@ -3,6 +3,7 @@ import type { ButtonVariant } from './composables/useButtonVariant';
 import type { ButtonColor } from './composables/useButtonColor';
 
 // ── Re-export composed types ──
+export type { Color, Size };
 export type ButtonTypes = 'button' | 'submit' | 'reset';
 export type ButtonVariants = ButtonVariant;
 export type ButtonSize = Size;

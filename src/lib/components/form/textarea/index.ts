@@ -20,8 +20,8 @@ export const defaultValidation: {
 } = {
 	required: (fieldName) => {
 		return {
-			isValid(input: TextareaInput) {
-				if (input?.length) return true;
+			isValid(input?: unknown) {
+				if (typeof input === 'string' && input.length) return true;
 				return false;
 			},
 			message: {
@@ -38,8 +38,8 @@ export const defaultValidation: {
 	},
 	minLength: (minCount, fieldName) => {
 		return {
-			isValid(input: TextareaInput) {
-				if (input?.length >= minCount) return true;
+			isValid(input?: unknown) {
+				if (typeof input === 'string' && input.length >= minCount) return true;
 				return false;
 			},
 			message: {
@@ -56,8 +56,8 @@ export const defaultValidation: {
 	},
 	maxLength: (maxCount, fieldName) => {
 		return {
-			isValid(input: TextareaInput) {
-				if (input?.length <= maxCount) return true;
+			isValid(input?: unknown) {
+				if (typeof input === 'string' && input.length <= maxCount) return true;
 				return false;
 			},
 			message: {

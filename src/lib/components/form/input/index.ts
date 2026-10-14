@@ -158,7 +158,8 @@ export const defaultValidation: {
 	required: (fieldName) => {
 		return {
 			isValid(input) {
-				if (input?.length) return true;
+				if (typeof input === 'string' && input.length) return true;
+				if (Array.isArray(input) && input.length) return true;
 				return false;
 			},
 			message: {
@@ -176,7 +177,7 @@ export const defaultValidation: {
 	minNumber(minValue, fieldName) {
 		return {
 			isValid(input) {
-				if (input && parseFloat(input) >= minValue) return true;
+				if (input && typeof input === 'string' && parseFloat(input) >= minValue) return true;
 				return false;
 			},
 			message: {
@@ -192,7 +193,7 @@ export const defaultValidation: {
 	maxNumber(maxValue, fieldName) {
 		return {
 			isValid(input) {
-				if (input && parseFloat(input) <= maxValue) return true;
+				if (input && typeof input === 'string' && parseFloat(input) <= maxValue) return true;
 				return false;
 			},
 			message: {
@@ -209,7 +210,7 @@ export const defaultValidation: {
 		return {
 			isValid(input) {
 				const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-				if (input && emailRegex.test(input)) return true;
+				if (input && typeof input === 'string' && emailRegex.test(input)) return true;
 				return false;
 			},
 			message: {
@@ -229,7 +230,7 @@ export const defaultValidation: {
 		return {
 			isValid(input) {
 				const phoneRegex = /^\+?[0-9\s().\-#*]{7,15}$/;
-				if (input && phoneRegex.test(input.trim())) return true;
+				if (input && typeof input === 'string' && phoneRegex.test(input.trim())) return true;
 				return false;
 			},
 			message: {
