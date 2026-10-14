@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Offline — PhuongDoMega</title>
+		<style>
+			:root {
+				color-scheme: light dark;
+			}
+			body {
+				margin: 0;
+				min-height: 100vh;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+				background: #f8fafc;
+				color: #0f172a;
+				text-align: center;
+				padding: 1.5rem;
+			}
+			@media (prefers-color-scheme: dark) {
+				body {
+					background: #0b1220;
+					color: #e2e8f0;
+				}
+			}
+			.box {
+				max-width: 26rem;
+			}
+			.badge {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.5rem;
+				padding: 0.35rem 0.9rem;
+				border-radius: 999px;
+				background: #3180ff;
+				color: #fff;
+				font-weight: 600;
+				font-size: 0.85rem;
+			}
+			h1 {
+				font-size: 1.5rem;
+				margin: 1rem 0 0.4rem;
+			}
+			p {
+				margin: 0;
+				opacity: 0.75;
+				line-height: 1.55;
+			}
+			button {
+				margin-top: 1.25rem;
+				padding: 0.6rem 1.4rem;
+				border: 0;
+				border-radius: 0.6rem;
+				background: #3180ff;
+				color: #fff;
+				font-size: 0.95rem;
+				font-weight: 600;
+				cursor: pointer;
+			}
+		</style>
+	</head>
+	<body>
+		<main class="box">
+			<span class="badge">PhuongDoMega</span>
+			<h1>Mất kết nối</h1>
+			<p>
+				Không tải được trang vì thiết bị đang offline. Dữ liệu nhạy cảm không được lưu cache
+				trên máy — hãy kiểm tra mạng và thử lại.
+			</p>
+			<button onclick="location.reload()">Thử lại</button>
+		</main>
+	</body>
+</html>

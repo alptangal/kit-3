@@ -13,7 +13,22 @@
 		/>
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<!-- PWA manifest + theme_color (primary-500 light mode — token tĩnh duy nhất
+		     sống ngoài CSS; sw.js chỉ precache offline fallback, không đụng API encrypted). -->
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<meta name="theme-color" content="#3180ff" />
+		<link rel="icon" href="/icons/icon-192.png" type="image/png" />
 		<!--END SINGLE PWA-->
+		<!-- Service worker: đăng ký sau load — không chặn first paint -->
+		<script>
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', function () {
+					navigator.serviceWorker.register('/sw.js').catch(function () {
+						/* offline-only feature — lỗi đăng ký không ảnh hưởng app */
+					});
+				});
+			}
+		</script>
 
 		%unocss-svelte-scoped.global%
 		<!--------------------- -->
