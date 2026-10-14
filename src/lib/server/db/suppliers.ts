@@ -111,6 +111,7 @@ const PO_ADMIN_SAFE_FIELDS = [
   'receivedAt',
   'source',
   'note',
+  'categoryId',
   'createdAt',
   'updatedAt'
 ] as const;
@@ -844,6 +845,8 @@ export class SupplierService {
       receivedAt: now,
       source: 'quick' as string,
       note: input.note?.trim() || null,
+      // mode 'category': lưu category gốc để list lọc "nhập theo thể loại"
+      categoryId: input.categoryId ?? null,
       createdAt: now,
       updatedAt: now
     };
@@ -891,5 +894,98 @@ export class SupplierService {
     }
 
     return { success: true, po: sanitizePOForAdmin({...po, _id: poId}) };
+  }
+
+  /**
+   * Danh sách phiếu nhập cho trang /admin/purchases — dùng permission 'purchases:read'
+   * (khác listPurchaseOrders dùng 'suppliers:read' cho trang suppliers).
+   * Filter: branch / supplier / category / source ('quick'|'order') / status /
+   * khoảng thời gian theo receivedAt.
+   */
+  static async listPurchases(
+    actor: ActorContext,
+    options: {
+      branchId?: string;
+      supplierId?: string;
+      categoryId?: string;
+      source?: string;
+      status?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & ListResult)> {
+    const scope = await PermissionChecker.getScope(actor.roleName, 'purchases:read');
+    if (!scope) return { success: false, messages: supplierAdminMessages.permissionDenied };
+
+    const page = Math.max(1, options.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 20));
+    const offset = (page - 1) * pageSize;
+
+    const conditions: string[] = [];
+    const args: (string | number)[] = [];
+
+    if (scope === 'own_branch') {
+      if (!actor.branchId) {
+        return { success: false, messages: supplierAdminMessages.permissionDenied };
+      }
+      conditions.push('branchId = $' + (args.length + 1));
+      args.push(actor.branchId);
+    }
+
+    if (options.branchId) {
+      conditions.push('branchId = $' + (args.length + 1));
+      args.push(options.branchId);
+    }
+    if (options.supplierId) {
+      conditions.push('supplierId = $' + (args.length + 1));
+      args.push(options.supplierId);
+    }
+    if (options.categoryId) {
+      conditions.push('categoryId = $' + (args.length + 1));
+      args.push(options.categoryId);
+    }
+    if (options.source) {
+      conditions.push('source = $' + (args.length + 1));
+      args.push(options.source);
+    }
+    if (options.status) {
+      conditions.push('status = $' + (args.length + 1));
+      args.push(options.status);
+    }
+    if (options.dateFrom) {
+      conditions.push('receivedAt >= $' + (args.length + 1));
+      args.push(options.dateFrom);
+    }
+    if (options.dateTo) {
+      conditions.push('receivedAt <= $' + (args.length + 1));
+      args.push(options.dateTo);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const selectClause = 'META().id AS _id, ' + PO_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ');
+
+    const [countRes, dataRes] = await Promise.all([
+      cbPurchaseOrders.document.query({
+        statement: `SELECT RAW COUNT(*) FROM ${purchaseOrdersKeyspace} ${whereClause}`,
+        args,
+        readonly: true
+      }),
+      cbPurchaseOrders.document.query({
+        statement: `SELECT ${selectClause} FROM ${purchaseOrdersKeyspace} ${whereClause} ORDER BY createdAt DESC LIMIT ${pageSize} OFFSET ${offset}`,
+        args,
+        readonly: true
+      })
+    ]);
+
+    if (!countRes.ok || !dataRes.ok) {
+      return { success: false, messages: supplierAdminMessages.queryFailed };
+    }
+
+    const total = Number(countRes.data?.results?.[0] ?? 0);
+    const items = (dataRes.data?.results ?? []).map(sanitizePOForAdmin);
+
+    return { success: true, items, total, page, pageSize };
   }
 }
