@@ -408,7 +408,7 @@
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{listError}</p>
-			<Button color="primary" variant="outline" onClick={loadLots}>{pageContents.states.retry[lang]}</Button>
+			<Button color="primary" variant="outline" onClick={() => void loadLots()}>{pageContents.states.retry[lang]}</Button>
 		</div>
 	{:else if lots.length === 0}
 		<div class="admin-state">
