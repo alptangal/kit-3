@@ -121,6 +121,8 @@
 		'/admin/expenses': 'Chi phí',
 		'/admin/cameras': 'Camera',
 		'/admin/purchases': 'Nhập hàng',
+		'/admin/transfers': 'Chuyển kho',
+		'/admin/returns': 'Đổi trả',
 		'/admin/expiry': 'Hạn sử dụng',
 		'/settings': 'Cấu hình hệ thống'
 	};
@@ -276,6 +278,24 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
+							label="Chuyển kho"
+							href="/admin/transfers"
+							active={isActive('/admin/transfers')}
+							icon="lucide:arrow-right-left"
+							data-test="admin-nav-transfers"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Đổi trả"
+							href="/admin/returns"
+							active={isActive('/admin/returns')}
+							icon="lucide:undo-2"
+							data-test="admin-nav-returns"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
 							label="Hạn sử dụng"
 							href="/admin/expiry"
 							active={isActive('/admin/expiry')}
@@ -383,6 +403,15 @@
 							active={isActive('/admin/email-logs')}
 							icon="lucide:mail"
 							data-test="admin-nav-email-logs"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Màn hình TV"
+							href="/display"
+							active={isActive('/display')}
+							icon="lucide:tv"
+							data-test="admin-nav-display"
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
