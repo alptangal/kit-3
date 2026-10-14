@@ -283,6 +283,8 @@ export interface InputConfigs extends BasicConfigs {
 	trailing: BasicConfigs;
 	lastValue?: string;
 	validation: {
+		/** Cache giá trị isValid set từ ngoài (setter) — getter ưu tiên trả cache này. */
+		_cachedIsValid?: boolean | 'pending';
 		process?: Map<keyof EventListener | 'required', boolean | 'pending'>;
 		isValid?: boolean | 'pending';
 		messages?: Map<

@@ -10,7 +10,7 @@
 	import type { MouseEvents } from '$components/interface';
 	import { measureTextWidth, styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
-	import { client } from '$store/basic.svelte';
+	import { client, profile } from '$store/basic.svelte';
 	import { onDestroy, onMount, untrack, type SvelteComponent } from 'svelte';
 	import type {
 		InputConfigs,
@@ -19,6 +19,7 @@
 		ValidationCompact,
 		ValidationFull
 	} from './_interface';
+	import type { TextFieldConfigs } from '$components/form/textField/_interface';
 	import type { ButtonConfigs } from '$components/element/button/_interface';
 	import {
 		text_keys_allowed,
@@ -28,7 +29,7 @@
 		createDefaultInputEvents
 	} from '.';
 	import type { BasicConfigs, EventListener } from '$components/interface';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { ensureKeyboardHost } from '$modules/keyboardHost.svelte';
 	import { browser } from '$app/environment';
 	import { getFormContext } from '../form';
@@ -323,12 +324,17 @@
 	let isInteractingWithSuggestions = $state(false);
 	// Focus-hold cho email popup: mousedown giữ focus để click suggestion không mất popup
 	let suggestionsFocusHeld = $state(false);
-	const isFocused = $derived(!!(configs?.status?.focus || configs?.input?.status?.focus));
+	// isFocused đọc configs (khai báo cuối file) — $derived bị lazy nên an toàn,
+	// nhưng TS chặn "used before its declaration" → chuyển thành function-wrapper
+	// để hoist được mà không vi phạm TDZ (gọi tại chỗ dùng, không evaluate sớm).
+	function isFocused() {
+		return !!(configs?.status?.focus || configs?.input?.status?.focus);
+	}
 
 	const emailSuggestionsOpen = $derived(
 		emailSuggestEnabled &&
 		!emailSuggestionsDismissed &&
-		(isFocused || isInteractingWithSuggestions) &&
+		(isFocused() || isInteractingWithSuggestions) &&
 		emailPartsDerived !== null &&
 		matchingEmailDomains.length > 0
 	);
@@ -415,7 +421,7 @@
 	const phoneSuggestionsOpen = $derived(
 		phoneSuggestEnabled &&
 		!phoneSuggestionsDismissed &&
-		(isFocused || isInteractingWithPhoneSuggestions) &&
+		(isFocused() || isInteractingWithPhoneSuggestions) &&
 		phonePartsDerived !== null &&
 		matchingPhoneCountries.length > 0
 	);
@@ -441,7 +447,7 @@
 	function selectPhoneCountry(country: typeof defaultPhoneCountryCodes[0]) {
 		if (!phonePartsDerived) return;
 		// If user just typed digits, prepend the country code
-		const currentValue = value;
+		const currentValue = value ?? '';
 		const digitsOnly = currentValue.replace(/\D/g, '');
 		const countryCodeDigits = country.code.replace(/\D/g, '');
 
@@ -475,7 +481,7 @@
 				inputRef.focus();
 				try {
 					if (['text', 'search', 'url', 'tel', 'password'].includes(inputRef.type)) {
-						inputRef.setSelectionRange(value.length, value.length);
+						inputRef.setSelectionRange((value ?? '').length, (value ?? '').length);
 					}
 				} catch (e) {
 					// Input type email/number không hỗ trợ setSelectionRange theo chuẩn WHATWG
@@ -589,7 +595,11 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		},
 		set showing(v) {
 			this._showing = v;
-		}
+		},
+		// Khớp BasicConfigs['status'] — status prop của input.password phải có shape này
+		hover: undefined as boolean | undefined,
+		focus: undefined as boolean | undefined,
+		loaded: undefined as boolean | undefined
 	});
 
 	let configs: InputConfigs = $state({
@@ -661,7 +671,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					if (configs.type === 'barcode') {
 						return (codes?.length ?? 0) > 0;
 					}
-					const val = configs.value ?? '';
+					const val = String(configs.value ?? '');
 					return val.trim().length > 0;
 				}
 
@@ -876,9 +886,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 										},
 										target: window
 									}
-								] as InputConfigs['input']['text']['event'])
+								] as NonNullable<InputConfigs['input']['text']['event']>)
 							: [])
-					] as InputConfigs['input']['text']['event'];
+					] as NonNullable<InputConfigs['input']['text']['event']>;
 				},
 				get style() {
 					const defaultStyles: (string | undefined)[] = ['input-editor'];
@@ -1326,7 +1336,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					const defaultStyles: (string | undefined)[] = ['input-file-editor'];
 					return styleSynced({ defaultStyles });
 				}
-			}
+			},
+			// type='barcode' — events window-level mousedown khai báo động ở text.event
+			// (không có style riêng); giữ key đủ để khớp InputConfigs['input'].
+			barcode: {}
 		},
 		maskValue: {
 			get style() {
@@ -1341,7 +1354,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				return [
 					{
 						events: {
-							async load(e, data) {
+							async load(e?: Event | MouseEvents | TouchEvent | KeyboardEvent, data?: { node?: HTMLElement | Window | Document | Body | VisualViewport }) {
 								if (data?.node instanceof HTMLElement) {
 									data.node.style.width = `${configs.maskValue.width}px`;
 									data.node.style.height = `${configs.maskValue.height}px`;
@@ -1495,7 +1508,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 						events: {
 							mousedown(e) {
 								// Prevent focus loss on mousedown
-								e.preventDefault();
+								(e as Event | undefined)?.preventDefault?.();
 							},
 							click() {
 								const newShowing = !passwordStatus.showing;
@@ -1654,7 +1667,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					);
 						const overallValid = operator == 'and' ? promises.every((isValid) => isValid) : promises.some((isValid) => isValid);
 						configs.validation.isValid = overallValid;
-					if (configs.ref && configs.validation.isValid != 'pending') {
+					if (configs.ref && configs.validation._cachedIsValid !== 'pending') {
 						configs.ref.classList.remove('validation-loading');
 					}
 					configs.loading = false;
@@ -3196,7 +3209,10 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		// Register this Input with the Form context for validation
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
-			formContext.childrens.add(configs);
+			// InputConfigs không nằm trong union FormConfigs.childrens (thiếu mode/
+			// searchable/… của Select) — Form chỉ đọc .validation/.loading/.name qua
+			// 'checked'/'value' in checks, cast an toàn.
+			formContext.childrens.add(configs as unknown as TextFieldConfigs);
 		}
 		// type='barcode' fullscreen: theo dõi fullscreenchange — user Esc khỏi
 		// fullscreen (KHÔNG qua closeScan) → fullscreenchange bung, cleanup guard.
@@ -3235,10 +3251,12 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		// number/currency: input unmount khi visual keyboard đang mở → keyboard
 		// kẹt trên màn hình vĩnh viễn (host là singleton refCount, không ai giải
 		// phóng). hideVisualNumberKb dọn cleaner + cursor + focus status (Fix #3).
+		// isShow nằm trên profile.visualKeyboard (useVisualKeyboard), không phải
+		// browser.visualKeyboard (VisualKeyboardMeta — chỉ width/height/ref).
 		if (visualNumberKbCleaner) {
 			hideVisualNumberKb();
-		} else if (client.browser?.visualKeyboard?.isShow && configs.status?.focus) {
-			client.browser.visualKeyboard.isShow = false;
+		} else if (profile.visualKeyboard.isShow && configs.status?.focus) {
+			profile.visualKeyboard.isShow = false;
 		}
 		[...(configs.timeId?.values() ?? [])].forEach((time) => {
 			clearTimeout(time);
@@ -3277,7 +3295,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 			aria-hidden="true"
 			style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
 			bind:this={configs.input.file.ref}
-			onchange={(e) => handleFileSelect(e.target.files, e)}
+			onchange={(e) => handleFileSelect((e.currentTarget as HTMLInputElement).files, e)}
 		/>
 		<div
 			bind:this={dropzoneEl}
@@ -3691,7 +3709,6 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 						size="sm"
 						aspect-square
 						class="input-barcode-scan-trigger"
-						aria-haspopup="dialog"
 						aria-label="Quét mã bằng camera"
 						onclick={() => void openScan()}
 					>
@@ -3760,7 +3777,6 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 							size="xs"
 							class="input-barcode-selectall-btn"
 							aria-label={allCodesSelected ? 'Bỏ chọn tất cả mã' : 'Chọn tất cả mã'}
-							aria-pressed={allCodesSelected}
 							onclick={toggleAllCodesSelected}
 						>
 							<Icon icon={allCodesSelected ? 'lucide:x' : 'lucide:check-check'} class="input-barcode-icon" />

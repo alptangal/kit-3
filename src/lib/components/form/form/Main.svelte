@@ -89,7 +89,11 @@
 									if ('checked' in children) {
 										if (children.name) jsonData[children.name] = children.checked;
 									} else if ('value' in children) {
-										if (children.name) jsonData[children.name] = children.value;
+										if (children.name) {
+											const v = children.value;
+											if (typeof v === 'number') jsonData[children.name] = String(v);
+											else if (typeof v !== 'number') jsonData[children.name] = v as string | boolean | undefined | null;
+										}
 									}
 								});
 								let res: ServerResponse | undefined;
@@ -111,8 +115,8 @@
 							}
 						},
 						reset: {
-							handler(e) {
-								e.preventDefault();
+							handler(e?) {
+								e?.preventDefault();
 								configs.reset();
 							}
 						}
@@ -135,8 +139,8 @@
 					return validatedChildren.every(
 						(children) =>
 							children.validation?.isValid === true &&
-							children.loading != true &&
-							children.validation?.isValid != 'pending'
+							children.loading != true
+						// isValid === true đã loại 'pending' — không cần check thêm
 					);
 				}
 				return true;
