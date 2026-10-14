@@ -317,10 +317,15 @@ export class InventoryService {
     ];
 
     const updateRes = await cbInventoryStock.document.query({
+      // RETURNING bắt buộc: Capella Data API UPDATE không có RETURNING trả
+      // results: [] LUÔN (kể cả khi mutate thành công) → CAS check dưới đây
+      // tưởng match thất bại. RETURNING META().id cho results.length===1 khi
+      // điều kiện khớp, [] khi CAS thật sự fail.
       statement: `
         UPDATE ${inventoryStockKeyspace}
         SET quantityOnHand = $3, updatedAt = $4
         WHERE META().id = $1 AND quantityOnHand = $2
+        RETURNING META().id AS id
       `,
       args: updateArgs,
       readonly: false
