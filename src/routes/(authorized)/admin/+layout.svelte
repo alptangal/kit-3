@@ -116,6 +116,8 @@
 		'/admin/messages': 'Tin nhắn',
 		'/admin/email-logs': 'Email logs',
 		'/admin/dashboard': 'Tổng quan',
+		'/admin/expenses': 'Chi phí',
+		'/admin/cameras': 'Camera',
 		'/settings': 'Cấu hình hệ thống'
 	};
 	const crumbs = $derived<BreadcrumbItem[]>([
@@ -284,6 +286,30 @@
 							active={isActive('/admin/customers')}
 							icon="lucide:users"
 							data-test="admin-nav-customers"
+						/>
+					</Sidebar.MenuItem>
+				</Sidebar.Menu>
+			</Sidebar.Group>
+
+			<Sidebar.Group id="operations">
+				<Sidebar.GroupLabel>Vận hành</Sidebar.GroupLabel>
+				<Sidebar.Menu>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Chi phí"
+							href="/admin/expenses"
+							active={isActive('/admin/expenses')}
+							icon="lucide:receipt"
+							data-test="admin-nav-expenses"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Camera"
+							href="/admin/cameras"
+							active={isActive('/admin/cameras')}
+							icon="lucide:video"
+							data-test="admin-nav-cameras"
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
