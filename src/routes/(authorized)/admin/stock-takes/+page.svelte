@@ -1,6 +1,7 @@
 <!-- src/routes/(authorized)/admin/stock-takes/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -163,7 +164,7 @@
 		return label ? label[lang] : (status ?? '—');
 	}
 
-	function statusColor(status?: string): string {
+	function statusColor(status?: string): 'success' | 'warning' | 'default' {
 		switch (status) {
 			case 'draft':
 				return 'default';
@@ -371,6 +372,19 @@
 		await loadStockTakes();
 	}
 
+	// Pagination element bind:page — đổi trang server qua effect armed-guard
+	// (chạy sau lần arm đầu, tránh load trùng lúc mount — onMount đã gọi loadStockTakes)
+	let pageArmed = $state(false);
+	$effect(() => {
+		void pageNo;
+		if (!pageArmed) {
+			pageArmed = true;
+			return;
+		}
+		if (loading) return;
+		void goToPage(pageNo);
+	});
+
 	async function changePageSize(newSize: number) {
 		if (newSize === pageSize || loading) return;
 		pageSize = newSize;
@@ -383,6 +397,58 @@
 		pageNo = 1;
 		await loadStockTakes();
 	}
+
+	// ---------- DataTable ----------
+	const stockTakesAny = $derived(stockTakes as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'reference',
+			label: pageContents.table.reference[lang],
+			accessor: (row) => (row as unknown as StockTakeRow).referenceNumber ?? '—'
+		},
+		{
+			id: 'branch',
+			label: pageContents.table.branch[lang],
+			accessor: (row) => getBranchLabel((row as unknown as StockTakeRow).branchId),
+			noHighlight: true
+		},
+		{
+			id: 'status',
+			label: pageContents.table.status[lang],
+			accessor: (row) => statusLabel((row as unknown as StockTakeRow).status),
+			status: (_v, row) => statusColor((row as unknown as StockTakeRow).status)
+		},
+		{
+			id: 'totalItems',
+			label: pageContents.table.totalItems[lang],
+			accessor: (row) => String((row as unknown as StockTakeRow).totalItems ?? 0),
+			noHighlight: true
+		},
+		{
+			id: 'totalVariance',
+			label: pageContents.table.totalVariance[lang],
+			accessor: (row) => String((row as unknown as StockTakeRow).totalVariance ?? 0),
+			noHighlight: true
+		},
+		{
+			id: 'variancePct',
+			label: pageContents.table.variancePct[lang],
+			accessor: (row) => `${(row as unknown as StockTakeRow).variancePercentage ?? 0}%`,
+			noHighlight: true
+		},
+		{
+			id: 'started',
+			label: pageContents.table.started[lang],
+			accessor: (row) => formatDateTime((row as unknown as StockTakeRow).startedAt),
+			noHighlight: true
+		},
+		{
+			id: 'completed',
+			label: pageContents.table.completed[lang],
+			accessor: (row) => formatDateTime((row as unknown as StockTakeRow).completedAt),
+			noHighlight: true
+		}
+	]);
 
 	// ── Modal tạo ──
 	let createModalDisplay = $state(false);
@@ -616,91 +682,61 @@
 		</Button>
 	</div>
 
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
-		</div>
-	{:else if loadError}
+	{#if loadError}
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{loadError}</p>
 			<Button color="primary" variant="outline" onClick={loadStockTakes}>{pageContents.states.retry[lang]}</Button>
 		</div>
-	{:else if stockTakes.length === 0}
-		<div class="admin-state">
-			<p>{pageContents.states.empty[lang]}</p>
-		</div>
 	{:else}
+		<!-- ── Bảng kiểm kê — DataTable (component có sẵn) ──
+		     Server-side paging: paging trong DataTable TẮT, footer Pagination điều khiển server. -->
 		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col">{pageContents.table.reference[lang]}</th>
-						<th scope="col">{pageContents.table.branch[lang]}</th>
-						<th scope="col">{pageContents.table.status[lang]}</th>
-						<th scope="col">{pageContents.table.totalItems[lang]}</th>
-						<th scope="col">{pageContents.table.totalVariance[lang]}</th>
-						<th scope="col">{pageContents.table.variancePct[lang]}</th>
-						<th scope="col">{pageContents.table.started[lang]}</th>
-						<th scope="col">{pageContents.table.completed[lang]}</th>
-						<th scope="col" class="col-actions">{pageContents.table.actions[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each stockTakes as row (row._id)}
-						<tr>
-							<td class="col-code">{row.referenceNumber ?? '—'}</td>
-							<td>{getBranchLabel(row.branchId)}</td>
-							<td class="col-status">
-								<span class="status-badge status-{statusColor(row.status)}">{statusLabel(row.status)}</span>
-							</td>
-							<td class="col-num">{row.totalItems ?? 0}</td>
-							<td class="col-num">{row.totalVariance ?? 0}</td>
-							<td class="col-num">{row.variancePercentage ?? 0}%</td>
-							<td>{formatDateTime(row.startedAt)}</td>
-							<td>{formatDateTime(row.completedAt)}</td>
-							<td class="col-actions">
-								<div class="row-actions">
-									<!-- update/edit = primary -->
-									<Button color="primary" variant="ghost" size="sm" onClick={() => openDetail(row)}>
-										{pageContents.actions.detail[lang]}
-									</Button>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+			<DataTable
+				data={stockTakesAny}
+				{columns}
+				pageSize={pageSize}
+				showPagination={false}
+				loading={loading && !loadedOnce}
+				visual={{ striped: true, hoverable: true }}
+				emptyLabel={pageContents.states.empty[lang]}
+				loadingLabel={pageContents.states.loading[lang]}
+				caption={{ vi: 'Danh sách phiếu kiểm kê', en: 'Stock takes list' }}
+				actionsLabel={pageContents.table.actions[lang]}
+				stickyHead
+				data-test="stock-takes-datatable"
+			>
+				{#snippet actionsContent(row)}
+					{@const r = row as unknown as StockTakeRow}
+					<div class="row-actions">
+						<!-- update/edit = primary -->
+						<Button color="primary" variant="ghost" size="sm" onClick={() => openDetail(r)}>
+							{pageContents.actions.detail[lang]}
+						</Button>
+					</div>
+				{/snippet}
+			</DataTable>
 		</div>
 	{/if}
 
-	<!-- ── Phân trang ── -->
+	<!-- ── Phân trang (server-side) ── -->
 	<footer class="admin-pagination">
 		<span class="total-count">{pageContents.pagination.totalCount[lang].replace('{total}', String(total))}</span>
 		<div class="page-controls">
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo <= 1}
-				onClick={() => goToPage(pageNo - 1)}
-			>
-				{pageContents.pagination.prev[lang]}
-			</Button>
+			<Pagination
+				bind:page={pageNo}
+				totalPages={totalPages}
+				loading={loading}
+				variant="compact"
+				prevLabel={pageContents.pagination.prev[lang]}
+				nextLabel={pageContents.pagination.next[lang]}
+				aria-label={pageContents.title[lang]}
+			/>
 			<span class="page-info">
 				{pageContents.pagination.pageInfo[lang]
 					.replace('{page}', String(pageNo))
 					.replace('{total}', String(totalPages))}
 			</span>
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				disabled={pageNo >= totalPages}
-				onClick={() => goToPage(pageNo + 1)}
-			>
-				{pageContents.pagination.next[lang]}
-			</Button>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -1087,87 +1123,12 @@
 		background: var(--background);
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.col-code {
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.col-num {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.col-wrap {
-		white-space: normal;
-		min-width: 8rem;
-	}
-
-	.col-actions {
-		text-align: right;
-	}
-
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
 	.row-actions {
 		display: flex;
 		gap: 0.25rem;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-	}
-
-	.col-status {
-		white-space: nowrap;
-	}
-
-	.status-badge {
-		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
-		font-weight: 600;
-
-		&.status-success {
-			background: var(--success-100, var(--default-200));
-			color: var(--success-700, var(--success));
-		}
-
-		&.status-warning {
-			background: var(--warning-100, var(--default-200));
-			color: var(--warning-700, var(--foreground-600));
-		}
-
-		&.status-error {
-			background: var(--danger-100, hsl(358, 62.5%, 90.6%));
-			color: var(--error);
-		}
-
-		&.status-default {
-			background: var(--default-200);
-			color: var(--foreground-600);
-		}
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-pagination {
