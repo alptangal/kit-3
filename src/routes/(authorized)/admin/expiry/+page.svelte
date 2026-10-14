@@ -1,6 +1,7 @@
 <!-- src/routes/(authorized)/admin/expiry/+page.svelte -->
 <script lang="ts">
-	import { Button } from '$components/element';
+	import { Button, DataTable, Pagination } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -75,7 +76,13 @@
 			quantity: { vi: 'Tồn', en: 'Qty' },
 			manufacturedAt: { vi: 'Ngày SX', en: 'Mfg date' },
 			expiresAt: { vi: 'Hạn dùng', en: 'Expires' },
-			daysRemaining: { vi: 'Còn lại', en: 'Days left' }
+			daysRemaining: { vi: 'Còn lại', en: 'Days left' },
+			selectAll: { vi: 'Chọn tất cả', en: 'Select all' },
+			rowSelect: { vi: 'Chọn dòng', en: 'Select row' }
+		},
+		pagination: {
+			prev: { vi: 'Trước', en: 'Previous' },
+			next: { vi: 'Sau', en: 'Next' }
 		},
 		actions: {
 			createPromotion: { vi: 'Tạo khuyến mãi xả hàng', en: 'Create clearance promotion' },
@@ -169,11 +176,12 @@
 		return `${row.daysRemaining} ${pageContents.daysUnit[lang]}`;
 	}
 
-	function daysClass(row: ExpiryLotRow): string {
-		if (row.daysRemaining === null) return '';
-		if (row.daysRemaining < 0) return 'cell-danger';
-		if (row.daysRemaining < 7) return 'cell-warn';
-		return '';
+	// Map bucket màu ngày-còn-lại -> DataTableStatus
+	function daysStatus(row: ExpiryLotRow): 'danger' | 'warning' | 'default' {
+		if (row.daysRemaining === null) return 'default';
+		if (row.daysRemaining < 0) return 'danger';
+		if (row.daysRemaining < 7) return 'warning';
+		return 'default';
 	}
 
 	function bucketCount(key: Exclude<BucketKey, 'all'>): number {
@@ -252,30 +260,68 @@
 		onFilterChange();
 	}
 
-	function changePage(delta: number) {
-		const next = page + delta;
-		if (next < 1 || next > totalPages) return;
-		page = next;
+	// Pagination element bind:page — đổi trang server → clear selection lot cũ
+	let pageArmed = $state(false);
+	$effect(() => {
+		void page;
+		if (!pageArmed) {
+			pageArmed = true;
+			return;
+		}
 		selectedLotIds = [];
 		void loadLots();
-	}
+	});
 
-	function toggleLot(lotId: string, checked: boolean) {
-		if (checked) {
-			selectedLotIds = [...selectedLotIds, lotId];
-		} else {
-			selectedLotIds = selectedLotIds.filter((id) => id !== lotId);
+	// ---------- DataTable ----------
+	const lotsAny = $derived(lots as unknown as Record<string, unknown>[]);
+	const columns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'variant',
+			label: pageContents.table.variant[lang],
+			accessor: (row) => {
+				const r = row as unknown as ExpiryLotRow;
+				return r.sku ? `${r.displayName ?? r.variantId} (${r.sku})` : (r.displayName ?? r.variantId);
+			}
+		},
+		{
+			id: 'lot',
+			label: pageContents.table.lot[lang],
+			accessor: (row) => (row as unknown as ExpiryLotRow).lotNumber || '—'
+		},
+		{
+			id: 'branch',
+			label: pageContents.table.branch[lang],
+			accessor: (row) => getBranchLabel((row as unknown as ExpiryLotRow).branchId),
+			noHighlight: true
+		},
+		{
+			id: 'quantity',
+			label: pageContents.table.quantity[lang],
+			accessor: (row) => String((row as unknown as ExpiryLotRow).quantityOnHand),
+			noHighlight: true
+		},
+		{
+			id: 'manufacturedAt',
+			label: pageContents.table.manufacturedAt[lang],
+			accessor: (row) => formatDate((row as unknown as ExpiryLotRow).manufacturedAt),
+			noHighlight: true
+		},
+		{
+			id: 'expiresAt',
+			label: pageContents.table.expiresAt[lang],
+			accessor: (row) => formatDate((row as unknown as ExpiryLotRow).expiresAt),
+			noHighlight: true
+		},
+		{
+			id: 'daysRemaining',
+			label: pageContents.table.daysRemaining[lang],
+			accessor: (row) => daysLabel(row as unknown as ExpiryLotRow),
+			status: (_value, row) => daysStatus(row as unknown as ExpiryLotRow)
 		}
-	}
+	]);
 
-	const allPageSelected = $derived(lots.length > 0 && lots.every((l) => selectedLotIds.includes(l._id)));
-
-	function toggleAll(checked: boolean) {
-		if (checked) {
-			selectedLotIds = [...new Set([...selectedLotIds, ...lots.map((l) => l._id)])];
-		} else {
-			selectedLotIds = selectedLotIds.filter((id) => !lots.some((l) => l._id === id));
-		}
+	function onSelection(ids: string[]) {
+		selectedLotIds = ids;
 	}
 
 	function openPromoModal() {
@@ -399,76 +445,52 @@
 		</label>
 	</div>
 
-	<!-- ── Danh sách lot ── -->
-	{#if loading && !loadedOnce}
-		<div class="admin-state" role="status">
-			<p>{pageContents.states.loading[lang]}</p>
-		</div>
-	{:else if listError}
+	<!-- ── Danh sách lot — DataTable (component có sẵn) ──
+	     Server-side paging: paging trong DataTable TẮT, Pagination element điều khiển server.
+	     Selection checkbox do DataTable quản (selectable + getRowId + onSelectionChange),
+	     thay thế checkbox tự viết cũ — selectedLotIds vẫn dùng cho modal tạo khuyến mãi. -->
+	{#if listError}
 		<div class="admin-state error" role="alert">
 			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
 			<p class="state-detail">{listError}</p>
 			<Button color="primary" variant="outline" onClick={() => void loadLots()}>{pageContents.states.retry[lang]}</Button>
 		</div>
-	{:else if lots.length === 0}
-		<div class="admin-state">
-			<p>{pageContents.states.empty[lang]}</p>
-		</div>
 	{:else}
 		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<thead>
-					<tr>
-						<th scope="col" class="col-check">
-							<input
-								type="checkbox"
-								checked={allPageSelected}
-								onchange={(e) => toggleAll((e.currentTarget as HTMLInputElement).checked)}
-								aria-label="select all"
-							/>
-						</th>
-						<th scope="col">{pageContents.table.variant[lang]}</th>
-						<th scope="col">{pageContents.table.lot[lang]}</th>
-						<th scope="col">{pageContents.table.branch[lang]}</th>
-						<th scope="col">{pageContents.table.quantity[lang]}</th>
-						<th scope="col">{pageContents.table.manufacturedAt[lang]}</th>
-						<th scope="col">{pageContents.table.expiresAt[lang]}</th>
-						<th scope="col">{pageContents.table.daysRemaining[lang]}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each lots as row (row._id)}
-						<tr>
-							<td class="col-check">
-								<input
-									type="checkbox"
-									checked={selectedLotIds.includes(row._id)}
-									onchange={(e) => toggleLot(row._id, (e.currentTarget as HTMLInputElement).checked)}
-									aria-label={`select ${row.lotNumber}`}
-								/>
-							</td>
-							<td class="col-name">
-								{row.displayName ?? row.variantId}
-								{#if row.sku}<span class="cell-sku"> ({row.sku})</span>{/if}
-							</td>
-							<td class="col-code">{row.lotNumber || '—'}</td>
-							<td>{getBranchLabel(row.branchId)}</td>
-							<td class="col-num">{row.quantityOnHand}</td>
-							<td>{formatDate(row.manufacturedAt)}</td>
-							<td>{formatDate(row.expiresAt)}</td>
-							<td class="col-num {daysClass(row)}">{daysLabel(row)}</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+			<DataTable
+				data={lotsAny}
+				{columns}
+				selectable
+				getRowId={(row) => (row as unknown as ExpiryLotRow)._id}
+				onSelectionChange={onSelection}
+				selectAllLabel={pageContents.table.selectAll[lang]}
+				rowSelectLabel={pageContents.table.rowSelect[lang]}
+				pageSize={pageSize}
+				showPagination={false}
+				loading={loading && !loadedOnce}
+				visual={{ striped: true, hoverable: true }}
+				emptyLabel={pageContents.states.empty[lang]}
+				loadingLabel={pageContents.states.loading[lang]}
+				caption={{ vi: 'Danh sách lô sắp hết hạn', en: 'Expiring lots list' }}
+				stickyHead
+				data-test="expiry-datatable"
+			/>
 		</div>
 
+		<!-- ── Phân trang (server-side) ── -->
 		<div class="admin-pagination">
 			<span class="total-count">{total}</span>
 			<div class="page-controls">
-				<Button color="default" variant="outline" size="sm" disabled={page <= 1} onClick={() => changePage(-1)}>‹</Button>
+				<Pagination
+					bind:page={page}
+					totalPages={totalPages}
+					loading={loading}
+					variant="compact"
+					prevLabel={pageContents.pagination.prev[lang]}
+					nextLabel={pageContents.pagination.next[lang]}
+					aria-label={pageContents.title[lang]}
+				/>
 				<span class="page-info">{page} / {totalPages}</span>
-				<Button color="default" variant="outline" size="sm" disabled={page >= totalPages} onClick={() => changePage(1)}>›</Button>
 			</div>
 		</div>
 	{/if}
@@ -645,66 +667,6 @@
 		border-radius: 0.75rem;
 		border: 1px solid var(--default-300);
 		background: var(--background);
-	}
-
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-
-		th,
-		td {
-			padding: 0.75rem 1rem;
-			border-bottom: 1px solid var(--default-200);
-			text-align: left;
-			white-space: nowrap;
-		}
-
-		th {
-			font-size: 0.8rem;
-			text-transform: uppercase;
-			font-weight: 600;
-			background: var(--default-100);
-			color: var(--foreground-500);
-		}
-
-		tbody tr:hover {
-			background: var(--default-50);
-		}
-	}
-
-	.col-check {
-		width: 2.5rem;
-		text-align: center;
-	}
-
-	.col-name {
-		white-space: normal;
-		min-width: 12rem;
-	}
-
-	.cell-sku {
-		color: var(--foreground-500);
-		font-size: 0.8rem;
-	}
-
-	.col-code {
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.col-num {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.cell-danger {
-		color: var(--error);
-		font-weight: 700;
-	}
-
-	.cell-warn {
-		color: var(--warning, hsl(38, 92%, 40%));
-		font-weight: 700;
 	}
 
 	.admin-pagination {
