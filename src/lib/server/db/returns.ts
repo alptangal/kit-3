@@ -391,11 +391,16 @@ export class ReturnService {
 		referenceId: string,
 		now: string
 	): Promise<boolean> {
-		const stockId = `stock_${variantId}_${branchId}`;
-		const getRes = await cbInventoryStock.document.get({ documentKey: stockId });
-		if (!getRes.ok) {
+		// Tra doc tồn kho theo (variantId, branchId) — key có thể là `inventory::...` cũ hoặc `stock_...` mới
+		const findRes = await cbInventoryStock.document.query({
+			statement: `SELECT META().id AS _id, quantityOnHand FROM ${inventoryStockKeyspace} WHERE variantId = $1 AND branchId = $2 LIMIT 1`,
+			args: [variantId, branchId],
+			readonly: true
+		});
+		const stockDoc = (findRes.data?.results ?? [])[0] as { _id: string; quantityOnHand?: number } | undefined;
+		if (!findRes.ok || !stockDoc) {
 			const createRes = await cbInventoryStock.document.create({
-				documentKey: stockId,
+				documentKey: `stock_${variantId}_${branchId}`,
 				content: {
 					variantId,
 					branchId,
@@ -412,7 +417,7 @@ export class ReturnService {
 					SET quantityOnHand = quantityOnHand + $3, updatedAt = $4
 					WHERE META().id = $1 AND variantId = $2
 				`,
-				args: [stockId, variantId, quantity, now],
+				args: [stockDoc._id, variantId, quantity, now],
 				readonly: false
 			});
 			if (!incRes.ok) return false;

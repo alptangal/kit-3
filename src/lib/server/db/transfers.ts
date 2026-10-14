@@ -336,26 +336,34 @@ export class TransferService {
 		referenceId: string,
 		now: string
 	): Promise<{ ok: boolean; reason?: 'insufficient' | 'not_found' | 'failed' }> {
-		const stockId = `stock_${variantId}_${branchId}`;
-		const getRes = await cbInventoryStock.document.get({ documentKey: stockId });
-		if (!getRes.ok) return { ok: false, reason: 'not_found' };
+		// Doc tồn kho có thể mang key cũ `inventory::...` (seed) hoặc `stock_<variant>_<branch>` —
+		// tra theo (variantId, branchId) như InventoryService.getStock, KHÔNG giả định format key.
+		const findRes = await cbInventoryStock.document.query({
+			statement: `SELECT META().id AS _id, quantityOnHand FROM ${inventoryStockKeyspace} WHERE variantId = $1 AND branchId = $2 LIMIT 1`,
+			args: [variantId, branchId],
+			readonly: true
+		});
+		const stockDoc = (findRes.data?.results ?? [])[0] as { _id: string; quantityOnHand?: number } | undefined;
+		if (!findRes.ok || !stockDoc) return { ok: false, reason: 'not_found' };
 
-		const stock = (getRes as any).data as { quantityOnHand?: number; variantId?: string };
-		const current = Number(stock?.quantityOnHand ?? 0);
+		const current = Number(stockDoc.quantityOnHand ?? 0);
 		if (current < quantity) return { ok: false, reason: 'insufficient' };
 
-		// UPDATE điều kiện theo số cũ — atomic, chống race
+		// UPDATE điều kiện theo số cũ — atomic, chống race (dùng META().id thật của doc)
+		// LƯU Ý: Data API/SDK UPDATE trả results=[] nhưng mutationCount=1 khi thành công —
+		// KHÔNG check results.length (chỉ check ok + mutationCount nếu có).
 		const incRes = await cbInventoryStock.document.query({
 			statement: `
 				UPDATE ${inventoryStockKeyspace}
 				SET quantityOnHand = quantityOnHand - $3, updatedAt = $4
 				WHERE META().id = $1 AND variantId = $2 AND quantityOnHand = $5
 			`,
-			args: [stockId, variantId, quantity, now, current],
+			args: [stockDoc._id, variantId, quantity, now, current],
 			readonly: false
 		});
 		if (!incRes.ok) return { ok: false, reason: 'failed' };
-		if ((incRes.data?.results?.length ?? 0) === 0) return { ok: false, reason: 'failed' };
+		const mutationCount = Number((incRes.data as any)?.metrics?.mutationCount ?? 1);
+		if (mutationCount === 0) return { ok: false, reason: 'failed' };
 
 		// Ghi stock movement 'out' (pattern InventoryService.recordStockMovement)
 		await cbStockMovements.document.create({
@@ -391,12 +399,18 @@ export class TransferService {
 		referenceId: string,
 		now: string
 	): Promise<boolean> {
-		const stockId = `stock_${variantId}_${branchId}`;
-		const getRes = await cbInventoryStock.document.get({ documentKey: stockId });
-		if (!getRes.ok) {
-			// Chưa có doc tồn kho tại chi nhánh nhận → tạo mới
+		// Tra doc tồn kho theo (variantId, branchId) — key có thể là `inventory::...` cũ hoặc `stock_...` mới
+		const findRes = await cbInventoryStock.document.query({
+			statement: `SELECT META().id AS _id, quantityOnHand FROM ${inventoryStockKeyspace} WHERE variantId = $1 AND branchId = $2 LIMIT 1`,
+			args: [variantId, branchId],
+			readonly: true
+		});
+		const stockDoc = (findRes.data?.results ?? [])[0] as { _id: string; quantityOnHand?: number } | undefined;
+		let okFlag = true;
+		if (!findRes.ok || !stockDoc) {
+			// Chưa có doc tồn kho tại chi nhánh nhận → tạo mới (pattern suppliers.receiveItemToStock)
 			const createRes = await cbInventoryStock.document.create({
-				documentKey: stockId,
+				documentKey: `stock_${variantId}_${branchId}`,
 				content: {
 					variantId,
 					branchId,
@@ -405,7 +419,7 @@ export class TransferService {
 					updatedAt: now
 				}
 			});
-			if (!createRes.ok) return false;
+			if (!createRes.ok) okFlag = false;
 		} else {
 			const incRes = await cbInventoryStock.document.query({
 				statement: `
@@ -413,10 +427,10 @@ export class TransferService {
 					SET quantityOnHand = quantityOnHand + $3, updatedAt = $4
 					WHERE META().id = $1 AND variantId = $2
 				`,
-				args: [stockId, variantId, quantity, now],
+				args: [stockDoc._id, variantId, quantity, now],
 				readonly: false
 			});
-			if (!incRes.ok) return false;
+			if (!incRes.ok) okFlag = false;
 		}
 
 		// Ghi stock movement 'in'
