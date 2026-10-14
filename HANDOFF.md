@@ -105,3 +105,17 @@ Sidebar: nhóm mới "Vận hành" (expenses/cameras) + "Nhập hàng" + "Hạn 
 2. Seed thiếu 9 permission key services dùng: `inventory:read/:manage`, `stock_takes:read/:manage`, `suppliers:read`, `pos:read/:manage`, `promotions:read/:manage` (mismatch do service Phase 4 + seed viết riêng). Đã sửa seed-data.ts + seed trực tiếp DB qua N1QL UPSERT (20/20 grants). Backlog cũ "seed promotions:*" ĐÃ ĐÓNG.
 
 **UI check 10/10 trang admin ĐẠT** (ui-checker, ảnh v3 trong tests/_ui-shots/): purchases/expiry/expenses/cameras/analytics/inventory/suppliers/promotions/pos-sessions/stock-takes — hết Loading, đúng empty state hoặc dữ liệu thật (inventory 8+ dòng, suppliers 11+, pos 1 phiên Open). Bẫy: chụp sau networkidle 3.5s vẫn quá sớm (5/10 trang còn Loading) → phải poll body text hết "Loading" rồi chụp; ui-checker max 8 ảnh/prompt → chia 5 ảnh/đợt.
+
+## 11. Hoàn thiện chức năng còn thiếu + đồng bộ UI/UX toàn hệ thống — XONG (2026-10-21, master 67abc554)
+
+Task user: chia 5 agents hoàn thành toàn bộ chức năng thiếu, đồng bộ UI/UX, tái sử dụng component có sẵn. **Cả 5 xong, check 195 baseline, build PASS.**
+
+- **A — Chuyển kho + Đổi trả** (6 commits `ef584448`…`715fa9fe`): schema thêm originBranchId/returnBranchId, transfers.ts 602d + returns.ts 569d + 12 routes, UI /admin/transfers + /admin/returns, seed 14/14, probe 13/13 PASS (approve trừ kho FROM conditional N1QL, complete cộng kho TO, return hoàn kho, movement log đủ). db-broadcast thêm stock_transfers|order_returns.
+- **B/B2 — POS Terminal /admin/pos** (4 commits `0f063750`…`67abc554`): search barcode/tên, giỏ, 7 phương thức thanh toán (bank_transfer→payment pending, loyalty_points/cod OK), tiền thừa numpad, checkout tạo order paid + trừ tồn CAS + payment doc + session totals. Probe 24/24 PASS idempotent (tồn 6→5, ORD-...-8899 paid, PAY-...-95E9, session +50.000). B chết do transcript nhiễm ảnh (400 model nvidia) → B2 transcript sạch hoàn thiện nốt.
+- **C/C2 — Storefront** (C chết như B → C2 verify + fix 5 bug commit `77b792fb`): guard `/storefront`→`/store` (hooks.server.ts:107), `p._id`→`META(p).id` (products.ts:1100 + api get), search fan-out 24 query→1 batch IN (32 variants 817ms), CartDocument.branchId nullable. Probe 18/18 PASS 2 lần. [id] detail, /store/account, /store/search, homepage featured 8.
+- **D — Đồng bộ 14 trang admin → DataTable** (12 commits `713b114`…`0401bb75`): promotions/payments/shipments/fulfillment/notifications/posts/social/campaigns/suppliers(2 tab)/purchases/expiry(selection API selectable+getRowId)/pos-sessions/stock-takes/inventory(2 tab). messages giữ chat layout chỉ thay Pagination. Bẫy: bỏ nhánh empty bọc bảng (purchases), actions width:1%+min-width:fit-content, error→danger map, shared Pagination qua currentPagingPage + armed-guard.
+- **E — PWA + TV /display + passkey UI** (4 commits `d969aaea`…`63dcc588`): manifest+sw+icons+offline, /display auto-refresh 60s + reload 30p + session-guard + 1920px, passkey i18n. Probe 20/20 PASS.
+
+**Infra ui-checker chết toàn phần đợt này** (9+3 lần thử: "Part of the response never arrived" cả 1 ảnh lẫn 8 ảnh) → mọi agent dùng DOM-probe thay thế làm bằng chứng. 19 ảnh giữ trong `tests/_ui-shots/` chờ infra hồi phục đọc lại.
+
+Backlog mới: notifications mất row-unread bold (DataTable không hỗ trợ custom row class); PartyKit ws console noise (HTTP fallback chạy); search storefront còn chậm ~15s (encrypt+couchbase).
