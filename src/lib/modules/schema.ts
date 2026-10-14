@@ -55,7 +55,9 @@ const collectionsName = [
 	// Chi phí vận hành (operating expenses)
 	'operating_expenses',
 	// Camera giám sát MVP
-	'cameras'
+	'cameras',
+	// Analytics — lịch sử biến động giá (giá nhập/giá bán)
+	'price_history'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -507,6 +509,8 @@ export const collectionSchemas = {
 			status: { type: 'string', searchable: true, sortable: true, selectable: true }, // 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled'
 			items: { type: 'array', searchable: false, sortable: false, selectable: true }, // [{ variantId, quantity, unitCost, lotNumber?, expiresAt? }]
 			totalCost: { type: 'number', searchable: true, sortable: true, selectable: true },
+			source: { type: 'string', searchable: true, sortable: true, selectable: true }, // 'quick' | 'order'
+			receiptImages: { type: 'array', searchable: false, sortable: false, selectable: false }, // base64 data URLs — chỉ trả qua get endpoint
 			createdBy: { type: 'string', searchable: true, sortable: false, selectable: true },
 			approvedBy: { type: 'string', searchable: false, sortable: false, selectable: true }, // owner/manager duyệt — audit trail
 			expectedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
@@ -1204,6 +1208,27 @@ export const collectionSchemas = {
 
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
 			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Analytics — lịch sử biến động giá =====
+	price_history: {
+		fields: {
+			// 'variant_cost' | 'variant_price'
+			entity: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			variantId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			oldPrice: { type: 'number', searchable: true, sortable: true, selectable: true },
+			newPrice: { type: 'number', searchable: true, sortable: true, selectable: true },
+
+			// 'purchase_order' | 'manual' | 'quick_purchase'
+			source: { type: 'string', searchable: true, sortable: true, selectable: true },
+			referenceId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			changedBy: { type: 'string', searchable: true, sortable: false, selectable: true },
+			changedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
 	}
 } as const satisfies Record<
