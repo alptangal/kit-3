@@ -103,7 +103,13 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'notifications:read', resource: 'notifications', action: 'read' },
 		{ key: 'notifications:manage', resource: 'notifications', action: 'manage' },
 		{ key: 'email_logs:read', resource: 'email_logs', action: 'read' },
-		{ key: 'email_logs:manage', resource: 'email_logs', action: 'manage' }
+		{ key: 'email_logs:manage', resource: 'email_logs', action: 'manage' },
+
+		// Chi phí vận hành / camera giám sát
+		{ key: 'expenses:read', resource: 'expenses', action: 'read' },
+		{ key: 'expenses:manage', resource: 'expenses', action: 'manage' },
+		{ key: 'cameras:read', resource: 'cameras', action: 'read' },
+		{ key: 'cameras:manage', resource: 'cameras', action: 'manage' }
 	];
 
 	for (const p of permissions) {
@@ -159,7 +165,12 @@ export async function seedDetailRoles(): Promise<void> {
 			'notifications:read',
 			'notifications:manage',
 			'email_logs:read',
-			'email_logs:manage'
+			'email_logs:manage',
+			// Chi phí vận hành / camera giám sát
+			'expenses:read',
+			'expenses:manage',
+			'cameras:read',
+			'cameras:manage'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -202,6 +213,12 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'notifications:manage', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'email_logs:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'email_logs:manage', scope: 'own_branch' },
+
+		// Chi phí vận hành / camera giám sát — manager trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'expenses:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'expenses:manage', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'cameras:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'cameras:manage', scope: 'own_branch' },
 
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
