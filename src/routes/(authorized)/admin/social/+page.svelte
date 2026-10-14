@@ -1042,19 +1042,6 @@
 		flex-wrap: wrap;
 	}
 
-	.platform-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.8125rem;
-		color: var(--foreground);
-
-		.iconify {
-			font-size: 1rem;
-			color: var(--muted-foreground);
-		}
-	}
-
 	.status-badge {
 		display: inline-block;
 		padding: 0.125rem 0.5rem;
