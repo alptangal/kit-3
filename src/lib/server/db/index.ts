@@ -26,3 +26,4 @@ export * from './social';
 export * from './expenses';
 export * from './cameras';
 export * from './expiry';
+export * from './analytics';
