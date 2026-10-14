@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Button } from '$components/element';
+	import { Button, DataTable } from '$components/element';
+	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { AlertDialog } from '$lib/components/element/alert-dialog';
 	import { encryption } from '$modules/encryption';
@@ -187,6 +188,23 @@
 		failed: 'error',
 		cancelled: 'muted'
 	};
+
+	// Map cho DataTableStatus ('default'|'success'|'warning'|'danger'|'info')
+	function postStatusColor(status: string): 'success' | 'warning' | 'danger' | 'info' | 'default' {
+		switch (postStatusClass[status]) {
+			case 'success':
+				return 'success';
+			case 'info':
+				return 'info';
+			case 'warning':
+				return 'warning';
+			case 'error':
+				// DataTableStatus không có 'error' — map sang 'danger'
+				return 'danger';
+			default:
+				return 'default';
+		}
+	}
 
 	// ---------- state ----------
 	interface SocialAccountItem {
@@ -582,6 +600,52 @@
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadAccounts(), loadPosts()]);
 	});
+
+	// ---------- DataTable columns (posts) ----------
+	const postsAny = $derived(posts as unknown as Record<string, unknown>[]);
+	const postColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'platform',
+			label: t('colPlatform'),
+			accessor: (row) => platformLabel((row as unknown as SocialPostItem).platform),
+			noHighlight: true
+		},
+		{
+			id: 'content',
+			label: t('colContent'),
+			accessor: (row) => {
+				const post = row as unknown as SocialPostItem;
+				const mediaPart = post.mediaUrls?.length ? ` (${post.mediaUrls.length} media)` : '';
+				return `${post.content}${mediaPart}`;
+			}
+		},
+		{
+			id: 'status',
+			label: t('colStatus'),
+			accessor: (row) =>
+				postStatusLabels[(row as unknown as SocialPostItem).status]?.[lang] ??
+				(row as unknown as SocialPostItem).status,
+			status: (_value, row) => postStatusColor((row as unknown as SocialPostItem).status)
+		},
+		{
+			id: 'scheduledAt',
+			label: t('colScheduled'),
+			accessor: (row) => formatDate((row as unknown as SocialPostItem).scheduledAt),
+			noHighlight: true
+		},
+		{
+			id: 'publishedAt',
+			label: t('colPublished'),
+			accessor: (row) => formatDate((row as unknown as SocialPostItem).publishedAt),
+			noHighlight: true
+		},
+		{
+			id: 'permalink',
+			label: t('colPermalink'),
+			accessor: (row) => (row as unknown as SocialPostItem).permalink ?? '—',
+			noHighlight: true
+		}
+	]);
 </script>
 
 <svelte:head>
@@ -662,101 +726,62 @@
 	<div class="section-head">
 		<h2>{t('postsTitle')}</h2>
 	</div>
-	{#if isLoadingPosts}
-		<div class="admin-state" role="status"><p>{t('loading')}</p></div>
-	{:else if errorPosts}
+	{#if errorPosts}
 		<div class="admin-state admin-state--error" role="alert">{errorPosts}</div>
-	{:else if posts.length === 0}
-		<div class="admin-state">{t('emptyPosts')}</div>
 	{:else}
-		<div class="admin-table-wrap">
-			<table class="admin-table" data-test="social-posts-table">
-				<thead>
-					<tr>
-						<th>{t('colPlatform')}</th>
-						<th>{t('colContent')}</th>
-						<th>{t('colStatus')}</th>
-						<th>{t('colScheduled')}</th>
-						<th>{t('colPublished')}</th>
-						<th>{t('colPermalink')}</th>
-						<th>{t('colActions')}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each posts as post (post._id)}
-						<tr data-test="social-posts-row">
-							<td>
-								<span class="platform-chip">
-									<i
-										class="iconify"
-										data-icon={platformIcons[post.platform as SocialPlatform] ?? 'lucide:share-2'}
-									></i>
-									{platformLabel(post.platform)}
-								</span>
-							</td>
-							<td class="admin-td-content">
-								<div class="content-clip">{post.content}</div>
-								{#if post.mediaUrls?.length}
-									<div class="admin-td-sub">{post.mediaUrls.length} media</div>
-								{/if}
-							</td>
-							<td>
-								<span class="status-badge status-badge--{postStatusClass[post.status] ?? 'muted'}"
-									>{postStatusLabels[post.status]?.[lang] ?? post.status}</span
-								>
-							</td>
-							<td>{formatDate(post.scheduledAt)}</td>
-							<td>{formatDate(post.publishedAt)}</td>
-							<td>
-								{#if post.permalink}
-									<a
-										class="permalink"
-										href={post.permalink}
-										target="_blank"
-										rel="noopener noreferrer">{t('preview')}</a
-									>
-								{:else}
-									—
-								{/if}
-							</td>
-							<td>
-								<div class="admin-td-actions">
-									{#if post.status === 'draft'}
-										<Button size="sm" color="primary" onClick={() => postAction(post, 'schedule')}
-											>{t('fieldSchedule')}</Button
-										>
-									{/if}
-									{#if post.status === 'draft' || post.status === 'scheduled'}
-										<Button size="sm" color="success" onClick={() => postAction(post, 'publish')}
-											>{t('colPublished')}</Button
-										>
-									{/if}
-									{#if post.status === 'draft' || post.status === 'scheduled'}
-										<Button size="sm" variant="ghost" onClick={() => postAction(post, 'cancel')}
-											>{t('cancelConfirm')}</Button
-										>
-									{/if}
-									{#if post.status === 'draft' || post.status === 'failed'}
-										<Button
-											size="sm"
-											color="primary"
-											variant="ghost"
-											onClick={() => openEditPost(post)}>{t('editPost')}</Button
-										>
-									{/if}
-									<Button
-										size="sm"
-										color="error"
-										variant="ghost"
-										onClick={() => askDeletePost(post)}>{t('delete')}</Button
-									>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
+	<!-- ── Bảng bài đăng — DataTable (component có sẵn) ──
+	     KHÔNG phân trang server (API pageSize 50, client render tất cả). -->
+	<div class="admin-table-wrap">
+		<DataTable
+			data={postsAny}
+			columns={postColumns}
+			pageSize={posts.length || 10}
+			showPagination={false}
+			loading={isLoadingPosts}
+			visual={{ striped: true, hoverable: true }}
+			emptyLabel={t('emptyPosts')}
+			loadingLabel={t('loading')}
+			caption={{ vi: 'Danh sách bài đăng mạng xã hội', en: 'Social posts list' }}
+			actionsLabel={{ vi: t('colActions'), en: t('colActions') }}
+			stickyHead
+			data-test="social-posts-datatable"
+		>
+			{#snippet actionsContent(row)}
+				{@const post = row as unknown as SocialPostItem}
+				<div class="row-actions">
+					{#if post.status === 'draft'}
+						<Button size="sm" color="primary" onClick={() => postAction(post, 'schedule')}
+							>{t('fieldSchedule')}</Button
+						>
+					{/if}
+					{#if post.status === 'draft' || post.status === 'scheduled'}
+						<Button size="sm" color="success" onClick={() => postAction(post, 'publish')}
+							>{t('colPublished')}</Button
+						>
+					{/if}
+					{#if post.status === 'draft' || post.status === 'scheduled'}
+						<Button size="sm" variant="ghost" onClick={() => postAction(post, 'cancel')}
+							>{t('cancelConfirm')}</Button
+						>
+					{/if}
+					{#if post.status === 'draft' || post.status === 'failed'}
+						<Button
+							size="sm"
+							color="primary"
+							variant="ghost"
+							onClick={() => openEditPost(post)}>{t('editPost')}</Button
+						>
+					{/if}
+					<Button
+						size="sm"
+						color="error"
+						variant="ghost"
+						onClick={() => askDeletePost(post)}>{t('delete')}</Button
+					>
+				</div>
+			{/snippet}
+		</DataTable>
+	</div>
 	{/if}
 </section>
 
@@ -1076,61 +1101,12 @@
 		border-radius: 0.5rem;
 	}
 
-	.admin-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.875rem;
-
-		th,
-		td {
-			padding: 0.625rem 0.75rem;
-			text-align: left;
-			border-bottom: 1px solid var(--default-200);
-			color: var(--foreground);
-		}
-
-		th {
-			font-weight: 600;
-			background: var(--default-100);
-			white-space: nowrap;
-		}
-
-		tbody tr:hover {
-			background: var(--default-100);
-		}
-	}
-
-	.admin-td-content {
-		max-width: 320px;
-	}
-
-	.content-clip {
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		overflow-wrap: anywhere;
-	}
-
-	.admin-td-sub {
-		font-size: 0.75rem;
-		color: var(--muted-foreground);
-		margin-top: 0.125rem;
-	}
-
-	.admin-td-actions {
+	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
+	.row-actions {
 		display: flex;
 		gap: 0.375rem;
-		flex-wrap: wrap;
-	}
-
-	.permalink {
-		color: var(--primary);
-		text-decoration: none;
-
-		&:hover {
-			text-decoration: underline;
-		}
+		width: 1%;
+		min-width: fit-content;
 	}
 
 	.admin-select,
