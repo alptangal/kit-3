@@ -1243,6 +1243,8 @@ export type InventoryStock = InferCollection<'inventory_stock'>;
 export type InventoryLot = InferCollection<'inventory_lots'>;
 export type StockMovement = InferCollection<'stock_movements'>;
 export type Branch = InferCollection<'branches'>;
+export type OperatingExpense = InferCollection<'operating_expenses'>;
+export type Camera = InferCollection<'cameras'>;
 
 // const collectionSchemasVault = {
 // 	system_secrets: {
