@@ -160,23 +160,24 @@ async function main() {
     }
 
     // Tồn kho TRƯỚC — /stock/get trả data = stock trực tiếp (không bọc .stock)
+    // Probe tiêu thụ 5 đơn mỗi lần chạy (P15 UI + P19 session + P21-23 method)
+    // → nếu tồn < 5 thì UPSERT đè về 10 để idempotent giữa các lần chạy.
     const stockGet = await api('/api/admin/inventory/stock/get', { variantId, branchId });
     let stockBefore = Number(stockGet.data?.quantityOnHand ?? -1);
     if (!stockGet.ok) {
       fail('P6 tồn kho trước', 'API stock/get fail');
-    } else if (stockBefore < 0) {
-      // Chưa có doc inventory_stock → UPSERT thẳng (adjustStock chỉ làm việc khi doc đã có)
+    } else if (stockBefore < 5) {
       await seedStockDoc(variantId, branchId, 10);
       await settle(1000);
       // Đọc lại qua chính API get (checkpoint chắc chắn)
       for (let i = 0; i < 5; i++) {
         const re = await api('/api/admin/inventory/stock/get', { variantId, branchId });
         stockBefore = Number(re.data?.quantityOnHand ?? -1);
-        if (stockBefore >= 0) break;
+        if (stockBefore >= 5) break;
         await settle(1000);
       }
-      if (stockBefore >= 0) {
-        ok('P6 seed tồn kho ban đầu (UPSERT doc +10)', `quantityOnHand=${stockBefore}`);
+      if (stockBefore >= 5) {
+        ok('P6 seed tồn kho (UPSERT doc → 10)', `quantityOnHand=${stockBefore}`);
       } else {
         fail('P6 seed tồn kho', 'UPSERT xong nhưng stock/get vẫn không thấy doc');
         throw new Error('không thể seed tồn kho');
