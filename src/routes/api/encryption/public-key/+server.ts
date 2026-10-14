@@ -1,11 +1,11 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { cb_document_id_rsa_key_vault } from '$env/static/private';
+import { cb_document_id_rsa_key_vault, cb_collectionName_vault } from '$env/static/private';
 
 import { cbVault } from '$modules/couchbase/clients';
 import type { CollectionName } from '$modules/schema';
 
 // env cb_collectionName_vault ('vaults') nằm ngoài CollectionName — cast như initSystemVault.ts:20
-const vaultsCollection = cbVault('system_secrets' as CollectionName);
+const vaultsCollection = cbVault(cb_collectionName_vault as CollectionName);
 export const GET: RequestHandler = async () => {
 	const response = await vaultsCollection.document.get({
 		documentKey: cb_document_id_rsa_key_vault

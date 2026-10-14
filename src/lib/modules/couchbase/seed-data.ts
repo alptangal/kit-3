@@ -68,6 +68,10 @@ export async function seedPermissions(): Promise<void> {
 
 		{ key: 'inventory:view', resource: 'inventory', action: 'read' },
 		{ key: 'inventory:adjust', resource: 'inventory', action: 'update' },
+		// SỬA: InventoryService dùng inventory:read/inventory:manage (Phase 4 worktree)
+		// nhưng seed chỉ có view/adjust — admin 400 "permission denied" trang Tồn kho.
+		{ key: 'inventory:read', resource: 'inventory', action: 'read' },
+		{ key: 'inventory:manage', resource: 'inventory', action: 'manage' },
 
 		{ key: 'purchase_orders:create', resource: 'purchase_orders', action: 'create' },
 		{ key: 'purchase_orders:approve', resource: 'purchase_orders', action: 'approve' },
@@ -76,8 +80,20 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'stock_transfers:approve', resource: 'stock_transfers', action: 'approve' },
 
 		{ key: 'stock_takes:perform', resource: 'stock_takes', action: 'create' },
+		// SỬA: StockTakeService dùng stock_takes:read/:manage, seed chỉ có :perform.
+		{ key: 'stock_takes:read', resource: 'stock_takes', action: 'read' },
+		{ key: 'stock_takes:manage', resource: 'stock_takes', action: 'manage' },
 
 		{ key: 'suppliers:manage', resource: 'suppliers', action: 'manage' },
+		// SỬA: SupplierService list dùng suppliers:read — thiếu nên NCC 400.
+		{ key: 'suppliers:read', resource: 'suppliers', action: 'read' },
+		// SỬA: POSService dùng pos:read/:manage — không có key nào trong seed.
+		{ key: 'pos:read', resource: 'pos', action: 'read' },
+		{ key: 'pos:manage', resource: 'pos', action: 'manage' },
+		// SỬA: PricingService (listPromotions) + ExpiryService dùng promotions:read/:manage
+		// — thiếu nên trang Khuyến mãi 400 cho mọi role.
+		{ key: 'promotions:read', resource: 'promotions', action: 'read' },
+		{ key: 'promotions:manage', resource: 'promotions', action: 'manage' },
 		{ key: 'users:manage', resource: 'users', action: 'manage' },
 		{ key: 'reports:view', resource: 'reports', action: 'read' },
 
@@ -145,12 +161,26 @@ export async function seedDetailRoles(): Promise<void> {
 			'orders:delete',
 			'inventory:view',
 			'inventory:adjust',
+			// Khớp với keys InventoryService thực dùng (xem seedPermissions)
+			'inventory:read',
+			'inventory:manage',
 			'purchase_orders:create',
 			'purchase_orders:approve',
 			'stock_transfers:create',
 			'stock_transfers:approve',
 			'stock_takes:perform',
+			// Khớp với keys StockTakeService thực dùng
+			'stock_takes:read',
+			'stock_takes:manage',
 			'suppliers:manage',
+			// Khớp với keys SupplierService thực dùng
+			'suppliers:read',
+			// Khớp với keys POSService thực dùng
+			'pos:read',
+			'pos:manage',
+			// Khớp với keys PricingService/ExpiryService thực dùng
+			'promotions:read',
+			'promotions:manage',
 			'users:manage',
 			'reports:view',
 			// Phase 5: đối soát thanh toán / vận đơn / điều phối đơn
@@ -197,6 +227,17 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'purchase_orders:approve', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'stock_transfers:create', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'stock_takes:perform', scope: 'own_branch' },
+		// Khớp keys service thực dùng (manager trong chi nhánh mình)
+		{ roleName: 'manager', permissionKey: 'inventory:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'inventory:manage', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'stock_takes:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'stock_takes:manage', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'suppliers:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'pos:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'pos:manage', scope: 'own_branch' },
+		// Khớp keys PricingService/ExpiryService thực dùng
+		{ roleName: 'manager', permissionKey: 'promotions:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'promotions:manage', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'reports:view', scope: 'own_branch' },
 		// Manager cũng cần quản lý user trong chi nhánh mình (vd khoá/mở tài khoản staff) —
 		// thiếu grant này thì UserAdminService.setStatus/setRole/delete/list sẽ luôn từ chối manager.
@@ -244,7 +285,10 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'staff', permissionKey: 'orders:create', scope: 'own_records' },
 		{ roleName: 'staff', permissionKey: 'orders:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'inventory:view', scope: 'own_branch' },
+		// Staff đọc tồn kho qua InventoryService (key inventory:read)
+		{ roleName: 'staff', permissionKey: 'inventory:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'stock_takes:perform', scope: 'own_branch' },
+		{ roleName: 'staff', permissionKey: 'stock_takes:read', scope: 'own_branch' },
 
 		// Customer — chỉ tạo/xem đơn của chính mình
 		{ roleName: 'customer', permissionKey: 'orders:create', scope: 'own_records' },
