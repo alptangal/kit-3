@@ -18,6 +18,7 @@ partykit/public/dist/
 partykit/.partykit/
 partykit/.env
 partykit/.dev.vars
+partykit/.wrangler/
 .env
 
 # Kho lưu tạm (script debug/scratch từ các phiên) — không theo dõi
