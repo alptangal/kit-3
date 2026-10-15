@@ -316,28 +316,28 @@
 		{
 			id: 'variant',
 			label: pageContents.variantCol[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as VariantListItem).displayName,
 			render: (value, row) => {
 				const v = row as unknown as VariantListItem;
 				const barcode = v.barcode ? ` · ${v.barcode}` : '';
 				return `${String(value)}${barcode}`;
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'product',
 			label: pageContents.productLabel[lang],
+			sortable: true,
 			accessor: (row) => {
 				const v = row as unknown as VariantListItem;
 				return productNameById.get(v.productId) ?? '—';
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'sku',
 			label: pageContents.skuLabel[lang],
-			accessor: (row) => (row as unknown as VariantListItem).sku,
-			sortable: false
+			sortable: true,
+			accessor: (row) => (row as unknown as VariantListItem).sku
 		},
 		{
 			id: 'attributes',
@@ -347,18 +347,18 @@
 				const entries = Object.entries(v.attributes ?? {});
 				if (entries.length === 0) return '—';
 				return entries.map(([k, val]) => `${k}: ${val}`).join(', ');
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'price',
 			label: pageContents.priceLabel[lang],
-			accessor: (row) => formatPrice((row as unknown as VariantListItem).price),
-			sortable: false
+			sortable: true,
+			accessor: (row) => formatPrice((row as unknown as VariantListItem).price)
 		},
 		{
 			id: 'status',
 			label: pageContents.statusLabel[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as VariantListItem).status,
 			status: (value) => {
 				const s = String(value ?? '');
@@ -372,6 +372,7 @@
 		{
 			id: 'updated',
 			label: pageContents.updated[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as VariantListItem).updatedAt),
 			noHighlight: true
 		}
@@ -742,6 +743,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm biến thể…', en: 'Search variants…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.empty[lang]}

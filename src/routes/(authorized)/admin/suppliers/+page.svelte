@@ -489,11 +489,13 @@
 		{
 			id: 'name',
 			label: pageContents.supplierTable.name[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as SupplierRow).name ?? '—'
 		},
 		{
 			id: 'contact',
 			label: pageContents.supplierTable.contact[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as SupplierRow).contactPerson ?? '—'
 		},
 		{
@@ -505,6 +507,7 @@
 		{
 			id: 'status',
 			label: pageContents.supplierTable.status[lang],
+			sortable: true,
 			accessor: (row) => {
 				const status = (row as unknown as SupplierRow).status;
 				return status === 'active' ? (lang === 'vi' ? 'Đang hoạt động' : 'Active') : (status ?? '—');
@@ -515,6 +518,7 @@
 		{
 			id: 'createdAt',
 			label: pageContents.supplierTable.createdAt[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as SupplierRow).createdAt),
 			noHighlight: true
 		}
@@ -525,11 +529,13 @@
 		{
 			id: 'code',
 			label: pageContents.poTable.code[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as PurchaseOrderRow).poCode ?? '—'
 		},
 		{
 			id: 'supplier',
 			label: pageContents.poTable.supplier[lang],
+			sortable: true,
 			accessor: (row) => getSupplierLabel((row as unknown as PurchaseOrderRow).supplierId),
 			noHighlight: true
 		},
@@ -542,18 +548,21 @@
 		{
 			id: 'status',
 			label: pageContents.poTable.status[lang],
+			sortable: true,
 			accessor: (row) => poStatusLabel((row as unknown as PurchaseOrderRow).status),
 			status: (_value, row) => poStatusColor((row as unknown as PurchaseOrderRow).status)
 		},
 		{
 			id: 'totalCost',
 			label: pageContents.poTable.totalCost[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as PurchaseOrderRow).totalCost),
 			noHighlight: true
 		},
 		{
 			id: 'expectedAt',
 			label: pageContents.poTable.expectedAt[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as PurchaseOrderRow).expectedAt),
 			noHighlight: true
 		}
@@ -843,6 +852,10 @@
 					columns={supplierColumns}
 					pageSize={pageSize}
 					showPagination={false}
+					sortable
+					searchable
+					searchPlaceholder={{ vi: 'Tìm nhà cung cấp…', en: 'Search suppliers…' }}
+					resizable={{ enabled: true, fit: true }}
 					loading={suppliersLoading && !suppliersLoadedOnce}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptySuppliers[lang]}
@@ -868,6 +881,10 @@
 					columns={poColumns}
 					pageSize={pageSize}
 					showPagination={false}
+					sortable
+					searchable
+					searchPlaceholder={{ vi: 'Tìm đơn mua hàng…', en: 'Search purchase orders…' }}
+					resizable={{ enabled: true, fit: true }}
 					loading={posLoading && !posLoadedOnce}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptyPOs[lang]}
