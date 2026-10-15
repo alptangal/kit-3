@@ -202,10 +202,6 @@ export const pageContents: { [k: string]: any } = {
 			vi: 'Sau',
 			en: 'Next'
 		},
-		pageInfo: {
-			vi: 'Trang {page} / {total}',
-			en: 'Page {page} of {total}'
-		},
 		totalCount: {
 			vi: '{total} người dùng',
 			en: '{total} users'

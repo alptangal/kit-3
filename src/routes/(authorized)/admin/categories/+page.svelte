@@ -699,7 +699,6 @@
 				nextLabel={{ vi: 'Sau', en: 'Next' }}
 				aria-label={pageContents.title[lang]}
 			/>
-			<span class="page-info">Page {pageNumber} of {totalPages}</span>
 			<label class="page-size">
 				<span>{lang === 'vi' ? 'Row/trang' : 'Rows per page'}</span>
 				<select
@@ -950,11 +949,6 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.75rem;
-	}
-
-	.page-info {
-		font-size: 0.875rem;
-		color: var(--muted);
 	}
 
 	.page-size {

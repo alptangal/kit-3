@@ -184,10 +184,6 @@ export const pageContents: PageContents = {
 	pagination: {
 		prev: { vi: 'Trước', en: 'Prev' },
 		next: { vi: 'Sau', en: 'Next' },
-		pageInfo: {
-			vi: 'Trang {page} / {total}',
-			en: 'Page {page} / {total}'
-		},
 		totalCount: {
 			vi: 'Tổng: {total}',
 			en: 'Total: {total}'
