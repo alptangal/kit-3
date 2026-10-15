@@ -471,6 +471,7 @@
 		{
 			id: 'variant',
 			label: pageContents.stockTable.variant[lang],
+			sortable: true,
 			accessor: (row) => getVariantLabel((row as unknown as StockRow).variantId)
 		},
 		{
@@ -482,18 +483,21 @@
 		{
 			id: 'onHand',
 			label: pageContents.stockTable.onHand[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as StockRow).quantityOnHand ?? 0),
 			noHighlight: true
 		},
 		{
 			id: 'reserved',
 			label: pageContents.stockTable.reserved[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as StockRow).quantityReserved ?? 0),
 			noHighlight: true
 		},
 		{
 			id: 'updated',
 			label: pageContents.stockTable.updated[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as StockRow).updatedAt),
 			noHighlight: true
 		}
@@ -502,11 +506,13 @@
 		{
 			id: 'lotNumber',
 			label: pageContents.lotsTable.lotNumber[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as LotRow).lotNumber ?? '—'
 		},
 		{
 			id: 'variant',
 			label: pageContents.lotsTable.variant[lang],
+			sortable: true,
 			accessor: (row) => getVariantLabel((row as unknown as LotRow).variantId)
 		},
 		{
@@ -518,18 +524,21 @@
 		{
 			id: 'quantity',
 			label: pageContents.lotsTable.quantity[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as LotRow).quantityOnHand ?? 0),
 			noHighlight: true
 		},
 		{
 			id: 'expires',
 			label: pageContents.lotsTable.expires[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as LotRow).expiresAt),
 			noHighlight: true
 		},
 		{
 			id: 'status',
 			label: pageContents.lotsTable.status[lang],
+			sortable: true,
 			accessor: (row) => lotStatusLabel((row as unknown as LotRow).status),
 			status: (_v, row) => lotStatusColor((row as unknown as LotRow).status)
 		}
@@ -780,6 +789,10 @@
 					columns={stockColumns}
 					pageSize={pageSize}
 					showPagination={false}
+					sortable
+					searchable
+					searchPlaceholder={{ vi: 'Tìm tồn kho…', en: 'Search stock…' }}
+					resizable={{ enabled: true, fit: true }}
 					loading={stockLoading && !stockLoadedOnce}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptyStock[lang]}
@@ -816,6 +829,10 @@
 					columns={lotColumns}
 					pageSize={pageSize}
 					showPagination={false}
+					sortable
+					searchable
+					searchPlaceholder={{ vi: 'Tìm lô hàng…', en: 'Search lots…' }}
+					resizable={{ enabled: true, fit: true }}
 					loading={lotsLoading && !lotsLoadedOnce}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptyLots[lang]}

@@ -263,16 +263,19 @@
 		{
 			id: 'orderCode',
 			label: pageContents.table.orderCode[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as QueueRow).orderCode ?? '—'
 		},
 		{
 			id: 'channel',
 			label: pageContents.table.channel[lang],
+			sortable: true,
 			accessor: (row) => channelLabel((row as unknown as QueueRow).channel)
 		},
 		{
 			id: 'fulfillmentMethod',
 			label: pageContents.table.fulfillmentMethod[lang],
+			sortable: true,
 			accessor: (row) => methodLabel((row as unknown as QueueRow).fulfillmentMethod)
 		},
 		{
@@ -284,17 +287,20 @@
 		{
 			id: 'totalAmount',
 			label: pageContents.table.totalAmount[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as QueueRow).totalAmount)
 		},
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => statusLabel((row as unknown as QueueRow).status),
 			status: (_value, row) => statusColor((row as unknown as QueueRow).status)
 		},
 		{
 			id: 'createdAt',
 			label: pageContents.table.createdAt[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as QueueRow).createdAt),
 			noHighlight: true
 		}
@@ -481,6 +487,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm đơn hàng…', en: 'Search orders…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}

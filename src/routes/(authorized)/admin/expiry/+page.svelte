@@ -278,6 +278,7 @@
 		{
 			id: 'variant',
 			label: pageContents.table.variant[lang],
+			sortable: true,
 			accessor: (row) => {
 				const r = row as unknown as ExpiryLotRow;
 				return r.sku ? `${r.displayName ?? r.variantId} (${r.sku})` : (r.displayName ?? r.variantId);
@@ -286,6 +287,7 @@
 		{
 			id: 'lot',
 			label: pageContents.table.lot[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as ExpiryLotRow).lotNumber || '—'
 		},
 		{
@@ -297,24 +299,28 @@
 		{
 			id: 'quantity',
 			label: pageContents.table.quantity[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as ExpiryLotRow).quantityOnHand),
 			noHighlight: true
 		},
 		{
 			id: 'manufacturedAt',
 			label: pageContents.table.manufacturedAt[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as ExpiryLotRow).manufacturedAt),
 			noHighlight: true
 		},
 		{
 			id: 'expiresAt',
 			label: pageContents.table.expiresAt[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as ExpiryLotRow).expiresAt),
 			noHighlight: true
 		},
 		{
 			id: 'daysRemaining',
 			label: pageContents.table.daysRemaining[lang],
+			sortable: true,
 			accessor: (row) => daysLabel(row as unknown as ExpiryLotRow),
 			status: (_value, row) => daysStatus(row as unknown as ExpiryLotRow)
 		}
@@ -467,6 +473,10 @@
 				rowSelectLabel={pageContents.table.rowSelect[lang]}
 				pageSize={pageSize}
 				showPagination={false}
+				sortable
+				searchable
+				searchPlaceholder={{ vi: 'Tìm lô hàng…', en: 'Search lots…' }}
+				resizable={{ enabled: true, fit: true }}
 				loading={loading && !loadedOnce}
 				visual={{ striped: true, hoverable: true }}
 				emptyLabel={pageContents.states.empty[lang]}

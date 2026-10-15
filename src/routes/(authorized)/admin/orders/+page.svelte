@@ -355,6 +355,7 @@
 		{
 			id: 'orderCode',
 			label: pageContents.table.orderCode[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as AdminOrderRow).orderCode ?? '—')
 		},
 		{
@@ -365,6 +366,7 @@
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => getStatusLabel((row as unknown as AdminOrderRow).status),
 			status: (_value, row) => orderStatusColor((row as unknown as AdminOrderRow).status)
 		},
@@ -372,11 +374,12 @@
 			id: 'items',
 			label: pageContents.table.items[lang],
 			accessor: (row) => String((row as unknown as AdminOrderRow).items?.length ?? 0),
-			sortable: false
+			sortable: true
 		},
 		{
 			id: 'total',
 			label: pageContents.table.total[lang],
+			sortable: true,
 			accessor: (row) => {
 				const amount = (row as unknown as AdminOrderRow).totalAmount;
 				return amount != null ? formatCurrency(amount, lang) : '—';
@@ -386,6 +389,7 @@
 		{
 			id: 'created',
 			label: pageContents.table.created[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as AdminOrderRow).createdAt, lang),
 			noHighlight: true
 		}
@@ -504,6 +508,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm đơn hàng…', en: 'Search orders…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}

@@ -242,6 +242,7 @@
 		{
 			id: 'title',
 			label: pageContents.table.title[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as NotificationRow).title ?? '—'
 		},
 		{
@@ -253,6 +254,7 @@
 		{
 			id: 'type',
 			label: pageContents.table.type[lang],
+			sortable: true,
 			accessor: (row) => typeLabel((row as unknown as NotificationRow).type),
 			status: (_value, row) => typeColor((row as unknown as NotificationRow).type)
 		},
@@ -268,12 +270,14 @@
 		{
 			id: 'createdAt',
 			label: pageContents.table.createdAt[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as NotificationRow).createdAt),
 			noHighlight: true
 		},
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) =>
 				(row as unknown as NotificationRow).isRead
 					? pageContents.statuses.read[lang]
@@ -494,6 +498,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm thông báo…', en: 'Search notifications…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}
