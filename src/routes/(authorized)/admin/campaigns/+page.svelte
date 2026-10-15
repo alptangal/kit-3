@@ -52,7 +52,6 @@
 			loading: 'Đang tải...',
 			prev: 'Trước',
 			next: 'Sau',
-			pageInfo: 'Trang {page} / {total}',
 			linkedCount: '{count} khuyến mãi'
 		},
 		en: {
@@ -94,7 +93,6 @@
 			loading: 'Loading...',
 			prev: 'Previous',
 			next: 'Next',
-			pageInfo: 'Page {page} / {total}',
 			linkedCount: '{count} promotions'
 		}
 	} as const;
@@ -654,11 +652,6 @@
 			nextLabel={t('next')}
 			aria-label={t('title')}
 		/>
-		<span
-			>{t('pageInfo')
-				.replace('{page}', String(page))
-				.replace('{total}', String(totalPages))}</span
-		>
 	</div>
 	{/if}
 </section>
