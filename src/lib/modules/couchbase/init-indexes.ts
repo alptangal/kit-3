@@ -32,7 +32,7 @@ export async function initAllIndexes(): Promise<void> {
 				try {
 					// CREATE INDEX IF NOT EXISTS — N1QL hỗ trợ sẵn, tự động idempotent
 					const statement = `
-					CREATE INDEX \`${indexName}\`
+					CREATE INDEX \`${indexName}\` IF NOT EXISTS
 					ON \`${cb_bucketName}\`.\`${cb_scopeName}\`.\`${collectionName}\`(\`${fieldName}\`)
 				`;
 					const res = await client.document.query({ statement });
@@ -49,7 +49,9 @@ export async function initAllIndexes(): Promise<void> {
 					}
 				} catch (e) {
 					const msg = e instanceof Error ? e.message : String(e);
-					if (msg.includes('already exists')) {
+					// "already exists" hoặc transient 4360 (index đang build nền từ lần
+					// init trước) — cả hai đều không phải lỗi cấu hình: index sẽ sẵn sàng.
+					if (msg.includes('already exists') || msg.includes('Build Already In Progress')) {
 						console.log(`[initIndexes] Index "${indexName}" already exists — skip`);
 					} else {
 						console.error(`[initIndexes] Failed to create index "${indexName}":`, e);
