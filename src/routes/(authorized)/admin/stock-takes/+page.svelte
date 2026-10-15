@@ -403,6 +403,7 @@
 		{
 			id: 'reference',
 			label: pageContents.table.reference[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as StockTakeRow).referenceNumber ?? '—'
 		},
 		{
@@ -414,36 +415,42 @@
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => statusLabel((row as unknown as StockTakeRow).status),
 			status: (_v, row) => statusColor((row as unknown as StockTakeRow).status)
 		},
 		{
 			id: 'totalItems',
 			label: pageContents.table.totalItems[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as StockTakeRow).totalItems ?? 0),
 			noHighlight: true
 		},
 		{
 			id: 'totalVariance',
 			label: pageContents.table.totalVariance[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as StockTakeRow).totalVariance ?? 0),
 			noHighlight: true
 		},
 		{
 			id: 'variancePct',
 			label: pageContents.table.variancePct[lang],
+			sortable: true,
 			accessor: (row) => `${(row as unknown as StockTakeRow).variancePercentage ?? 0}%`,
 			noHighlight: true
 		},
 		{
 			id: 'started',
 			label: pageContents.table.started[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as StockTakeRow).startedAt),
 			noHighlight: true
 		},
 		{
 			id: 'completed',
 			label: pageContents.table.completed[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as StockTakeRow).completedAt),
 			noHighlight: true
 		}
@@ -696,6 +703,10 @@
 				{columns}
 				pageSize={pageSize}
 				showPagination={false}
+				sortable
+				searchable
+				searchPlaceholder={{ vi: 'Tìm phiếu kiểm kê…', en: 'Search stock takes…' }}
+				resizable={{ enabled: true, fit: true }}
 				loading={loading && !loadedOnce}
 				visual={{ striped: true, hoverable: true }}
 				emptyLabel={pageContents.states.empty[lang]}

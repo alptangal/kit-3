@@ -253,16 +253,19 @@
 		{
 			id: 'code',
 			label: pageContents.table.code[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as PromotionRow).code ?? '—'
 		},
 		{
 			id: 'name',
 			label: pageContents.table.name[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as PromotionRow).name ?? '—'
 		},
 		{
 			id: 'type',
 			label: pageContents.table.type[lang],
+			sortable: true,
 			accessor: (row) => typeLabel((row as unknown as PromotionRow).type)
 		},
 		{
@@ -278,6 +281,7 @@
 		{
 			id: 'usage',
 			label: pageContents.table.usage[lang],
+			sortable: true,
 			accessor: (row) => {
 				const r = row as unknown as PromotionRow;
 				return `${r.usageCount ?? 0}${r.usageLimit ? ` / ${r.usageLimit}` : ''}`;
@@ -295,6 +299,7 @@
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => statusLabel((row as unknown as PromotionRow).status),
 			status: (_value, row) => statusColor((row as unknown as PromotionRow).status)
 		}
@@ -457,6 +462,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm khuyến mãi…', en: 'Search promotions…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}

@@ -607,12 +607,14 @@
 		{
 			id: 'platform',
 			label: t('colPlatform'),
+			sortable: true,
 			accessor: (row) => platformLabel((row as unknown as SocialPostItem).platform),
 			noHighlight: true
 		},
 		{
 			id: 'content',
 			label: t('colContent'),
+			sortable: true,
 			accessor: (row) => {
 				const post = row as unknown as SocialPostItem;
 				const mediaPart = post.mediaUrls?.length ? ` (${post.mediaUrls.length} media)` : '';
@@ -622,6 +624,7 @@
 		{
 			id: 'status',
 			label: t('colStatus'),
+			sortable: true,
 			accessor: (row) =>
 				postStatusLabels[(row as unknown as SocialPostItem).status]?.[lang] ??
 				(row as unknown as SocialPostItem).status,
@@ -630,12 +633,14 @@
 		{
 			id: 'scheduledAt',
 			label: t('colScheduled'),
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as SocialPostItem).scheduledAt),
 			noHighlight: true
 		},
 		{
 			id: 'publishedAt',
 			label: t('colPublished'),
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as SocialPostItem).publishedAt),
 			noHighlight: true
 		},
@@ -737,6 +742,10 @@
 			columns={postColumns}
 			pageSize={posts.length || 10}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm bài đăng…', en: 'Search posts…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={isLoadingPosts}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={t('emptyPosts')}

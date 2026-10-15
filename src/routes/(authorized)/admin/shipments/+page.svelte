@@ -239,16 +239,19 @@
 		{
 			id: 'orderId',
 			label: pageContents.table.orderId[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as ShipmentRow).orderId ?? '—'
 		},
 		{
 			id: 'provider',
 			label: pageContents.table.provider[lang],
+			sortable: true,
 			accessor: (row) => providerLabel((row as unknown as ShipmentRow).provider)
 		},
 		{
 			id: 'trackingNumber',
 			label: pageContents.table.trackingNumber[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as ShipmentRow).trackingNumber ?? '—',
 			noHighlight: true
 		},
@@ -261,17 +264,20 @@
 		{
 			id: 'cost',
 			label: pageContents.table.cost[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as ShipmentRow).cost)
 		},
 		{
 			id: 'estimated',
 			label: pageContents.table.estimated[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as ShipmentRow).estimatedDeliveryDate),
 			noHighlight: true
 		},
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => statusLabel((row as unknown as ShipmentRow).status),
 			status: (_value, row) => statusColor((row as unknown as ShipmentRow).status)
 		}
@@ -380,6 +386,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm vận đơn…', en: 'Search shipments…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}
