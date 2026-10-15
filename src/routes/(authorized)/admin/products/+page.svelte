@@ -331,13 +331,13 @@
 		{
 			id: 'product',
 			label: pageContents.productCol[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as ProductListItem).name,
 			render: (value, row) => {
 				const p = row as unknown as ProductListItem;
 				const desc = p.description ? ` — ${p.description.slice(0, 40)}` : '';
 				return `${String(value)}${desc}`;
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'category',
@@ -345,8 +345,7 @@
 			accessor: (row) => {
 				const p = row as unknown as ProductListItem;
 				return p.categoryId ? categoryNameById.get(p.categoryId) ?? '—' : '—';
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'brand',
@@ -354,8 +353,7 @@
 			accessor: (row) => {
 				const p = row as unknown as ProductListItem;
 				return p.brandId ? brandNameById.get(p.brandId) ?? '—' : '—';
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'variants',
@@ -365,12 +363,12 @@
 				if (!p.hasVariants) return pageContents.simpleProduct[lang];
 				const n = Object.keys(p.variantAttributes ?? {}).length;
 				return pageContents.attrCount[lang].replace('{n}', String(n));
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'status',
 			label: pageContents.statusLabel[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as ProductListItem).status,
 			status: (value) => {
 				const s = String(value ?? '');
@@ -384,6 +382,7 @@
 		{
 			id: 'updated',
 			label: pageContents.updated[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as ProductListItem).updatedAt),
 			noHighlight: true
 		}
@@ -708,6 +707,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm sản phẩm…', en: 'Search products…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.empty[lang]}

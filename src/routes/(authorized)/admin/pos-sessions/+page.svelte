@@ -301,6 +301,7 @@
 		{
 			id: 'device',
 			label: pageContents.table.device[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as PosSessionRow).deviceId ?? '—'
 		},
 		{
@@ -312,42 +313,49 @@
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => statusLabel((row as unknown as PosSessionRow).status),
 			status: (_v, row) => statusColor((row as unknown as PosSessionRow).status)
 		},
 		{
 			id: 'opening',
 			label: pageContents.table.opening[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as PosSessionRow).openingBalance),
 			noHighlight: true
 		},
 		{
 			id: 'sales',
 			label: pageContents.table.sales[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalSales),
 			noHighlight: true
 		},
 		{
 			id: 'returns',
 			label: pageContents.table.returns[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalReturns),
 			noHighlight: true
 		},
 		{
 			id: 'expenses',
 			label: pageContents.table.expenses[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalExpenses),
 			noHighlight: true
 		},
 		{
 			id: 'cash',
 			label: pageContents.table.cash[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as PosSessionRow).totalCash),
 			noHighlight: true
 		},
 		{
 			id: 'variance',
 			label: pageContents.table.variance[lang],
+			sortable: true,
 			accessor: (row) => {
 				const r = row as unknown as PosSessionRow;
 				if (r.variance === null || r.variance === undefined) return '—';
@@ -364,6 +372,7 @@
 		{
 			id: 'opened',
 			label: pageContents.table.opened[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as PosSessionRow).openedAt),
 			noHighlight: true
 		}
@@ -612,6 +621,10 @@
 				{columns}
 				pageSize={pageSize}
 				showPagination={false}
+				sortable
+				searchable
+				searchPlaceholder={{ vi: 'Tìm phiên POS…', en: 'Search POS sessions…' }}
+				resizable={{ enabled: true, fit: true }}
 				loading={loading && !loadedOnce}
 				visual={{ striped: true, hoverable: true }}
 				emptyLabel={pageContents.states.empty[lang]}

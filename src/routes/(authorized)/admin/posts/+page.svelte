@@ -283,6 +283,7 @@
 		{
 			id: 'title',
 			label: pageContents.table.title[lang],
+			sortable: true,
 			// accessor gộp title + slug (DataTable cell chỉ render string)
 			accessor: (row) => {
 				const post = row as unknown as PostRow;
@@ -308,18 +309,21 @@
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => statusLabel((row as unknown as PostRow).status),
 			status: (_value, row) => statusColor((row as unknown as PostRow).status)
 		},
 		{
 			id: 'views',
 			label: pageContents.table.views[lang],
+			sortable: true,
 			accessor: (row) => String((row as unknown as PostRow).viewCount ?? 0),
 			noHighlight: true
 		},
 		{
 			id: 'publishedAt',
 			label: pageContents.table.publishedAt[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as PostRow).publishedAt),
 			noHighlight: true
 		}
@@ -609,6 +613,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm bài viết…', en: 'Search posts…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}

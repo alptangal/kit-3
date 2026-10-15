@@ -254,6 +254,7 @@
 		{
 			id: 'paymentCode',
 			label: pageContents.table.paymentCode[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as PaymentRow).paymentCode ?? '—'
 		},
 		{
@@ -264,11 +265,13 @@
 		{
 			id: 'method',
 			label: pageContents.table.method[lang],
+			sortable: true,
 			accessor: (row) => methodLabel((row as unknown as PaymentRow).method)
 		},
 		{
 			id: 'amount',
 			label: pageContents.table.amount[lang],
+			sortable: true,
 			accessor: (row) => formatMoney((row as unknown as PaymentRow).amount)
 		},
 		{
@@ -280,12 +283,14 @@
 		{
 			id: 'createdAt',
 			label: pageContents.table.createdAt[lang],
+			sortable: true,
 			accessor: (row) => formatDateTime((row as unknown as PaymentRow).createdAt),
 			noHighlight: true
 		},
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => statusLabel((row as unknown as PaymentRow).status),
 			status: (_value, row) => statusColor((row as unknown as PaymentRow).status)
 		}
@@ -450,6 +455,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm thanh toán…', en: 'Search payments…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}
