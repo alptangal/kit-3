@@ -490,7 +490,6 @@
 					nextLabel={pageContents.pagination.next[lang]}
 					aria-label={pageContents.title[lang]}
 				/>
-				<span class="page-info">{page} / {totalPages}</span>
 			</div>
 		</div>
 	{/if}
@@ -686,13 +685,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-	}
-
-	.page-info {
-		font-size: 0.85rem;
-		color: var(--foreground);
-		min-width: 6rem;
-		text-align: center;
 	}
 
 	.form-error-banner {

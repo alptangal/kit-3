@@ -855,7 +855,6 @@
 					nextLabel={pageContents.pagination.next[lang]}
 					aria-label={pageContents.title[lang]}
 				/>
-				<span class="page-info">{page} / {totalPages}</span>
 				<span class="page-size">
 					<span class="page-size-label">{pageContents.pagination.pageSize[lang]}</span>
 					<select class="admin-select" bind:value={pageSize} onchange={onPageSizeChange}>
@@ -1268,13 +1267,6 @@
 		align-items: center;
 		gap: 0.75rem;
 		flex-wrap: wrap;
-	}
-
-	.page-info {
-		font-size: 0.85rem;
-		color: var(--foreground);
-		min-width: 6rem;
-		text-align: center;
 	}
 
 	.page-size {

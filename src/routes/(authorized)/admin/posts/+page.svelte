@@ -89,7 +89,6 @@
 		pagination: {
 			prev: { vi: 'Trước', en: 'Prev' },
 			next: { vi: 'Sau', en: 'Next' },
-			pageInfo: { vi: 'Trang {page}/{total}', en: 'Page {page}/{total}' },
 			totalCount: { vi: '{total} bài viết', en: '{total} posts' },
 			pageSizeLabel: { vi: 'Số dòng:', en: 'Rows:' }
 		},
@@ -659,11 +658,6 @@
 				nextLabel={pageContents.pagination.next[lang]}
 				aria-label={pageContents.title[lang]}
 			/>
-			<span class="page-info">
-				{pageContents.pagination.pageInfo[lang]
-					.replace('{page}', String(pageNo))
-					.replace('{total}', String(totalPages))}
-			</span>
 			<label class="page-size">
 				<span class="page-size-label">{pageContents.pagination.pageSizeLabel[lang]}</span>
 				<select
@@ -939,13 +933,6 @@
 		align-items: center;
 		gap: 0.75rem;
 		flex-wrap: wrap;
-	}
-
-	.page-info {
-		font-size: 0.85rem;
-		color: var(--foreground);
-		min-width: 6rem;
-		text-align: center;
 	}
 
 	.page-size {
