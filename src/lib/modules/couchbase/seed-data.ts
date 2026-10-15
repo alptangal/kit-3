@@ -140,7 +140,11 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'returns:manage', resource: 'order_returns', action: 'manage' },
 
 		// Analytics — thống kê biến động giá / khối lượng / tồn kho
-		{ key: 'analytics:read', resource: 'analytics', action: 'read' }
+		{ key: 'analytics:read', resource: 'analytics', action: 'read' },
+
+		// Quản lí công nợ 2 chiều (AR phải thu / AP phải trả)
+		{ key: 'debts:read', resource: 'debts', action: 'read' },
+		{ key: 'debts:manage', resource: 'debts', action: 'manage' }
 	];
 
 	for (const p of permissions) {
@@ -226,7 +230,10 @@ export async function seedDetailRoles(): Promise<void> {
 			'returns:read',
 			'returns:manage',
 			// Analytics — thống kê biến động giá / khối lượng / tồn kho
-			'analytics:read'
+			'analytics:read',
+			// Quản lí công nợ 2 chiều — owner toàn quyền
+			'debts:read',
+			'debts:manage'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -302,6 +309,10 @@ export async function seedDetailRoles(): Promise<void> {
 		// Analytics — xem thống kê trong chi nhánh mình
 		{ roleName: 'manager', permissionKey: 'analytics:read', scope: 'own_branch' },
 
+		// Quản lí công nợ 2 chiều — manager đọc + quản lý trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'debts:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'debts:manage', scope: 'own_branch' },
+
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'orders:create', scope: 'own_records' },
@@ -315,6 +326,9 @@ export async function seedDetailRoles(): Promise<void> {
 		// Chuyển kho + đổi trả — staff chỉ đọc trong chi nhánh mình
 		{ roleName: 'staff', permissionKey: 'transfers:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'returns:read', scope: 'own_branch' },
+
+		// Công nợ — staff chỉ đọc trong chi nhánh mình
+		{ roleName: 'staff', permissionKey: 'debts:read', scope: 'own_branch' },
 
 		// Customer — chỉ tạo/xem đơn của chính mình
 		{ roleName: 'customer', permissionKey: 'orders:create', scope: 'own_records' },

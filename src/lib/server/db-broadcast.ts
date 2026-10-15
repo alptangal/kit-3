@@ -33,6 +33,9 @@ export type DbChangeCollection =
 	// Chuyển kho + đổi trả (Phase 3 vertical slices)
 	| 'stock_transfers'
 	| 'order_returns'
+	// Công nợ 2 chiều (AR/AP) + lịch sử thanh toán
+	| 'debts'
+	| 'debt_payments'
 	| 'system';
 
 /** Hành động gây thay đổi — chỉ để log/debug, client v1 refetch mọi event. */

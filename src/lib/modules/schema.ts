@@ -57,7 +57,11 @@ const collectionsName = [
 	// Camera giám sát MVP
 	'cameras',
 	// Analytics — lịch sử biến động giá (giá nhập/giá bán)
-	'price_history'
+	'price_history',
+	// Quản lí công nợ 2 chiều (AR phải thu khách hàng / AP phải trả nhà cung cấp)
+	'debts',
+	// Lịch sử lần trả/thanh toán từng khoản nợ
+	'debt_payments'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -1240,6 +1244,67 @@ export const collectionSchemas = {
 			changedBy: { type: 'string', searchable: true, sortable: false, selectable: true },
 			changedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
+	},
+
+	// ===== Quản lí công nợ 2 chiều (AR/AP) =====
+	debts: {
+		fields: {
+			// 'receivable' (phải thu khách hàng) | 'payable' (phải trả nhà cung cấp)
+			type: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+
+			// 'customer' | 'supplier'
+			partyType: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			partyId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			// Denormalize tên khách/nhà cung cấp để list không cần join
+			partyName: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+
+			// Nguồn phát sinh: 'order' | 'purchase_order' | 'manual'
+			referenceType: { type: 'string', searchable: true, sortable: true, selectable: true },
+			referenceId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			referenceCode: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			// Tổng nợ
+			amount: { type: 'number', searchable: true, sortable: true, selectable: true, required: true },
+			paidAmount: { type: 'number', searchable: true, sortable: true, selectable: true },
+			remainingAmount: { type: 'number', searchable: true, sortable: true, selectable: true },
+
+			dueDate: { type: 'date', searchable: true, sortable: true, selectable: true },
+
+			// 'open' | 'partial' | 'settled' | 'overdue'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			notes: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			createdBy: { type: 'string', searchable: true, sortable: false, selectable: true },
+			settledAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	debt_payments: {
+		fields: {
+			debtId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			// Mã khoản nợ denormalize để hiển thị nhanh trong list payments
+			debtCode: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			amount: { type: 'number', searchable: true, sortable: true, selectable: true, required: true },
+
+			// 'cash' | 'bank_transfer' | 'card' | 'other'
+			method: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+
+			paidAt: { type: 'date', searchable: true, sortable: true, selectable: true, required: true },
+
+			// staffId người ghi nhận (AR: người thu; AP: người trả)
+			receivedBy: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			notes: { type: 'string', searchable: false, sortable: false, selectable: true },
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
 	}
 } as const satisfies Record<
 	CollectionName,
@@ -1285,6 +1350,8 @@ export type Branch = InferCollection<'branches'>;
 export type OperatingExpense = InferCollection<'operating_expenses'>;
 export type Camera = InferCollection<'cameras'>;
 export type PriceHistory = InferCollection<'price_history'>;
+export type Debt = InferCollection<'debts'>;
+export type DebtPayment = InferCollection<'debt_payments'>;
 
 // const collectionSchemasVault = {
 // 	system_secrets: {
