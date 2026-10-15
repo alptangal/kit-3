@@ -6,6 +6,7 @@ import { initApp } from '$store/init-app';
 import { verifyAccessToken } from '$lib/server/jwt';
 import { resolveLang, localize } from '$lib/server/i18n';
 import { cbData } from '$modules/couchbase/clients';
+import { QrPaymentService } from '$lib/server/db/qr-payments';
 
 const cbRoles = cbData('name_roles');
 
@@ -26,6 +27,9 @@ if (!globalThis.__appInitialized || !vaultReady()) {
 	globalThis.__initPromise = (async () => {
 		await initApp();
 		await initSystemVault();
+		// Auto polling QR payment (chỉ chạy khi QR_CHECKER_AUTO_POLL=true + có URL tool —
+		// guard bên trong startAutoPolling; no-op khi chưa cấu hình).
+		QrPaymentService.startAutoPolling();
 	})();
 }
 

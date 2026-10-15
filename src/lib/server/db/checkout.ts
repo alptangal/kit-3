@@ -11,6 +11,7 @@ import type { TranslateContent } from '$interfaces/basic';
 import { cb_bucketName, cb_scopeName } from '$env/static/private';
 import { cbData } from '$modules/couchbase/clients';
 import type { ActorContext } from '$lib/server/db/products';
+import { QrPaymentService, isQrPaymentMethod } from '$lib/server/db/qr-payments';
 import { checkouts as checkoutMessages } from '../messages/db';
 
 const cbCheckouts = cbData('checkouts');
@@ -19,10 +20,12 @@ const cbOrders = cbData('orders');
 const cbVariants = cbData('product_variants');
 const cbUsers = cbData('users');
 const cbInventoryStock = cbData('inventory_stock');
+const cbPayments = cbData('payments');
 
 const checkoutsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`checkouts\``;
 const ordersKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`orders\``;
 const inventoryStockKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_stock\``;
+const paymentsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`payments\``;
 
 // Enum paymentMethod theo schema.ts (UI chỉ expose 5 phương thức chính).
 const VALID_PAYMENT_METHODS = ['cash', 'bank_pos', 'momo', 'zalopay', 'bank_transfer', 'cod', 'loyalty_points'];
@@ -137,7 +140,14 @@ export class CheckoutService {
 		options?: { notes?: string }
 	): Promise<
 		| { success: false; messages: TranslateContent }
-		| { success: true; checkout: Record<string, unknown>; orderId: string; orderCode: string }
+		| {
+				success: true;
+				checkout: Record<string, unknown>;
+				orderId: string;
+				orderCode: string;
+				paymentCode?: string;
+				qr?: { payload: string; dataUrl: string };
+		  }
 	> {
 		const denied = this.checkAccess(actor, userId);
 		if (denied) return { success: false, messages: denied };
@@ -239,6 +249,36 @@ export class CheckoutService {
 			}
 		}
 
+		// 4b. QR payment (momo/zalopay/bank_transfer): tạo payment doc 'pending'
+		// chờ tool đối soát tự confirm + sinh QR payload cho khách quét. Best-effort
+		// — lỗi QR không chặn order đã tạo (payment có thể tạo tay ở admin).
+		let qr: { payload: string; dataUrl: string } | undefined;
+		let qrPaymentCode: string | undefined;
+		if (isQrPaymentMethod(method)) {
+			const datePart2 = now.slice(0, 10).replace(/-/g, '');
+			qrPaymentCode = `PAY-${datePart2}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+			try {
+				await cbPayments.document.create({
+					documentKey: `payment::${crypto.randomUUID()}`,
+					content: {
+						orderId: orderKey,
+						paymentCode: qrPaymentCode,
+						// schema payments.method — momo/zalopay là ví điện tử, giữ method gốc
+						// để QrPaymentService poll theo đúng nhóm QR (momo|zalopay|bank_transfer).
+						method,
+						amount: finalTotal,
+						status: 'pending',
+						transactionReference: orderCode,
+						notes: `Storefront ${method}`,
+						createdAt: now
+					}
+				});
+				qr = await QrPaymentService.generateQr(qrPaymentCode, finalTotal, orderCode);
+			} catch (e) {
+				console.error('[CheckoutService.initiateCheckout] QR payment create failed', orderKey, e);
+			}
+		}
+
 		// 5. Tạo checkout doc — order đã tạo xong → status 'converted_to_order'.
 		const checkoutKey = `checkout::${crypto.randomUUID()}`;
 		const checkoutDoc: Omit<CheckoutDocument, '_id' | 'documentKey'> = {
@@ -265,7 +305,9 @@ export class CheckoutService {
 					success: true,
 					checkout: sanitizeCheckout(checkoutDoc as CheckoutDocument, checkoutKey),
 					orderId: orderKey,
-					orderCode
+					orderCode,
+					paymentCode: qrPaymentCode,
+					qr
 				};
 			}
 		} catch (e) {
@@ -274,7 +316,9 @@ export class CheckoutService {
 				success: true,
 				checkout: sanitizeCheckout(checkoutDoc as CheckoutDocument, checkoutKey),
 				orderId: orderKey,
-				orderCode
+				orderCode,
+				paymentCode: qrPaymentCode,
+				qr
 			};
 		}
 
@@ -300,7 +344,9 @@ export class CheckoutService {
 			success: true,
 			checkout: sanitizeCheckout(checkoutDoc as CheckoutDocument, checkoutKey),
 			orderId: orderKey,
-			orderCode
+			orderCode,
+			paymentCode: qrPaymentCode,
+			qr
 		};
 	}
 

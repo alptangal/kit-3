@@ -7,7 +7,7 @@ import {
 	getActorContext,
 	statusForServiceFailure
 } from '$lib/server/admin/api';
-import { PaymentService } from '$lib/server/db';
+import { PaymentService, readQrCheckerConfig } from '$lib/server/db';
 
 export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
@@ -52,6 +52,8 @@ export const POST: RequestHandler = async (event) => {
 			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
 		}
 
+		// Trạng thái auto polling QR (badge UI) — trả kèm list để tránh thêm 1 round-trip.
+		const qrConfig = readQrCheckerConfig();
 		return respond({
 			ok: true,
 			message: { vi: 'Lấy danh sách thanh toán thành công', en: 'Payment list fetched successfully' },
@@ -59,7 +61,11 @@ export const POST: RequestHandler = async (event) => {
 				items: result.data.items,
 				total: result.data.total,
 				page: result.data.page,
-				pageSize: result.data.pageSize
+				pageSize: result.data.pageSize,
+				qrAutoPoll: {
+					enabled: !!(qrConfig.autoPoll && qrConfig.url),
+					intervalMs: qrConfig.pollIntervalMs
+				}
 			}
 		});
 	} catch (e) {

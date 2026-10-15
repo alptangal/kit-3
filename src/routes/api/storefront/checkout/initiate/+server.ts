@@ -56,7 +56,13 @@ export const POST: RequestHandler = async (event) => {
 		return respond({
 			ok: true,
 			message: { vi: 'Đặt hàng thành công', en: 'Order placed successfully' },
-			data: { checkout: result.checkout, orderId: result.orderId, orderCode: result.orderCode }
+			data: {
+				checkout: result.checkout,
+				orderId: result.orderId,
+				orderCode: result.orderCode,
+				paymentCode: result.paymentCode,
+				qr: result.qr
+			}
 		});
 	} catch (e) {
 		console.error('[POST /api/storefront/checkout/initiate]', e);

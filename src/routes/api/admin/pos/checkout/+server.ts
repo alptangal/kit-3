@@ -13,6 +13,7 @@ import { broadcastDbChange } from '$lib/server/db-broadcast';
 import { cbData } from '$modules/couchbase/clients';
 import { POSService } from '$lib/server/db/pos';
 import { InventoryService } from '$lib/server/db/inventory';
+import { QrPaymentService, isQrPaymentMethod } from '$lib/server/db/qr-payments';
 
 const cbOrders = cbData('orders');
 const cbPayments = cbData('payments');
@@ -240,16 +241,18 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		// ── Create payment doc ──
-		// bank_transfer: chờ đối soát ở admin/payments (confirmBankTransfer chỉ nhận
-		// pending) → status 'pending'; các phương thức khác hoàn tất ngay → 'completed'.
-		// cod: tiền mặt thu khi giao — không qua confirmBankTransfer, đánh dấu completed.
+		// bank_transfer + momo/zalopay (QR methods): khách quét QR → chờ tool đối
+		// soát tự confirm → status 'pending'. cash/bank_pos/cod/loyalty_points:
+		// hoàn tất ngay tại quầy → 'completed'. (confirmBankTransfer admin vẫn nhận
+		// pending bank_transfer như cũ; momo/zalopay pending confirm qua qr/check.)
+		const pendingQrMethod = isQrPaymentMethod(paymentMethod);
 		const paymentKey = `payment::${crypto.randomUUID()}`;
 		const paymentDoc = {
 			orderId: documentKey,
 			paymentCode: `PAY-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
 			method: schemaMethod,
 			amount: payableAmount,
-			status: schemaMethod === 'bank_transfer' ? 'pending' : 'completed',
+			status: pendingQrMethod ? 'pending' : 'completed',
 			transactionReference: orderCode,
 			notes:
 				paymentMethod === 'cash'
@@ -259,6 +262,14 @@ export const POST: RequestHandler = async (event) => {
 			createdAt: now
 		};
 		await cbPayments.document.create({ documentKey: paymentKey, content: paymentDoc });
+
+		// ── QR thanh toán (momo/zalopay/bank_transfer): sinh QR cho khách quét ──
+		// Payment tương ứng đang 'pending' — chờ tool đối soát (nút Check QR ở
+		// admin/payments hoặc auto poll) tự confirm.
+		let qr: { payload: string; dataUrl: string } | undefined;
+		if (pendingQrMethod) {
+			qr = await QrPaymentService.generateQr(paymentDoc.paymentCode, payableAmount, orderCode);
+		}
 
 		// ── Update session totals khi bán gắn ca ──
 		let sessionUpdated = false;
@@ -281,7 +292,9 @@ export const POST: RequestHandler = async (event) => {
 				totalAmount: payableAmount,
 				discountAmount,
 				change,
-				sessionUpdated
+				sessionUpdated,
+				paymentCode: paymentDoc.paymentCode,
+				qr
 			}
 		});
 	} catch (e) {
