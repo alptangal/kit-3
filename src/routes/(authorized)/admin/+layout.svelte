@@ -116,6 +116,7 @@
 		'/admin/post-categories': 'Danh mục bài viết',
 		'/admin/campaigns': 'Chiến dịch',
 		'/admin/social': 'Social media',
+		'/admin/channels': 'Kênh bán',
 		'/admin/notifications': 'Thông báo',
 		'/admin/messages': 'Tin nhắn',
 		'/admin/email-logs': 'Email logs',
@@ -482,6 +483,15 @@
 							active={isActive('/admin/social')}
 							icon="lucide:share-2"
 							data-test="admin-nav-social"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Kênh bán"
+							href="/admin/channels"
+							active={isActive('/admin/channels')}
+							icon="lucide:shopping-bag"
+							data-test="admin-nav-channels"
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
