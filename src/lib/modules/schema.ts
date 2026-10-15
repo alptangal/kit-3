@@ -61,7 +61,10 @@ const collectionsName = [
 	// Quản lí công nợ 2 chiều (AR phải thu khách hàng / AP phải trả nhà cung cấp)
 	'debts',
 	// Lịch sử lần trả/thanh toán từng khoản nợ
-	'debt_payments'
+	'debt_payments',
+	// Phase 7 — Omnichannel sales sync (bán hàng đa kênh: Shopee/TikTok/Lazada/...)
+	'channel_accounts',
+	'channel_orders'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -1305,6 +1308,77 @@ export const collectionSchemas = {
 
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
+	},
+
+	channel_accounts: {
+		fields: {
+			// 'shopee' | 'tiktok_shop' | 'facebook' | 'google' | 'lazada' | 'threads'
+			// | 'instagram' | 'telegram' | 'discord'
+			channel: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			// Tên hiển thị người dùng tự đặt (VD: "Shopee Shop Chính")
+			name: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+
+			// 'connected' | 'disconnected' | 'error' | 'pending'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			// API credentials mã hoá AES-GCM — KHÔNG bao giờ trả về API
+			credentialsEncrypted: { type: 'object', searchable: false, sortable: false, selectable: false },
+
+			// ID gian hàng trên nền tảng (Shopee shopId, TikTok shop_id...)
+			shopId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			lastSyncAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			// Cursor phân trang tăng dần theo thời gian (kiểu string — mỗi nền tảng format riêng)
+			syncCursor: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// Config kênh-specific (warehouseId, autoConfirm, feeRate...)
+			config: { type: 'object', searchable: false, sortable: false, selectable: true },
+
+			// Lỗi gần nhất khi sync/test connection (để UI hiển thị)
+			lastError: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	channel_orders: {
+		fields: {
+			channel: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			// Mã đơn trên nền tảng (Shopee order_sn, TikTok order_id...)
+			channelOrderId: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			// documentKey của channel_accounts
+			channelAccountId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+
+			// Link sang orders thật khi import xong
+			orderId: { type: 'string', searchable: true, sortable: true, selectable: true },
+
+			// 'pending_import' | 'imported' | 'failed' | 'cancelled'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+
+			customerName: { type: 'string', searchable: true, sortable: true, selectable: true },
+			phone: { type: 'string', searchable: true, sortable: false, selectable: true },
+			address: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// [{ variantId?, channelSku, name, quantity, unitPrice }]
+			items: { type: 'array', searchable: false, sortable: false, selectable: true },
+
+			totalAmount: { type: 'number', searchable: true, sortable: true, selectable: true },
+			// 'VND' | 'USD' | ... — mặc định VND
+			currency: { type: 'string', searchable: false, sortable: false, selectable: true },
+			shippingFee: { type: 'number', searchable: true, sortable: true, selectable: true },
+
+			// JSON payload gốc từ nền tảng — để debug/replay
+			rawPayload: { type: 'object', searchable: false, sortable: false, selectable: true },
+
+			// Lỗi khi import gần nhất
+			importError: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			receivedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			importedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
 	}
 } as const satisfies Record<
 	CollectionName,
@@ -1352,6 +1426,8 @@ export type Camera = InferCollection<'cameras'>;
 export type PriceHistory = InferCollection<'price_history'>;
 export type Debt = InferCollection<'debts'>;
 export type DebtPayment = InferCollection<'debt_payments'>;
+export type ChannelAccount = InferCollection<'channel_accounts'>;
+export type ChannelOrder = InferCollection<'channel_orders'>;
 
 // const collectionSchemasVault = {
 // 	system_secrets: {

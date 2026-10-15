@@ -144,7 +144,11 @@ export async function seedPermissions(): Promise<void> {
 
 		// Quản lí công nợ 2 chiều (AR phải thu / AP phải trả)
 		{ key: 'debts:read', resource: 'debts', action: 'read' },
-		{ key: 'debts:manage', resource: 'debts', action: 'manage' }
+		{ key: 'debts:manage', resource: 'debts', action: 'manage' },
+
+		// Phase 7 — Đồng bộ bán hàng đa kênh (omnichannel)
+		{ key: 'channels:read', resource: 'channels', action: 'read' },
+		{ key: 'channels:manage', resource: 'channels', action: 'manage' }
 	];
 
 	for (const p of permissions) {
@@ -233,7 +237,10 @@ export async function seedDetailRoles(): Promise<void> {
 			'analytics:read',
 			// Quản lí công nợ 2 chiều — owner toàn quyền
 			'debts:read',
-			'debts:manage'
+			'debts:manage',
+			// Đồng bộ bán hàng đa kênh — owner toàn quyền
+			'channels:read',
+			'channels:manage'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -313,6 +320,10 @@ export async function seedDetailRoles(): Promise<void> {
 		{ roleName: 'manager', permissionKey: 'debts:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'debts:manage', scope: 'own_branch' },
 
+		// Đồng bộ bán hàng đa kênh — manager đọc + quản lý trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'channels:read', scope: 'own_branch' },
+		{ roleName: 'manager', permissionKey: 'channels:manage', scope: 'own_branch' },
+
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'orders:create', scope: 'own_records' },
@@ -326,6 +337,9 @@ export async function seedDetailRoles(): Promise<void> {
 		// Chuyển kho + đổi trả — staff chỉ đọc trong chi nhánh mình
 		{ roleName: 'staff', permissionKey: 'transfers:read', scope: 'own_branch' },
 		{ roleName: 'staff', permissionKey: 'returns:read', scope: 'own_branch' },
+
+		// Đa kênh — staff KHÔNG có channels:manage (chỉ đọc nếu cần tra cứu đơn kênh)
+		{ roleName: 'staff', permissionKey: 'channels:read', scope: 'own_branch' },
 
 		// Công nợ — staff chỉ đọc trong chi nhánh mình
 		{ roleName: 'staff', permissionKey: 'debts:read', scope: 'own_branch' },

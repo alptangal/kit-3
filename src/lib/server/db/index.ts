@@ -31,3 +31,4 @@ export * from './analytics';
 export * from './transfers';
 export * from './returns';
 export * from './debts';
+export * from './channels';
