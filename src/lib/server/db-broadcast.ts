@@ -16,7 +16,7 @@ import { env } from '$env/dynamic/private';
  * Module CHỈ server-side. KHÔNG bao giờ throw.
  */
 
-const DEFAULT_BROADCAST_URL = 'http://localhost:1999/party/db-changes';
+const DEFAULT_BROADCAST_URL = 'http://127.0.0.1:8787/parties/main/db-changes';
 const DEFAULT_TOKEN = 'dev-insecure-token-change-me';
 
 /** Tên collection Couchbase bị thay đổi — client subscribe theo tên này. */

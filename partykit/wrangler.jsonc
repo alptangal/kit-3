@@ -1,0 +1,30 @@
+// Wrangler config cho realtime server chạy trên Cloudflare Workers
+// (PartyServer — package chính thức của Cloudflare thay thế partykit).
+//
+// KHÔNG đặt secret thật trong file này — nó được commit. Token
+// PARTYKIT_INTERNAL_TOKEN chỉ là placeholder "vars" cho local dev
+// (wrangler dev override qua .dev.vars); production set qua
+// `npx wrangler secret put PARTYKIT_INTERNAL_TOKEN`.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "kit3-realtime",
+	"main": "src/server.ts",
+	"compatibility_date": "2026-08-25",
+	"vars": {
+		"PARTYKIT_INTERNAL_TOKEN": "dev-insecure-token-change-me"
+	},
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "Main",
+				"class_name": "Main"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["Main"]
+		}
+	]
+}

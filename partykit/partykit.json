@@ -1,9 +1,0 @@
-{
-	"$schema": "https://www.partykit.io/schema.json",
-	"name": "partykit",
-	"main": "src/server.ts",
-	"compatibilityDate": "2026-08-25",
-	"vars": {
-		"PARTYKIT_INTERNAL_TOKEN": "dev-insecure-token-change-me"
-	}
-}

@@ -12,7 +12,7 @@ import { env } from '$env/dynamic/private';
  * Module CHỈ chạy server-side (được import bởi initSystemVault) — không dùng được ở browser.
  */
 
-const DEFAULT_PUSH_URL = 'http://localhost:1999/party/server-keys';
+const DEFAULT_PUSH_URL = 'http://127.0.0.1:8787/parties/main/server-keys';
 const DEFAULT_TOKEN = 'dev-insecure-token-change-me';
 
 const MAX_RETRIES = 5;

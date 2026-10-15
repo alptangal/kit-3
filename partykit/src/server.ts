@@ -1,23 +1,42 @@
-import type * as Party from 'partykit/server';
-
 /**
- * Hai room chia sẻ MỘT class này (phân nhánh theo this.room.id):
+ * Realtime server chạy trên Cloudflare Workers qua PartyServer (package chính thức
+ * của Cloudflare thay thế partykit/server — partykit đóng dịch vụ).
  *
- * 1. Room "server-keys" — lưu trữ public key (RSA-2048 SPKI, base64) của system vault.
+ * Kiến trúc: MỘT Durable Object class `Server` (partyserver) bound với tên `Main`,
+ * một Worker entry `src/index.ts` route mọi request qua routePartykitRequest
+ * (URL pattern /parties/main/:room). Hai "room" là hai instance DO khác tên:
+ *
+ * 1. Room "server-keys" — lưu public key (RSA-2048 SPKI, base64) của system vault.
  *
  * Luồng:
  *   1. SvelteKit (initSystemVault) POST key lên đây khi boot, kèm Bearer token
  *      PARTYKIT_INTERNAL_TOKEN — KHÔNG có token đúng thì 401. Đây là con đường duy nhất
  *      để set key: bắt buộc, vì kẻ tấn công đẩy key của nó vào sẽ khiến client mã hoá
  *      request cho key của kẻ tấn công (MITM decrypt).
- *   2. PartyKit lưu key vào Durable Object storage và broadcast cho mọi WS client.
+ *   2. Server lưu key vào Durable Object storage và broadcast cho mọi WS client.
  *   3. WS onMessage KHÔNG BAO GIỜ chấp nhận key update — chỉ log.
  *   4. GET (không cần auth — public key là dữ liệu công khai) trả key hiện tại.
  *
  * 2. Room "db-changes" (B8 realtime) — SvelteKit POST event {collection, action, by}
- *    sau mỗi mutation thành công; PartyKit broadcast ngay cho mọi WS client (refetch hint,
+ *    sau mỗi mutation thành công; broadcast ngay cho mọi WS client (refetch hint,
  *    không lưu storage). Cùng Bearer token server-to-server như room server-keys.
  */
+
+// Types runtime Cloudflare Workers (DurableObjectNamespace, ExportedHandler, ...).
+// tsconfig riêng của partykit/ đã có "types": ["@cloudflare/workers-types"], nhưng
+// svelte-check ở root phân tích file này bằng root tsconfig (không có workers-types)
+// → triple-slash reference để mọi ngữ cảnh đều thấy types workerd.
+/// <reference types="@cloudflare/workers-types" />
+
+import { Server, routePartykitRequest } from 'partyserver';
+import type { Connection, ConnectionContext, WSMessage } from 'partyserver';
+
+interface Env {
+	/** Bearer token server-to-server — set qua .dev.vars (local) / wrangler secret put (prod). */
+	PARTYKIT_INTERNAL_TOKEN?: string;
+	/** DO binding (khớp durable_objects.bindings[0].name trong wrangler.jsonc). */
+	Main: DurableObjectNamespace;
+}
 
 const KEY_STORAGE_FIELD = 'publicKeyB64';
 const DB_CHANGES_ROOM_ID = 'db-changes';
@@ -43,19 +62,17 @@ function isValidEventField(value: unknown): value is string {
 	return EVENT_FIELD_RE.test(value);
 }
 
-export default class Server implements Party.Server {
-	constructor(readonly room: Party.Party) {}
-
-	/** Bearer token server-to-server (SvelteKit → PartyKit) — dùng cho cả 2 room. */
-	private isAuthorized(req: Party.Request): boolean {
-		const expected = this.room.env.PARTYKIT_INTERNAL_TOKEN ?? '';
+export class Main extends Server<Env> {
+	/** Bearer token server-to-server (SvelteKit → Workers) — dùng cho cả 2 room. */
+	private isAuthorized(req: Request): boolean {
+		const expected = this.env.PARTYKIT_INTERNAL_TOKEN ?? '';
 		if (!expected) return false; // deny-all khi env chưa set
 		const authHeader = req.headers.get('authorization') ?? '';
 		return authHeader === `Bearer ${expected}`;
 	}
 
-	async onRequest(req: Party.Request): Promise<Response> {
-		if (this.room.id === DB_CHANGES_ROOM_ID) {
+	async onRequest(req: Request): Promise<Response> {
+		if (this.name === DB_CHANGES_ROOM_ID) {
 			return this.handleDbChange(req);
 		}
 		if (req.method === 'POST') {
@@ -83,15 +100,15 @@ export default class Server implements Party.Server {
 			}
 
 			const publicKeyB64: string = body.publicKeyB64;
-			await this.room.storage.put(KEY_STORAGE_FIELD, publicKeyB64);
-			this.room.broadcast(JSON.stringify({ type: 'key', publicKeyB64 }));
-			console.log(`[server-keys] pushed new public key (${publicKeyB64.length} chars), broadcast to room ${this.room.id}`);
+			await this.ctx.storage.put(KEY_STORAGE_FIELD, publicKeyB64);
+			this.broadcast(JSON.stringify({ type: 'key', publicKeyB64 }));
+			console.log(`[server-keys] pushed new public key (${publicKeyB64.length} chars), broadcast to room ${this.name}`);
 			return new Response(JSON.stringify({ ok: true }), { status: 200 });
 		}
 
 		if (req.method === 'GET') {
 			// Public key là dữ liệu công khai — không cần auth
-			const publicKeyB64 = await this.room.storage.get<string>(KEY_STORAGE_FIELD);
+			const publicKeyB64 = await this.ctx.storage.get<string>(KEY_STORAGE_FIELD);
 			if (!publicKeyB64) {
 				return new Response(JSON.stringify({ ok: false, message: 'No key stored yet' }), {
 					status: 404
@@ -107,10 +124,10 @@ export default class Server implements Party.Server {
 
 	/**
 	 * Room "db-changes" (B8 realtime): SvelteKit POST event sau mutation thành công,
-	 * PartyKit broadcast ngay cho mọi WS client. KHÔNG lưu storage (refetch hint) —
+	 * broadcast ngay cho mọi WS client. KHÔNG lưu storage (refetch hint) —
 	 * client nào join sau chỉ refetch lần đầu theo nhịp load riêng, không cần replay.
 	 */
-	private async handleDbChange(req: Party.Request): Promise<Response> {
+	private async handleDbChange(req: Request): Promise<Response> {
 		if (req.method !== 'POST') {
 			return new Response(JSON.stringify({ ok: false, message: `Method ${req.method} not allowed` }), {
 				status: 405
@@ -145,19 +162,19 @@ export default class Server implements Party.Server {
 			action: body.action,
 			...(isValidEventField(body.by) ? { by: body.by } : {})
 		};
-		this.room.broadcast(JSON.stringify(event));
+		this.broadcast(JSON.stringify(event));
 		console.log(`[db-changes] broadcast ${event.collection}/${event.action} (by ${event.by ?? 'unknown'})`);
 		return new Response(JSON.stringify({ ok: true }), { status: 200 });
 	}
 
-	onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
-		if (this.room.id === DB_CHANGES_ROOM_ID) {
+	onConnect(conn: Connection, _ctx: ConnectionContext) {
+		if (this.name === DB_CHANGES_ROOM_ID) {
 			console.log(`[db-changes] connected: ${conn.id}`);
 			return;
 		}
 		console.log(`[server-keys] connected: ${conn.id}`);
 		// Gửi key hiện tại ngay khi client kết nối (nếu đã có)
-		this.room.storage
+		this.ctx.storage
 			.get<string>(KEY_STORAGE_FIELD)
 			.then((publicKeyB64: string | undefined) => {
 				if (publicKeyB64) {
@@ -167,11 +184,18 @@ export default class Server implements Party.Server {
 			.catch((e: unknown) => console.error('[server-keys] failed to send key on connect:', e));
 	}
 
-	onMessage(message: string, sender: Party.Connection) {
+	onMessage(sender: Connection, _message: WSMessage) {
 		// CHÚ Ý BẢO MẬT: không bao giờ xử lý key update qua WS — client nào cũng
 		// kết nối được room này. Chỉ log.
-		console.log(`[${this.room.id}] ignored message from ${sender.id}`);
+		console.log(`[${this.name}] ignored message from ${sender.id}`);
 	}
 }
 
-Server satisfies Party.Worker;
+export default {
+	async fetch(request: Request, env: Env): Promise<Response> {
+		return (
+			(await routePartykitRequest(request, env)) ||
+			new Response('Not Found', { status: 404 })
+		);
+	}
+} satisfies ExportedHandler<Env>;

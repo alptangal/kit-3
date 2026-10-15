@@ -1,40 +1,69 @@
-// Test cho partykit/src/server.ts (room "server-keys") — chạy trực tiếp class Server
-// với room giả lập. import 'partykit/server' là type-only nên bị erase khi transform.
+// Test cho partykit/src/server.ts (PartyServer — room "server-keys") — chạy trực tiếp
+// class Main với DO ctx + env giả lập. PartyServer class extends DurableObject
+// (cloudflare:workers — chỉ tồn tại trong workerd runtime), nên mock module này
+// bằng stub trống: class Main không gọi gì từ DurableObject trong constructor,
+// các method được test (onRequest/onConnect/onMessage) chỉ dùng this.env /
+// this.ctx.storage / this.name / this.broadcast.
 //
 // QUAN TRỌNG: các test này khóa chặt yêu cầu bảo mật — push endpoint phải 401 khi
 // thiếu/sai token, và onMessage KHÔNG BAO GIỜ được cập nhật key.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import Server from '../../../partykit/src/server';
+// Phải đặt TRƯỚC import partykit/src/server (vi.mock hoisted tự động). Stub
+// DurableObject phải MIRROR workers runtime thật: constructor lưu this.ctx =
+// state + this.env = env — PartyServer getter `name` đọc this.ctx.id.name.
+vi.mock('cloudflare:workers', () => ({
+	DurableObject: class {
+		ctx: unknown;
+		env: unknown;
+		constructor(state: unknown, env: unknown) {
+			this.ctx = state;
+			this.env = env;
+		}
+	}
+}));
+
+import { Main } from '../../../partykit/src/server';
 
 const TOKEN = 'test-token-123';
 const VALID_KEY = 'A'.repeat(392); // RSA-2048 SPKI base64 ~392 chars
 
-interface MockRoom {
-	id: string;
-	env: Record<string, unknown>;
-	storage: { put: ReturnType<typeof vi.fn>; get: ReturnType<typeof vi.fn> };
-	broadcast: ReturnType<typeof vi.fn>;
+interface MockStorage {
+	put: ReturnType<typeof vi.fn>;
+	get: ReturnType<typeof vi.fn>;
 }
 
-function makeRoom(storedKey?: string): MockRoom {
+function makeCtx(roomName: string, storage: MockStorage) {
 	return {
-		id: 'server-keys',
-		env: { PARTYKIT_INTERNAL_TOKEN: TOKEN },
-		storage: {
-			put: vi.fn().mockResolvedValue(undefined),
-			get: vi.fn().mockResolvedValue(storedKey)
-		},
-		broadcast: vi.fn()
-	};
+		id: { name: roomName },
+		storage,
+		// PartyServer Server.__ensureInitialized có thể dùng — nhưng onRequest path
+		// của Main không gọi các DO runtime API khác ngoài storage.
+		waitUntil: vi.fn(),
+		blockConcurrencyWhile: vi.fn((fn) => fn())
+	} as never;
 }
 
-function makeServer(room: MockRoom) {
-	return new Server(room as never);
+function makeEnv(): { PARTYKIT_INTERNAL_TOKEN: string; Main: DurableObjectNamespace } {
+	// Main = DO binding namespace — server code không dùng nó trong các method
+	// được test, chỉ cần presence để thỏa interface Env.
+	return { PARTYKIT_INTERNAL_TOKEN: TOKEN, Main: {} as DurableObjectNamespace };
+}
+
+function makeServer(roomName = 'server-keys', storedKey?: string) {
+	const storage: MockStorage = {
+		put: vi.fn().mockResolvedValue(undefined),
+		get: vi.fn().mockResolvedValue(storedKey)
+	};
+	const server = new Main(makeCtx(roomName, storage), makeEnv());
+	// broadcast là method kế thừa từ PartyServer Server (lặp qua getConnections) —
+	// thay bằng spy để assert đã broadcast mà không cần connection thật.
+	server.broadcast = vi.fn();
+	return { server, storage };
 }
 
 function postRequest(body: unknown, token?: string) {
-	return new Request('http://localhost:1999/party/server-keys', {
+	return new Request('http://127.0.0.1:8787/parties/main/server-keys', {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
@@ -44,33 +73,32 @@ function postRequest(body: unknown, token?: string) {
 	});
 }
 
-describe('partykit server-keys room', () => {
-	let room: MockRoom;
-	let server: Server;
+describe('partyserver server-keys room', () => {
+	let server: InstanceType<typeof Main>;
+	let storage: MockStorage;
 
 	beforeEach(() => {
-		room = makeRoom(VALID_KEY);
-		server = makeServer(room);
+		({ server, storage } = makeServer('server-keys', VALID_KEY));
 	});
 
 	describe('POST (push key từ SvelteKit)', () => {
 		it('401 khi KHÔNG có Authorization header', async () => {
 			const res = await server.onRequest(postRequest({ publicKeyB64: VALID_KEY }));
 			expect(res.status).toBe(401);
-			expect(room.storage.put).not.toHaveBeenCalled();
-			expect(room.broadcast).not.toHaveBeenCalled();
+			expect(storage.put).not.toHaveBeenCalled();
+			expect(server.broadcast).not.toHaveBeenCalled();
 		});
 
 		it('401 khi token SAI — kẻ tấn công không đẩy được key giả', async () => {
 			const res = await server.onRequest(postRequest({ publicKeyB64: VALID_KEY }, 'attacker-token'));
 			expect(res.status).toBe(401);
-			expect(room.storage.put).not.toHaveBeenCalled();
-			expect(room.broadcast).not.toHaveBeenCalled();
+			expect(storage.put).not.toHaveBeenCalled();
+			expect(server.broadcast).not.toHaveBeenCalled();
 		});
 
 		it('401 khi env chưa set PARTYKIT_INTERNAL_TOKEN (deny-all)', async () => {
-			room.env = {};
-			const res = await server.onRequest(postRequest({ publicKeyB64: VALID_KEY }, 'anything'));
+			const bare = new Main(makeCtx('server-keys', storage), {} as never);
+			const res = await bare.onRequest(postRequest({ publicKeyB64: VALID_KEY }, 'anything'));
 			expect(res.status).toBe(401);
 		});
 
@@ -78,27 +106,27 @@ describe('partykit server-keys room', () => {
 			const res = await server.onRequest(postRequest({ publicKeyB64: VALID_KEY }, TOKEN));
 			expect(res.status).toBe(200);
 
-			expect(room.storage.put).toHaveBeenCalledWith('publicKeyB64', VALID_KEY);
-			expect(room.broadcast).toHaveBeenCalledTimes(1);
-			const broadcasted = JSON.parse(room.broadcast.mock.calls[0][0] as string);
+			expect(storage.put).toHaveBeenCalledWith('publicKeyB64', VALID_KEY);
+			expect(server.broadcast).toHaveBeenCalledTimes(1);
+			const broadcasted = JSON.parse((server.broadcast as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
 			expect(broadcasted).toEqual({ type: 'key', publicKeyB64: VALID_KEY });
 		});
 
 		it('400 khi body không phải JSON', async () => {
-			const req = new Request('http://localhost:1999/party/server-keys', {
+			const req = new Request('http://127.0.0.1:8787/parties/main/server-keys', {
 				method: 'POST',
 				headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
 				body: 'not-json'
 			});
 			const res = await server.onRequest(req);
 			expect(res.status).toBe(400);
-			expect(room.storage.put).not.toHaveBeenCalled();
+			expect(storage.put).not.toHaveBeenCalled();
 		});
 
 		it('400 khi key quá ngắn', async () => {
 			const res = await server.onRequest(postRequest({ publicKeyB64: 'AAA' }, TOKEN));
 			expect(res.status).toBe(400);
-			expect(room.storage.put).not.toHaveBeenCalled();
+			expect(storage.put).not.toHaveBeenCalled();
 		});
 
 		it('400 khi key chứa ký tự không phải base64', async () => {
@@ -114,16 +142,82 @@ describe('partykit server-keys room', () => {
 
 	describe('GET (public — không cần auth)', () => {
 		it('trả key hiện tại', async () => {
-			const res = await server.onRequest(new Request('http://localhost:1999/party/server-keys'));
+			const res = await server.onRequest(
+				new Request('http://127.0.0.1:8787/parties/main/server-keys')
+			);
 			expect(res.status).toBe(200);
-			const js = await res.json();
+			const js = (await res.json()) as { data: { publicKeyB64: string } };
 			expect(js.data.publicKeyB64).toBe(VALID_KEY);
 		});
 
 		it('404 khi chưa có key', async () => {
-			room.storage.get.mockResolvedValue(undefined);
-			const res = await server.onRequest(new Request('http://localhost:1999/party/server-keys'));
+			storage.get.mockResolvedValue(undefined);
+			const res = await server.onRequest(
+				new Request('http://127.0.0.1:8787/parties/main/server-keys')
+			);
 			expect(res.status).toBe(404);
+		});
+	});
+
+	describe('db-changes room', () => {
+		it('401 khi POST event thiếu/sai token', async () => {
+			const dbServer = makeServer('db-changes');
+			const res = await dbServer.server.onRequest(
+				new Request('http://127.0.0.1:8787/parties/main/db-changes', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ collection: 'orders', action: 'create' })
+				})
+			);
+			expect(res.status).toBe(401);
+		});
+
+		it('405 khi GET (chỉ nhận POST)', async () => {
+			const dbServer = makeServer('db-changes');
+			const res = await dbServer.server.onRequest(
+				new Request('http://127.0.0.1:8787/parties/main/db-changes')
+			);
+			expect(res.status).toBe(405);
+		});
+
+		it('400 khi collection/action sai format', async () => {
+			const dbServer = makeServer('db-changes');
+			const res = await dbServer.server.onRequest(
+				new Request('http://127.0.0.1:8787/parties/main/db-changes', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+						authorization: `Bearer ${TOKEN}`
+					},
+					body: JSON.stringify({ collection: 'orders', action: 'x'.repeat(100) })
+				})
+			);
+			expect(res.status).toBe(400);
+		});
+
+		it('200 + broadcast event khi token đúng', async () => {
+			const dbServer = makeServer('db-changes');
+			const res = await dbServer.server.onRequest(
+				new Request('http://127.0.0.1:8787/parties/main/db-changes', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+						authorization: `Bearer ${TOKEN}`
+					},
+					body: JSON.stringify({ collection: 'orders', action: 'create', by: 'tester' })
+				})
+			);
+			expect(res.status).toBe(200);
+			expect(dbServer.server.broadcast).toHaveBeenCalledTimes(1);
+			const broadcasted = JSON.parse(
+				(dbServer.server.broadcast as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+			);
+			expect(broadcasted).toEqual({
+				type: 'db-change',
+				collection: 'orders',
+				action: 'create',
+				by: 'tester'
+			});
 		});
 	});
 
@@ -142,7 +236,7 @@ describe('partykit server-keys room', () => {
 		});
 
 		it('không gửi gì khi chưa có key', async () => {
-			room.storage.get.mockResolvedValue(undefined);
+			storage.get.mockResolvedValue(undefined);
 			const send = vi.fn();
 			await server.onConnect({ id: 'conn-1', send } as never, {} as never);
 			await new Promise((resolve) => setTimeout(resolve, 0));
@@ -153,12 +247,13 @@ describe('partykit server-keys room', () => {
 	describe('onMessage (WS — KHÔNG BAO GIỜ nhận key update)', () => {
 		it('bỏ qua mọi message: không storage.put, không broadcast', async () => {
 			const attackerKey = 'B'.repeat(392);
-			await server.onMessage(JSON.stringify({ type: 'key', publicKeyB64: attackerKey }), {
-				id: 'conn-evil'
-			} as never);
+			await server.onMessage(
+				{ id: 'conn-evil' } as never,
+				JSON.stringify({ type: 'key', publicKeyB64: attackerKey })
+			);
 
-			expect(room.storage.put).not.toHaveBeenCalled();
-			expect(room.broadcast).not.toHaveBeenCalled();
+			expect(storage.put).not.toHaveBeenCalled();
+			expect(server.broadcast).not.toHaveBeenCalled();
 		});
 	});
 });

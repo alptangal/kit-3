@@ -11,12 +11,13 @@ tests/*.log
 CLAUDE.md
 .claude/
 
-# PartyKit: track source + config, ignore deps/build/env
+# PartyKit → PartyServer (Cloudflare Workers): track source + config, ignore deps/build/env
 partykit/node_modules/
 partykit/build/
 partykit/public/dist/
 partykit/.partykit/
 partykit/.env
+partykit/.dev.vars
 .env
 
 # Kho lưu tạm (script debug/scratch từ các phiên) — không theo dõi

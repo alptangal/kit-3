@@ -50,7 +50,16 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+					// partyserver import runtime 'cloudflare:workers' (scheme chỉ có
+					// trong workerd). Inline để vite transform nó — khi đó resolve.alias
+					// 'cloudflare:workers' → stub trống mới được áp dụng thay vì node
+					// ESM loader từ chối scheme.
+					server: {
+						deps: {
+							inline: ['partyserver']
+						}
+					}
 				}
 			}
 		]
@@ -64,7 +73,12 @@ export default defineConfig({
 			$styles: path.resolve('./src/lib/assets/styles'),
 			$modules: path.resolve('./src/lib/modules'),
 			$plugins: path.resolve('./src/lib/plugins'),
-			$assets: path.resolve('./src/lib/assets')
+			$assets: path.resolve('./src/lib/assets'),
+			// PartyServer (Cloudflare) import runtime class DurableObject từ scheme
+			// "cloudflare:workers" — chỉ tồn tại trong workerd. Khi vitest (node)
+			// import partykit/src/server.ts, thay bằng stub trống: class Main không
+			// gọi gì từ DurableObject trong constructor, test inject ctx giả lập.
+			'cloudflare:workers': path.resolve('./src/lib/server/cloudflare-workers-stub.ts')
 		}
 	},
 	build: {

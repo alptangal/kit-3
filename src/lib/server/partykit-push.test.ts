@@ -30,21 +30,21 @@ describe('pushPublicKeyToPartyKit', () => {
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(url).toBe('http://localhost:1999/party/server-keys');
+		expect(url).toBe('http://127.0.0.1:8787/parties/main/server-keys');
 		expect(init.method).toBe('POST');
 		expect(init.headers.authorization).toBe('Bearer dev-insecure-token-change-me');
 		expect(JSON.parse(init.body)).toEqual({ publicKeyB64: FAKE_KEY });
 	});
 
 	it('dùng env PARTYKIT_PUSH_URL + PARTYKIT_INTERNAL_TOKEN khi có', async () => {
-		testEnv.PARTYKIT_PUSH_URL = 'http://example.internal/party/server-keys';
+		testEnv.PARTYKIT_PUSH_URL = 'http://example.internal/parties/main/server-keys';
 		testEnv.PARTYKIT_INTERNAL_TOKEN = 'secret-token';
 		fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
 		await pushPublicKeyToPartyKit(FAKE_KEY);
 
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(url).toBe('http://example.internal/party/server-keys');
+		expect(url).toBe('http://example.internal/parties/main/server-keys');
 		expect(init.headers.authorization).toBe('Bearer secret-token');
 	});
 
