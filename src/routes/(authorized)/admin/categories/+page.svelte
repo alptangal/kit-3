@@ -270,18 +270,17 @@
 			render: (value, row) => {
 				const depth = (row as unknown as { _treeDepth?: number })._treeDepth ?? 0;
 				return depth > 0 ? `${'↳ '.repeat(depth)}${String(value)}` : String(value);
-			},
-			sortable: false
+			}
 		},
 		{
 			id: 'slug',
 			label: pageContents.slugLabel[lang],
-			accessor: (row) => (row as unknown as CategoryListItem).slug,
-			sortable: false
+			accessor: (row) => (row as unknown as CategoryListItem).slug
 		},
 		{
 			id: 'status',
 			label: pageContents.statusLabel[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as CategoryListItem).status,
 			status: (value) => {
 				const s = String(value ?? '');
@@ -293,6 +292,7 @@
 		{
 			id: 'updated',
 			label: pageContents.updated[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as CategoryListItem).updatedAt),
 			noHighlight: true
 		}
@@ -654,6 +654,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={pageContents.searchPlaceholder}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.empty[lang]}

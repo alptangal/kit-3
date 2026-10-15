@@ -375,30 +375,31 @@
 		{
 			id: 'name',
 			label: pageContents.table.name[lang],
-			accessor: (row) => getRowName(row as unknown as AdminCustomerRow),
-			sortable: false
+			accessor: (row) => getRowName(row as unknown as AdminCustomerRow)
 		},
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => getStatusLabel((row as unknown as AdminCustomerRow).statusId),
 			status: (_value, row) => customerStatusColor((row as unknown as AdminCustomerRow).statusId)
 		},
 		{
 			id: 'loyalty',
 			label: pageContents.table.loyalty[lang],
-			accessor: (row) => String((row as unknown as AdminCustomerRow).loyaltyPoints ?? 0),
-			sortable: false
+			accessor: (row) => String((row as unknown as AdminCustomerRow).loyaltyPoints ?? 0)
 		},
 		{
 			id: 'created',
 			label: pageContents.table.created[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as AdminCustomerRow).createdAt, lang),
 			noHighlight: true
 		},
 		{
 			id: 'lastLogin',
 			label: pageContents.table.lastLogin[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as AdminCustomerRow).lastLoginAt, lang),
 			noHighlight: true
 		}
@@ -517,6 +518,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={pageContents.filters.searchPlaceholder}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.states.empty[lang]}

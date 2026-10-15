@@ -240,17 +240,18 @@
 			id: 'brand',
 			label: pageContents.title[lang],
 			accessor: (row) => (row as unknown as BrandListItem).name,
-			sortable: false
+			sortable: true
 		},
 		{
 			id: 'slug',
 			label: pageContents.slugLabel[lang],
 			accessor: (row) => (row as unknown as BrandListItem).slug,
-			sortable: false
+			sortable: true
 		},
 		{
 			id: 'status',
 			label: pageContents.statusLabel[lang],
+			sortable: true,
 			accessor: (row) => (row as unknown as BrandListItem).status,
 			status: (value) => {
 				const s = String(value ?? '');
@@ -262,6 +263,7 @@
 		{
 			id: 'updated',
 			label: pageContents.updated[lang],
+			sortable: true,
 			accessor: (row) => formatDate((row as unknown as BrandListItem).updatedAt),
 			noHighlight: true
 		}
@@ -587,6 +589,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={pageContents.searchPlaceholder}
+			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.empty[lang]}

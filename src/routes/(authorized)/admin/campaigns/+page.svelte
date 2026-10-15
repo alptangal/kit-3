@@ -475,6 +475,7 @@
 		{
 			id: 'name',
 			label: t('colName'),
+			sortable: true,
 			accessor: (row) => {
 				const item = row as unknown as CampaignItem;
 				const sub = item.promotionIds?.length
@@ -486,6 +487,7 @@
 		{
 			id: 'type',
 			label: t('colType'),
+			sortable: true,
 			accessor: (row) =>
 				typeLabels[(row as unknown as CampaignItem).type]?.[lang] ??
 				(row as unknown as CampaignItem).type,
@@ -494,6 +496,7 @@
 		{
 			id: 'status',
 			label: t('colStatus'),
+			sortable: true,
 			accessor: (row) =>
 				statusLabels[(row as unknown as CampaignItem).status]?.[lang] ??
 				(row as unknown as CampaignItem).status,
@@ -521,6 +524,7 @@
 		{
 			id: 'reached',
 			label: t('colReached'),
+			sortable: true,
 			accessor: (row) => {
 				const item = row as unknown as CampaignItem;
 				return `${item.reachedCount ?? 0} / ${item.targetCount ?? 0}`;
@@ -598,6 +602,10 @@
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
+			sortable
+			searchable
+			searchPlaceholder={{ vi: 'Tìm chiến dịch…', en: 'Search campaigns…' }}
+			resizable={{ enabled: true, fit: true }}
 			loading={isLoading && !loadedOnce}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={t('empty')}

@@ -130,8 +130,7 @@
 		{
 			id: 'name',
 			label: pageContents.table.name[lang],
-			accessor: (row) => getRowName(row as unknown as AdminUserRow),
-			sortable: false
+			accessor: (row) => getRowName(row as unknown as AdminUserRow)
 		},
 		{
 			id: 'role',
@@ -141,6 +140,7 @@
 		{
 			id: 'status',
 			label: pageContents.table.status[lang],
+			sortable: true,
 			accessor: (row) => getStatusLabel((row as unknown as AdminUserRow).statusId),
 			status: (_value, row) => {
 				// Map statusId → DataTableStatus ('error' của badge cũ → 'danger').
@@ -152,6 +152,7 @@
 		{
 			id: 'created',
 			label: pageContents.table.created[lang],
+			sortable: true,
 			accessor: (row) => formatCreated(row as unknown as AdminUserRow),
 			noHighlight: true
 		}
@@ -543,6 +544,10 @@
 				{columns}
 				pageSize={pageSize}
 				showPagination={false}
+				sortable
+				searchable
+				searchPlaceholder={{ vi: 'Tìm người dùng…', en: 'Search users…' }}
+				resizable={{ enabled: true, fit: true }}
 				loading={loading}
 				visual={{ striped: true, hoverable: true }}
 				emptyLabel={pageContents.states.empty[lang]}
