@@ -106,7 +106,12 @@
 			orderCode: { vi: 'Mã đơn', en: 'Order code' },
 			paid: { vi: 'Đã thu', en: 'Paid' },
 			change: { vi: 'Tiền thừa', en: 'Change' },
-			newOrder: { vi: 'Đơn mới', en: 'New order' }
+			newOrder: { vi: 'Đơn mới', en: 'New order' },
+			qrTitle: { vi: 'QR thanh toán — chờ khách quét', en: 'Payment QR — waiting for scan' },
+			qrHint: {
+				vi: 'Khách quét QR bằng app ngân hàng/ví. Hệ thống tự xác nhận khi tool đối soát thấy giao dịch.',
+				en: 'Customer scans with banking/e-wallet app. The system auto-confirms once the checker tool sees the transaction.'
+			}
 		}
 	};
 
@@ -325,7 +330,16 @@
 
 	// ── Result modal ──
 	let resultDisplay = $state(false);
-	let lastOrder = $state<{ orderCode?: string; change?: number; totalAmount?: number } | null>(null);
+	let lastOrder = $state<{
+		orderCode?: string;
+		change?: number;
+		totalAmount?: number;
+		paymentCode?: string;
+		qr?: { payload: string; dataUrl: string };
+	} | null>(null);
+
+	const QR_PAY_METHODS = ['momo', 'zalopay', 'bank_transfer'];
+	const lastOrderHasQr = $derived(!!lastOrder?.qr?.dataUrl);
 
 	async function submitCheckout() {
 		if (checkoutBusy || !encryptionKeys) return;
@@ -744,6 +758,15 @@
 							{formatMoney(lastOrder.change)}
 						</p>
 					</div>
+					{#if lastOrderHasQr}
+						<!-- QR thanh toán cho khách quét (momo/zalopay/bank_transfer) -->
+						<div class="pos-qr-box" data-test="pos-qr-payment">
+							<p class="pos-qr-title">{pageContents.result.qrTitle[lang]}</p>
+							<img class="pos-qr-img" src={lastOrder.qr!.dataUrl} alt="QR {lastOrder.paymentCode ?? ''}" />
+							<p class="pos-qr-code">#{lastOrder.paymentCode ?? '—'}</p>
+							<p class="pos-qr-hint">{pageContents.result.qrHint[lang]}</p>
+						</div>
+					{/if}
 				{/if}
 			</Modal.Container.Body>
 			<Modal.Container.Footer>
@@ -783,6 +806,45 @@
 
 	.pos-page {
 		max-width: 1280px;
+	}
+
+	/* QR thanh toán trong modal kết quả — khách quét bằng app ngân hàng/ví */
+	.pos-qr-box {
+		margin-top: 0.75rem;
+		padding: 0.85rem;
+		border: 1px dashed var(--default-300, hsl(0 0% 88%));
+		border-radius: 0.75rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.4rem;
+		text-align: center;
+	}
+	.pos-qr-title {
+		margin: 0;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+	.pos-qr-img {
+		width: 200px;
+		height: 200px;
+		object-fit: contain;
+		background: #fff;
+		border-radius: 0.5rem;
+		padding: 0.35rem;
+	}
+	.pos-qr-code {
+		margin: 0;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.82rem;
+		color: var(--foreground);
+		overflow-wrap: anywhere;
+	}
+	.pos-qr-hint {
+		margin: 0;
+		font-size: 0.78rem;
+		color: var(--foreground-500, #64748b);
 	}
 	.admin-page {
 		display: flex;

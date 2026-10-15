@@ -148,8 +148,16 @@
 				encryptionKeys
 			);
 			if (response.ok) {
-				const data = response.data as { orderCode?: string } | undefined;
-				goto(`/store/checkout/thanks?order=${encodeURIComponent(data?.orderCode ?? '')}`);
+				const data = response.data as
+					| { orderCode?: string; paymentCode?: string; qr?: { payload: string; dataUrl: string } }
+					| undefined;
+				const params = new URLSearchParams();
+				if (data?.orderCode) params.set('order', data.orderCode);
+				// QR payment: payload text được render lại client-side ở thanks page
+				// (dataUrl base64 quá dài cho URL).
+				if (data?.paymentCode) params.set('pay', data.paymentCode);
+				if (data?.qr?.payload) params.set('qr', data.qr.payload);
+				goto(`/store/checkout/thanks?${params.toString()}`);
 			} else {
 				placeError = resolveServerMessage(response.message, lang, sf(t.checkout.placeFailed, lang));
 			}

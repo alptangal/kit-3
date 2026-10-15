@@ -87,7 +87,11 @@ export const STOREFRONT_CONTENTS = {
 		title: { vi: 'Đặt hàng thành công!', en: 'Order placed successfully!' },
 		subtitle: { vi: 'Cảm ơn bạn đã mua hàng. Đơn của bạn đang được xử lý.', en: 'Thanks for your purchase. Your order is being processed.' },
 		orderCode: { vi: 'Mã đơn hàng', en: 'Order code' },
-		continueShopping: { vi: 'Tiếp tục mua sắm', en: 'Continue shopping' }
+		continueShopping: { vi: 'Tiếp tục mua sắm', en: 'Continue shopping' },
+		qrHint: {
+			vi: 'Quét QR bằng app ngân hàng/ví để thanh toán. Hệ thống tự xác nhận khi nhận được giao dịch.',
+			en: 'Scan the QR with your banking/e-wallet app to pay. The system auto-confirms when the transaction is received.'
+		}
 	},
 	account: {
 		title: { vi: 'Tài khoản của tôi', en: 'My account' },

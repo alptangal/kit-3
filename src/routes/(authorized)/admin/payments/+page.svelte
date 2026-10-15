@@ -72,7 +72,25 @@
 		},
 		actions: {
 			confirm: { vi: 'Xác nhận đã nhận chuyển khoản', en: 'Confirm transfer received' },
-			markFailed: { vi: 'Đánh dấu thất bại', en: 'Mark as failed' }
+			markFailed: { vi: 'Đánh dấu thất bại', en: 'Mark as failed' },
+			checkQr: { vi: 'Check QR', en: 'Check QR' }
+		},
+		qr: {
+			badgeAuto: {
+				vi: 'Tự động xác nhận QR: đang chạy (mỗi {n}s)',
+				en: 'QR auto-confirm: running (every {n}s)'
+			},
+			checking: { vi: 'Đang kiểm tra…', en: 'Checking…' },
+			confirmed: {
+				vi: 'QR xác nhận thành công — thanh toán hoàn tất',
+				en: 'QR confirmed — payment completed'
+			},
+			stillPending: {
+				vi: 'Tool đối soát chưa thấy giao dịch — vẫn chờ',
+				en: 'Checker tool has not seen the transaction — still pending'
+			},
+			failed: { vi: 'Kiểm tra QR thất bại', en: 'QR check failed' },
+			requestFailed: { vi: 'Đã xảy ra lỗi không xác định', en: 'Unexpected error occurred' }
 		},
 		states: {
 			loading: { vi: 'Đang tải dữ liệu…', en: 'Loading data…' },
@@ -186,6 +204,48 @@
 		return row.status === 'pending';
 	}
 
+	// ── QR payment (momo/zalopay/bank_transfer) — nút Check QR gọi tool đối soát ──
+	// Gồm cả 'e_wallet' — POS map momo/zalopay → schema 'e_wallet' khi lưu payment.
+	const QR_CHECK_METHODS = ['momo', 'zalopay', 'bank_transfer', 'e_wallet'];
+	let checkingCode = $state<string | null>(null);
+	let qrAutoPollInfo = $state<{ enabled: boolean; intervalMs?: number } | null>(null);
+
+	function isQrCheckable(row: PaymentRow): boolean {
+		return (
+			row.status === 'pending' &&
+			QR_CHECK_METHODS.includes(row.method ?? '') &&
+			!!row.paymentCode
+		);
+	}
+
+	async function checkQr(row: PaymentRow) {
+		if (!row.paymentCode || checkingCode || !encryptionKeys) return;
+		checkingCode = row.paymentCode;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/payments/qr/check',
+				{ method: 'POST', body: { paymentCode: row.paymentCode } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as { status?: string } | undefined;
+				if (data?.status === 'completed') {
+					showToast(pageContents.qr.confirmed[lang], 'success');
+				} else {
+					showToast(pageContents.qr.stillPending[lang], 'success');
+				}
+				await loadPayments();
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.qr.failed), 'error');
+			}
+		} catch (err) {
+			showToast(pageContents.qr.requestFailed[lang], 'error');
+			if (import.meta.env.DEV) console.error('[admin/payments] qr check failed:', err);
+		} finally {
+			checkingCode = null;
+		}
+	}
+
 	function showToast(text: string, color: 'success' | 'error') {
 		client.browser?.toasts?.create({ title: text, color });
 	}
@@ -212,11 +272,17 @@
 			loading = false;
 			if (response.ok) {
 				const data = response.data as
-					| { items?: PaymentRow[]; total?: number; page?: number }
+					| {
+							items?: PaymentRow[];
+							total?: number;
+							page?: number;
+							qrAutoPoll?: { enabled: boolean; intervalMs?: number };
+					  }
 					| undefined;
 				payments = data?.items ?? [];
 				if (typeof data?.total === 'number') total = data.total;
 				if (typeof data?.page === 'number') pageNo = data.page;
+				if (data?.qrAutoPoll) qrAutoPollInfo = data.qrAutoPoll;
 				loadedOnce = true;
 			} else {
 				loadError = resolveServerMessage(response.message, lang, pageContents.states.errorTitle);
@@ -417,6 +483,14 @@
 			<h1 class="admin-title">{pageContents.title[lang]}</h1>
 			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
+		{#if qrAutoPollInfo?.enabled}
+			<span class="qr-auto-badge" data-test="qr-auto-badge">
+				{pageContents.qr.badgeAuto[lang].replace(
+					'{n}',
+					String(Math.round((qrAutoPollInfo.intervalMs ?? 30000) / 1000))
+				)}
+			</span>
+		{/if}
 	</header>
 
 	<!-- ── Bộ lọc ── -->
@@ -471,17 +545,33 @@
 			{#snippet actionsContent(row)}
 				{@const payment = row as unknown as PaymentRow}
 				<div class="row-actions">
+					{#if isQrCheckable(payment)}
+						<!-- QR pending: Check QR gọi tool đối soát tự động (đặt trước confirm —
+						     bank_transfer vẫn giữ nút Confirm thủ công bên cạnh) -->
+						<Button
+							color="primary"
+							variant="outline"
+							size="sm"
+							loading={checkingCode === payment.paymentCode}
+							disabled={!!checkingCode}
+							onClick={() => checkQr(payment)}
+						>
+							{checkingCode === payment.paymentCode
+								? pageContents.qr.checking[lang]
+								: pageContents.actions.checkQr[lang]}
+						</Button>
+					{/if}
 					{#if isConfirmable(payment)}
 						<!-- Quy ước màu nút: confirm = success -->
 						<Button color="success" size="sm" onClick={() => openConfirmModal(payment)}>
 							{pageContents.actions.confirm[lang]}
 						</Button>
-					{:else if isMarkFailedable(payment)}
+					{:else if !isQrCheckable(payment) && isMarkFailedable(payment)}
 						<!-- Quy ước màu nút: delete/mark-failed = error -->
 						<Button color="error" size="sm" onClick={() => openFailModal(payment)}>
 							{pageContents.actions.markFailed[lang]}
 						</Button>
-					{:else}
+					{:else if !isQrCheckable(payment)}
 						<span class="actions-none">—</span>
 					{/if}
 				</div>
@@ -613,6 +703,21 @@
 		align-items: flex-end;
 		gap: 1rem;
 		flex-wrap: wrap;
+	}
+
+	/* Badge trạng thái auto-confirm QR (chỉ hiện khi QR_CHECKER_AUTO_POLL=true + có URL tool) */
+	.qr-auto-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--success, #2e7d32);
+		background: var(--success-soft, hsl(152, 45%, 90%));
+		border: 1px solid var(--success, #2e7d32);
+		border-radius: 999px;
+		padding: 0.3rem 0.75rem;
+		white-space: nowrap;
 	}
 
 	.admin-title {
