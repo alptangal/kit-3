@@ -507,14 +507,19 @@ export const collectionSchemas = {
 			supplierId: { type: 'string', searchable: true, sortable: false, selectable: true },
 			branchId: { type: 'string', searchable: true, sortable: false, selectable: true },
 			status: { type: 'string', searchable: true, sortable: true, selectable: true }, // 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled'
-			items: { type: 'array', searchable: false, sortable: false, selectable: true }, // [{ variantId, quantity, unitCost, lotNumber?, expiresAt? }]
+			items: { type: 'array', searchable: false, sortable: false, selectable: true }, // [{ variantId, quantity, unitCost, lotNumber?, expiresAt?, voucher? {type 'money'|'gift', value?/giftVariantId?+giftQuantity?, unitCostEffective? } }]
 			totalCost: { type: 'number', searchable: true, sortable: true, selectable: true },
+			// Voucher nhập hàng cấp phiếu (khuyến mãi TỪ NCC khi nhập — không phải promotions bán hàng):
+			// [{ type: 'money', value, note? }] — giảm tiền trên tổng đơn nhập. Optional (backward compatible).
+			vouchers: { type: 'array', searchable: false, sortable: false, selectable: true },
 			source: { type: 'string', searchable: true, sortable: true, selectable: true }, // 'quick' | 'order'
 			receiptImages: { type: 'array', searchable: false, sortable: false, selectable: false }, // base64 data URLs — chỉ trả qua get endpoint
 			createdBy: { type: 'string', searchable: true, sortable: false, selectable: true },
 			approvedBy: { type: 'string', searchable: false, sortable: false, selectable: true }, // owner/manager duyệt — audit trail
 			expectedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
 			receivedAt: { type: 'date', searchable: false, sortable: true, selectable: true },
+			// Ghi chú phiếu nhập — service đã dùng từ trước (createQuickPurchase), schema khai báo trước đó thiếu
+			note: { type: 'string', searchable: false, sortable: false, selectable: true },
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
 			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
