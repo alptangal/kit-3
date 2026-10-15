@@ -1,6 +1,10 @@
 // src/routes/api/admin/pos/checkout/+server.ts
 // POS terminal checkout: validate stock -> create order (paid/pos) -> deduct stock
 // -> create completed payment -> update session totals when sessionId given.
+// V2: hỗ trợ chia tiền nhiều phương thức (payments[] mỗi line 1 payment doc),
+// giảm giá từng dòng (lineDiscount), giảm giá cả đơn theo số tiền
+// (orderDiscountAmount, song song customerDiscount %), customerId + notes.
+// Flow cũ (paymentMethod + cashReceived đơn method) giữ nguyên tương thích.
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import {
@@ -18,6 +22,7 @@ import { QrPaymentService, isQrPaymentMethod } from '$lib/server/db/qr-payments'
 const cbOrders = cbData('orders');
 const cbPayments = cbData('payments');
 const cbVariants = cbData('product_variants');
+const cbUsers = cbData('users');
 
 /** POS payment method (VALID_PAYMENT_METHODS trong checkout.ts) -> schema payments
  *  method ('cash'|'credit_card'|'bank_transfer'|'e_wallet'|'loyalty_points'). */
@@ -35,6 +40,21 @@ interface CheckoutItem {
 	variantId: string;
 	quantity: number;
 	unitPrice?: number;
+	/** Giảm giá cả dòng (VND) — trừ vào price*quantity. */
+	lineDiscount?: number;
+}
+
+interface PaymentInput {
+	method?: string;
+	amount?: number;
+	cashReceived?: number;
+}
+
+/** Payment sau chuẩn hoá — mỗi line tạo 1 payment doc. */
+interface NormalizedPayment {
+	method: string;
+	amount: number;
+	cashReceived?: number;
 }
 
 export const POST: RequestHandler = async (event) => {
@@ -44,10 +64,14 @@ export const POST: RequestHandler = async (event) => {
 		const read = await readAdminRequest<{
 			items: CheckoutItem[];
 			paymentMethod: string;
+			payments?: PaymentInput[];
 			sessionId?: string;
 			branchId?: string;
 			cashReceived?: number;
 			customerDiscount?: number;
+			orderDiscountAmount?: number;
+			customerId?: string;
+			notes?: string;
 		}>(event);
 		if (!read.ok) return read.response;
 		const { lang, publicKeyB64 } = read;
@@ -72,24 +96,13 @@ export const POST: RequestHandler = async (event) => {
 				400
 			);
 		}
-		const paymentMethod = data.paymentMethod ?? 'cash';
-		const schemaMethod = PAYMENT_METHOD_MAP[paymentMethod];
-		if (!schemaMethod) {
-			return respond(
-				{
-					ok: false,
-					message: { vi: 'Phương thức thanh toán không hợp lệ', en: 'Invalid payment method' }
-				},
-				400
-			);
-		}
 		const customerDiscount =
 			typeof data.customerDiscount === 'number' && data.customerDiscount > 0
 				? Math.min(data.customerDiscount, 100)
 				: 0;
 
 		// ── Validate items: variant active + enough stock at branch ──
-		const validated: Array<{ variantId: string; quantity: number; price: number }> = [];
+		const validated: Array<{ variantId: string; quantity: number; price: number; lineDiscount: number }> = [];
 		let totalAmount = 0;
 		for (const item of items) {
 			const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
@@ -158,31 +171,136 @@ export const POST: RequestHandler = async (event) => {
 					409
 				);
 			}
-			validated.push({ variantId: item.variantId, quantity, price });
-			totalAmount += price * quantity;
+			// Giảm giá cả dòng — clamp 0..price*quantity để tổng không âm.
+			const lineDiscount = Math.min(
+				Math.max(0, Math.round(Number(item.lineDiscount) || 0)),
+				price * quantity
+			);
+			validated.push({ variantId: item.variantId, quantity, price, lineDiscount });
+			totalAmount += price * quantity - lineDiscount;
 		}
 
-		// ── Customer discount (percent) ──
-		const discountAmount = Math.round((totalAmount * customerDiscount) / 100);
+		// ── Discount: % khách hàng + số tiền cả đơn (VND) ──
+		const percentOff = Math.round((totalAmount * customerDiscount) / 100);
+		const amountOff = Math.min(
+			Math.max(0, Math.round(Number(data.orderDiscountAmount) || 0)),
+			Math.max(0, totalAmount - percentOff)
+		);
+		const discountAmount = percentOff + amountOff;
 		const payableAmount = Math.max(0, totalAmount - discountAmount);
 
-		// ── Cash received → change (only for cash) ──
-		let change = 0;
-		if (paymentMethod === 'cash') {
-			const cashReceived = Number(data.cashReceived);
-			if (!Number.isFinite(cashReceived) || cashReceived < payableAmount) {
+		// ── Chuẩn hoá payments: mảng chia tiền (V2) hoặc 1 method cũ ──
+		let normalizedPayments: NormalizedPayment[];
+		const rawPayments = Array.isArray(data.payments) ? data.payments : [];
+		if (rawPayments.length > 0) {
+			normalizedPayments = [];
+			let sum = 0;
+			for (const p of rawPayments) {
+				const method = String(p?.method ?? '');
+				if (!PAYMENT_METHOD_MAP[method]) {
+					return respond(
+						{
+							ok: false,
+							message: { vi: 'Phương thức thanh toán không hợp lệ', en: 'Invalid payment method' }
+						},
+						400
+					);
+				}
+				const amount = Math.round(Number(p?.amount));
+				// Đơn 0đ (giỏ giá 0): cho phép duy nhất 1 dòng amount 0 khi payable = 0
+				// — giữ tương thích flow cũ một method/đơn giá 0.
+				const allowZero = payableAmount === 0 && rawPayments.length === 1;
+				if (!Number.isFinite(amount) || amount < 0 || (amount === 0 && !allowZero)) {
+					return respond(
+						{
+							ok: false,
+							message: {
+								vi: 'Số tiền từng phương thức phải lớn hơn 0',
+								en: 'Each payment amount must be greater than 0'
+							}
+						},
+						400
+					);
+				}
+				const cashReceived =
+					p?.cashReceived !== undefined && p?.cashReceived !== null
+						? Number(p.cashReceived)
+						: undefined;
+				if (method === 'cash' && cashReceived !== undefined && cashReceived < amount) {
+					return respond(
+						{
+							ok: false,
+							message: {
+								vi: 'Tiền khách đưa nhỏ hơn số tiền phương thức tiền mặt',
+								en: 'Cash received is less than the cash method amount'
+							}
+						},
+						400
+					);
+				}
+				normalizedPayments.push({ method, amount, cashReceived });
+				sum += amount;
+			}
+			if (sum !== payableAmount) {
 				return respond(
 					{
 						ok: false,
 						message: {
-							vi: 'Tiền khách đưa nhỏ hơn tổng tiền cần thanh toán',
-							en: 'Cash received is less than the payable amount'
+							vi: `Tổng các phương thức (${sum}) phải bằng số tiền cần thu (${payableAmount})`,
+							en: `Sum of payment methods (${sum}) must equal the payable amount (${payableAmount})`
 						}
 					},
 					400
 				);
 			}
-			change = Math.round(cashReceived - payableAmount);
+		} else {
+			const paymentMethod = data.paymentMethod ?? 'cash';
+			if (!PAYMENT_METHOD_MAP[paymentMethod]) {
+				return respond(
+					{
+						ok: false,
+						message: { vi: 'Phương thức thanh toán không hợp lệ', en: 'Invalid payment method' }
+					},
+					400
+				);
+			}
+			const cashReceived =
+				typeof data.cashReceived === 'number' ? Number(data.cashReceived) : undefined;
+			if (paymentMethod === 'cash') {
+				if (!Number.isFinite(cashReceived) || (cashReceived as number) < payableAmount) {
+					return respond(
+						{
+							ok: false,
+							message: {
+								vi: 'Tiền khách đưa nhỏ hơn tổng tiền cần thanh toán',
+								en: 'Cash received is less than the payable amount'
+							}
+						},
+						400
+					);
+				}
+			}
+			normalizedPayments = [{ method: paymentMethod, amount: payableAmount, cashReceived }];
+		}
+
+		// ── Customer (optional): phải là role-customer, chưa xoá ──
+		let customerId: string | null = null;
+		if (data.customerId) {
+			const customerRes = await cbUsers.document.get({ documentKey: data.customerId });
+			if (!customerRes.ok || !customerRes.data) {
+				return respond(
+					{ ok: false, message: { vi: 'Khách hàng không hợp lệ', en: 'Invalid customer' } },
+					400
+				);
+			}
+			const customer = customerRes.data as { roleId?: string; deletedAt?: string | null };
+			if (customer.roleId !== 'role-customer' || customer.deletedAt) {
+				return respond(
+					{ ok: false, message: { vi: 'Khách hàng không hợp lệ', en: 'Invalid customer' } },
+					400
+				);
+			}
+			customerId = data.customerId;
 		}
 
 		// ── Create order: status paid, channel pos ──
@@ -193,7 +311,7 @@ export const POST: RequestHandler = async (event) => {
 
 		const orderDoc = {
 			orderCode,
-			customerId: null,
+			customerId,
 			staffId: actor.userId,
 			branchId: branchId ?? null,
 			status: 'paid',
@@ -202,10 +320,12 @@ export const POST: RequestHandler = async (event) => {
 				variantId: v.variantId,
 				lotId: undefined,
 				quantity: v.quantity,
-				price: v.price
+				price: v.price,
+				discount: v.lineDiscount
 			})),
 			totalAmount: payableAmount,
 			discountAmount,
+			notes: data.notes?.trim() ? data.notes.trim() : undefined,
 			createdAt: now,
 			updatedAt: now
 		};
@@ -240,36 +360,56 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
-		// ── Create payment doc ──
+		// ── Create payment docs — MỖI payment line 1 doc ──
 		// bank_transfer + momo/zalopay (QR methods): khách quét QR → chờ tool đối
 		// soát tự confirm → status 'pending'. cash/bank_pos/cod/loyalty_points:
 		// hoàn tất ngay tại quầy → 'completed'. (confirmBankTransfer admin vẫn nhận
 		// pending bank_transfer như cũ; momo/zalopay pending confirm qua qr/check.)
-		const pendingQrMethod = isQrPaymentMethod(paymentMethod);
-		const paymentKey = `payment::${crypto.randomUUID()}`;
-		const paymentDoc = {
-			orderId: documentKey,
-			paymentCode: `PAY-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
-			method: schemaMethod,
-			amount: payableAmount,
-			status: pendingQrMethod ? 'pending' : 'completed',
-			transactionReference: orderCode,
-			notes:
-				paymentMethod === 'cash'
-					? `POS cash — received ${Number(data.cashReceived ?? 0)}, change ${change}`
-					: `POS ${paymentMethod}`,
-			processedBy: actor.userId,
-			createdAt: now
-		};
-		await cbPayments.document.create({ documentKey: paymentKey, content: paymentDoc });
+		const paymentsOut: Array<{
+			paymentCode: string;
+			method: string;
+			amount: number;
+			status: string;
+			qr?: { payload: string; dataUrl: string };
+		}> = [];
+		let change = 0;
+		for (const line of normalizedPayments) {
+			const pendingQrMethod = isQrPaymentMethod(line.method);
+			const paymentKey = `payment::${crypto.randomUUID()}`;
+			const paymentCode = `PAY-${datePart}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+			if (line.method === 'cash') {
+				change += (line.cashReceived ?? line.amount) - line.amount;
+			}
+			const paymentDoc = {
+				orderId: documentKey,
+				paymentCode,
+				method: PAYMENT_METHOD_MAP[line.method],
+				amount: line.amount,
+				status: pendingQrMethod ? 'pending' : 'completed',
+				transactionReference: orderCode,
+				notes:
+					line.method === 'cash'
+						? `POS cash — received ${Number(line.cashReceived ?? line.amount)}, change ${Math.max(0, (line.cashReceived ?? line.amount) - line.amount)}`
+						: `POS ${line.method}`,
+				processedBy: actor.userId,
+				createdAt: now
+			};
+			await cbPayments.document.create({ documentKey: paymentKey, content: paymentDoc });
 
-		// ── QR thanh toán (momo/zalopay/bank_transfer): sinh QR cho khách quét ──
-		// Payment tương ứng đang 'pending' — chờ tool đối soát (nút Check QR ở
-		// admin/payments hoặc auto poll) tự confirm.
-		let qr: { payload: string; dataUrl: string } | undefined;
-		if (pendingQrMethod) {
-			qr = await QrPaymentService.generateQr(paymentDoc.paymentCode, payableAmount, orderCode);
+			const out: (typeof paymentsOut)[number] = {
+				paymentCode,
+				method: line.method,
+				amount: line.amount,
+				status: pendingQrMethod ? 'pending' : 'completed'
+			};
+			// ── QR thanh toán (momo/zalopay/bank_transfer): sinh QR cho khách quét ──
+			if (pendingQrMethod) {
+				out.qr = await QrPaymentService.generateQr(paymentCode, line.amount, orderCode);
+			}
+			paymentsOut.push(out);
 		}
+		// QR chính (tương thích UI cũ): line QR đầu tiên nếu có.
+		const primaryQr = paymentsOut.find((p) => p.qr)?.qr;
 
 		// ── Update session totals khi bán gắn ca ──
 		let sessionUpdated = false;
@@ -290,11 +430,13 @@ export const POST: RequestHandler = async (event) => {
 				documentKey,
 				orderCode,
 				totalAmount: payableAmount,
+				subtotal: totalAmount,
 				discountAmount,
 				change,
 				sessionUpdated,
-				paymentCode: paymentDoc.paymentCode,
-				qr
+				paymentCode: paymentsOut[0]?.paymentCode,
+				payments: paymentsOut,
+				qr: primaryQr
 			}
 		});
 	} catch (e) {

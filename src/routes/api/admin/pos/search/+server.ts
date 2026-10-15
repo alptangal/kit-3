@@ -1,7 +1,10 @@
 // src/routes/api/admin/pos/search/+server.ts
 // POS terminal product search: keyword (sku/displayName/barcode) — capped limit 20.
+// V2: nhận branchId để trả kèm tồn kho từng variant (stock) trong item —
+// thêm field không phá client cũ. Không có branchId → stock undefined.
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
+import { cb_bucketName, cb_scopeName } from '$env/static/private';
 import {
 	readAdminRequest,
 	respondEncrypted,
@@ -9,12 +12,15 @@ import {
 	statusForServiceFailure
 } from '$lib/server/admin/api';
 import { ProductAdminService } from '$lib/server/db/products';
+import { cbData } from '$modules/couchbase/clients';
+
+const inventoryStockKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.inventory_stock`;
 
 export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
 
 	try {
-		const read = await readAdminRequest<{ search?: string; limit?: number }>(event);
+		const read = await readAdminRequest<{ search?: string; limit?: number; branchId?: string }>(event);
 		if (!read.ok) return read.response;
 		const { lang, publicKeyB64 } = read;
 
@@ -31,6 +37,7 @@ export const POST: RequestHandler = async (event) => {
 
 		const search = (read.data.search ?? '').trim();
 		const limit = Math.min(20, Math.max(1, Math.floor(Number(read.data.limit) || 20)));
+		const branchId = (read.data.branchId ?? '').trim() || actor.branchId || '';
 
 		const result = await ProductAdminService.listVariants(actor, {
 			page: 1,
@@ -42,10 +49,33 @@ export const POST: RequestHandler = async (event) => {
 			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
 		}
 
+		// ── Batch lấy tồn kho tại branch cho các variant trong kết quả ──
+		// (1 query IN thay vì N query từng variant — tránh fan-out N1QL bị drop).
+		let stockByVariant: Record<string, number> | undefined;
+		const items = result.items as Array<Record<string, unknown>>;
+		if (branchId && items.length > 0) {
+			const ids = items.map((i) => String(i._id));
+			const res = await cbData('inventory_stock').document.query({
+				statement: `SELECT variantId, quantityOnHand FROM ${inventoryStockKeyspace} WHERE branchId = $1 AND variantId IN $2`,
+				args: [branchId, ids],
+				readonly: true
+			});
+			if (res.ok && res.data?.results) {
+				stockByVariant = {};
+				for (const row of res.data.results as Array<{ variantId: string; quantityOnHand?: number }>) {
+					stockByVariant[row.variantId] = Number(row.quantityOnHand ?? 0);
+				}
+			}
+		}
+		const itemsWithStock = items.map((item) => ({
+			...item,
+			stock: stockByVariant ? Number(stockByVariant[String(item._id)] ?? 0) : undefined
+		}));
+
 		return respond({
 			ok: true,
 			message: { vi: 'Tìm kiếm sản phẩm thành công', en: 'Product search completed' },
-			data: { items: result.items, total: result.total }
+			data: { items: itemsWithStock, total: result.total }
 		});
 	} catch (e) {
 		console.error('[POST /api/admin/pos/search]', e);

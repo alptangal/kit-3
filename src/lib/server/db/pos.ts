@@ -113,11 +113,19 @@ export class POSService {
     if (permError) return permError;
 
     // Check if device already has open session
-    const existingRes = await cbPOS.document.query({
-      statement: `SELECT META().id AS _id FROM ${posKeyspace} WHERE deviceId = $1 AND status = $2 AND branchId = $3`,
-      args: [sessionData.deviceId, 'open', actor.branchId],
-      readonly: true
-    });
+    // (branchId có thể null/missing ở cả session lẫn actor — user không gán chi nhánh;
+    // Data API drop args null nên tách 2 nhánh query thay vì dùng IFNULL($3,...))
+    const existingRes = actor.branchId
+      ? await cbPOS.document.query({
+          statement: `SELECT META().id AS _id FROM ${posKeyspace} WHERE deviceId = $1 AND status = $2 AND branchId = $3`,
+          args: [sessionData.deviceId, 'open', actor.branchId],
+          readonly: true
+        })
+      : await cbPOS.document.query({
+          statement: `SELECT META().id AS _id FROM ${posKeyspace} WHERE deviceId = $1 AND status = $2 AND (branchId IS MISSING OR branchId IS NULL)`,
+          args: [sessionData.deviceId, 'open'],
+          readonly: true
+        });
 
     if (existingRes.ok && (existingRes.data?.results?.length ?? 0) > 0) {
       return { success: false, messages: posAdminMessages.sessionAlreadyOpen };
@@ -165,11 +173,18 @@ export class POSService {
     const scope = await PermissionChecker.getScope(actor.roleName, 'pos:read');
     if (!scope) return { success: false, messages: posAdminMessages.permissionDenied };
 
-    const res = await cbPOS.document.query({
-      statement: `SELECT META().id AS _id, ${POS_SESSION_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')} FROM ${posKeyspace} WHERE deviceId = $1 AND status = $2 AND branchId = $3 LIMIT 1`,
-      args: [deviceId, 'open', actor.branchId],
-      readonly: true
-    });
+    // (branchId null/missing an toàn: Data API drop args null nên tách 2 nhánh query)
+    const res = actor.branchId
+      ? await cbPOS.document.query({
+          statement: `SELECT META().id AS _id, ${POS_SESSION_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')} FROM ${posKeyspace} WHERE deviceId = $1 AND status = $2 AND branchId = $3 ORDER BY IFNULL(openedAt, '') DESC LIMIT 1`,
+          args: [deviceId, 'open', actor.branchId],
+          readonly: true
+        })
+      : await cbPOS.document.query({
+          statement: `SELECT META().id AS _id, ${POS_SESSION_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ')} FROM ${posKeyspace} WHERE deviceId = $1 AND status = $2 AND (branchId IS MISSING OR branchId IS NULL) ORDER BY IFNULL(openedAt, '') DESC LIMIT 1`,
+          args: [deviceId, 'open'],
+          readonly: true
+        });
 
     if (!res.ok || !res.data?.results || res.data.results.length === 0) {
       return { success: false, messages: posAdminMessages.sessionNotOpen };
