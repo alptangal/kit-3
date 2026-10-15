@@ -46,8 +46,10 @@
 		};
 	});
 
-	// Shrink header khi cuộn (chỉ mobile ≤767px áp dụng qua CSS): scroll
-	// container là div.w-full.h-full của Container root (window không cuộn).
+	// Shrink header khi cuộn (desktop + mobile — xem .admin-inset.is-scrolled):
+	// scroll container là div.w-full.h-full của Container root (window không cuộn).
+	// Ngưỡng 80px: user cuộn qua phần đầu trang (header + filters) → header
+	// trang con thu gọn; cuộn về gần top → trả nguyên trạng thái.
 	$effect(() => {
 		if (typeof document === 'undefined') return;
 		const findScrollEl = (): HTMLElement | undefined => {
@@ -63,7 +65,7 @@
 			if (raf) return;
 			raf = requestAnimationFrame(() => {
 				raf = 0;
-				isScrolled = (scrollEl?.scrollTop ?? window.scrollY) > 8;
+				isScrolled = (scrollEl?.scrollTop ?? window.scrollY) > 80;
 			});
 		};
 		let scrollEl = findScrollEl();
@@ -124,6 +126,7 @@
 		'/admin/purchases': 'Nhập hàng',
 		'/admin/transfers': 'Chuyển kho',
 		'/admin/returns': 'Đổi trả',
+		'/admin/debts': 'Công nợ',
 		'/admin/expiry': 'Hạn sử dụng',
 		'/settings': 'Cấu hình hệ thống'
 	};
@@ -302,6 +305,15 @@
 							active={isActive('/admin/expiry')}
 							icon="lucide:calendar-clock"
 							data-test="admin-nav-expiry"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Công nợ"
+							href="/admin/debts"
+							active={isActive('/admin/debts')}
+							icon="lucide:hand-coins"
+							data-test="admin-nav-debts"
 						/>
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
@@ -493,7 +505,7 @@
 	</Sidebar>
 
 	<Sidebar.Inset>
-		<div class="admin-inset" bind:this={insetEl}>
+		<div class="admin-inset" class:is-scrolled={isScrolled} bind:this={insetEl}>
 			<div
 				class="admin-inset-header"
 				class:is-scrolled={isScrolled}
@@ -561,6 +573,44 @@
 		@media (max-width: 767px) {
 			display: inline-flex;
 		}
+	}
+
+	/* G: thu gọn header trang con khi cuộn xuống (desktop + mobile, ngưỡng
+	   80px — class .is-scrolled do scroll listener đặt trên .admin-inset).
+	   Header trang con giữ KHÔNG sticky (tránh vỡ layout trang có filters/
+	   toolbar sticky riêng) — chỉ thu gọn: subtitle collapse height 0 +
+	   title nhỏ lại. Scoped layout không match markup trang con → :global()
+	   qua anchor .admin-inset (element của chính layout này). */
+	.admin-inset :global(.admin-header) {
+		transition: gap 200ms ease;
+	}
+
+	.admin-inset :global(.admin-header .admin-title) {
+		transition: font-size 200ms ease;
+	}
+
+	.admin-inset :global(.admin-header .admin-subtitle) {
+		max-height: 3rem;
+		opacity: 1;
+		overflow: hidden;
+		transition:
+			max-height 200ms ease,
+			opacity 200ms ease,
+			margin-top 200ms ease;
+	}
+
+	.admin-inset.is-scrolled :global(.admin-header) {
+		gap: 0.5rem;
+	}
+
+	.admin-inset.is-scrolled :global(.admin-header .admin-title) {
+		font-size: 1.25rem;
+	}
+
+	.admin-inset.is-scrolled :global(.admin-header .admin-subtitle) {
+		max-height: 0;
+		opacity: 0;
+		margin-top: 0;
 	}
 
 	.admin-inset-body {
