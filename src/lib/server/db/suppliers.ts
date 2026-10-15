@@ -88,6 +88,14 @@ const supplierAdminMessages = {
     vi: 'Không tìm thấy sản phẩm trong phiếu',
     en: 'Variant not found in purchase'
   } as TranslateContent,
+  invalidVoucher: {
+    vi: 'Thông tin khuyến mãi nhập hàng không hợp lệ',
+    en: 'Invalid purchase voucher data'
+  } as TranslateContent,
+  giftVariantNotFound: {
+    vi: 'Không tìm thấy sản phẩm quà tặng trong phiếu',
+    en: 'Gift variant not found in purchase'
+  } as TranslateContent,
 } as const;
 
 const SUPPLIER_ADMIN_SAFE_FIELDS = [
@@ -106,6 +114,7 @@ const PO_ADMIN_SAFE_FIELDS = [
   'status',
   'items',
   'totalCost',
+  'vouchers',
   'createdBy',
   'approvedBy',
   'expectedAt',
@@ -156,7 +165,26 @@ type POItem = {
   unitCost: number;
   lotNumber?: string;
   expiresAt?: string;
+  // NSX per-item (mỗi dòng có thể có ngày sản xuất riêng — nhập hàng thực tế
+  // mỗi dòng 1 lô NSX khác nhau); rỗng → dùng expiry chung của phiếu.
+  manufacturedAt?: string;
+  // Giá vốn hiệu dụng sau phân bổ voucher (tổng tiền thực trả / tổng đơn vị thực nhận
+  // kể cả quà tặng) — xem applyVoucherCostAllocation.
+  unitCostEffective?: number;
+  // Voucher nhập hàng từ NCC (khuyến mãi gắn 1 dòng nhập): 'money' giảm tiền,
+  // 'gift' tặng thêm hàng. Optional — phiếu cũ không có field này vẫn chạy như cũ.
+  voucher?: PurchaseVoucher;
 };
+
+/**
+ * Voucher nhập hàng (khuyến mãi TỪ NCC khi nhập — KHÔNG phải khuyến mãi bán hàng):
+ * - type 'money': giảm tiền trên dòng nhập (value = số tiền giảm, >= 0).
+ * - type 'gift': tặng thêm hàng (giftVariantId + giftQuantity > 0) — khi receive
+ *   sẽ CỘNG TỒN thêm cho variant quà (quà = hàng nhận thật, giá vốn 0 đồng phần quà).
+ */
+export type PurchaseVoucher =
+  | { type: 'money'; value: number; note?: string }
+  | { type: 'gift'; giftVariantId: string; giftQuantity: number; note?: string };
 
 type QuickPurchaseMode = 'supplier' | 'product' | 'category';
 
@@ -167,6 +195,7 @@ type QuickPurchaseItem = {
   lotNumber?: string;
   expiresAt?: string;
   manufacturedAt?: string;
+  voucher?: PurchaseVoucher;
 };
 
 export type QuickPurchaseInput = {
@@ -178,6 +207,8 @@ export type QuickPurchaseInput = {
   totalCost: number;
   receiptImages?: string[];
   note?: string;
+  // Voucher giảm tiền cấp PHIEU (giảm trên tổng đơn nhập, độc lập voucher từng dòng).
+  vouchers?: PurchaseVoucher[];
   // expiryMode: nhập trực tiếp ISO hoặc theo số ngày
   expiryMode?: 'direct' | 'days';
   manufacturedAt?: string;
@@ -702,6 +733,29 @@ export class SupplierService {
         now
       });
       if (!ok) allOk = false;
+
+      // Quà tặng từ voucher dòng nhập (PO truyền thống cũng hỗ trợ) — cộng tồn kho quà
+      if (item.voucher?.type === 'gift') {
+        const giftQty = Number(item.voucher.giftQuantity) || 0;
+        if (giftQty > 0) {
+          const giftOk = await this.receiveItemToStock({
+            actor,
+            poId,
+            poCode: po.poCode ?? poId,
+            item: {
+              variantId: item.voucher.giftVariantId,
+              quantity: giftQty,
+              lotNumber: merged.lotNumber ? `${merged.lotNumber}-gift` : undefined,
+              manufacturedAt: merged.manufacturedAt,
+              expiresAt: merged.expiresAt
+            },
+            branchId: po.branchId,
+            supplierId: po.supplierId,
+            now
+          });
+          if (!giftOk) allOk = false;
+        }
+      }
     }
 
     // Update status PO sang received kèm receivedAt
@@ -735,6 +789,81 @@ export class SupplierService {
       po.branchId
     ).catch(() => {});
     return { success: true, po: sanitizePOForAdmin({...updatedPO, _id: poId}) };
+  }
+
+  /**
+   * Validate voucher nhập hàng (khuyến mãi từ NCC). Trả null nếu hợp lệ, ngược lại
+   * trả message lỗi tương ứng. Voucher là optional — undefined luôn hợp lệ.
+   * - 'money': value phải là số >= 0.
+   * - 'gift': giftVariantId bắt buộc + giftQuantity > 0; variant quà phải tồn tại
+   *   (nếu không tồn tại thì phiếu nhập sẽ cộng kho cho hàng không có thật).
+   */
+  private static async validatePurchaseVoucher(
+    voucher: PurchaseVoucher | undefined,
+    lang?: 'vi' | 'en'
+  ): Promise<TranslateContent | null> {
+    if (voucher == null) return null;
+    if (typeof voucher !== 'object' || (voucher.type !== 'money' && voucher.type !== 'gift')) {
+      return supplierAdminMessages.invalidVoucher;
+    }
+    if (voucher.type === 'money') {
+      const v = Number(voucher.value);
+      if (!Number.isFinite(v) || v < 0) return supplierAdminMessages.invalidVoucher;
+      return null;
+    }
+    const giftQty = Number((voucher as { giftQuantity?: unknown }).giftQuantity);
+    const giftVariantId = (voucher as { giftVariantId?: unknown }).giftVariantId;
+    if (!giftVariantId || typeof giftVariantId !== 'string' || !Number.isFinite(giftQty) || giftQty <= 0) {
+      return supplierAdminMessages.invalidVoucher;
+    }
+    const giftRes = await cbVariants.document.get({ documentKey: giftVariantId });
+    if (!giftRes.ok) return supplierAdminMessages.giftVariantNotFound;
+    void lang;
+    return null;
+  }
+
+  /**
+   * Phân bổ giá vốn voucher cho các dòng nhập (tính unitCostEffective).
+   *
+   * RATIONALE (giá vốn sau khuyến mãi nhập hàng):
+   * - Tổng tiền thực trả effectiveCost = totalCost − Σ voucher 'money' (item + phiếu).
+   *   Phần giảm tiền do NCC chịu → không nằm trong giá vốn hàng nhập.
+   * - Quà tặng ('gift') là hàng nhận THẬT với giá vốn 0 đồng phần được tặng: tổng
+   *   đơn vị thực nhận toàn phiếu = Σ(quantity + giftQuantity của từng dòng).
+   * - effectiveCost chia ĐỀU theo tổng đơn vị thực nhận toàn phiếu (đơn giản,
+   *   deterministic, tổng unitCostEffective × tổng SL đúng bằng tiền thực trả —
+   *   không theo tỷ trọng giá trị để tránh sai số làm tròn lũy kế phức tạp).
+   * - Round 4 chữ số thập phân.
+   */
+  private static applyVoucherCostAllocation(
+    items: POItem[],
+    totalCost: number,
+    poVouchers: PurchaseVoucher[]
+  ): POItem[] {
+    const moneyItem = items.reduce(
+      (s, it) => s + (it.voucher?.type === 'money' ? Number(it.voucher.value) || 0 : 0),
+      0
+    );
+    const moneyPO = poVouchers.reduce(
+      (s, v) => s + (v.type === 'money' ? Number(v.value) || 0 : 0),
+      0
+    );
+    const effectiveCost = Math.max(0, (Number(totalCost) || 0) - moneyItem - moneyPO);
+
+    // Tổng đơn vị thực nhận (kể cả quà tặng)
+    let totalUnits = 0;
+    for (const it of items) {
+      const giftQty = it.voucher?.type === 'gift' ? Number(it.voucher.giftQuantity) || 0 : 0;
+      totalUnits += it.quantity + giftQty;
+    }
+
+    if (totalUnits <= 0 || effectiveCost <= 0) {
+      // Không có gì để phân bổ — giữ nguyên giá gốc (phiếu cũ không voucher)
+      return items.map((it) => ({ ...it, unitCostEffective: it.unitCost }));
+    }
+
+    const perUnit = Math.round((effectiveCost / totalUnits) * 10000) / 10000;
+    return items.map((it) => ({ ...it, unitCostEffective: perUnit }));
   }
 
   /**
@@ -794,6 +923,18 @@ export class SupplierService {
       if (!item.variantId || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 || !Number.isFinite(Number(item.unitCost)) || Number(item.unitCost) < 0) {
         return { success: false, messages: supplierAdminMessages.invalidQuickPurchase };
       }
+      // Voucher từng dòng (optional) — validate shape + variant quà tồn tại
+      const voucherError = await this.validatePurchaseVoucher(item.voucher);
+      if (voucherError) return { success: false, messages: voucherError };
+    }
+
+    // Voucher cấp phiếu (optional) — validate shape + variant quà tồn tại
+    if (input.vouchers != null) {
+      if (!Array.isArray(input.vouchers)) return { success: false, messages: supplierAdminMessages.invalidVoucher };
+      for (const v of input.vouchers) {
+        const voucherError = await this.validatePurchaseVoucher(v);
+        if (voucherError) return { success: false, messages: voucherError };
+      }
     }
 
     // mode 'supplier' bắt buộc có supplierId
@@ -836,16 +977,25 @@ export class SupplierService {
       quantity: Number(item.quantity),
       unitCost: Number(item.unitCost),
       lotNumber: item.lotNumber?.trim() || undefined,
-      expiresAt: item.expiresAt || expiry.expiresAt || undefined
+      expiresAt: item.expiresAt || expiry.expiresAt || undefined,
+      manufacturedAt: item.manufacturedAt || expiry.manufacturedAt || undefined,
+      voucher: item.voucher ?? undefined
     }));
+
+    // Voucher cấp phiếu: giảm tiền tổng đơn (khuyến mãi từ NCC)
+    const poVouchers: PurchaseVoucher[] = (input.vouchers ?? []).filter((v) => v != null);
+
+    // Phân bổ giá vốn sau voucher (unitCostEffective)
+    const allocatedItems = this.applyVoucherCostAllocation(items, Number(input.totalCost) || 0, poVouchers);
 
     const po = {
       poCode,
       supplierId: input.supplierId ?? null,
       branchId: input.branchId,
       status: 'received' as POStatus,
-      items,
+      items: allocatedItems,
       totalCost: Number(input.totalCost) || items.reduce((s, it) => s + it.quantity * it.unitCost, 0),
+      vouchers: poVouchers.length > 0 ? poVouchers : undefined,
       createdBy: actor.userId,
       approvedBy: actor.userId,
       expectedAt: now,
@@ -875,9 +1025,11 @@ export class SupplierService {
       });
     }
 
-    // Chạy receive flow: tạo lot + cộng kho cho từng item
+    // Chạy receive flow: tạo lot + cộng kho cho từng item (NSX per-item nếu có),
+    // cộng thêm tồn kho quà tặng (voucher 'gift' = hàng nhận thật từ NCC —
+    // tạo lot + stock movement riêng cho phần quà).
     let allOk = true;
-    for (const item of items) {
+    for (const item of allocatedItems) {
       const ok = await this.receiveItemToStock({
         actor,
         poId,
@@ -886,7 +1038,7 @@ export class SupplierService {
           variantId: item.variantId,
           quantity: item.quantity,
           lotNumber: item.lotNumber,
-          manufacturedAt: expiry.manufacturedAt,
+          manufacturedAt: item.manufacturedAt || expiry.manufacturedAt,
           expiresAt: item.expiresAt || expiry.expiresAt
         },
         branchId: input.branchId,
@@ -894,6 +1046,29 @@ export class SupplierService {
         now
       });
       if (!ok) allOk = false;
+
+      // Quà tặng: cộng tồn kho cho variant quà (lot riêng suffix '-gift')
+      if (item.voucher?.type === 'gift') {
+        const giftQty = Number(item.voucher.giftQuantity) || 0;
+        if (giftQty > 0) {
+          const giftOk = await this.receiveItemToStock({
+            actor,
+            poId,
+            poCode,
+            item: {
+              variantId: item.voucher.giftVariantId,
+              quantity: giftQty,
+              lotNumber: item.lotNumber ? `${item.lotNumber}-gift` : undefined,
+              manufacturedAt: item.manufacturedAt || expiry.manufacturedAt,
+              expiresAt: item.expiresAt || expiry.expiresAt
+            },
+            branchId: input.branchId,
+            supplierId: po.supplierId ?? '',
+            now
+          });
+          if (!giftOk) allOk = false;
+        }
+      }
     }
 
     if (!allOk) {
