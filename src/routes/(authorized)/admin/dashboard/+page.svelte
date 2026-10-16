@@ -7,6 +7,7 @@
 	import { Button } from '$components/element';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { formatDateTime as formatDateTimeShared } from '$modules/i18n';
 	import { onMount } from 'svelte';
 	import { resolveServerMessage } from '../_interface';
 
@@ -150,20 +151,9 @@
 	let loadError = $state<string | undefined>(undefined);
 	let loadedOnce = $state(false);
 
+	// i18n: format qua helper dùng chung ($modules/i18n) — cùng shape trước đây.
 	function formatDateTime(raw?: string | null): string {
-		if (!raw) return '—';
-		try {
-			const date = new Date(raw);
-			return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
-				year: 'numeric',
-				month: 'short',
-				day: '2-digit',
-				hour: '2-digit',
-				minute: '2-digit'
-			}).format(date);
-		} catch {
-			return '—';
-		}
+		return formatDateTimeShared(raw, lang);
 	}
 
 	function formatMoney(value?: number | null): string {

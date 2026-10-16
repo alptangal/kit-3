@@ -2,10 +2,12 @@
 <script lang="ts">
 	import { Button, DataTable, Pagination } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
+	import { ImageUpload } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { AlertDialog } from '$lib/components/element/alert-dialog';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { formatDateTime as formatDateTimeShared } from '$modules/i18n';
 	import { onMount } from 'svelte';
 	import { resolveServerMessage } from '../_interface';
 
@@ -174,20 +176,9 @@
 		return categories.find((c) => c.categoryId === categoryId)?.name ?? '—';
 	}
 
+	// i18n: format qua helper dùng chung ($modules/i18n) — cùng shape trước đây.
 	function formatDateTime(raw?: string | null): string {
-		if (!raw) return '—';
-		try {
-			const date = new Date(raw);
-			return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
-				year: 'numeric',
-				month: 'short',
-				day: '2-digit',
-				hour: '2-digit',
-				minute: '2-digit'
-			}).format(date);
-		} catch {
-			return '—';
-		}
+		return formatDateTimeShared(raw, lang);
 	}
 
 	function showToast(text: string, color: 'success' | 'error') {
@@ -730,7 +721,9 @@
 					</div>
 					<label class="form-field">
 						<span class="form-label">{pageContents.editModal.coverImage[lang]}</span>
-						<input class="admin-input" type="text" bind:value={form.coverImageUrl} disabled={submitting} />
+						<!-- SỬA: dùng ImageUpload (upload thẳng hosting ngoài + preview + xoá)
+						     thay URL input tay — vẫn bind cùng field form.coverImageUrl -->
+						<ImageUpload bind:value={form.coverImageUrl} label={pageContents.editModal.coverImage[lang]} disabled={submitting} />
 					</label>
 					<label class="form-field">
 						<span class="form-label">{pageContents.editModal.excerpt[lang]}</span>
