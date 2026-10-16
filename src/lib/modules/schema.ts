@@ -70,7 +70,9 @@ const collectionsName = [
 	// Lịch sử truy cập user (page/router analytics)
 	'access_logs',
 	// Secret Key API — key Bearer sk-... để gọi /api/agent/* từ ngoài (raw key hiển thị 1 lần, DB chỉ hash)
-	'api_keys'
+	'api_keys',
+	// Trả hàng nhà cung cấp — trừ tồn + giảm công nợ phải trả
+	'purchase_returns'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -1441,6 +1443,24 @@ export const collectionSchemas = {
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true, required: true },
 			lastUsedAt: { type: 'date', searchable: false, sortable: false, selectable: true },
 			revokedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
+		}
+	},
+
+	// Trả hàng nhà cung cấp — trừ tồn + giảm công nợ phải trả
+	purchase_returns: {
+		fields: {
+			// PR-YYYYMMDD-XXXX
+			returnCode: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			supplierId: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			supplierName: { type: 'string', searchable: true, sortable: true, selectable: true },
+			branchId: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			// [{ variantId, quantity, unitCost, lotId, serials[] }]
+			items: { type: 'array', searchable: false, sortable: false, selectable: true },
+			reason: { type: 'string', searchable: false, sortable: false, selectable: true },
+			status: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			createdBy: { type: 'string', searchable: true, sortable: false, selectable: true },
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true, required: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
 	}
 } as const satisfies Record<
