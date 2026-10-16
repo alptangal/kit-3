@@ -142,21 +142,36 @@ export const POST: RequestHandler = async (event) => {
 			);
 		}
 
-		// Hosting ngoài có thể trả JSON {url} / {data:{url}} / {link} hoặc text thuần
+		// Hosting ngoài có thể trả JSON {url} / {data:{url}} / {link} hoặc text thuần.
+		// Space hiện tại (HF): {data: "<python-dict-string>"} — dict bị str() hóa (single
+		// quotes) nên không parse JSON được → trích URL bằng regex trên chuỗi data.
 		const rawText = await hostRes.text();
 		let imageUrl: string | undefined;
 		try {
 			const parsed = JSON.parse(rawText) as Record<string, unknown>;
-			const candidate =
-				(parsed.url as string) ??
-				((parsed.data as Record<string, unknown> | undefined)?.url as string) ??
-				(parsed.link as string) ??
-				(parsed.image as string) ??
-				(parsed.path as string);
-			if (typeof candidate === 'string') imageUrl = candidate;
+			// data là object JSON chuẩn (định dạng khác của host)
+			if (parsed.data && typeof parsed.data === 'object') {
+				const nested = parsed.data as Record<string, unknown>;
+				const candidate =
+					(nested.url as string) ?? (nested.link as string) ?? (nested.image as string) ?? (nested.path as string) ?? (nested.src as string);
+				if (typeof candidate === 'string') imageUrl = candidate;
+			} else {
+				const candidate =
+					(parsed.url as string) ??
+					(parsed.link as string) ??
+					(parsed.image as string) ??
+					(parsed.path as string);
+				if (typeof candidate === 'string') imageUrl = candidate;
+			}
+			// data là string (Python dict str()-ized hoặc HTML/text) → tìm URL ảnh đầu tiên
+			// Ưu tiên khóa 'src'/'url' trong chuỗi, rơi về http(s) đầu tiên gặp
+			if (!imageUrl && typeof parsed.data === 'string') {
+				const m = parsed.data.match(/'(?:src|url|link|image)':\s*'([^']+)'/) ?? parsed.data.match(/"(?:src|url|link|image)":\s*"([^"]+)"/);
+				imageUrl = m?.[1] ?? parsed.data.match(/https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|webp|gif)/i)?.[0];
+			}
 		} catch {
-			// không phải JSON — coi như trả URL trực tiếp
-			imageUrl = rawText.trim();
+			// không phải JSON — coi như trả URL trực tiếp (hoặc trích URL nếu có trong text)
+			imageUrl = rawText.match(/https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|webp|gif)/i)?.[0] ?? rawText.trim();
 		}
 		if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
 			imageUrl = imageUrl.startsWith('/') ? `${hostUrl.split('/api/')[0]}${imageUrl}` : undefined;
