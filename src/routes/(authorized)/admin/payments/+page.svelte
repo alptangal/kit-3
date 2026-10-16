@@ -799,6 +799,14 @@
 		border-radius: 0.75rem;
 		border: 1px solid var(--default-300);
 		background: var(--background);
+		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
+		   theo wrap (khong cuon) -> thead truot mat. Desktop co stickyHead:
+		   wrap phai thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
+		@media (min-width: 768px) {
+			&:has(:global(.datatable-sticky-head)) {
+				overflow-x: visible;
+			}
+		}
 	}
 
 	/* Nút action trong snippet actionsContent DataTable —

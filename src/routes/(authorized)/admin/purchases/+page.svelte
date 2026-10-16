@@ -308,6 +308,7 @@
 	let branches = $state<BranchOption[]>([]);
 	let suppliers = $state<SupplierOption[]>([]);
 	let categories = $state<CategoryOption[]>([]);
+	let brands = $state<SupplierOption[]>([]);
 	let variantOptions = $state<VariantOption[]>([]);
 	let variantsLoading = $state(false);
 
@@ -402,7 +403,6 @@
 	let productCreating = $state(false);
 	let variantCreating = $state(false);
 	let newProductDocId = $state('');
-	let brands = $state<SupplierOption[]>([]);
 
 	// ── Modal chi tiết + nhận hàng ──
 	let detailModalDisplay = $state(false);
@@ -2361,9 +2361,13 @@
 	// .select-root (as=div) — không inline TS trong attr class (unocss/acorn).
 	// Trigger cao bằng .admin-select, root width auto trong filters /
 	// 100% trong form-grid.
-	.admin-filter-select {
+	// BẪY scoped: .admin-filter-select scoped trang không match (element mang
+	// hash Select) → width:100% mặc định thắng, filter wrap full-row. Nhắm qua
+	// anchor .admin-filters / .form-field + :global().
+	.admin-filters :global(.admin-filter-select) {
 		width: auto;
 		min-width: 11rem;
+		max-width: 16rem;
 
 		:global(.select-trigger) {
 			height: 2.25rem;
@@ -2375,8 +2379,9 @@
 		}
 	}
 
-	.form-field .admin-filter-select {
+	.form-field :global(.admin-filter-select) {
 		width: 100%;
+		max-width: 100%;
 	}
 
 	.admin-input {
@@ -2422,6 +2427,14 @@
 		border-radius: 0.75rem;
 		border: 1px solid var(--default-300);
 		background: var(--background);
+		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
+		   theo wrap (khong cuon) -> thead truot mat. Desktop co stickyHead:
+		   wrap phai thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
+		@media (min-width: 768px) {
+			&:has(:global(.datatable-sticky-head)) {
+				overflow-x: visible;
+			}
+		}
 	}
 
 	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */

@@ -1025,6 +1025,15 @@
 	.admin-table-wrap {
 		width: 100%;
 		overflow: auto;
+
+		/* Sticky thead: wrap overflow auto tao scroll context - th sticky bam theo
+		   wrap (khong cuon) -> thead truot mat. Desktop co stickyHead: wrap phai
+		   thoat scroll context. */
+		@media (min-width: 768px) {
+			&:has(:global(.datatable-sticky-head)) {
+				overflow: visible;
+			}
+		}
 	}
 
 	.row-actions {

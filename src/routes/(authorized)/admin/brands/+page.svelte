@@ -7,7 +7,7 @@
 	// encryption.fetchSecure POST như users page.
 	import { onMount } from 'svelte';
 	import { Button, DataTable, Pagination } from '$components/element';
-	import { Input, Label, TextField } from '$components/form';
+	import { ImageUpload, Input, Label, TextField } from '$components/form';
 	import { Checkbox } from '$components/form/checkbox';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
@@ -686,10 +686,9 @@
 					</TextField>
 				</div>
 
-				<TextField name="brand-logo">
-					<Label>{pageContents.logoLabel[lang]}</Label>
-					<Input bind:value={formData.logoUrl} placeholder="https://example.com/logo.png" />
-				</TextField>
+				<!-- SỬA: ImageUpload (upload thẳng hosting ngoài + preview + xoá)
+				     thay URL input tay — bind cùng field formData.logoUrl -->
+				<ImageUpload bind:value={formData.logoUrl} label={pageContents.logoLabel[lang]} />
 
 				<div>
 					<label for="brand-description" class="modal-field-label">{pageContents.descLabel[lang]}</label>
@@ -852,6 +851,14 @@
 		@media (max-width: 767px) {
 			border: 0;
 			border-radius: 0;
+		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
+		   theo wrap (khong cuon) -> thead truot mat. Desktop co stickyHead:
+		   wrap phai thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
+		@media (min-width: 768px) {
+			&:has(:global(.datatable-sticky-head)) {
+				overflow-x: visible;
+			}
+		}
 		}
 	}
 

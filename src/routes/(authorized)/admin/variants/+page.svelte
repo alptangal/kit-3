@@ -7,7 +7,7 @@
 	// sang encryption.fetchSecure POST cho list + create/update/delete.
 	import { onMount } from 'svelte';
 	import { Button, DataTable, Pagination } from '$components/element';
-	import { Input, Label, TextField } from '$components/form';
+	import { ImageUpload, Input, Label, TextField } from '$components/form';
 	import { Checkbox } from '$components/form/checkbox';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
@@ -985,10 +985,11 @@
 						<Label>{pageContents.weightLabel[lang]}</Label>
 						<Input type="number" bind:value={formData.weight} />
 					</TextField>
-					<TextField name="variant-image">
-						<Label>{pageContents.imageLabel[lang]}</Label>
-						<Input bind:value={formData.imageUrl} placeholder="https://example.com/image.jpg" />
-					</TextField>
+					<!-- SỬA: ImageUpload (upload thẳng hosting ngoài + preview + xoá)
+					     thay URL input tay — bind cùng field formData.imageUrl -->
+					<div>
+						<ImageUpload bind:value={formData.imageUrl} label={pageContents.imageLabel[lang]} />
+					</div>
 				</div>
 
 				<!-- Thuộc tính (key-value động) -->
@@ -1287,6 +1288,14 @@
 		@media (max-width: 767px) {
 			border: 0;
 			border-radius: 0;
+		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
+		   theo wrap (khong cuon) -> thead truot mat. Desktop co stickyHead:
+		   wrap phai thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
+		@media (min-width: 768px) {
+			&:has(:global(.datatable-sticky-head)) {
+				overflow-x: visible;
+			}
+		}
 		}
 	}
 

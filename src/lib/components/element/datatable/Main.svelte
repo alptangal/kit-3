@@ -1821,6 +1821,10 @@
 	// .datatable-root overflow:hidden + .datatable-table-wrap overflow-x:auto
 	// tạo scroll context → sticky theo WINDOW fail. Mở overflow trong media;
 	// desktop giữ nguyên (không hồi quy).
+	// BẪY (phát hiện khi tối ưu wide screen): th/thead render trong Head.svelte
+	// (hash scope riêng s-*) → selector lồng `.datatable-th` compile thành
+	// `... .datatable-th:where(.s-MainHash)` KHÔNG match th (mang hash Head)
+	// → rule sticky chết. Phải :global() phần th (caption vẫn trong Main — ok).
 	@media (max-width: 1024px) {
 		.datatable-root.datatable-sticky-head {
 			overflow: visible;
@@ -1836,7 +1840,7 @@
 				background: var(--content1, #fff);
 			}
 
-			.datatable-th {
+			:global(.datatable-th) {
 				position: sticky;
 				top: calc(var(--admin-header-h, 0px) + var(--admin-filters-h, 0px) + 1.75rem);
 				z-index: 2;
@@ -1866,7 +1870,7 @@
 				background: var(--content1, #fff);
 			}
 
-			.datatable-th {
+			:global(.datatable-th) {
 				position: sticky;
 				top: calc(var(--admin-header-h, 0px) + var(--admin-page-header-h, 0px) + var(--admin-filters-h, 0px));
 				z-index: 2;

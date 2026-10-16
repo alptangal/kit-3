@@ -1044,10 +1044,14 @@
 	}
 
 	// Component Select trong admin-filters (searchable category/brand):
-	// class đặt trên .select-root (as=div), trigger khớp .admin-select.
-	.admin-filter-select {
+	// class đặt trên .select-root (as=div) — element mang hash Select nên rule
+	// scoped `.admin-filter-select.s-<trang>` không match (bẫy scoped). Nhắm qua
+	// anchor .admin-filters + :global() — trước đây width:100% mặc định của
+	// .select-root thắng → mỗi select full-row → filter bar wrap 4 hàng.
+	.admin-filters :global(.admin-filter-select) {
 		width: auto;
 		min-width: 11rem;
+		max-width: 16rem;
 
 		:global(.select-trigger) {
 			min-height: 2.25rem;
@@ -1080,6 +1084,16 @@
 		@media (max-width: 767px) {
 			border: 0;
 			border-radius: 0;
+		}
+
+		/* Sticky thead: wrap overflow-x auto tạo scroll context — th sticky bám
+		   theo wrap (không cuộn) → thead trượt mất. Khi DataTable bật stickyHead
+		   (desktop), wrap phải thoát scroll context (overflow-x visible) — bề
+		   ngang đã do .datatable-table-wrap tự cuộn. */
+		@media (min-width: 768px) {
+			&:has(:global(.datatable-sticky-head)) {
+				overflow-x: visible;
+			}
 		}
 	}
 

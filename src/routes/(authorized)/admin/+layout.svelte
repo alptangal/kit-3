@@ -573,7 +573,7 @@
 				</div>
 				<Breadcrumb items={crumbs} data-test="admin-breadcrumb" />
 			</div>
-			<Separator decorative />
+			<Separator decorative class="admin-inset-separator" />
 			<div class="admin-inset-body">
 				{@render children()}
 			</div>
@@ -610,14 +610,18 @@
 		/* Desktop: sticky breadcrumb bar — user luôn thấy vị trí đang đứng.
 		   1 scroll container duy nhất (.admin-inset body cuộn trong Container
 		   root) → sticky hoạt động mà không tạo scroll lồng. z-500 dưới
-		   sidebar overlay (999). */
+		   sidebar overlay (999). Khi cuộn (.is-scrolled) thu padding-block để
+		   bar mỏng tối đa — mục tiêu: tối đa dòng data hiển thị trên màn hình
+		   (wide screen), breadcrumb vẫn đủ nhận biết vị trí. ResizeObserver đo
+		   .admin-inset-header → --admin-header-h tự theo chiều cao mới. */
 		@media (min-width: 768px) {
 			position: sticky;
 			top: 0;
 			z-index: 500;
-			transition: box-shadow 200ms ease;
+			transition: padding 200ms ease, box-shadow 200ms ease;
 
 			&.is-scrolled {
+				padding-block: 0.35rem;
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}
 		}
@@ -694,13 +698,44 @@
 	   con (z-400) → filter bar (z-390) → pagination dính đáy (z-390). Chỉ data
 	   rows cuộn; các bar luôn nhìn thấy. Mobile đã có riêng (B5 + trang tự khai)
 	   — không đụng. :global() qua anchor .admin-inset (markup trang con ngoài
-	   scope layout). Nền đặc var(--background) chống row lòi xuyên. */
+	   scope layout). Nền đặc var(--background) chống row lòi xuyên.
+	   Wide screen (yêu cầu user): khi cuộn — separator ẩn (trống 1px), body
+	   padding-top thu lại, gap giữa header/filters/bảng nén để tối đa rows. */
+	/* Separator giữa header + body: element render trong component Separator
+	   (hash riêng) → scoped selector layout không khớp. :global() qua anchor
+	   .admin-inset (trong template layout, hash khớp) — ẩn khi cuộn. */
+	.admin-inset :global(.admin-inset-separator) {
+		transition: opacity 200ms ease;
+	}
+
+	@media (min-width: 768px) {
+		.admin-inset.is-scrolled :global(.admin-inset-separator) {
+			opacity: 0;
+		}
+	}
+
+	.admin-inset.is-scrolled .admin-inset-body {
+		@media (min-width: 768px) {
+			padding-top: 0.5rem;
+		}
+	}
+
 	@media (min-width: 768px) {
 		.admin-inset :global(.admin-header) {
 			position: sticky;
 			top: var(--admin-header-h, 0px);
 			z-index: 400;
 			background: var(--background, #fff);
+			padding-block: 0.25rem;
+			transition: padding 200ms ease;
+		}
+
+		.admin-inset :global(.admin-page) {
+			transition: gap 200ms ease;
+		}
+
+		.admin-inset.is-scrolled :global(.admin-page) {
+			gap: 0.5rem;
 		}
 
 		.admin-inset :global(.admin-filters) {
