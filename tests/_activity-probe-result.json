@@ -1,0 +1,77 @@
+[
+  {
+    "name": "P0 N1QL setup (collection + indexes + permission + grants)",
+    "pass": true,
+    "detail": "collection access_logs: true; index userId: true; index status: true; permission activity:read: true; grant owner: true; grant manager: true"
+  },
+  {
+    "name": "P1 đi vòng 3 trang admin (sinh log)",
+    "pass": true,
+    "detail": "/admin, /admin/brands, /admin/activity"
+  },
+  {
+    "name": "P2 hook ghi access_logs vào DB (đợi ≤20s)",
+    "pass": true,
+    "detail": "admin=80 total=125"
+  },
+  {
+    "name": "P3 summary ok + totalRequests > 0 + activeUsers >= 1",
+    "pass": true,
+    "detail": "total=130 users=2 avg=2798ms"
+  },
+  {
+    "name": "P4 per-user có row (userId + totalRequests + span)",
+    "pass": true,
+    "detail": "rows=2 first=users-admin reqs=84"
+  },
+  {
+    "name": "P5 top-pages có path /admin + hits/avgDuration",
+    "pass": true,
+    "detail": "rows=10 first=/api/admin/activity/query hits=50"
+  },
+  {
+    "name": "P5b top-pages orderBy=duration có avgDurationMs",
+    "pass": true,
+    "detail": "first=/api/admin/inventory/branches avg=12988ms"
+  },
+  {
+    "name": "P6 top-errors ok (mảng rows)",
+    "pass": true,
+    "detail": "rows=3"
+  },
+  {
+    "name": "P7 entries list đúng shape + userId có giá trị",
+    "pass": true,
+    "detail": "rows=10 total=135"
+  },
+  {
+    "name": "P7b entries filter userId=admin → mọi row khớp",
+    "pass": true,
+    "detail": "rows=10 userId=users-admin"
+  },
+  {
+    "name": "P8 entries userId lạ → 0 row",
+    "pass": true,
+    "detail": "rows=0"
+  },
+  {
+    "name": "P9 UI /admin/activity render (title + 4 cards + bảng per-user + top pages)",
+    "pass": true,
+    "detail": "title=Access history cards={\"requests\":true,\"users\":true,\"duration\":true,\"errors\":true} perUser=true topPages=true cardValue=0"
+  },
+  {
+    "name": "P9b sidebar có entry Lịch sử truy cập",
+    "pass": true,
+    "detail": "text=Activity log"
+  },
+  {
+    "name": "P10a RBAC grants: staff=0, owner>=1",
+    "pass": true,
+    "detail": "staff=0 owner=1"
+  },
+  {
+    "name": "P10b staff/anon gọi API activity → bị từ chối (ok=false)",
+    "pass": true,
+    "detail": "fallback anon ok=undefined msg=\"\""
+  }
+]
