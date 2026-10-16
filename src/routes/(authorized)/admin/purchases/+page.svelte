@@ -841,6 +841,16 @@
 
 	const quickTotal = $derived(quickItems.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0), 0));
 
+	// P2: % lợi nhuận từng dòng nhập nhanh — cần giá bán của variant + unitCost nhập.
+	// Giá bán lấy từ variantOptions (đã nạp cho select) — không có → ẩn badge.
+	function quickItemProfit(item: QuickItem): number | null {
+		const variant = variantOptions.find((v) => v._id === item.variantId);
+		const price = Number(variant?.price);
+		const cost = Number(item.unitCost);
+		if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(cost) || cost <= 0) return null;
+		return Math.round(((price - cost) / cost) * 1000) / 10;
+	}
+
 	function validateQuickForm(): string | undefined {
 		if (!quickBranchId) return pageContents.quickModal.requireBranch[lang];
 		if (quickMode === 'supplier' && !quickSupplierId) return pageContents.quickModal.requireSupplier[lang];
@@ -1628,6 +1638,16 @@
 								</select>
 								<input class="admin-input po-item-num" type="number" min="1" bind:value={item.quantity} aria-label={pageContents.quickModal.quantity[lang]} />
 								<input class="admin-input po-item-num" type="number" min="0" step="1000" bind:value={item.unitCost} aria-label={pageContents.quickModal.unitCost[lang]} />
+								{#if quickItemProfit(item) !== null}
+									{@const profit = quickItemProfit(item) as number}
+									<span
+										class="po-item-profit"
+										class:po-item-profit--neg={profit < 0}
+										data-test="quick-item-profit-{index}"
+									>
+										{profit > 0 ? '+' : ''}{profit}%
+									</span>
+								{/if}
 								<input class="admin-input" type="text" bind:value={item.lotNumber} placeholder={pageContents.quickModal.lotNumber[lang]} aria-label={pageContents.quickModal.lotNumber[lang]} />
 								<Button color="error" variant="ghost" size="sm" onClick={() => removeQuickItem(index)} aria-label={pageContents.actions.remove[lang]}>✕</Button>
 							</div>
@@ -2616,6 +2636,18 @@
 
 		@media (max-width: 860px) {
 			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	/* P2: % lợi nhuận từng dòng nhập (so giá bán variant) */
+	.po-item-profit {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--success, #16a34a);
+		white-space: nowrap;
+
+		&--neg {
+			color: var(--danger, #ef4444);
 		}
 	}
 

@@ -333,6 +333,55 @@ export class AnalyticsService {
 	}
 
 	/**
+	 * Giá bán gần nhất của variant từ price_history (P2 — gợi ý giá bán).
+	 * entity='variant_price', lấy điểm mới nhất theo changedAt.
+	 * Kèm cả giá nhập gần nhất (entity='variant_cost') để form variant có prefill.
+	 * Không chặn quyền analytics:read — dùng products:read (form variant đã có quyền này).
+	 */
+	static async latestPrices(
+		actor: ActorContext,
+		options: { variantId: string; branchId?: string }
+	): Promise<{
+		success: boolean;
+		messages?: TranslateContent;
+		lastPrice?: number;
+		lastPriceAt?: string;
+		lastCost?: number;
+		lastCostAt?: string;
+	}> {
+		const denied = await this.requirePermission(actor, 'products:read');
+		if (denied) return { success: false, messages: denied.messages };
+
+		// price_history docKey có suffix '-${i}' → 1 variant có thể có 2 điểm cùng giây
+		// (price + cost) — lấy danh sách mới nhất rồi chọn theo entity.
+		const conditions: string[] = ['variantId = $1'];
+		const args: (string | number)[] = [options.variantId];
+		if (options.branchId) {
+			conditions.push(`branchId = $2`);
+			args.push(options.branchId);
+		}
+		const res = await cbPriceHistory.document.query({
+			statement: `SELECT entity, newPrice, changedAt FROM ${priceHistoryKeyspace}
+				WHERE ${conditions.join(' AND ')}
+				ORDER BY changedAt DESC LIMIT 20`,
+			args,
+			readonly: true
+		});
+		if (!res.ok) return { success: false, messages: analyticsMessages.queryFailed };
+
+		const rows = (res.data?.results ?? []) as Array<{ entity: string; newPrice?: number; changedAt: string }>;
+		const priceRow = rows.find((r) => r.entity === 'variant_price');
+		const costRow = rows.find((r) => r.entity === 'variant_cost');
+		return {
+			success: true,
+			lastPrice: priceRow?.newPrice,
+			lastPriceAt: priceRow?.changedAt,
+			lastCost: costRow?.newPrice,
+			lastCostAt: costRow?.changedAt
+		};
+	}
+
+	/**
 	 * Ghi history giá nhập từ nhận hàng PO — gọi từ SupplierService.receivePurchaseOrder
 	 * (hoặc route nhận hàng). items = PO items sau khi nhận.
 	 */

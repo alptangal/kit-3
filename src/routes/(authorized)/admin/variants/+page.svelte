@@ -41,6 +41,8 @@
 		weight?: number;
 		trackLot?: boolean;
 		trackExpiry?: boolean;
+		trackSerial?: boolean;
+		units?: Array<{ name: string; factor: number; price?: number | null }>;
 		lowStockThreshold?: number;
 		imageUrl?: string;
 		status: string;
@@ -85,6 +87,16 @@
 		advancedLabel: { vi: 'Nâng cao', en: 'Advanced' },
 		trackLotLabel: { vi: 'Theo dõi lô', en: 'Track Lots' },
 		trackExpiryLabel: { vi: 'Theo dõi hạn dùng', en: 'Track Expiry' },
+		trackSerialLabel: { vi: 'Theo dõi serial/IMEI', en: 'Track Serial/IMEI' },
+		unitsLabel: { vi: 'Đơn vị quy đổi', en: 'Unit conversions' },
+		addUnit: { vi: 'Thêm đơn vị', en: 'Add unit' },
+		unitName: { vi: 'Tên đơn vị (vd: Lốc)', en: 'Unit name (e.g. Pack)' },
+		unitFactor: { vi: 'Hệ số', en: 'Factor' },
+		unitPrice: { vi: 'Giá bán', en: 'Price' },
+		unitsNote: {
+			vi: 'Dòng đầu là đơn vị gốc (hệ số 1, khoá cố định). Hệ số = số đơn vị gốc trong 1 đơn vị này (vd: Lốc = 6).',
+			en: 'First row is the base unit (factor 1, locked). Factor = base units per this unit (e.g. Pack = 6).'
+		},
 		lowStockLabel: { vi: 'Ngưỡng tồn kho thấp', en: 'Low Stock Threshold' },
 		imageLabel: { vi: 'URL ảnh', en: 'Image URL' },
 		statusLabel: { vi: 'Trạng thái', en: 'Status' },
@@ -144,6 +156,7 @@
 	let draftAutosaveArmed = false;
 
 	// Form state — trường số giữ string (Input value là string), parse khi submit.
+	// units: mảng đơn vị quy đổi (P2) — dòng đầu là base factor 1.
 	let formData = $state({
 		productId: '',
 		sku: '',
@@ -155,10 +168,54 @@
 		weight: '',
 		trackLot: false,
 		trackExpiry: false,
+		trackSerial: false,
+		units: [] as Array<{ name: string; factor: string; price: string }>,
 		lowStockThreshold: '',
 		imageUrl: '',
 		status: 'active'
 	});
+
+	// % lợi nhuận (P2): (price − cost) / cost — đủ 2 giá > 0 mới tính.
+	let profitPercent = $derived.by(() => {
+		const price = Number(formData.price);
+		const cost = Number(formData.costPrice);
+		if (!Number.isFinite(price) || !Number.isFinite(cost) || price <= 0 || cost <= 0) return null;
+		return Math.round(((price - cost) / cost) * 1000) / 10;
+	});
+
+	// Gợi ý giá (P2): giá bán gần nhất từ price_history — fetch khi mở form edit/create.
+	let latestPriceHint = $state<{ price: number; at: string } | null>(null);
+	let latestPriceLoading = $state(false);
+
+	async function fetchLatestPriceHint(variantId: string) {
+		if (!encryptionKeys) return;
+		latestPriceLoading = true;
+		latestPriceHint = null;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/variants/latest-prices',
+				{ method: 'POST', body: { variantId } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const d = response.data as { lastPrice?: number; lastPriceAt?: string } | undefined;
+				if (d?.lastPrice != null) {
+					latestPriceHint = { price: d.lastPrice, at: d.lastPriceAt ?? '' };
+				}
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[admin/variants] latest price hint failed:', err);
+		} finally {
+			latestPriceLoading = false;
+		}
+	}
+
+	// Áp gợi ý giá vào form price
+	function applyLatestPriceHint() {
+		if (latestPriceHint) {
+			formData.price = String(latestPriceHint.price);
+		}
+	}
 
 	// ── P3 confirm-dirty: chặn đóng modal khi form còn thay đổi chưa lưu ──
 	// baseline cập nhật ở mọi điểm formData được set (openCreate/openEdit/
@@ -449,6 +506,12 @@
 			weight: variant.weight != null ? String(variant.weight) : '',
 			trackLot: variant.trackLot ?? false,
 			trackExpiry: variant.trackExpiry ?? false,
+			trackSerial: variant.trackSerial ?? false,
+			units: (variant.units ?? []).map((u) => ({
+				name: u.name,
+				factor: String(u.factor),
+				price: u.price != null ? String(u.price) : ''
+			})),
 			lowStockThreshold:
 				variant.lowStockThreshold != null ? String(variant.lowStockThreshold) : '',
 			imageUrl: variant.imageUrl ?? '',
@@ -461,6 +524,8 @@
 		draftAutosaveArmed = false;
 		closeGuard.markClean();
 		modalOpen = true;
+		// P2 gợi ý giá: giá bán gần nhất của variant này
+		void fetchLatestPriceHint(variant._id);
 	}
 
 	// B9: đọc draft khi mở form — nếu còn bản nháp, hiện dialog hỏi khôi phục
@@ -517,6 +582,8 @@
 			weight: '',
 			trackLot: false,
 			trackExpiry: false,
+			trackSerial: false,
+			units: [],
 			lowStockThreshold: '',
 			imageUrl: '',
 			status: 'active'
@@ -526,6 +593,7 @@
 		formSubmitting = false;
 		draftFormKey = null;
 		pendingDraftFormKey = null;
+		latestPriceHint = null;
 	}
 
 	// Thêm dòng thuộc tính trống (key tạm "attr{N}" tránh trùng).
@@ -582,6 +650,7 @@
 		formSubmitting = true;
 		try {
 			// Trường số: parse string → number trước khi gửi (API nhận number).
+			// units (P2): bỏ dòng trống, factor nguyên >= 1, price optional.
 			const payload = {
 				productId: formData.productId,
 				sku: formData.sku,
@@ -593,6 +662,14 @@
 				weight: parseNumberField(formData.weight) ?? 0,
 				trackLot: formData.trackLot,
 				trackExpiry: formData.trackExpiry,
+				trackSerial: formData.trackSerial,
+				units: formData.units
+					.filter((u) => u.name.trim() && Number(u.factor) >= 1)
+					.map((u) => ({
+						name: u.name.trim(),
+						factor: Math.max(1, Math.floor(Number(u.factor) || 1)),
+						price: u.price !== '' ? Number(u.price) : null
+					})),
 				lowStockThreshold: parseNumberField(formData.lowStockThreshold) ?? 0,
 				imageUrl: formData.imageUrl,
 				status: formData.status
@@ -875,10 +952,31 @@
 						{#if formErrors.price}
 							<span class="field-error" role="alert">{formErrors.price}</span>
 						{/if}
+						{#if latestPriceHint && Number(formData.price) !== latestPriceHint.price}
+							<button
+								type="button"
+								class="price-hint"
+								data-test="variant-price-hint"
+								title={latestPriceHint.at}
+								onclick={applyLatestPriceHint}
+							>
+								{lang === 'vi' ? 'Giá gần nhất:' : 'Last price:'}&nbsp;
+								{formatPrice(latestPriceHint.price)}
+							</button>
+						{/if}
 					</TextField>
 					<TextField name="variant-cost">
 						<Label>{pageContents.costLabel[lang]}</Label>
 						<Input type="number" bind:value={formData.costPrice} />
+						{#if profitPercent !== null}
+							<span
+								class="profit-badge"
+								class:profit-badge--neg={profitPercent < 0}
+								data-test="variant-profit-percent"
+							>
+								{lang === 'vi' ? 'Lợi nhuận' : 'Profit'}: {profitPercent > 0 ? '+' : ''}{profitPercent}%
+							</span>
+						{/if}
 					</TextField>
 				</div>
 
@@ -959,6 +1057,11 @@
 								{pageContents.trackExpiryLabel[lang]}
 							</Checkbox>
 						</div>
+						<div class="advanced-check">
+							<Checkbox bind:checked={formData.trackSerial}>
+								{pageContents.trackSerialLabel[lang]}
+							</Checkbox>
+						</div>
 						<TextField name="variant-low-stock">
 							<Label>{pageContents.lowStockLabel[lang]}</Label>
 							<Input type="number" bind:value={formData.lowStockThreshold} />
@@ -976,6 +1079,65 @@
 								<option value="discontinued">Discontinued</option>
 							</select>
 						</TextField>
+					</div>
+
+					<!-- Đơn vị quy đổi (P2) — dòng đầu = base (factor 1) -->
+					<div class="units-block">
+						<div class="units-head">
+							<span class="modal-field-label">{pageContents.unitsLabel[lang]}</span>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									formData.units = [...formData.units, { name: '', factor: '1', price: '' }];
+								}}
+								data-test="variant-add-unit"
+							>
+								{pageContents.addUnit[lang]}
+							</Button>
+						</div>
+						{#if formData.units.length > 0}
+							<div class="units-rows">
+								{#each formData.units as unit, i (i)}
+									<div class="units-row" data-test={`variant-unit-${i}`}>
+										<input
+											class="modal-input"
+											placeholder={pageContents.unitName[lang]}
+											bind:value={unit.name}
+										/>
+										<input
+											class="modal-input units-factor"
+											type="number"
+											min="1"
+											step="1"
+											disabled={i === 0}
+											bind:value={unit.factor}
+											aria-label={pageContents.unitFactor[lang]}
+										/>
+										<input
+											class="modal-input units-price"
+											type="number"
+											min="0"
+											placeholder={pageContents.unitPrice[lang]}
+											bind:value={unit.price}
+										/>
+										{#if i > 0}
+											<Button
+												variant="ghost"
+												color="error"
+												size="sm"
+												onClick={() => {
+													formData.units = formData.units.filter((_, idx) => idx !== i);
+												}}
+											>
+												{pageContents.deleteAction[lang]}
+											</Button>
+										{/if}
+									</div>
+								{/each}
+								<p class="units-note">{pageContents.unitsNote[lang]}</p>
+							</div>
+						{/if}
 					</div>
 				</fieldset>
 			</ModalBody>
@@ -1218,6 +1380,79 @@
 		font-size: 0.75rem;
 		color: var(--danger, #ef4444);
 		margin-top: 0.25rem;
+	}
+
+	/* ── P2: % lợi nhuận + gợi ý giá + đơn vị quy đổi ── */
+	.profit-badge {
+		display: inline-block;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--success, #16a34a);
+		margin-top: 0.25rem;
+
+		&--neg {
+			color: var(--danger, #ef4444);
+		}
+	}
+
+	.price-hint {
+		display: inline-block;
+		font-size: 0.75rem;
+		color: var(--primary);
+		background: none;
+		border: none;
+		padding: 0;
+		margin-top: 0.25rem;
+		cursor: pointer;
+		text-decoration: underline;
+		text-decoration-style: dotted;
+
+		&:hover {
+			text-decoration-style: solid;
+		}
+	}
+
+	.units-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+
+	.units-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.units-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.units-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+
+		.modal-input {
+			flex: 1;
+		}
+	}
+
+	.units-factor {
+		flex: 0 0 5.5rem !important;
+	}
+
+	.units-price {
+		flex: 0 0 8rem !important;
+	}
+
+	.units-note {
+		font-size: 0.72rem;
+		color: var(--muted-foreground, #6b7280);
+		margin: 0;
 	}
 
 	.modal-select {
