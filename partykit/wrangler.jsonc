@@ -10,9 +10,9 @@
 	"name": "kit3-realtime",
 	"main": "src/server.ts",
 	"compatibility_date": "2026-08-25",
-	"vars": {
-		"PARTYKIT_INTERNAL_TOKEN": "dev-insecure-token-change-me"
-	},
+	// PARTYKIT_INTERNAL_TOKEN set qua `npx wrangler secret put` (prod)
+	// và override qua .dev.vars (local dev) — không đặt trong vars để
+	// tránh xung đột binding name với secret.
 	"durable_objects": {
 		"bindings": [
 			{
