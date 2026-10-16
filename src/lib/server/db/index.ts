@@ -32,3 +32,5 @@ export * from './transfers';
 export * from './returns';
 export * from './debts';
 export * from './channels';
+export * from './activity-logs';
+export * from './api-keys';
