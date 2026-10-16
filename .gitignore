@@ -33,3 +33,4 @@ playwright-report/
 
 # Ảnh ad-hoc cho ui-checker sinh mỗi lần chạy probe (không track; test-results/ đợt audit cũ vẫn giữ)
 test-results/ui-check/
+tests/_ui-shots/*.png
