@@ -2336,7 +2336,9 @@
 		align-items: center;
 	}
 
-	.admin-date {
+	/* .admin-input (width:100%) viết sau .admin-date cùng specificity → date
+	   full-width rơi từng ô 1 hàng (filtersH 140px). Tăng specificity thắng. */
+	.admin-input.admin-date {
 		width: auto;
 		min-width: 9.5rem;
 	}
