@@ -190,7 +190,7 @@ function logAccess(event: RequestEvent, status: number, durationMs: number) {
 	}
 }
 
-export const handleError = ({ error }) => {
+export const handleError = ({ error }: { error: unknown }) => {
 	import('fs').then(fs => {
 		const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
 		fs.writeFileSync('d:/nodejs/svelte/kit-3/last_ssr_error.log', errorMessage);

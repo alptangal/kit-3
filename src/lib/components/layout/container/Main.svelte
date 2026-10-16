@@ -69,11 +69,12 @@
 							handler() {
 								if (props.portal) {
 									if (props.portal instanceof HTMLElement && configs.ref) {
-										props.portal.append(configs.ref);
+										// appendChild: @types/node override Body.append đè ParentNode.append
+										props.portal.appendChild(configs.ref);
 									} else {
 										const portal = document.getElementById(props.portal as string);
 										if (portal && configs.ref) {
-											portal.append(configs.ref);
+											portal.appendChild(configs.ref);
 										}
 									}
 								}

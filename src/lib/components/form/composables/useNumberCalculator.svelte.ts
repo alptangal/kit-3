@@ -55,7 +55,9 @@ export function useNumberCalculator(
 		const cs = getComputedStyle(inputElement);
 		mirror.style.font = cs.font;
 		mirror.style.letterSpacing = cs.letterSpacing;
-		document.body.append(mirror);
+		// appendChild thay vì append: @types/node (undici) override global Body.append
+		// (union string|Response|ReadableStream) đè ParentNode.append của lib.dom
+		document.body.appendChild(mirror);
 		for (let i = 0; i <= value.length; i++) {
 			mirror.textContent = value.slice(0, i);
 			if (mirror.offsetWidth >= event.clientX - (inputElement.getBoundingClientRect().left ?? 0) + inputElement.scrollLeft) {

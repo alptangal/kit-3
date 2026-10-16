@@ -24,6 +24,6 @@ export const GET: RequestHandler = async () => {
 		message: 'System crash'
 	});
 };
-export const POST = ({ params }) => {
+export const POST = ({ params }: { params: Record<string, string> }) => {
 	return new Response(JSON.stringify(''));
 };

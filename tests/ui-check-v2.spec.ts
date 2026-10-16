@@ -157,7 +157,7 @@ test.describe('UI Component Cross-Browser Check', () => {
           try {
             return navigator.clipboard ? 'available' : 'not-available';
           } catch (e) {
-            return `error: ${e.message}`;
+            return `error: ${e instanceof Error ? e.message : String(e)}`;
           }
         });
         console.log(`[WebKit] Clipboard API: ${clipboardResult}`);

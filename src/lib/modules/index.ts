@@ -1,6 +1,6 @@
 import type { DistanceUnits, TimeUnits } from '$components/interface';
 import type { Browser } from '$interfaces/basic';
-import type { ServerResponse } from '$interfaces/basic';
+import type { ServerResponse, TranslateContent } from '$interfaces/basic';
 import { client, profile } from '$store/basic.svelte';
 import { matchSegments, queryMatchesText, type TextSegment } from './highlight';
 
@@ -229,16 +229,24 @@ export async function apiFetch(
 		body: options.body ? JSON.stringify(options.body) : undefined
 	});
 
-	const data = await res.json().catch(() => undefined);
+	const data = (await res.json().catch(() => undefined)) as
+		| { [k: string]: any }
+		| undefined;
+
+	const message = data?.message as TranslateContent | string | undefined;
+	let messageContent: TranslateContent | undefined = undefined;
+	if (typeof message === 'object' && message !== null) messageContent = message;
 
 	if (!res.ok) {
 		return {
-			message: data?.message ?? `Request failed: ${res.status}`,
+			// fallback chuỗi giữ nguyên hành vi cũ (interface khai TranslateContent nhưng
+			// runtime caller đã nhận chuỗi từ trước — cast để không đổi hành vi)
+			message: messageContent ?? (`Request failed: ${res.status}` as unknown as TranslateContent),
 			data,
 			status: res.status,
 			ok: res.ok
 		};
 	}
 
-	return { message: data?.message, data, status: res.status, ok: res.ok };
+	return { message: messageContent, data, status: res.status, ok: res.ok };
 }

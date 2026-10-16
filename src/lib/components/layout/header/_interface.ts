@@ -1,25 +1,26 @@
+import type { Snippet } from 'svelte';
 import type { BasicProps } from '$components/interface';
 
 export interface HeaderProps extends BasicProps {
 	left?:
-		| SvelteSlots
+		| Snippet
 		| (Pick<BasicProps, 'events' | 'class' | 'overwriteDefaultStyles'> & {
-				snippet?: SvelteSlots;
+				snippet?: Snippet;
 				title?: string;
 				subtitle?: string;
 				icon?: string;
 		  });
 	center?:
-		| SvelteSlots
+		| Snippet
 		| (Pick<BasicProps, 'events' | 'class' | 'overwriteDefaultStyles'> & {
-				snippet?: SvelteSlots;
+				snippet?: Snippet;
 				title?: string;
 				icon?: string;
 		  });
 	right?:
-		| SvelteSlots
+		| Snippet
 		| (Pick<BasicProps, 'events' | 'class' | 'overwriteDefaultStyles'> & {
-				snippet?: SvelteSlots;
+				snippet?: Snippet;
 				title?: string;
 				icon?: string;
 		  });

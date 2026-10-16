@@ -417,7 +417,11 @@ const fetchSecure = async (
 
 	let decryptedPayload: any = null;
 	try {
-		const encryptedResponse = await res.json();
+		const encryptedResponse = (await res.json()) as {
+			encryptedSessionKeyB64: string;
+			ivB64: string;
+			ciphertextB64: string;
+		};
 		const decryptedText = await decryptWithPrivateKeyHybrid(sessionPrivateKey, encryptedResponse);
 		if (decryptedText) {
 			decryptedPayload = JSON.parse(decryptedText);

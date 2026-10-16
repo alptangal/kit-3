@@ -207,7 +207,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 				try {
 					const res = await fetch(`${baseUrl}/v4/organizations/${organizationId}`, { headers });
 					if (res.ok) {
-						const jsonData = await res.json();
+						const jsonData = (await res.json()) as Record<string, any>;
 
 						return {
 							data: jsonData,
@@ -223,7 +223,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 				try {
 					const res = await fetch(`${baseUrl}/v4/organizations`, { headers });
 					if (res.ok) {
-						const jsonData = await res.json();
+						const jsonData = (await res.json()) as Record<string, any>;
 						return {
 							data: jsonData['data'],
 							ok: true
@@ -266,7 +266,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						})
 					});
 					if (res.ok) {
-						const jsonData = await res.json();
+						const jsonData = (await res.json()) as Record<string, any>;
 						return {
 							data: jsonData.id,
 							ok: true
@@ -283,7 +283,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						headers
 					});
 					if (res.ok) {
-						const jsonData = await res.json();
+						const jsonData = (await res.json()) as Record<string, any>;
 						return { data: jsonData, ok: true };
 					}
 					throw new Error(`[Projects.list] ${res.status} ${res.statusText}`);
@@ -301,7 +301,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 						}
 					);
 					if (res.ok) {
-						const jsonData = await res.json();
+						const jsonData = (await res.json()) as Record<string, any>;
 						return { data: jsonData, ok: true };
 					}
 					throw new Error(`[Projects.get] ${res.status} ${res.statusText}`);
@@ -384,7 +384,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData.id, ok: true };
 						}
 						throw new Error(`[Clusters.create] ${res.status} ${res.statusText}`);
@@ -401,7 +401,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return {
 								...jsonData,
 								ok: true
@@ -422,7 +422,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData, ok: true };
 						}
 						throw new Error(`[Clusters.get] ${res.status} ${res.statusText}`);
@@ -491,7 +491,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData, ok: true };
 						}
 						throw new Error(`[Clusters.getCapacityStatistics] ${res.status} ${res.statusText}`);
@@ -593,7 +593,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData.id, ok: true };
 						}
 						throw new Error(`[Buckets.create] ${res.status} ${res.statusText}`);
@@ -610,7 +610,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { ...jsonData, ok: true };
 						}
 						throw new Error(`[Buckets.list] ${res.status} ${res.statusText}`);
@@ -629,7 +629,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData, ok: true };
 						}
 						throw new Error(`[Buckets.get] ${res.status} ${res.statusText}`);
@@ -736,7 +736,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData, ok: true };
 						}
 						throw new Error(`[Scopes.list] ${res.status} ${res.statusText}`);
@@ -754,7 +754,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData, ok: true };
 						}
 						throw new Error(`[scopes.get] ${res.status} ${res.statusText}`);
@@ -821,7 +821,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { ...jsonData, ok: true };
 						}
 						throw new Error(`[Collections.list] ${res.status} ${res.statusText}`);
@@ -839,7 +839,7 @@ const managementData = (data: { apiKeySecret: string; organizationId: string }) 
 							}
 						);
 						if (res.ok) {
-							const jsonData = await res.json();
+							const jsonData = (await res.json()) as Record<string, any>;
 							return { data: jsonData, ok: true };
 						}
 						throw new Error(`[Collections.get] ${res.status} ${res.statusText}`);
@@ -1302,7 +1302,7 @@ const dataApi = <C extends CollectionName>(data: {
 							const res = await fetch(url, { headers });
 
 							if (res.ok) {
-								const jsonData = await res.json();
+								const jsonData = (await res.json()) as Record<string, any>;
 								return {
 									status: res.status,
 									get ok() {
@@ -1382,7 +1382,7 @@ const dataApi = <C extends CollectionName>(data: {
 							});
 
 							if (res.ok) {
-								const jsonData = await res.json();
+								const jsonData = (await res.json()) as Record<string, any>;
 								return {
 									status: res.status,
 									get ok() {

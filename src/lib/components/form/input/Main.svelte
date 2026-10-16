@@ -1681,7 +1681,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		const mirroEl = document.createElement('span');
 		mirroEl.classList.add('input-mirror');
 		if (!configs.maskValue.positionCharacters) configs.maskValue.positionCharacters = new Map();
-		document.body.append(mirroEl);
+		// appendChild: @types/node override Body.append đè ParentNode.append
+		document.body.appendChild(mirroEl);
 		for (let i = 0; i <= value.length; i++) {
 			mirroEl.textContent = value.slice(0, i);
 			if (

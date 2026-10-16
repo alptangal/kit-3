@@ -63,7 +63,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		}
 
 		// 2. Giải mã request body từ client
-		const jsRaw = await request.json();
+		const jsRaw = (await request.json()) as { encryptedSessionKeyB64: string; ivB64: string; ciphertextB64: string };
 		const decryptedText = await encryption.decryptWithPrivateKeyHybrid(
 			systemVault.privateKey,
 			jsRaw

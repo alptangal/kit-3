@@ -38,4 +38,6 @@ export { Switch, setSwitchContext, getSwitchContext } from './switch';
 export type { SwitchProps, SwitchConfigs } from './switch';
 
 export { default as ImageUpload } from './image-upload/Main.svelte';
-export type { ImageUploadProps } from './image-upload/Main.svelte';
+// ImageUploadProps khai trong <script module> của Main.svelte — TS thuần không truy cập
+// được qua wildcard '*.svelte'. Ở đây chỉ re-export value component; type dùng trực tiếp
+// qua import type từ file .svelte tại nơi cần (vite-plugin-svelte chỉ expose default).

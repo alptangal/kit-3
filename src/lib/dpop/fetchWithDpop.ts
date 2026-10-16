@@ -24,7 +24,7 @@ export async function tryRefreshToken(): Promise<boolean> {
 				return false;
 			}
 
-			const { accessToken } = await res.json();
+			const { accessToken } = (await res.json()) as { accessToken: string };
 			sessionStorage.setItem('accessToken', accessToken);
 			return true;
 		} catch {

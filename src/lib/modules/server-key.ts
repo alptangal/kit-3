@@ -104,7 +104,7 @@ async function fetchKeyOverHttp(): Promise<string | undefined> {
 	try {
 		const res = await fetch('/api/encryption/public-key');
 		if (res.ok) {
-			const js = await res.json();
+			const js = (await res.json()) as { data?: { publicKeyB64?: string } };
 			const key = js?.['data']?.['publicKeyB64'];
 			if (typeof key === 'string' && key.length > 0) {
 				applyKey(key);

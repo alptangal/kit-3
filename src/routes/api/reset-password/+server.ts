@@ -54,8 +54,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// 2. Đọc + decrypt body
-		const jsRaw = await request.json();
-		if (!jsRaw) {
+		const jsRaw = (await request.json()) as { encryptedSessionKeyB64: string; ivB64: string; ciphertextB64: string };
+		if (!jsRaw || !jsRaw.encryptedSessionKeyB64) {
 			return json(
 				{ message: localizePayload({ ok: false, message: resetPasswordMessages.invalidBody }, lang) },
 				{ status: 400 }

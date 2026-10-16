@@ -42,7 +42,8 @@
 								},
 								ref: data.node
 							});
-							document.body.append(data.node);
+							// appendChild: @types/node override Body.append đè ParentNode.append
+							document.body.appendChild(data.node);
 							return () => {
 								if (data.node instanceof HTMLElement) data.node.remove();
 							};

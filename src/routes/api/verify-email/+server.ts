@@ -20,8 +20,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (!systemVault.privateKey) {
 			return json({ message: localizePayload({ ok: false, message: verifyEmailMessages.systemUnavailable }, lang) }, { status: 503 });
 		}
-		const jsRaw = await request.json();
-		if (!jsRaw) {
+		const jsRaw = (await request.json()) as { encryptedSessionKeyB64: string; ivB64: string; ciphertextB64: string };
+		if (!jsRaw || !jsRaw.encryptedSessionKeyB64) {
 			return json({ message: localizePayload({ ok: false, message: verifyEmailMessages.invalidBody }, lang) }, { status: 400 });
 		}
 		const decryptedText = await encryption.decryptWithPrivateKeyHybrid(systemVault.privateKey, jsRaw);
