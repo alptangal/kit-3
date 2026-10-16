@@ -10,6 +10,8 @@
 	import { Breadcrumb, Sidebar, TeamSwitcher } from '$components/navigation';
 	import { Separator } from '$components/element';
 	import type { LayoutData } from '$store/user-prefs.svelte';
+	import type { TranslateContent } from '$interfaces/basic';
+	import { client } from '$store/basic.svelte';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
@@ -103,16 +105,24 @@
 		};
 	});
 
+	// ── i18n: lang theo prefs (client.browser.language — setLanguage/applyUserPrefsFromLayout
+	// cập nhật; fallback 'en' khi client chưa seed). Mọi label sidebar/breadcrumb/brand
+	// resolve qua dict vi/en dưới đây (component SidebarMenuButton + Breadcrumb đã hỗ
+	// trợ TranslateContent; GroupLabel + TeamSwitcher group render inline → derive text).
+	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : 'en');
+	const tc = (vi: string, en: string): TranslateContent => ({ vi, en });
+
 	// Brand đầu sidebar — TeamSwitcher 1 team (ứng dụng hiện đơn tenant; mở
 	// rộng đa team sau). Tên app lấy từ session user context (fallback hằng).
-	const teams = [
+	// group resolve theo lang (TeamSwitcher nhận string).
+	const teams = $derived([
 		{
 			id: 'kit-admin',
 			name: 'Kit Admin',
 			abbr: 'KA',
-			group: 'Hệ thống'
+			group: lang === 'vi' ? 'Hệ thống' : 'System'
 		}
-	];
+	]);
 	let team = $state('kit-admin');
 
 	// Menu 7 routes admin — active theo page.url.pathname.
@@ -120,46 +130,46 @@
 	const isActive = (href: string) => (href === '/admin' ? pathname === '/admin' : pathname.startsWith(href));
 
 	// Breadcrumb derive từ route hiện tại (đơn giản: Home + tên trang).
-	const routeNames: Record<string, string> = {
-		'/admin': 'Người dùng',
-		'/admin/brands': 'Thương hiệu',
-		'/admin/categories': 'Danh mục',
-		'/admin/products': 'Sản phẩm',
-		'/admin/variants': 'Biến thể',
-		'/admin/customers': 'Khách hàng',
-		'/admin/orders': 'Đơn hàng',
-		'/admin/inventory': 'Tồn kho',
-		'/admin/suppliers': 'Nhà cung cấp',
-		'/admin/promotions': 'Khuyến mãi',
-		'/admin/stock-takes': 'Kiểm kê',
-		'/admin/pos': 'Bán hàng POS',
-		'/admin/pos-sessions': 'Phiên POS',
-		'/admin/payments': 'Thanh toán',
-		'/admin/shipments': 'Vận chuyển',
-		'/admin/fulfillment': 'Xử lý đơn',
-		'/admin/posts': 'Bài viết',
-		'/admin/post-categories': 'Danh mục bài viết',
-		'/admin/campaigns': 'Chiến dịch',
-		'/admin/social': 'Social media',
-		'/admin/channels': 'Kênh bán',
-		'/admin/notifications': 'Thông báo',
-		'/admin/messages': 'Tin nhắn',
-		'/admin/email-logs': 'Email logs',
-		'/admin/activity': 'Lịch sử truy cập',
-		'/admin/dashboard': 'Tổng quan',
-		'/admin/analytics': 'Thống kê',
-		'/admin/expenses': 'Chi phí',
-		'/admin/cameras': 'Camera',
-		'/admin/purchases': 'Nhập hàng',
-		'/admin/transfers': 'Chuyển kho',
-		'/admin/returns': 'Đổi trả',
-		'/admin/debts': 'Công nợ',
-		'/admin/expiry': 'Hạn sử dụng',
-		'/settings': 'Cấu hình hệ thống'
+	const routeNames: Record<string, TranslateContent> = {
+		'/admin': tc('Người dùng', 'Users'),
+		'/admin/brands': tc('Thương hiệu', 'Brands'),
+		'/admin/categories': tc('Danh mục', 'Categories'),
+		'/admin/products': tc('Sản phẩm', 'Products'),
+		'/admin/variants': tc('Biến thể', 'Variants'),
+		'/admin/customers': tc('Khách hàng', 'Customers'),
+		'/admin/orders': tc('Đơn hàng', 'Orders'),
+		'/admin/inventory': tc('Tồn kho', 'Inventory'),
+		'/admin/suppliers': tc('Nhà cung cấp', 'Suppliers'),
+		'/admin/promotions': tc('Khuyến mãi', 'Promotions'),
+		'/admin/stock-takes': tc('Kiểm kê', 'Stock takes'),
+		'/admin/pos': tc('Bán hàng POS', 'POS'),
+		'/admin/pos-sessions': tc('Phiên POS', 'POS sessions'),
+		'/admin/payments': tc('Thanh toán', 'Payments'),
+		'/admin/shipments': tc('Vận chuyển', 'Shipments'),
+		'/admin/fulfillment': tc('Xử lý đơn', 'Fulfillment'),
+		'/admin/posts': tc('Bài viết', 'Posts'),
+		'/admin/post-categories': tc('Danh mục bài viết', 'Post categories'),
+		'/admin/campaigns': tc('Chiến dịch', 'Campaigns'),
+		'/admin/social': tc('Social media', 'Social media'),
+		'/admin/channels': tc('Kênh bán', 'Sales channels'),
+		'/admin/notifications': tc('Thông báo', 'Notifications'),
+		'/admin/messages': tc('Tin nhắn', 'Messages'),
+		'/admin/email-logs': tc('Email logs', 'Email logs'),
+		'/admin/activity': tc('Lịch sử truy cập', 'Activity log'),
+		'/admin/dashboard': tc('Tổng quan', 'Overview'),
+		'/admin/analytics': tc('Thống kê', 'Analytics'),
+		'/admin/expenses': tc('Chi phí', 'Expenses'),
+		'/admin/cameras': tc('Camera', 'Cameras'),
+		'/admin/purchases': tc('Nhập hàng', 'Purchases'),
+		'/admin/transfers': tc('Chuyển kho', 'Transfers'),
+		'/admin/returns': tc('Đổi trả', 'Returns'),
+		'/admin/debts': tc('Công nợ', 'Debts'),
+		'/admin/expiry': tc('Hạn sử dụng', 'Expiry'),
+		'/settings': tc('Cấu hình hệ thống', 'System settings')
 	};
 	const crumbs = $derived<BreadcrumbItem[]>([
-		{ label: 'Trang chủ', href: '/', icon: 'lucide:home' },
-		{ label: routeNames[pathname] ?? 'Admin', icon: 'lucide:layout-dashboard' }
+		{ label: lang === 'vi' ? 'Trang chủ' : 'Home', href: '/', icon: 'lucide:home' },
+		{ label: routeNames[pathname] ?? tc('Admin', 'Admin'), icon: 'lucide:layout-dashboard' }
 	]);
 </script>
 
@@ -167,7 +177,7 @@
 	<Sidebar>
 		<Sidebar.Header>
 			<div class="brand-row" data-test="admin-brand-row">
-				<TeamSwitcher {teams} bind:value={team} aria-label="Chọn workspace" />
+				<TeamSwitcher {teams} bind:value={team} aria-label={lang === 'vi' ? 'Chọn workspace' : 'Select workspace'} />
 			</div>
 			<div class="trigger-row" data-test="admin-trigger-row">
 				<Sidebar.Trigger />
@@ -176,11 +186,11 @@
 
 		<Sidebar.Content>
 			<Sidebar.Group id="overview">
-				<Sidebar.GroupLabel>Tổng quan</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>{lang === 'vi' ? 'Tổng quan' : 'Overview'}</Sidebar.GroupLabel>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Tổng quan"
+							label={tc('Tổng quan', 'Overview')}
 							href="/admin/dashboard"
 							active={isActive('/admin/dashboard')}
 							icon="lucide:layout-dashboard"
@@ -189,7 +199,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Thanh toán"
+							label={tc('Thanh toán', 'Payments')}
 							href="/admin/payments"
 							active={isActive('/admin/payments')}
 							icon="lucide:credit-card"
@@ -198,7 +208,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Vận chuyển"
+							label={tc('Vận chuyển', 'Shipments')}
 							href="/admin/shipments"
 							active={isActive('/admin/shipments')}
 							icon="lucide:package-check"
@@ -207,7 +217,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Xử lý đơn"
+							label={tc('Xử lý đơn', 'Fulfillment')}
 							href="/admin/fulfillment"
 							active={isActive('/admin/fulfillment')}
 							icon="lucide:package-open"
@@ -216,7 +226,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Thống kê"
+							label={tc('Thống kê', 'Analytics')}
 							href="/admin/analytics"
 							active={isActive('/admin/analytics')}
 							icon="lucide:trending-up"
@@ -227,11 +237,11 @@
 			</Sidebar.Group>
 
 			<Sidebar.Group id="catalog">
-				<Sidebar.GroupLabel>Danh mục</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>{lang === 'vi' ? 'Danh mục' : 'Catalog'}</Sidebar.GroupLabel>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Sản phẩm"
+							label={tc('Sản phẩm', 'Products')}
 							href="/admin/products"
 							active={isActive('/admin/products')}
 							icon="lucide:package"
@@ -240,7 +250,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Biến thể"
+							label={tc('Biến thể', 'Variants')}
 							href="/admin/variants"
 							active={isActive('/admin/variants')}
 							icon="lucide:boxes"
@@ -249,7 +259,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Thương hiệu"
+							label={tc('Thương hiệu', 'Brands')}
 							href="/admin/brands"
 							active={isActive('/admin/brands')}
 							icon="lucide:tag"
@@ -258,7 +268,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Danh mục"
+							label={tc('Danh mục', 'Categories')}
 							href="/admin/categories"
 							active={isActive('/admin/categories')}
 							icon="lucide:folder-tree"
@@ -269,11 +279,11 @@
 			</Sidebar.Group>
 
 			<Sidebar.Group id="sales">
-				<Sidebar.GroupLabel>Bán hàng</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>{lang === 'vi' ? 'Bán hàng' : 'Sales'}</Sidebar.GroupLabel>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Đơn hàng"
+							label={tc('Đơn hàng', 'Orders')}
 							href="/admin/orders"
 							active={isActive('/admin/orders')}
 							icon="lucide:shopping-cart"
@@ -282,7 +292,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Tồn kho"
+							label={tc('Tồn kho', 'Inventory')}
 							href="/admin/inventory"
 							active={isActive('/admin/inventory')}
 							icon="lucide:warehouse"
@@ -291,7 +301,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Nhà cung cấp"
+							label={tc('Nhà cung cấp', 'Suppliers')}
 							href="/admin/suppliers"
 							active={isActive('/admin/suppliers')}
 							icon="lucide:truck"
@@ -300,7 +310,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Nhập hàng"
+							label={tc('Nhập hàng', 'Purchases')}
 							href="/admin/purchases"
 							active={isActive('/admin/purchases')}
 							icon="lucide:package-plus"
@@ -309,7 +319,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Chuyển kho"
+							label={tc('Chuyển kho', 'Transfers')}
 							href="/admin/transfers"
 							active={isActive('/admin/transfers')}
 							icon="lucide:arrow-right-left"
@@ -318,7 +328,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Đổi trả"
+							label={tc('Đổi trả', 'Returns')}
 							href="/admin/returns"
 							active={isActive('/admin/returns')}
 							icon="lucide:undo-2"
@@ -327,7 +337,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Hạn sử dụng"
+							label={tc('Hạn sử dụng', 'Expiry')}
 							href="/admin/expiry"
 							active={isActive('/admin/expiry')}
 							icon="lucide:calendar-clock"
@@ -336,7 +346,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Công nợ"
+							label={tc('Công nợ', 'Debts')}
 							href="/admin/debts"
 							active={isActive('/admin/debts')}
 							icon="lucide:hand-coins"
@@ -345,7 +355,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Khuyến mãi"
+							label={tc('Khuyến mãi', 'Promotions')}
 							href="/admin/promotions"
 							active={isActive('/admin/promotions')}
 							icon="lucide:badge-percent"
@@ -354,7 +364,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Kiểm kê"
+							label={tc('Kiểm kê', 'Stock takes')}
 							href="/admin/stock-takes"
 							active={isActive('/admin/stock-takes')}
 							icon="lucide:clipboard-list"
@@ -363,8 +373,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Bán hàng POS"
-							href="/admin/pos"
+							label={tc('Bán hàng POS', 'POS')}
 							active={isActive('/admin/pos')}
 							icon="lucide:scan-barcode"
 							data-test="admin-nav-pos-terminal"
@@ -372,7 +381,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Phiên POS"
+							label={tc('Phiên POS', 'POS sessions')}
 							href="/admin/pos-sessions"
 							active={isActive('/admin/pos-sessions')}
 							icon="lucide:calculator"
@@ -381,7 +390,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Khách hàng"
+							label={tc('Khách hàng', 'Customers')}
 							href="/admin/customers"
 							active={isActive('/admin/customers')}
 							icon="lucide:users"
@@ -392,11 +401,11 @@
 			</Sidebar.Group>
 
 			<Sidebar.Group id="operations">
-				<Sidebar.GroupLabel>Vận hành</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>{lang === 'vi' ? 'Vận hành' : 'Operations'}</Sidebar.GroupLabel>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Chi phí"
+							label={tc('Chi phí', 'Expenses')}
 							href="/admin/expenses"
 							active={isActive('/admin/expenses')}
 							icon="lucide:receipt"
@@ -405,7 +414,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Camera"
+							label={tc('Camera', 'Cameras')}
 							href="/admin/cameras"
 							active={isActive('/admin/cameras')}
 							icon="lucide:video"
@@ -416,11 +425,11 @@
 			</Sidebar.Group>
 
 			<Sidebar.Group id="system">
-				<Sidebar.GroupLabel>Hệ thống</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>{lang === 'vi' ? 'Hệ thống' : 'System'}</Sidebar.GroupLabel>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Người dùng"
+							label={tc('Người dùng', 'Users')}
 							href="/admin"
 							active={isActive('/admin')}
 							icon="lucide:shield-user"
@@ -429,7 +438,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Thông báo"
+							label={tc('Thông báo', 'Notifications')}
 							href="/admin/notifications"
 							active={isActive('/admin/notifications')}
 							icon="lucide:bell"
@@ -438,7 +447,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Tin nhắn"
+							label={tc('Tin nhắn', 'Messages')}
 							href="/admin/messages"
 							active={isActive('/admin/messages')}
 							icon="lucide:message-square"
@@ -447,7 +456,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Email logs"
+							label={tc('Email logs', 'Email logs')}
 							href="/admin/email-logs"
 							active={isActive('/admin/email-logs')}
 							icon="lucide:mail"
@@ -456,7 +465,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Lịch sử truy cập"
+							label={tc('Lịch sử truy cập', 'Activity log')}
 							href="/admin/activity"
 							active={isActive('/admin/activity')}
 							icon="lucide:history"
@@ -465,7 +474,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Màn hình TV"
+							label={tc('Màn hình TV', 'TV display')}
 							href="/display"
 							active={isActive('/display')}
 							icon="lucide:tv"
@@ -476,11 +485,11 @@
 			</Sidebar.Group>
 
 			<Sidebar.Group id="content">
-				<Sidebar.GroupLabel>Nội dung</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>{lang === 'vi' ? 'Nội dung' : 'Content'}</Sidebar.GroupLabel>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Bài viết"
+							label={tc('Bài viết', 'Posts')}
 							href="/admin/posts"
 							active={isActive('/admin/posts')}
 							icon="lucide:newspaper"
@@ -489,7 +498,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Danh mục bài viết"
+							label={tc('Danh mục bài viết', 'Post categories')}
 							href="/admin/post-categories"
 							active={isActive('/admin/post-categories')}
 							icon="lucide:tags"
@@ -500,11 +509,11 @@
 			</Sidebar.Group>
 
 			<Sidebar.Group id="marketing">
-				<Sidebar.GroupLabel>Marketing</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>{lang === 'vi' ? 'Marketing' : 'Marketing'}</Sidebar.GroupLabel>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Chiến dịch"
+							label={tc('Chiến dịch', 'Campaigns')}
 							href="/admin/campaigns"
 							active={isActive('/admin/campaigns')}
 							icon="lucide:megaphone"
@@ -513,7 +522,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Social media"
+							label={tc('Social media', 'Social media')}
 							href="/admin/social"
 							active={isActive('/admin/social')}
 							icon="lucide:share-2"
@@ -522,7 +531,7 @@
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							label="Kênh bán"
+							label={tc('Kênh bán', 'Sales channels')}
 							href="/admin/channels"
 							active={isActive('/admin/channels')}
 							icon="lucide:shopping-bag"
@@ -537,7 +546,7 @@
 			<Sidebar.Menu>
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton
-						label="Cấu hình hệ thống"
+						label={tc('Cấu hình hệ thống', 'System settings')}
 						href="/settings"
 						icon="lucide:settings"
 						data-test="admin-nav-settings"
