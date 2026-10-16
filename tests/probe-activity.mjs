@@ -64,8 +64,10 @@ const setupSteps = [];
 	setupSteps.push(`collection access_logs: ${r.ok}`);
 	setupAllOk = setupAllOk && r.ok;
 }
-// Indexes (userId, at, path, status)
-for (const field of ['userId', 'at', 'path', 'status']) {
+// Indexes (userId, status) — 'at' và 'path' là RESERVED WORD N1QL Capella:
+// CREATE INDEX ...(`at`) fail syntax error dù có backtick → không tạo được,
+// bỏ qua (userId đủ cho WHERE chính, at/path vẫn query được không index).
+for (const field of ['userId', 'status']) {
 	const r = await n1ql(
 		`CREATE INDEX \`idx_access_logs_${field}\` IF NOT EXISTS ON \`${BUCKET}\`.\`${SCOPE}\`.\`access_logs\`(${field})`
 	);
