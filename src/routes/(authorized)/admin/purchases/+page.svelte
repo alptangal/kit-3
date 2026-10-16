@@ -2,7 +2,7 @@
 <script lang="ts">
 	import { Button, DataTable, Pagination, Accordion } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
-	import { Input } from '$components/form';
+	import { Input, Select } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
@@ -285,6 +285,22 @@
 	let categories = $state<CategoryOption[]>([]);
 	let variantOptions = $state<VariantOption[]>([]);
 	let variantsLoading = $state(false);
+
+	// ── Options cho component Select (searchable) — category/supplier/branch ──
+	// Native <select> giữ cho enum cố định (source/status/page-size/variant —
+	// variant có search riêng + aria/probe cũ). Select dùng value=_id, label=name.
+	const branchSelectOptions = $derived(
+		branches.map((b) => ({ value: b._id, label: b.name ?? b._id }))
+	);
+	const supplierSelectOptions = $derived(
+		suppliers.map((s) => ({ value: s._id, label: s.displayName ?? s.name ?? s._id }))
+	);
+	const categorySelectOptions = $derived(
+		categories.map((c) => ({ value: c._id, label: c.displayName ?? c.name ?? c._id }))
+	);
+	const brandSelectOptions = $derived(
+		brands.map((b) => ({ value: b._id, label: b.displayName ?? b.name ?? b._id }))
+	);
 
 	// ── Modal nhập nhanh ──
 	let quickModalDisplay = $state(false);
@@ -1290,24 +1306,33 @@
 				<option value={key}>{(label as any)[lang]}</option>
 			{/each}
 		</select>
-		<select class="admin-select" bind:value={branchFilter} onchange={onFilterChange}>
-			<option value="">{pageContents.filters.allBranches[lang]}</option>
-			{#each branches as b (b._id)}
-				<option value={b._id}>{b.name ?? b._id}</option>
-			{/each}
-		</select>
-		<select class="admin-select" bind:value={supplierFilter} onchange={onFilterChange}>
-			<option value="">{pageContents.filters.allSuppliers[lang]}</option>
-			{#each suppliers as s (s._id)}
-				<option value={s._id}>{s.name ?? s._id}</option>
-			{/each}
-		</select>
-		<select class="admin-select" bind:value={categoryFilter} onchange={onFilterChange}>
-			<option value="">{pageContents.filters.allCategories[lang]}</option>
-			{#each categories as c (c._id)}
-				<option value={c._id}>{c.name ?? c._id}</option>
-			{/each}
-		</select>
+		<Select
+			class="admin-filter-select"
+			bind:value={branchFilter}
+			options={branchSelectOptions}
+			searchable
+			clearable
+			placeholder={pageContents.filters.allBranches[lang]}
+			onValueChange={() => onFilterChange()}
+		/>
+		<Select
+			class="admin-filter-select"
+			bind:value={supplierFilter}
+			options={supplierSelectOptions}
+			searchable
+			clearable
+			placeholder={pageContents.filters.allSuppliers[lang]}
+			onValueChange={() => onFilterChange()}
+		/>
+		<Select
+			class="admin-filter-select"
+			bind:value={categoryFilter}
+			options={categorySelectOptions}
+			searchable
+			clearable
+			placeholder={pageContents.filters.allCategories[lang]}
+			onValueChange={() => onFilterChange()}
+		/>
 		<input class="admin-input admin-date" type="date" bind:value={dateFrom} onchange={onFilterChange} aria-label={pageContents.filters.from[lang]} />
 		<input class="admin-input admin-date" type="date" bind:value={dateTo} onchange={onFilterChange} aria-label={pageContents.filters.to[lang]} />
 	</div>
@@ -1410,32 +1435,36 @@
 						{#if quickMode === 'supplier'}
 							<label class="form-field">
 								<span class="form-label">{pageContents.quickModal.supplier[lang]}</span>
-								<select class="admin-select" bind:value={quickSupplierId}>
-									<option value="">—</option>
-									{#each suppliers as s (s._id)}
-										<option value={s._id}>{s.name ?? s._id}</option>
-									{/each}
-								</select>
+								<Select
+									class="admin-filter-select"
+									bind:value={quickSupplierId}
+									options={supplierSelectOptions}
+									searchable
+									clearable
+								/>
 							</label>
 						{:else if quickMode === 'category'}
 							<label class="form-field">
 								<span class="form-label">{pageContents.quickModal.category[lang]}</span>
-								<select class="admin-select" bind:value={quickCategoryId} onchange={switchQuickMode}>
-									<option value="">—</option>
-									{#each categories as c (c._id)}
-										<option value={c._id}>{c.name ?? c._id}</option>
-									{/each}
-								</select>
+								<Select
+									class="admin-filter-select"
+									bind:value={quickCategoryId}
+									options={categorySelectOptions}
+									searchable
+									clearable
+									onValueChange={() => switchQuickMode()}
+								/>
 							</label>
 						{/if}
 						<label class="form-field">
 							<span class="form-label">{pageContents.quickModal.branch[lang]}</span>
-							<select class="admin-select" bind:value={quickBranchId}>
-								<option value="">—</option>
-								{#each branches as b (b._id)}
-									<option value={b._id}>{b.name ?? b._id}</option>
-								{/each}
-							</select>
+							<Select
+								class="admin-filter-select"
+								bind:value={quickBranchId}
+								options={branchSelectOptions}
+								searchable
+								clearable
+							/>
 						</label>
 					</div>
 
@@ -1561,20 +1590,23 @@
 						<div class="form-grid-2">
 							<label class="form-field">
 								<span class="form-label">{pageContents.fullModal.supplier[lang]}</span>
-								<select class="admin-select" bind:value={fullSupplierId}>
-									<option value="">—</option>
-									{#each suppliers as s (s._id)}
-										<option value={s._id}>{s.displayName ?? s._id}</option>
-									{/each}
-								</select>
+								<Select
+									class="admin-filter-select"
+									bind:value={fullSupplierId}
+									options={supplierSelectOptions}
+									searchable
+									clearable
+								/>
 							</label>
 							<label class="form-field">
 								<span class="form-label form-label--required">{pageContents.fullModal.branch[lang]}</span>
-								<select class="admin-select" bind:value={fullBranchId}>
-									{#each branches as b (b._id)}
-										<option value={b._id}>{b.name ?? b._id}</option>
-									{/each}
-								</select>
+								<Select
+									class="admin-filter-select"
+									bind:value={fullBranchId}
+									options={branchSelectOptions}
+									searchable
+									clearable
+								/>
 							</label>
 						</div>
 
@@ -1695,22 +1727,24 @@
 									</label>
 									<label class="form-field">
 										<span class="form-label">{pageContents.fullModal.category[lang]}</span>
-										<select class="admin-select" bind:value={newProductCategoryId}>
-											<option value="">—</option>
-											{#each categories as c (c._id)}
-												<option value={c._id}>{c.displayName ?? c.name ?? c._id}</option>
-											{/each}
-										</select>
+										<Select
+											class="admin-filter-select"
+											bind:value={newProductCategoryId}
+											options={categorySelectOptions}
+											searchable
+											clearable
+										/>
 									</label>
 								</div>
 								<label class="form-field">
 									<span class="form-label">{pageContents.fullModal.brand[lang]}</span>
-									<select class="admin-select" bind:value={newProductBrandId}>
-										<option value="">—</option>
-										{#each brands as b (b._id)}
-											<option value={b._id}>{b.displayName ?? b._id}</option>
-										{/each}
-									</select>
+									<Select
+										class="admin-filter-select"
+										bind:value={newProductBrandId}
+										options={brandSelectOptions}
+										searchable
+										clearable
+									/>
 								</label>
 								<Button color="success" loading={productCreating} disabled={productCreating || !newProductName.trim()} onclick={createProductOnTheFly} data-test="create-product-btn">
 									{productCreating ? pageContents.fullModal.creating[lang] : pageContents.fullModal.createProduct[lang]}
@@ -2054,6 +2088,28 @@
 			opacity: var(--disabled-opacity, 0.5);
 			cursor: not-allowed;
 		}
+	}
+
+	// Component Select trong admin-filters + form-field: class đặt trên
+	// .select-root (as=div) — không inline TS trong attr class (unocss/acorn).
+	// Trigger cao bằng .admin-select, root width auto trong filters /
+	// 100% trong form-grid.
+	.admin-filter-select {
+		width: auto;
+		min-width: 11rem;
+
+		:global(.select-trigger) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--default-50, transparent);
+			font-size: 0.85rem;
+		}
+	}
+
+	.form-field .admin-filter-select {
+		width: 100%;
 	}
 
 	.admin-input {

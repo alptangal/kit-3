@@ -6,7 +6,7 @@
 	// không bao giờ render. Chuyển sang encryption.fetchSecure POST.
 	import { onMount } from 'svelte';
 	import { Button, DataTable, Pagination } from '$components/element';
-	import { Input, Label, TextField } from '$components/form';
+	import { ImageUpload, Input, Label, TextField, Select } from '$components/form';
 	import { Checkbox } from '$components/form/checkbox';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
@@ -120,6 +120,10 @@
 	let selectedCategory = $state('');
 	let selectedBrand = $state('');
 	let showDeleted = $state(false);
+
+	// ── Options cho component Select (searchable) — category/brand filter + modal ──
+	const categorySelectOptions = $derived(categories.map((c) => ({ value: c._id, label: c.name })));
+	const brandSelectOptions = $derived(brands.map((b) => ({ value: b._id, label: b.name })));
 	// Modal create/edit dùng chung 1 biến display (bind:display — modal tự
 	// đóng qua Escape/backdrop phải sync ngược về parent, one-way sẽ hở).
 	let modalOpen = $state(false);
@@ -670,26 +674,24 @@
 				{/snippet}
 			</Input>
 		</div>
-		<select
-			class="admin-select"
+		<Select
+			class="admin-filter-select"
 			bind:value={selectedCategory}
-			aria-label={pageContents.categoryLabel[lang]}
-		>
-			<option value="">{pageContents.allCategories[lang]}</option>
-			{#each categories as cat (cat._id)}
-				<option value={cat._id}>{cat.name}</option>
-			{/each}
-		</select>
-		<select
-			class="admin-select"
+			options={categorySelectOptions}
+			searchable
+			clearable
+			placeholder={pageContents.allCategories[lang]}
+			name="category-filter"
+		/>
+		<Select
+			class="admin-filter-select"
 			bind:value={selectedBrand}
-			aria-label={pageContents.brandLabel[lang]}
-		>
-			<option value="">{pageContents.allBrands[lang]}</option>
-			{#each brands as brand (brand._id)}
-				<option value={brand._id}>{brand.name}</option>
-			{/each}
-		</select>
+			options={brandSelectOptions}
+			searchable
+			clearable
+			placeholder={pageContents.allBrands[lang]}
+			name="brand-filter"
+		/>
 		<Checkbox bind:checked={showDeleted}>
 			{pageContents.showDeleted[lang]}
 		</Checkbox>
@@ -810,36 +812,36 @@
 				<div class="grid-2">
 					<TextField name="product-category">
 						<Label>{pageContents.categoryLabel[lang]}</Label>
-						<select
-							class="modal-select"
+						<Select
+							class="modal-filter-select"
 							bind:value={formData.categoryId}
-							aria-label={pageContents.categoryLabel[lang]}
-						>
-							<option value="">—</option>
-							{#each categories as cat (cat._id)}
-								<option value={cat._id}>{cat.name}</option>
-							{/each}
-						</select>
+							options={categorySelectOptions}
+							searchable
+							clearable
+							placeholder="—"
+							name="product-category"
+						/>
 					</TextField>
 					<TextField name="product-brand">
 						<Label>{pageContents.brandLabel[lang]}</Label>
-						<select
-							class="modal-select"
+						<Select
+							class="modal-filter-select"
 							bind:value={formData.brandId}
-							aria-label={pageContents.brandLabel[lang]}
-						>
-							<option value="">—</option>
-							{#each brands as brand (brand._id)}
-								<option value={brand._id}>{brand.name}</option>
-							{/each}
-						</select>
+							options={brandSelectOptions}
+							searchable
+							clearable
+							placeholder="—"
+							name="product-brand"
+						/>
 					</TextField>
 				</div>
 
 				<div class="grid-2">
-					<TextField name="product-image">
+					<TextField name="product-image" class="product-image-field">
 						<Label>{pageContents.imageLabel[lang]}</Label>
-						<Input bind:value={formData.imageUrl} placeholder="https://example.com/image.jpg" />
+						<!-- SỬA: dùng ImageUpload (upload thẳng hosting ngoài + preview + xoá)
+						     thay URL input tay — vẫn bind cùng field formData.imageUrl -->
+						<ImageUpload bind:value={formData.imageUrl} label={pageContents.imageLabel[lang]} disabled={loading} />
 					</TextField>
 					<TextField name="product-status">
 						<Label>{pageContents.statusLabel[lang]}</Label>
@@ -1041,6 +1043,21 @@
 		font-size: 0.875rem;
 	}
 
+	// Component Select trong admin-filters (searchable category/brand):
+	// class đặt trên .select-root (as=div), trigger khớp .admin-select.
+	.admin-filter-select {
+		width: auto;
+		min-width: 11rem;
+
+		:global(.select-trigger) {
+			min-height: 2.25rem;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--background);
+			font-size: 0.875rem;
+		}
+	}
+
 	.admin-state {
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
@@ -1166,6 +1183,20 @@
 		background: var(--background);
 		color: var(--foreground);
 		font: inherit;
+	}
+
+	// Component Select trong modal (searchable category/brand): class đặt trên
+	// .select-root; trigger style khớp .modal-select.
+	.modal-filter-select {
+		width: 100%;
+
+		:global(.select-trigger) {
+			width: 100%;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--background);
+			font: inherit;
+		}
 	}
 
 	.modal-input {

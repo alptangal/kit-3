@@ -45,6 +45,22 @@
 	let tags = $state<string[]>([]);
 	const createLabel = { en: 'Add {value}', vi: 'Thêm {value}' };
 
+	// ── Demo: allowCreate single-mode + onOptionCreate ──
+	let createSingleValue = $state('');
+	let createSingleOptions = $state<SelectOption[]>([
+		{ value: 'hn', label: 'Hà Nội' },
+		{ value: 'dn', label: 'Đà Nẵng' },
+		{ value: 'hp', label: 'Hải Phòng' }
+	]);
+	let createSingleLog = $state<string[]>([]);
+	// Trang thật sẽ gọi API create ở đây rồi chèn option trả về vào danh sách.
+	const handleCreateSingle = (value: string, label: string): void => {
+		if (!createSingleOptions.some((o) => o.value.toLowerCase() === value.toLowerCase())) {
+			createSingleOptions = [...createSingleOptions, { value, label }];
+		}
+		createSingleLog.push(`create "${label}"`);
+	};
+
 	// ── Demo: Select-all (multiple) ──
 	let selectAllValue = $state<string[]>([]);
 
@@ -467,6 +483,32 @@
 		<p style="margin-top: 1rem; font-size: 0.875rem; color: #666;">
 			Selected: <code>{JSON.stringify(tags)}</code>
 		</p>
+	</section>
+
+	<!-- Create Option single-mode + onOptionCreate callback -->
+	<section style="margin-bottom: 3rem;">
+		<h2>Create Option single + onOptionCreate</h2>
+		<p style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">
+			Mode single: gõ tên chưa có trong danh sách → dòng "Tạo mới" hiện ra; click (hoặc Enter) gọi
+			<code>onOptionCreate</code> — nơi trang gọi API create rồi chèn option thật vào danh sách.
+		</p>
+		<Select
+			bind:value={createSingleValue}
+			options={createSingleOptions}
+			searchable
+			clearable
+			allowCreate
+			createOptionLabel={{ en: 'Create "{value}"', vi: 'Tạo mới "{value}"' }}
+			onOptionCreate={handleCreateSingle}
+		/>
+		<p style="margin-top: 1rem; font-size: 0.875rem; color: #666;">
+			Selected: <code>{createSingleValue || '(none)'}</code>
+		</p>
+		{#if createSingleLog.length}
+			<p style="font-size: 0.8rem; color: #888;">
+				Log: <code>{createSingleLog.join(' · ')}</code>
+			</p>
+		{/if}
 	</section>
 
 	<!-- Chip overflow (multiple) -->
