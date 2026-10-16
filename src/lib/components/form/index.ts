@@ -36,3 +36,6 @@ export type { InputDatetimeProps, InputDatetimeConfigs } from './input-datetime'
 
 export { Switch, setSwitchContext, getSwitchContext } from './switch';
 export type { SwitchProps, SwitchConfigs } from './switch';
+
+export { default as ImageUpload } from './image-upload/Main.svelte';
+export type { ImageUploadProps } from './image-upload/Main.svelte';
