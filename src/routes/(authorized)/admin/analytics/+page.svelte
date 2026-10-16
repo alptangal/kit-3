@@ -6,6 +6,7 @@
 	import type { ChartDatum } from '$components/element/chart/_interface';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { formatDate as formatDateShared } from '$modules/i18n';
 	import { resolveServerMessage } from '../_interface';
 
 	type AnalyticsTab = 'cost' | 'suppliers' | 'volume' | 'stock-price';
@@ -205,17 +206,9 @@
 		return period;
 	}
 
-	function formatDate(raw?: string | null): string {
-		if (!raw) return '—';
-		try {
-			return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
-				year: 'numeric',
-				month: 'short',
-				day: '2-digit'
-			}).format(new Date(raw));
-		} catch {
-			return '—';
-		}
+	// i18n: format qua helper dùng chung ($modules/i18n) — cùng shape trước đây.
+	function formatDate(raw?: string | null) {
+		return formatDateShared(raw, lang);
 	}
 
 	function t(key: string): any {

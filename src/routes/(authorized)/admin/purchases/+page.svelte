@@ -6,6 +6,7 @@
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { formatDate as formatDateShared } from '$modules/i18n';
 	import { onMount } from 'svelte';
 	import { resolveServerMessage } from '../_interface';
 
@@ -90,6 +91,7 @@
 		actions: {
 			createQuick: { vi: 'Nhập nhanh', en: 'Quick purchase' },
 			createFull: { vi: 'Nhập hàng đầy đủ', en: 'Full purchase' },
+			returnSupplier: { vi: 'Trả hàng NCC', en: 'Return to supplier' },
 			receive: { vi: 'Nhận hàng', en: 'Receive' },
 			detail: { vi: 'Chi tiết', en: 'Detail' },
 			remove: { vi: 'Xoá', en: 'Remove' },
@@ -241,9 +243,32 @@
 				en: 'Receiving will create lots and add stock for each line. Continue?'
 			}
 		},
+		returnModal: {
+			title: { vi: 'Trả hàng nhà cung cấp', en: 'Return to supplier' },
+			intro: {
+				vi: 'Chọn NCC + chi nhánh, nhập số lượng cần trả từ tồn kho hiện có. Tồn kho sẽ bị trừ ngay.',
+				en: 'Pick supplier + branch, enter quantities to return from current stock. Stock will be deducted immediately.'
+			},
+			supplier: { vi: 'Nhà cung cấp', en: 'Supplier' },
+			branch: { vi: 'Chi nhánh', en: 'Branch' },
+			reason: { vi: 'Lý do trả (tuỳ chọn)', en: 'Reason (optional)' },
+			variant: { vi: 'Hàng hoá', en: 'Item' },
+			stock: { vi: 'Tồn kho', en: 'In stock' },
+			quantity: { vi: 'Số lượng trả', en: 'Return qty' },
+			unitCost: { vi: 'Giá trị/đv', en: 'Unit cost' },
+			loading: { vi: 'Đang tải tồn kho…', en: 'Loading stock…' },
+			empty: { vi: 'Chi nhánh chưa có tồn kho', en: 'No stock at this branch' },
+			loadStock: { vi: 'Tải tồn kho', en: 'Load stock' },
+			requireSupplier: { vi: 'Chọn nhà cung cấp', en: 'Select a supplier' },
+			requireBranch: { vi: 'Chọn chi nhánh', en: 'Select a branch' },
+			requireItems: { vi: 'Nhập số lượng trả cho ít nhất 1 dòng', en: 'Enter return quantity for at least 1 line' },
+			overStock: { vi: 'Số lượng trả vượt tồn kho', en: 'Return quantity exceeds stock' },
+			submit: { vi: 'Xác nhận trả hàng', en: 'Confirm return' }
+		},
 		toasts: {
 			created: { vi: 'Tạo phiếu nhập thành công', en: 'Purchase created successfully' },
 			received: { vi: 'Nhận hàng thành công', en: 'Received successfully' },
+			returned: { vi: 'Trả hàng NCC thành công', en: 'Purchase return created successfully' },
 			failed: { vi: 'Thao tác thất bại', en: 'Action failed' },
 			requestFailed: { vi: 'Lỗi kết nối máy chủ', en: 'Server request failed' }
 		},
@@ -391,18 +416,9 @@
 	const pageSizes = [10, 20, 50, 100];
 	const totalPages = $derived(Math.max(1, Math.ceil(total / pageSize)));
 
+	// i18n: format qua helper dùng chung ($modules/i18n) — cùng shape trước đây.
 	function formatDate(raw?: string | Date | null): string {
-		if (!raw) return '—';
-		try {
-			const date = typeof raw === 'string' ? new Date(raw) : raw;
-			return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
-				year: 'numeric',
-				month: 'short',
-				day: '2-digit'
-			}).format(date);
-		} catch {
-			return '—';
-		}
+		return formatDateShared(raw, lang);
 	}
 
 	function formatMoney(value?: number): string {
@@ -664,6 +680,132 @@
 			noHighlight: true
 		}
 	]);
+
+	// ── Trả hàng NCC ──
+	interface ReturnItem {
+		variantId: string;
+		displayName: string;
+		sku: string;
+		stock: number;
+		quantity: number;
+		unitCost: number;
+	}
+	let returnModalDisplay = $state(false);
+	let returnSubmitting = $state(false);
+	let returnError = $state<string | undefined>(undefined);
+	let returnSupplierId = $state('');
+	let returnBranchId = $state('');
+	let returnReason = $state('');
+	let returnItems = $state<ReturnItem[]>([]);
+	let returnStockLoading = $state(false);
+
+	function openReturnModal() {
+		returnSupplierId = '';
+		returnBranchId = branchFilter || '';
+		returnReason = '';
+		returnItems = [];
+		returnError = undefined;
+		returnModalDisplay = true;
+	}
+
+	// Nạp tồn kho theo chi nhánh — dòng 'Trả về NCC' lấy từ stock có sẵn
+	async function loadReturnStock() {
+		if (!encryptionKeys || !returnBranchId) return;
+		returnStockLoading = true;
+		try {
+			// Đảm bảo variantOptions có dữ liệu (tên/sku/costPrice hiển thị dòng)
+			if (variantOptions.length === 0) {
+				const body: Record<string, unknown> = { page: 1, pageSize: 100 };
+				const variantsRes = await encryption.fetchSecure(
+					'/api/admin/variants/list',
+					{ method: 'POST', body },
+					encryptionKeys
+				);
+				if (variantsRes.ok) {
+					variantOptions = (variantsRes.data as { items?: VariantOption[] } | undefined)?.items ?? [];
+				}
+			}
+			const response = await encryption.fetchSecure(
+				'/api/admin/inventory/stock/list',
+				{ method: 'POST', body: { page: 1, pageSize: 100, branchId: returnBranchId } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as { items?: Array<Record<string, unknown>> } | undefined;
+				const stockItems = data?.items ?? [];
+				returnItems = stockItems.map((s) => {
+					const variantId = String(s.variantId ?? '');
+					const variant = variantOptions.find((v) => v._id === variantId);
+					return {
+						variantId,
+						displayName: variant?.displayName ?? variantId,
+						sku: variant?.sku ?? '',
+						stock: Number(s.quantityOnHand ?? 0),
+						quantity: 0,
+						unitCost: Number(variant?.costPrice ?? 0)
+					};
+				});
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[admin/purchases] load return stock failed:', err);
+		} finally {
+			returnStockLoading = false;
+		}
+	}
+
+	function submitReturn(): string | null {
+		if (!returnSupplierId) return pageContents.returnModal.requireSupplier[lang];
+		if (!returnBranchId) return pageContents.returnModal.requireBranch[lang];
+		const valid = returnItems.filter((it) => Number(it.quantity) > 0);
+		if (valid.length === 0) return pageContents.returnModal.requireItems[lang];
+		for (const it of valid) {
+			if (Number(it.quantity) > it.stock) return pageContents.returnModal.overStock[lang];
+		}
+		return null;
+	}
+
+	async function submitPurchaseReturn() {
+		const err = submitReturn();
+		if (err) {
+			returnError = err;
+			return;
+		}
+		if (!encryptionKeys) return;
+		returnSubmitting = true;
+		returnError = undefined;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/purchases/return',
+				{
+					method: 'POST',
+					body: {
+						supplierId: returnSupplierId,
+						branchId: returnBranchId,
+						reason: returnReason || undefined,
+						items: returnItems
+							.filter((it) => Number(it.quantity) > 0)
+							.map((it) => ({
+								variantId: it.variantId,
+								quantity: Math.floor(Number(it.quantity)),
+								unitCost: Number(it.unitCost) || 0
+							}))
+					}
+				},
+				encryptionKeys
+			);
+			if (response.ok) {
+				showToast(pageContents.toasts.returned[lang], 'success');
+				returnModalDisplay = false;
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.failed), 'error');
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[admin/purchases] return failed:', err);
+			showToast(resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed), 'error');
+		} finally {
+			returnSubmitting = false;
+		}
+	}
 
 	// ── Nhập nhanh ──
 	function openQuickModal() {
@@ -1287,7 +1429,10 @@
 			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
 		<div class="admin-header-actions">
-			<!-- Quy ước màu nút: create = success -->
+			<!-- Quy ước màu nút: create = success, destructive (trả NCC trừ tồn) = error soft -->
+			<Button color="error" variant="soft" onClick={openReturnModal} data-test="purchases-return-btn">
+				{pageContents.actions.returnSupplier[lang]}
+			</Button>
 			<Button color="primary" variant="soft" onClick={openFullModal}>{pageContents.actions.createFull[lang]}</Button>
 			<Button color="success" onClick={openQuickModal}>{pageContents.actions.createQuick[lang]}</Button>
 		</div>
@@ -1944,6 +2089,108 @@
 		</Modal>
 	{/if}
 
+	<!-- ── Modal trả hàng NCC ── -->
+	{#if returnModalDisplay}
+		<Modal bind:display={returnModalDisplay} size="lg" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>{pageContents.returnModal.title[lang]}</Modal.Container.Header>
+				<Modal.Container.Body>
+					<p class="modal-intro">{pageContents.returnModal.intro[lang]}</p>
+					{#if returnError}
+						<div class="form-error-banner" role="alert">{returnError}</div>
+					{/if}
+					<div class="form-grid-2">
+						<div class="form-field">
+							<label class="form-label" for="return-supplier">{pageContents.returnModal.supplier[lang]}</label>
+							<select
+								id="return-supplier"
+								class="admin-select"
+								bind:value={returnSupplierId}
+								onchange={() => { returnError = undefined; }}
+							>
+								<option value="">—</option>
+								{#each suppliers as s (s._id)}
+									<option value={s._id}>{s.name ?? s.displayName ?? s._id}</option>
+								{/each}
+							</select>
+						</div>
+						<div class="form-field">
+							<label class="form-label" for="return-branch">{pageContents.returnModal.branch[lang]}</label>
+							<select id="return-branch" class="admin-select" bind:value={returnBranchId} onchange={() => { returnItems = []; returnError = undefined; }}>
+								<option value="">—</option>
+								{#each branches as b (b._id)}
+									<option value={b._id}>{b.name ?? b._id}</option>
+								{/each}
+							</select>
+						</div>
+					</div>
+					<div class="form-field">
+						<label class="form-label" for="return-reason">{pageContents.returnModal.reason[lang]}</label>
+						<input id="return-reason" class="admin-input" type="text" bind:value={returnReason} />
+					</div>
+					{#if returnBranchId}
+						{#if returnItems.length === 0}
+							<div class="return-load-row">
+								<Button color="primary" variant="soft" loading={returnStockLoading} disabled={returnStockLoading} onclick={loadReturnStock} data-test="return-load-stock">
+									{pageContents.returnModal.loadStock[lang]}
+								</Button>
+							</div>
+						{:else}
+							<div class="return-items" data-test="return-items">
+								{#if returnStockLoading}
+									<p class="admin-state">{pageContents.returnModal.loading[lang]}</p>
+								{/if}
+								{#each returnItems as it, i (it.variantId)}
+									<div class="return-item" class:return-item--active={Number(it.quantity) > 0} data-test={`return-item-${i}`}>
+										<div class="return-item-info">
+											<span class="return-item-name">{it.displayName}{it.sku ? ` · ${it.sku}` : ''}</span>
+											<span class="return-item-stock">{pageContents.returnModal.stock[lang]}: {it.stock}</span>
+										</div>
+										<div class="return-item-inputs">
+											<input
+												class="admin-input return-item-qty"
+												type="number"
+												min="0"
+												max={it.stock}
+												step="1"
+												bind:value={it.quantity}
+												aria-label={pageContents.returnModal.quantity[lang]}
+												data-test={`return-item-qty-${i}`}
+											/>
+											<input
+												class="admin-input return-item-cost"
+												type="number"
+												min="0"
+												step="1"
+												bind:value={it.unitCost}
+												aria-label={pageContents.returnModal.unitCost[lang]}
+												data-test={`return-item-cost-${i}`}
+											/>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button color="default" variant="ghost" disabled={returnSubmitting} onclick={() => { returnModalDisplay = false; }}>
+						{pageContents.actions.cancel[lang]}
+					</Button>
+					<Button
+						color="error"
+						loading={returnSubmitting}
+						disabled={returnSubmitting || returnItems.length === 0}
+						onclick={submitPurchaseReturn}
+						data-test="return-submit"
+					>
+						{pageContents.returnModal.submit[lang]}
+					</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
 	<!-- ── Modal chi tiết ── -->
 	{#if detailModalDisplay && detailPO}
 		<Modal bind:display={detailModalDisplay} size="lg" isDimissable>
@@ -2235,6 +2482,79 @@
 		padding: 0.6rem 0.85rem;
 		font-size: 0.85rem;
 		margin-bottom: 0.75rem;
+	}
+
+	/* ── Modal trả hàng NCC ── */
+	.modal-intro {
+		font-size: 0.85rem;
+		color: var(--foreground-500);
+		margin: 0 0 0.85rem;
+	}
+
+	.return-load-row {
+		display: flex;
+		justify-content: center;
+		padding: 0.75rem 0;
+	}
+
+	.return-items {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		max-height: 20rem;
+		overflow-y: auto;
+		margin-top: 0.75rem;
+		padding-right: 0.25rem;
+	}
+
+	.return-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 0.65rem;
+		border: 1px solid var(--foreground-100);
+		border-radius: 0.5rem;
+
+		&--active {
+			border-color: var(--primary);
+			background: var(--primary-soft, hsl(212, 100%, 97%));
+		}
+	}
+
+	.return-item-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+
+	.return-item-name {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--foreground);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.return-item-stock {
+		font-size: 0.75rem;
+		color: var(--foreground-500);
+	}
+
+	.return-item-inputs {
+		display: flex;
+		gap: 0.4rem;
+		flex-shrink: 0;
+	}
+
+	.return-item-qty {
+		width: 5.5rem;
+	}
+
+	.return-item-cost {
+		width: 7rem;
 	}
 
 	.form-grid {

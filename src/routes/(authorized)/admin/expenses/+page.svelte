@@ -6,6 +6,7 @@
 	import { AlertDialog } from '$lib/components/element/alert-dialog';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { formatDate as formatDateShared } from '$modules/i18n';
 	import { resolveServerMessage } from '../_interface';
 
 	interface ExpenseRow {
@@ -220,18 +221,9 @@
 		return branch?.name ?? branchId;
 	}
 
-	function formatDate(raw?: string | Date | null): string {
-		if (!raw) return '—';
-		try {
-			const date = typeof raw === 'string' ? new Date(raw) : raw;
-			return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
-				year: 'numeric',
-				month: 'short',
-				day: '2-digit'
-			}).format(date);
-		} catch {
-			return '—';
-		}
+	// i18n: format qua helper dùng chung ($modules/i18n) — cùng shape trước đây.
+	function formatDate(raw?: string | Date | null) {
+		return formatDateShared(raw, lang);
 	}
 
 	function formatMoney(value?: number): string {

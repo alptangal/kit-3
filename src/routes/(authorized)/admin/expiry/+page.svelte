@@ -5,6 +5,7 @@
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { formatDate as formatDateShared } from '$modules/i18n';
 	import { onMount } from 'svelte';
 	import { resolveServerMessage } from '../_interface';
 
@@ -147,18 +148,9 @@
 		bucketFilter === 'le7' ? 7 : bucketFilter === 'le15' ? 15 : bucketFilter === 'le30' ? 30 : daysWindow
 	);
 
-	function formatDate(raw?: string | null): string {
-		if (!raw) return '—';
-		try {
-			const date = new Date(raw);
-			return new Intl.DateTimeFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {
-				year: 'numeric',
-				month: 'short',
-				day: '2-digit'
-			}).format(date);
-		} catch {
-			return '—';
-		}
+	// i18n: format qua helper dùng chung ($modules/i18n) — cùng shape trước đây.
+	function formatDate(raw?: string | null) {
+		return formatDateShared(raw, lang);
 	}
 
 	function showToast(text: string, color: 'success' | 'error') {
