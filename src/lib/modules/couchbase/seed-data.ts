@@ -95,6 +95,9 @@ export async function seedPermissions(): Promise<void> {
 		{ key: 'promotions:read', resource: 'promotions', action: 'read' },
 		{ key: 'promotions:manage', resource: 'promotions', action: 'manage' },
 		{ key: 'users:manage', resource: 'users', action: 'manage' },
+		// Secret Key API — key Bearer sk-... gọi /api/agent/* từ ngoài
+		{ key: 'api_keys:read', resource: 'api_keys', action: 'read' },
+		{ key: 'api_keys:manage', resource: 'api_keys', action: 'manage' },
 		{ key: 'reports:view', resource: 'reports', action: 'read' },
 
 		// Phase 5: đối soát thanh toán / vận đơn / điều phối đơn (POS + online)
@@ -148,7 +151,10 @@ export async function seedPermissions(): Promise<void> {
 
 		// Phase 7 — Đồng bộ bán hàng đa kênh (omnichannel)
 		{ key: 'channels:read', resource: 'channels', action: 'read' },
-		{ key: 'channels:manage', resource: 'channels', action: 'manage' }
+		{ key: 'channels:manage', resource: 'channels', action: 'manage' },
+
+		// Lịch sử truy cập user (activity logs)
+		{ key: 'activity:read', resource: 'activity', action: 'read' }
 	];
 
 	for (const p of permissions) {
@@ -198,6 +204,9 @@ export async function seedDetailRoles(): Promise<void> {
 			'promotions:read',
 			'promotions:manage',
 			'users:manage',
+			// Secret Key API (chỉ owner quản lý key API — manager/staff không có)
+			'api_keys:read',
+			'api_keys:manage',
 			'reports:view',
 			// Phase 5: đối soát thanh toán / vận đơn / điều phối đơn
 			'payments:read',
@@ -240,7 +249,9 @@ export async function seedDetailRoles(): Promise<void> {
 			'debts:manage',
 			// Đồng bộ bán hàng đa kênh — owner toàn quyền
 			'channels:read',
-			'channels:manage'
+			'channels:manage',
+			// Lịch sử truy cập user — owner xem tất cả
+			'activity:read'
 		].map((key) => ({ roleName: 'owner', permissionKey: key, scope: 'all' })),
 
 		// Manager — quản lý trong phạm vi chi nhánh mình
@@ -323,6 +334,9 @@ export async function seedDetailRoles(): Promise<void> {
 		// Đồng bộ bán hàng đa kênh — manager đọc + quản lý trong chi nhánh mình
 		{ roleName: 'manager', permissionKey: 'channels:read', scope: 'own_branch' },
 		{ roleName: 'manager', permissionKey: 'channels:manage', scope: 'own_branch' },
+
+		// Lịch sử truy cập user — manager xem user trong chi nhánh mình
+		{ roleName: 'manager', permissionKey: 'activity:read', scope: 'own_branch' },
 
 		// Staff — thao tác cơ bản, phạm vi hẹp
 		{ roleName: 'staff', permissionKey: 'products:read', scope: 'own_branch' },
