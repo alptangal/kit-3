@@ -272,12 +272,14 @@
 			id: 'span',
 			label: pageContents.table.span[lang],
 			accessor: (row) => (row as unknown as PerUserRow).spanMs,
+			render: (value) => formatSpan(Number(value ?? 0)),
 			align: 'right'
 		},
 		{
 			id: 'avg',
 			label: pageContents.table.avgDuration[lang],
 			accessor: (row) => (row as unknown as PerUserRow).avgDurationMs,
+			render: (value) => formatMs(Number(value ?? 0)),
 			align: 'right'
 		},
 		{
@@ -669,6 +671,14 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
 		gap: 1.25rem;
+
+		/* BẢY: grid item mặc định min-width:auto — bảng monospace dài (path +
+		   4 cột số nowrap) đẩy item rộng hơn track → tràn mép phải viewport,
+		   cắt mất cột P95. min-width:0 ép item co theo track, overflow-x của
+		   .admin-table-wrap cuộn ngang thay vì phá khung. */
+		& > * {
+			min-width: 0;
+		}
 
 		@media (max-width: 960px) {
 			grid-template-columns: 1fr;
