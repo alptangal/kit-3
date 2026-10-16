@@ -718,12 +718,18 @@
 		}
 	}
 
-	.col-path {
+	/* BẢY: phải lồng .admin-table — rule td nowrap của .admin-table có
+	   specificity (0,2,1) (class + scoped + element) thắng .col-path.sX
+	   (0,2,0) nếu viết phẳng → path vẫn nowrap, bảng tràn, cắt cột P95. */
+	.admin-table .col-path {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.8rem;
-		max-width: 22rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		min-width: 7rem;
+		/* path là chuỗi liền (URL không dấu cách) → min-content của bảng >
+		   track grid → thanh cuộn ngang trong .admin-table-wrap → cột P95
+		   bị cắt. anywhere cho gãy chuỗi liền, bảng co vừa track. */
+		white-space: normal;
+		overflow-wrap: anywhere;
 	}
 
 	.col-num {
