@@ -6,6 +6,7 @@
 	import { AlertDialog } from '$lib/components/element/alert-dialog';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { formatDateTime, formatNumber, getLang } from '$modules/i18n';
 	import { resolveServerMessage } from '../_interface';
 
 	type ChannelAccountStatus = 'connected' | 'disconnected' | 'error' | 'pending';
@@ -272,7 +273,9 @@
 			cancelled: 'cancelled'
 		})[status] as PageKey;
 
-	let lang = $state<'vi' | 'en'>('vi');
+	// i18n: lang theo prefs (client.browser.language) — reactive, đổi ngay khi
+	// user switch ngôn ngữ (trước đây $state set 1 lần trong onMount → không đổi).
+	const lang = $derived(getLang());
 	let encryptionKeys: { publicKey: CryptoKey; privateKey: CryptoKey } | null = null;
 
 	let accounts = $state<ChannelAccount[]>([]);
@@ -340,7 +343,7 @@
 			label: t('lastSync'),
 			sortable: true,
 			accessor: (row) =>
-				row.lastSyncAt ? new Date(String(row.lastSyncAt)).toLocaleString() : t('never')
+				row.lastSyncAt ? formatDateTime(String(row.lastSyncAt), lang) : t('never')
 		}
 	]);
 
@@ -382,7 +385,7 @@
 			id: 'totalAmount',
 			label: t('total'),
 			sortable: true,
-			accessor: (row) => `${Number(row.totalAmount ?? 0).toLocaleString()} ${String(row.currency ?? 'VND')}`
+			accessor: (row) => `${formatNumber(Number(row.totalAmount ?? 0), lang)} ${String(row.currency ?? 'VND')}`
 		},
 		{
 			id: 'status',
@@ -396,7 +399,7 @@
 			id: 'receivedAt',
 			label: t('placedAt'),
 			sortable: true,
-			accessor: (row) => (row.receivedAt ? new Date(String(row.receivedAt)).toLocaleString() : '—')
+			accessor: (row) => (row.receivedAt ? formatDateTime(String(row.receivedAt), lang) : '—')
 		}
 	]);
 
@@ -660,7 +663,6 @@
 
 	onMount(() => {
 		if (!client.browser) client.browser = {};
-		lang = client.browser?.language === 'en' ? 'en' : 'vi';
 		(async () => {
 			const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 			encryptionKeys = { privateKey, publicKey };
@@ -730,7 +732,7 @@
 					<div class="account-card-meta">
 						<span>
 							{t('lastSync')}:
-							{acc.lastSyncAt ? new Date(acc.lastSyncAt).toLocaleString() : t('never')}
+							{acc.lastSyncAt ? formatDateTime(acc.lastSyncAt, lang) : t('never')}
 						</span>
 						{#if acc.lastError}<span class="account-card-error">{acc.lastError}</span>{/if}
 						{#if !acc.hasCredentials}<span>{t('noCredentials')}</span>{/if}

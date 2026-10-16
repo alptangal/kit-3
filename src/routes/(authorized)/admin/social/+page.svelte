@@ -6,9 +6,12 @@
 	import { AlertDialog } from '$lib/components/element/alert-dialog';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { getLang } from '$modules/i18n';
 	import { resolveServerMessage } from '../_interface';
 
-	let lang = $state<'vi' | 'en'>('vi');
+	// i18n: lang theo prefs (client.browser.language) — reactive theo switcher
+	// (trước đây $state set 1 lần trong onMount → không đổi khi đổi ngôn ngữ).
+	const lang = $derived(getLang());
 	let encryptionKeys: { publicKey: CryptoKey; privateKey: CryptoKey } | null = null;
 
 	// ---------- i18n ----------
@@ -595,7 +598,6 @@
 	// ---------- lifecycle ----------
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
-		lang = client.browser?.language === 'en' ? 'en' : 'vi';
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadAccounts(), loadPosts()]);
