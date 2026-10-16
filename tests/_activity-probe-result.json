@@ -12,27 +12,27 @@
   {
     "name": "P2 hook ghi access_logs vào DB (đợi ≤20s)",
     "pass": true,
-    "detail": "admin=80 total=125"
+    "detail": "admin=218 total=299"
   },
   {
     "name": "P3 summary ok + totalRequests > 0 + activeUsers >= 1",
     "pass": true,
-    "detail": "total=130 users=2 avg=2798ms"
+    "detail": "total=301 users=2 avg=1767ms"
   },
   {
     "name": "P4 per-user có row (userId + totalRequests + span)",
     "pass": true,
-    "detail": "rows=2 first=users-admin reqs=84"
+    "detail": "rows=2 first=users-admin reqs=220"
   },
   {
     "name": "P5 top-pages có path /admin + hits/avgDuration",
     "pass": true,
-    "detail": "rows=10 first=/api/admin/activity/query hits=50"
+    "detail": "rows=10 first=/api/admin/activity/query hits=92"
   },
   {
     "name": "P5b top-pages orderBy=duration có avgDurationMs",
     "pass": true,
-    "detail": "first=/api/admin/inventory/branches avg=12988ms"
+    "detail": "first=/api/admin/pos/checkout avg=5108ms"
   },
   {
     "name": "P6 top-errors ok (mảng rows)",
@@ -42,7 +42,7 @@
   {
     "name": "P7 entries list đúng shape + userId có giá trị",
     "pass": true,
-    "detail": "rows=10 total=135"
+    "detail": "rows=10 total=306"
   },
   {
     "name": "P7b entries filter userId=admin → mọi row khớp",
