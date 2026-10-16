@@ -145,6 +145,7 @@
 		'/admin/notifications': 'Thông báo',
 		'/admin/messages': 'Tin nhắn',
 		'/admin/email-logs': 'Email logs',
+		'/admin/activity': 'Lịch sử truy cập',
 		'/admin/dashboard': 'Tổng quan',
 		'/admin/analytics': 'Thống kê',
 		'/admin/expenses': 'Chi phí',
@@ -451,6 +452,15 @@
 							active={isActive('/admin/email-logs')}
 							icon="lucide:mail"
 							data-test="admin-nav-email-logs"
+						/>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							label="Lịch sử truy cập"
+							href="/admin/activity"
+							active={isActive('/admin/activity')}
+							icon="lucide:history"
+							data-test="admin-nav-activity"
 						/>
 					</Sidebar.MenuItem>
 					<Sidebar.MenuItem>
