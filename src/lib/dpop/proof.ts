@@ -1,12 +1,7 @@
 // src/lib/dpop/proof.ts
 
 import { base64urlEncode, base64urlEncodeJson } from './base64url';
-import { encryption } from '$modules/encryption';
-
-async function exportPublicJwk(publicKey: CryptoKey) {
-	const jwk = await crypto.subtle.exportKey('jwk', publicKey);
-	return { kty: jwk.kty!, crv: jwk.crv!, x: jwk.x!, y: jwk.y! };
-}
+import { getDpopKeypair } from './keypair';
 
 export async function createDpopProof(opts: {
 	htm: string;
@@ -14,8 +9,9 @@ export async function createDpopProof(opts: {
 	accessToken?: string;
 	nonce?: string;
 }) {
-	const { publicKey, privateKey } = await encryption.generateRSAKeyPair();
-	const jwk = await exportPublicJwk(publicKey);
+	// Keypair ES256 BỀN (cache + sessionStorage) — trước đây tạo RSA mới mỗi lần
+	// (sai cả thuật toán: DPoP cần ECDSA P-256 chữ ký, không phải RSA-OAEP).
+	const { publicKey, privateKey, jwk } = await getDpopKeypair();
 
 	const header = { typ: 'dpop+jwt', alg: 'ES256', jwk };
 	const payload: Record<string, unknown> = {

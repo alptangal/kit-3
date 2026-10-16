@@ -73,6 +73,7 @@
 		for (const [key, value] of Object.entries(props)) {
 			if (value === undefined) continue;
 			if (
+				key === 'onclick' || // handler action (vd logout — item không href)
 				key === 'data-test' ||
 				key.startsWith('data-') ||
 				key.startsWith('aria-') ||

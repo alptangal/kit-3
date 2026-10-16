@@ -15,6 +15,7 @@
 	import { getFormContext } from '$components/form/form';
 	import { AuthLayout } from '$components/layout';
 	import { encryption } from '$modules/encryption';
+	import { getDpopPublicJwk } from '$lib/dpop/keypair';
 	import {
 		browserSupportsWebAuthn,
 		startAuthentication
@@ -229,7 +230,10 @@ $effect(() => {
 			username: configs.username.value!.trim(),
 			password: configs.password.value!,
 			remember: configs.remember.checked,
-			publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki')
+			publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki'),
+			// Keypair DPoP bền (ES256) — server bind refresh token qua jkt; sau này
+			// /api/auth/refresh yêu cầu proof ký đúng khoá này mới cấp token mới.
+			dpopJwk: await getDpopPublicJwk()
 		};
 
 		try {
@@ -318,7 +322,7 @@ $effect(() => {
 			// 3. Verify + tạo session (server set cookie giống /api/login)
 			const verRes = await encryption.fetchSecure('/api/auth/webauthn/auth/verify', {
 				method: 'post',
-				body: { response: assertion }
+				body: { response: assertion, dpopJwk: await getDpopPublicJwk() }
 			});
 			if (!verRes.ok) {
 				formError = verRes.message?.[lang] ?? verRes.message?.en ?? 'Passkey login failed';

@@ -7,6 +7,7 @@
 	import type { Snippet } from 'svelte';
 	import type { BreadcrumbItem } from '$components/navigation';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { Breadcrumb, Sidebar, TeamSwitcher } from '$components/navigation';
 	import { Separator } from '$components/element';
 	import type { LayoutData } from '$store/user-prefs.svelte';
@@ -128,6 +129,22 @@
 	// Menu 7 routes admin — active theo page.url.pathname.
 	const pathname = $derived(page.url.pathname);
 	const isActive = (href: string) => (href === '/admin' ? pathname === '/admin' : pathname.startsWith(href));
+
+	// ── Logout: POST /api/auth/logout (revoke refresh token + xoá cookies) → về /login.
+	// Gọi với finally goto để kể cả network fail vẫn rời app (cookies server-side
+	// đã cố revoke; client fallback: xoá accessToken DPoP trong sessionStorage).
+	const handleLogout = async () => {
+		try {
+			await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+		} catch {
+			// ignore — vẫn điều hướng về login
+		}
+		try {
+			sessionStorage.removeItem('accessToken');
+			sessionStorage.removeItem('dpop-keypair-jwk');
+		} catch {}
+		await goto('/login', { invalidateAll: true });
+	};
 
 	// Breadcrumb derive từ route hiện tại (đơn giản: Home + tên trang).
 	const routeNames: Record<string, TranslateContent> = {
@@ -550,6 +567,14 @@
 						href="/settings"
 						icon="lucide:settings"
 						data-test="admin-nav-settings"
+					/>
+				</Sidebar.MenuItem>
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton
+						label={tc('Đăng xuất', 'Log out')}
+						onclick={handleLogout}
+						icon="lucide:log-out"
+						data-test="admin-nav-logout"
 					/>
 				</Sidebar.MenuItem>
 			</Sidebar.Menu>

@@ -14,7 +14,9 @@ import { WebAuthnService } from '$lib/server/db/webauthn';
 import { webauthn } from '$lib/server/messages/db';
 import { Users, authMessages } from '$lib/server/db/users';
 import { cbData } from '$modules/couchbase/clients';
-import { applyRateLimit } from '$lib/server/rate-limit';
+import { applyRateLimit, getClientIp } from '$lib/server/rate-limit';
+import { createRefreshToken } from '$lib/server/db/tokens';
+import { calculateJwkThumbprint } from '$lib/dpop/thumbprint';
 
 // Đọc user_status catalog cho check canLogin (Users.canLogin là private)
 const cbUserStatus = cbData('user_status');
@@ -75,7 +77,8 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		// Tạo session giống /api/login
-		const userDocKey = userInstance.getDocumentKey();
+		// getDocumentKey trả string | undefined — verify thành công thì key luôn tồn tại
+		const userDocKey = userInstance.getDocumentKey() as string;
 		const token = await signAccessToken({
 			sub: userDocKey,
 			username: userDoc.firstname ?? '',
@@ -92,6 +95,36 @@ export const POST: RequestHandler = async (event) => {
 			secure: !dev,
 			maxAge: 60 * 60 * 24
 		});
+
+		// Cấp refresh token giống /api/login khi client gửi dpopJwk (bind qua jkt).
+		// Thiếu dpopJwk → bỏ qua (không chặn passkey login — session vẫn hợp lệ).
+		const dpopJwk = data.dpopJwk as { kty: string; crv: string; x: string; y: string } | undefined;
+		if (dpopJwk?.x && dpopJwk?.y) {
+			try {
+				const jkt = await calculateJwkThumbprint(dpopJwk);
+				const refreshTokenValue = crypto.randomUUID() + crypto.randomUUID();
+				const created = await createRefreshToken({
+					userId: userDocKey,
+					token: refreshTokenValue,
+					jkt,
+					expiresAt: Math.floor(Date.now() / 1000) + 30 * 86400,
+					deviceId: crypto.randomUUID(),
+					ipAddress: getClientIp(event.request, event.getClientAddress),
+					userAgent: event.request.headers.get('user-agent') ?? ''
+				});
+				if (created.success) {
+					event.cookies.set('refreshToken', refreshTokenValue, {
+						path: '/api/auth/refresh',
+						httpOnly: true,
+						sameSite: 'strict',
+						secure: !dev,
+						maxAge: 60 * 60 * 24 * 30
+					});
+				}
+			} catch (e) {
+				console.error('[POST /api/auth/webauthn/auth/verify] refresh token error:', e);
+			}
+		}
 
 		return respond({
 			ok: true,

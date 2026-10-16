@@ -159,6 +159,8 @@ export interface SidebarMenuButtonProps extends BasicProps {
 	leading?: Snippet;
 	trailing?: Snippet;
 	children?: Snippet;
+	/** click handler (forward qua restAttrs — dùng cho item không có href, vd logout) */
+	onclick?: (event: MouseEvent) => void;
 }
 
 export interface SidebarMenuBadgeProps extends BasicProps {

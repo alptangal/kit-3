@@ -8,6 +8,9 @@ import { Users } from '$lib/server/db/users';
 import { dev } from '$app/environment';
 import { resolveLang, localizePayload } from '$lib/server/i18n';
 import { signAccessToken } from '$lib/server/jwt';
+import { createRefreshToken } from '$lib/server/db/tokens';
+import { calculateJwkThumbprint } from '$lib/dpop/thumbprint';
+import { getClientIp } from '$lib/server/rate-limit';
 
 export const POST: RequestHandler = async ({ request, getClientAddress, cookies }) => {
 	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
@@ -112,7 +115,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 
 		// ── 8. Xây dựng JWT session token và thiết lập cookie ──
 		const userInstance = loginResult.user;
-		const userDocKey = userInstance.getDocumentKey();
+		// getDocumentKey trả string | undefined — login thành công thì key luôn tồn tại
+		const userDocKey = userInstance.getDocumentKey() as string;
 
 		// Ký JWT access token (ES256) để hooks.server.ts verifyAccessToken() khớp
 		const sessionPayload = {
@@ -135,6 +139,41 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 			secure: !dev,             // Chỉ gửi qua HTTPS trong production
 			maxAge
 		});
+
+		// ── 8b. Cấp refresh token (token family mới) + bind DPoP key của client ──
+		// Client gửi dpopJwk (ECDSA P-256) trong body — server tính thumbprint (jkt)
+		// và lưu cùng refresh token; /api/auth/refresh sau này yêu cầu proof ký bằng
+		// CÙNG khoá (jkt match) mới cấp access token mới.
+		if (dataDecrypted.dpopJwk?.x && dataDecrypted.dpopJwk?.y) {
+			try {
+				const jkt = await calculateJwkThumbprint(dataDecrypted.dpopJwk);
+				const refreshTokenValue = crypto.randomUUID() + crypto.randomUUID();
+				const created = await createRefreshToken({
+					userId: userDocKey,
+					token: refreshTokenValue,
+					jkt,
+					expiresAt: Math.floor(Date.now() / 1000) + 30 * 86400,
+					deviceId: crypto.randomUUID(),
+					ipAddress: getClientIp(request, getClientAddress),
+					userAgent: request.headers.get('user-agent') ?? ''
+				});
+				if (created.success) {
+					// Cookie riêng path /api/auth/refresh — chỉ gửi khi client gọi refresh
+					cookies.set('refreshToken', refreshTokenValue, {
+						path: '/api/auth/refresh',
+						httpOnly: true,
+						sameSite: 'strict',
+						secure: !dev,
+						maxAge: 60 * 60 * 24 * 30
+					});
+				} else {
+					// Không chặn login — session cookie vẫn hợp lệ, chỉ mất khả năng refresh
+					console.error('[POST /api/login] createRefreshToken failed:', created.messages);
+				}
+			} catch (e) {
+				console.error('[POST /api/login] refresh token error:', e);
+			}
+		}
 
 		// ── 9. Trả về phản hồi thành công ──
 		return respond(
