@@ -5,6 +5,7 @@ import { systemVault, initSystemVault } from '$store/initSystemVault';
 import { initApp } from '$store/init-app';
 import { verifyAccessToken } from '$lib/server/jwt';
 import { resolveLang, localize } from '$lib/server/i18n';
+import { getClientIp } from '$lib/server/rate-limit';
 import { cbData } from '$modules/couchbase/clients';
 import { QrPaymentService } from '$lib/server/db/qr-payments';
 
@@ -174,8 +175,9 @@ function logAccess(event: RequestEvent, status: number, durationMs: number) {
 			method: event.request.method,
 			status,
 			durationMs,
+			at: new Date().toISOString(),
 			userAgent: event.request.headers.get('user-agent') ?? undefined,
-			ip: event.getClientAddress().catch(() => undefined)
+			ip: getClientIp(event.request, event.getClientAddress) || undefined
 		}))
 		.catch(() => {});
 	// ~1% request: dọn log cũ > 30 ngày
