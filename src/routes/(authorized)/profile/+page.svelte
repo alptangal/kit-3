@@ -4,11 +4,7 @@
 	import { Button, Icon, AlertDialog } from '$components/element';
 	import { Input } from '$components/form';
 	import { encryption } from '$modules/encryption';
-	import {
-		browserSupportsWebAuthn,
-		startRegistration,
-		bufferToBase64URLString
-	} from '@simplewebauthn/browser';
+	import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 	import { client } from '$store/basic.svelte';
 
 	// data.user từ (authorized)/+layout.server.ts (MetaUser)
@@ -138,6 +134,134 @@
 		passkeyNamePlaceholder: {
 			vi: 'Ví dụ: iPhone của tôi',
 			en: 'e.g. My iPhone'
+		},
+
+		// ── Đổi mật khẩu ──
+		passwordTitle: {
+			vi: 'Đổi mật khẩu',
+			en: 'Change password'
+		},
+		passwordSubtitle: {
+			vi: 'Dùng mật khẩu hiện tại để xác nhận, sau đó đặt mật khẩu mới (tối thiểu 8 ký tự).',
+			en: 'Confirm with your current password, then set a new one (min 8 characters).'
+		},
+		passwordOld: {
+			vi: 'Mật khẩu hiện tại',
+			en: 'Current password'
+		},
+		passwordNew: {
+			vi: 'Mật khẩu mới',
+			en: 'New password'
+		},
+		passwordConfirm: {
+			vi: 'Nhập lại mật khẩu mới',
+			en: 'Confirm new password'
+		},
+		passwordSave: {
+			vi: 'Đổi mật khẩu',
+			en: 'Change password'
+		},
+		passwordSaving: {
+			vi: 'Đang lưu...',
+			en: 'Saving...'
+		},
+		passwordMismatch: {
+			vi: 'Mật khẩu nhập lại không khớp',
+			en: 'Passwords do not match'
+		},
+		passwordSuccess: {
+			vi: 'Đã đổi mật khẩu thành công',
+			en: 'Password changed successfully'
+		},
+
+		// ── Secret Key API ──
+		apiKeysTitle: {
+			vi: 'Secret Key API',
+			en: 'Secret API keys'
+		},
+		apiKeysSubtitle: {
+			vi: 'Dùng key Bearer sk-... để gọi /api/agent/* từ ngoài (script, CI, AI agent).',
+			en: 'Use a Bearer sk-... key to call /api/agent/* from outside (scripts, CI, AI agents).'
+		},
+		apiKeysCreate: {
+			vi: 'Tạo key mới',
+			en: 'Create key'
+		},
+		apiKeysCreating: {
+			vi: 'Đang tạo...',
+			en: 'Creating...'
+		},
+		apiKeysNameLabel: {
+			vi: 'Tên key',
+			en: 'Key name'
+		},
+		apiKeysNamePlaceholder: {
+			vi: 'Ví dụ: CI bot',
+			en: 'e.g. CI bot'
+		},
+		apiKeysEmpty: {
+			vi: 'Chưa có key nào.',
+			en: 'No API keys yet.'
+		},
+		apiKeysShowOnce: {
+			vi: 'Sao chép ngay — key sẽ KHÔNG bao giờ hiển thị lại!',
+			en: 'Copy it now — this key will NEVER be shown again!'
+		},
+		apiKeysCopy: {
+			vi: 'Sao chép',
+			en: 'Copy'
+		},
+		apiKeysCopied: {
+			vi: 'Đã sao chép',
+			en: 'Copied'
+		},
+		apiKeysRevoke: {
+			vi: 'Thu hồi',
+			en: 'Revoke'
+		},
+		apiKeysRevoked: {
+			vi: 'Đã thu hồi',
+			en: 'Revoked'
+		},
+		apiKeysRevokeConfirmTitle: {
+			vi: 'Thu hồi key này?',
+			en: 'Revoke this key?'
+		},
+		apiKeysRevokeConfirmBody: {
+			vi: 'Mọi request dùng key này sẽ bị từ chối ngay lập tức. Không thể hoàn tác.',
+			en: 'All requests using this key will be rejected immediately. This cannot be undone.'
+		},
+		apiKeysLoadFailed: {
+			vi: 'Không tải được danh sách key',
+			en: 'Failed to load API keys'
+		},
+		apiKeysCreateFailed: {
+			vi: 'Tạo key thất bại',
+			en: 'Failed to create key'
+		},
+		apiKeysRevokeFailed: {
+			vi: 'Thu hồi thất bại',
+			en: 'Failed to revoke'
+		},
+		apiKeysCreateSuccess: {
+			vi: 'Đã tạo key',
+			en: 'Key created'
+		},
+		apiKeysRevokeSuccess: {
+			vi: 'Đã thu hồi key',
+			en: 'Key revoked'
+		},
+		apiKeysLastUsed: {
+			vi: 'Dùng lần cuối',
+			en: 'Last used'
+		},
+		apiKeysCreatedAt: {
+			vi: 'Tạo lúc',
+			en: 'Created'
+		},
+		apiKeysCancel: {
+			vi: 'Huỷ',
+			en: 'Cancel'
 		}
 	};
 
@@ -311,6 +435,146 @@
 			browserSupportsWebAuthn();
 		if (passkeySupported) void loadCredentials();
 	});
+
+	// ── Đổi mật khẩu ──
+	let pwdOld = $state('');
+	let pwdNew = $state('');
+	let pwdConfirm = $state('');
+	let pwdSaving = $state(false);
+
+	async function submitPassword() {
+		if (pwdSaving) return;
+		if (pwdNew !== pwdConfirm) {
+			toast(msg('passwordMismatch'), undefined, 'error');
+			return;
+		}
+		pwdSaving = true;
+		try {
+			const res = await encryption.fetchSecure('/api/agent/profile/change-password', {
+				method: 'post',
+				body: { oldPassword: pwdOld, newPassword: pwdNew }
+			});
+			if (res.ok) {
+				toast(msg('passwordSuccess'), undefined, 'success');
+				pwdOld = '';
+				pwdNew = '';
+				pwdConfirm = '';
+			} else {
+				toast(res.message?.[lang] ?? res.message?.en ?? 'Error', undefined, 'error');
+			}
+		} catch (e) {
+			toast(e instanceof Error ? e.message : String(e), undefined, 'error');
+		} finally {
+			pwdSaving = false;
+		}
+	}
+
+	// ── Secret Key API ──
+	interface ApiKeyRow {
+		documentKey: string;
+		name: string;
+		prefix: string;
+		createdAt?: string;
+		lastUsedAt?: string;
+		revokedAt?: string;
+	}
+
+	let apiKeys = $state<ApiKeyRow[]>([]);
+	let apiKeysLoading = $state(false);
+	let apiKeysCreating = $state(false);
+	let newKeyName = $state('');
+	let showCreateModal = $state(false);
+	let createdKey = $state('');
+	let copied = $state(false);
+	let revokeTarget = $state<ApiKeyRow | undefined>(undefined);
+	let revokeDialogOpen = $state(false);
+
+	async function loadApiKeys() {
+		apiKeysLoading = true;
+		try {
+			const res = await encryption.fetchSecure('/api/agent/keys/list', { method: 'post' });
+			if (res.ok) {
+				apiKeys = (res.data?.keys ?? []) as ApiKeyRow[];
+			} else {
+				toast(msg('apiKeysLoadFailed'), res.message?.[lang] ?? res.message?.en, 'error');
+			}
+		} catch (e) {
+			toast(msg('apiKeysLoadFailed'), e instanceof Error ? e.message : String(e), 'error');
+		} finally {
+			apiKeysLoading = false;
+		}
+	}
+
+	async function submitCreateKey() {
+		if (apiKeysCreating) return;
+		const name = newKeyName.trim();
+		if (!name) return;
+		apiKeysCreating = true;
+		try {
+			const res = await encryption.fetchSecure('/api/agent/keys/create', {
+				method: 'post',
+				body: { name }
+			});
+			if (res.ok && res.data?.key) {
+				createdKey = res.data.key as string;
+				copied = false;
+				newKeyName = '';
+				showCreateModal = false;
+				toast(msg('apiKeysCreateSuccess'), undefined, 'success');
+				await loadApiKeys();
+			} else {
+				toast(msg('apiKeysCreateFailed'), res.message?.[lang] ?? res.message?.en, 'error');
+			}
+		} catch (e) {
+			toast(msg('apiKeysCreateFailed'), e instanceof Error ? e.message : String(e), 'error');
+		} finally {
+			apiKeysCreating = false;
+		}
+	}
+
+	async function copyCreatedKey(): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(createdKey);
+			copied = true;
+		} catch {
+			// clipboard API có thể bị chặn — fallback select
+			copied = false;
+		}
+	}
+
+	function confirmRevoke(key: ApiKeyRow) {
+		revokeTarget = key;
+		revokeDialogOpen = true;
+	}
+
+	async function handleRevoke() {
+		const key = revokeTarget;
+		if (!key) return;
+		try {
+			const res = await encryption.fetchSecure('/api/agent/keys/revoke', {
+				method: 'post',
+				body: { documentKey: key.documentKey }
+			});
+			if (res.ok) {
+				apiKeys = apiKeys.map((k) =>
+					k.documentKey === key.documentKey ? { ...k, revokedAt: new Date().toISOString() } : k
+				);
+				toast(msg('apiKeysRevokeSuccess'), undefined, 'success');
+			} else {
+				toast(msg('apiKeysRevokeFailed'), res.message?.[lang] ?? res.message?.en, 'error');
+			}
+		} catch (e) {
+			toast(msg('apiKeysRevokeFailed'), e instanceof Error ? e.message : String(e), 'error');
+		} finally {
+			revokeTarget = undefined;
+			revokeDialogOpen = false;
+		}
+	}
+
+	// Load keys cùng lúc passkey (mọi user đều xem được key của mình — route tự check permission)
+	$effect(() => {
+		if (data.user.userId) void loadApiKeys();
+	});
 </script>
 
 <svelte:head>
@@ -444,7 +708,152 @@
 			</ul>
 		{/if}
 	</section>
+
+	<!-- Đổi mật khẩu (self-service) -->
+	<section class="pwd-section">
+		<header class="pwd-header">
+			<div class="passkey-heading">
+				<Icon class="passkey-icon" icon="lucide:key-round" size="md" />
+				<div>
+					<h2 class="passkey-title">{msg('passwordTitle')}</h2>
+					<p class="passkey-subtitle">{msg('passwordSubtitle')}</p>
+				</div>
+			</div>
+		</header>
+		<form
+			class="pwd-form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				void submitPassword();
+			}}
+		>
+			<label class="pwd-field">
+				<span class="pwd-label">{msg('passwordOld')}</span>
+				<Input type="password" bind:value={pwdOld} autocomplete="current-password" required />
+			</label>
+			<label class="pwd-field">
+				<span class="pwd-label">{msg('passwordNew')}</span>
+				<Input type="password" bind:value={pwdNew} autocomplete="new-password" required />
+			</label>
+			<label class="pwd-field">
+				<span class="pwd-label">{msg('passwordConfirm')}</span>
+				<Input type="password" bind:value={pwdConfirm} autocomplete="new-password" required />
+			</label>
+			<div class="pwd-actions">
+				<Button type="submit" color="primary" variant="solid" disabled={pwdSaving} loading={pwdSaving}>
+					{pwdSaving ? msg('passwordSaving') : msg('passwordSave')}
+				</Button>
+			</div>
+		</form>
+	</section>
+
+	<!-- Secret Key API -->
+	<section class="keys-section">
+		<header class="pwd-header">
+			<div class="passkey-heading">
+				<Icon class="passkey-icon" icon="lucide:shield-keyhole" size="md" />
+				<div>
+					<h2 class="passkey-title">{msg('apiKeysTitle')}</h2>
+					<p class="passkey-subtitle">{msg('apiKeysSubtitle')}</p>
+				</div>
+			</div>
+			<Button
+				color="primary"
+				variant="ghost"
+				loading={apiKeysCreating}
+				disabled={apiKeysCreating}
+				onclick={() => {
+					showCreateModal = true;
+				}}
+			>
+				{msg('apiKeysCreate')}
+			</Button>
+		</header>
+
+		{#if apiKeysLoading && apiKeys.length === 0}
+			<div class="passkey-loading"><span class="passkey-spinner"></span></div>
+		{:else if apiKeys.length === 0}
+			<p class="passkey-empty">{msg('apiKeysEmpty')}</p>
+		{:else}
+			<ul class="passkey-list">
+				{#each apiKeys as key (key.documentKey)}
+					<li class="passkey-item" class:passkey-item--revoked={!!key.revokedAt}>
+						<div class="passkey-item-main">
+							<span class="passkey-name">
+								{key.name}
+								<code class="keys-prefix">{key.prefix}…</code>
+							</span>
+							<span class="passkey-meta">
+								{msg('apiKeysCreatedAt')}: {formatDate(key.createdAt)}
+								· {msg('apiKeysLastUsed')}: {formatDate(key.lastUsedAt)}
+								{#if key.revokedAt}
+									· {msg('apiKeysRevoked')}
+								{/if}
+							</span>
+						</div>
+						<div class="passkey-item-actions">
+							{#if !key.revokedAt}
+								<Button variant="link" color="error" size="sm" onclick={() => confirmRevoke(key)}>
+									{msg('apiKeysRevoke')}
+								</Button>
+							{/if}
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
 </section>
+
+<!-- Modal tạo key mới -->
+<AlertDialog bind:open={showCreateModal}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{msg('apiKeysCreate')}</AlertDialog.Title>
+			<AlertDialog.Description>{msg('apiKeysNameLabel')}</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{msg('apiKeysCancel')}</AlertDialog.Cancel>
+			<AlertDialog.Action color="primary" onclick={submitCreateKey}>
+				{apiKeysCreating ? msg('apiKeysCreating') : msg('apiKeysCreate')}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog>
+
+<!-- Modal hiển thị raw key ĐÚNG 1 LẦN -->
+<AlertDialog open={createdKey !== ''}>
+	<AlertDialog.Content>
+		<AlertDialog.Header variant="danger">
+			<AlertDialog.Title>{msg('apiKeysCreateSuccess')}</AlertDialog.Title>
+			<AlertDialog.Description>{msg('apiKeysShowOnce')}</AlertDialog.Description>
+		</AlertDialog.Header>
+		<div class="keys-reveal">
+			<code class="keys-reveal-code">{createdKey}</code>
+			<Button variant="ghost" color="primary" size="sm" onclick={copyCreatedKey}>
+				{copied ? msg('apiKeysCopied') : msg('apiKeysCopy')}
+			</Button>
+		</div>
+		<AlertDialog.Footer>
+			<AlertDialog.Action color="primary" onclick={() => (createdKey = '')}>
+				{msg('passkeySave')}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog>
+
+<AlertDialog bind:open={revokeDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header variant="danger">
+			<AlertDialog.Title>{msg('apiKeysRevokeConfirmTitle')}</AlertDialog.Title>
+			<AlertDialog.Description>{revokeTarget?.name} — {msg('apiKeysRevokeConfirmBody')}</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{msg('apiKeysCancel')}</AlertDialog.Cancel>
+			<AlertDialog.Action color="danger" onclick={handleRevoke}>{msg('apiKeysRevoke')}</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog>
 
 <AlertDialog bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>
@@ -704,5 +1113,77 @@
 		.passkey-item-actions {
 			padding-left: 0;
 		}
+	}
+
+	// ── Đổi mật khẩu ──
+	.pwd-section,
+	.keys-section {
+		border: 1px solid var(--default-300);
+		border-radius: 0.75rem;
+		background: var(--background);
+		padding: 1.25rem;
+	}
+
+	.pwd-header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+	}
+
+	.pwd-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+		max-width: 26rem;
+	}
+
+	.pwd-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.pwd-label {
+		font-size: 0.85rem;
+		color: var(--foreground-500);
+	}
+
+	.pwd-actions {
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	// ── Secret Key API ──
+	.keys-prefix {
+		font-size: 0.75rem;
+		color: var(--foreground-500);
+		background: var(--default-100, var(--default-200));
+		border-radius: 0.25rem;
+		padding: 0.1rem 0.35rem;
+		margin-left: 0.4rem;
+	}
+
+	.passkey-item--revoked {
+		opacity: 0.55;
+	}
+
+	.keys-reveal {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0 1.25rem 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.keys-reveal-code {
+		font-size: 0.8rem;
+		word-break: break-all;
+		background: var(--default-100, var(--default-200));
+		border-radius: 0.35rem;
+		padding: 0.45rem 0.6rem;
+		flex: 1;
+		min-width: 0;
 	}
 </style>

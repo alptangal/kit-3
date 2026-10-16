@@ -5,7 +5,7 @@
 
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
-import { getActorContext } from '$lib/server/admin/api';
+import { requireAgentActor, agentUnauthorized } from '$lib/server/agent-auth';
 import { collectionSchemas } from '$modules/schema';
 import type { CollectionName } from '$modules/schema';
 
@@ -98,12 +98,10 @@ const PERMISSION_NOTES: Record<string, string> = {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const actor = await getActorContext(event.locals);
+		// Session HOẶC Bearer sk-... (Secret Key API) — pattern requireAgentActor
+		const actor = await requireAgentActor(event);
 		if (!actor) {
-			return json(
-				{ ok: false, message: { vi: 'Phiên đăng nhập đã hết hạn', en: 'Session expired' } },
-				{ status: 401 }
-			);
+			return agentUnauthorized(event);
 		}
 		if (actor.roleName !== 'owner') {
 			return json(
