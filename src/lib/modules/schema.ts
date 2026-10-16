@@ -64,7 +64,13 @@ const collectionsName = [
 	'debt_payments',
 	// Phase 7 — Omnichannel sales sync (bán hàng đa kênh: Shopee/TikTok/Lazada/...)
 	'channel_accounts',
-	'channel_orders'
+	'channel_orders',
+	// Serial/IMEI tracking — hàng có mã định danh từng chiếc (SIM nhiều serial, điện thoại nhiều IMEI)
+	'serial_numbers',
+	// Lịch sử truy cập user (page/router analytics)
+	'access_logs',
+	// Secret Key API — key Bearer sk-... để gọi /api/agent/* từ ngoài (raw key hiển thị 1 lần, DB chỉ hash)
+	'api_keys'
 ] as const;
 const fieldTypes = [
 	'string',
@@ -414,6 +420,11 @@ export const collectionSchemas = {
 
 			trackLot: { type: 'boolean', searchable: true, sortable: false, selectable: true },
 			trackExpiry: { type: 'boolean', searchable: true, sortable: false, selectable: true },
+			// Serial/IMEI tracking: variant có mã định danh từng chiếc → POS bắt buộc chọn serial cụ thể
+			trackSerial: { type: 'boolean', searchable: true, sortable: false, selectable: true },
+			// Đơn vị quy đổi (P2): đơn vị nhỏ nhất là base — [{ name, factor, price? }]
+			// vd chai factor 1, lốc factor 6, thùng factor 24; price = giá bán theo đơn vị đó (tuỳ chọn)
+			units: { type: 'array', searchable: false, sortable: false, selectable: true },
 			lowStockThreshold: { type: 'number', searchable: false, sortable: false, selectable: true },
 
 			imageUrl: { type: 'string', searchable: false, sortable: false, selectable: true }, // ảnh riêng cho biến thể (vd ảnh theo màu)
@@ -559,6 +570,29 @@ export const collectionSchemas = {
 			completedAt: { type: 'date', searchable: false, sortable: true, selectable: true }
 		}
 	},
+	// ===== Serial/IMEI — mã định danh từng chiếc hàng (SIM nhiều serial, điện thoại nhiều IMEI) =====
+	serial_numbers: {
+		fields: {
+			variantId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			branchId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			// Serial/IMEI — duy nhất trong phạm vi 1 variant
+			serial: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+
+			// 'in_stock' | 'sold' | 'returned' | 'defective'
+			status: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+
+			lotId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			orderId: { type: 'string', searchable: true, sortable: false, selectable: true },
+
+			receivedAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			soldAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			notes: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
+			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
 	brands: {
 		fields: {
 			name: { type: 'string', searchable: true, sortable: true, selectable: true },
@@ -1379,6 +1413,35 @@ export const collectionSchemas = {
 
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
+	},
+
+	access_logs: {
+		fields: {
+			// 'anonymous' khi request chưa đăng nhập
+			userId: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			path: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			method: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			status: { type: 'number', searchable: true, sortable: true, selectable: true, required: true },
+			durationMs: { type: 'number', searchable: true, sortable: true, selectable: true, required: true },
+			at: { type: 'date', searchable: true, sortable: true, selectable: true, required: true },
+			userAgent: { type: 'string', searchable: false, sortable: false, selectable: true },
+			ip: { type: 'string', searchable: false, sortable: false, selectable: true }
+		}
+	},
+	api_keys: {
+		fields: {
+			// owner của key — documentKey users
+			userId: { type: 'string', searchable: true, sortable: false, selectable: true, required: true },
+			// tên do user tự đặt (vd 'CI bot')
+			name: { type: 'string', searchable: true, sortable: true, selectable: true, required: true },
+			// prefix raw key để nhận diện (vd 'sk-a1b2') — an toàn vì không đủ để suy ra key
+			prefix: { type: 'string', searchable: false, sortable: false, selectable: true, required: true },
+			// SHA-256 hex của raw key — raw key KHÔNG bao giờ lưu DB
+			keyHash: { type: 'string', searchable: false, sortable: false, selectable: true, required: true },
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true, required: true },
+			lastUsedAt: { type: 'date', searchable: false, sortable: false, selectable: true },
+			revokedAt: { type: 'date', searchable: false, sortable: false, selectable: true }
+		}
 	}
 } as const satisfies Record<
 	CollectionName,
@@ -1420,6 +1483,7 @@ export type Brand = InferCollection<'brands'>;
 export type InventoryStock = InferCollection<'inventory_stock'>;
 export type InventoryLot = InferCollection<'inventory_lots'>;
 export type StockMovement = InferCollection<'stock_movements'>;
+export type SerialNumber = InferCollection<'serial_numbers'>;
 export type Branch = InferCollection<'branches'>;
 export type OperatingExpense = InferCollection<'operating_expenses'>;
 export type Camera = InferCollection<'cameras'>;
@@ -1428,6 +1492,21 @@ export type Debt = InferCollection<'debts'>;
 export type DebtPayment = InferCollection<'debt_payments'>;
 export type ChannelAccount = InferCollection<'channel_accounts'>;
 export type ChannelOrder = InferCollection<'channel_orders'>;
+export type AccessLog = InferCollection<'access_logs'>;
+export type ApiKey = InferCollection<'api_keys'>;
+
+/**
+ * Đơn vị quy đổi của variant (P2): đơn vị nhỏ nhất là BASE (factor = 1).
+ * vd: chai {name:'Chai', factor:1, price:20000}, lốc {name:'Lốc', factor:6, price:114000},
+ * thùng {name:'Thùng', factor:24, price:432000}.
+ * - factor: 1 đơn vị này = bao nhiêu đơn vị base (bán 1 thùng → trừ tồn base 24).
+ * - price: giá bán theo đơn vị đó (tuỳ chọn — thiếu thì UI tính từ price base × factor).
+ */
+export interface VariantUnit {
+	name: string;
+	factor: number;
+	price?: number | null;
+}
 
 // const collectionSchemasVault = {
 // 	system_secrets: {
