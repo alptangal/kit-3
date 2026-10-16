@@ -6,6 +6,8 @@ import { matchSegments, queryMatchesText, type TextSegment } from './highlight';
 
 export { matchSegments, queryMatchesText, type TextSegment };
 
+export { getLang, getLocale, formatDate, formatDateTime, formatNumber, type Lang } from './i18n';
+
 export async function copyToClipboard(content: string) {
 	try {
 		await navigator.clipboard.writeText(content);
