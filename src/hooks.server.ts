@@ -109,7 +109,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Public paths that don't require authentication
 	// '/store' (group route '(storefront)') + '/api/storefront': storefront công khai (Phase 5) —
 	// trang xem/giỏ/thanh toán vẫn đọc locals.user nếu có (cart API tự 401).
-	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/store', '/api/storefront', '/api/auth/webauthn/auth', '/api/agent'];
+	// '/api/webhooks/qr-payment': webhook thanh toán QR từ tool đối soát ngoài —
+	// route tự xác thực bằng QR_WEBHOOK_TOKEN (Bearer), không dùng session.
+	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/store', '/api/storefront', '/api/auth/webauthn/auth', '/api/agent', '/api/webhooks/qr-payment'];
 	const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
 
 	// API routes that don't require authentication
