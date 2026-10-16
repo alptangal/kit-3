@@ -12,27 +12,27 @@
   {
     "name": "P2 hook ghi access_logs vào DB (đợi ≤20s)",
     "pass": true,
-    "detail": "admin=251 total=343"
+    "detail": "admin=493 total=640"
   },
   {
     "name": "P3 summary ok + totalRequests > 0 + activeUsers >= 1",
     "pass": true,
-    "detail": "total=345 users=2 avg=1650ms"
+    "detail": "total=645 users=2 avg=1404ms"
   },
   {
     "name": "P4 per-user có row (userId + totalRequests + span)",
     "pass": true,
-    "detail": "rows=2 first=users-admin reqs=254"
+    "detail": "rows=2 first=users-admin reqs=500"
   },
   {
     "name": "P5 top-pages có path /admin + hits/avgDuration",
     "pass": true,
-    "detail": "rows=10 first=/api/admin/activity/query hits=115"
+    "detail": "rows=10 first=/api/admin/activity/query hits=258"
   },
   {
     "name": "P5b top-pages orderBy=duration có avgDurationMs",
     "pass": true,
-    "detail": "first=/api/admin/pos/checkout avg=5108ms"
+    "detail": "first=/api/admin/settings/backup/list avg=11005ms"
   },
   {
     "name": "P6 top-errors ok (mảng rows)",
@@ -42,7 +42,7 @@
   {
     "name": "P7 entries list đúng shape + userId có giá trị",
     "pass": true,
-    "detail": "rows=10 total=350"
+    "detail": "rows=10 total=650"
   },
   {
     "name": "P7b entries filter userId=admin → mọi row khớp",
@@ -57,7 +57,7 @@
   {
     "name": "P9 UI /admin/activity render (title + 4 cards + bảng per-user + top pages)",
     "pass": true,
-    "detail": "title=Access history cards={\"requests\":true,\"users\":true,\"duration\":true,\"errors\":true} perUser=true topPages=true cardValue=354"
+    "detail": "title=Access history cards={\"requests\":true,\"users\":true,\"duration\":true,\"errors\":true} perUser=true topPages=true cardValue=658"
   },
   {
     "name": "P9b sidebar có entry Lịch sử truy cập",
