@@ -261,10 +261,16 @@ let uiReady = false;
 for (let i = 0; i < 6; i++) {
 	try {
 		await page.waitForFunction(
-			() =>
-				!!document.querySelector('[data-test="activity-summary"]') ||
-				!!document.querySelector('[data-test="activity-error"]'),
-			{ timeout: 8000, polling: 500 }
+			() => {
+				const el = document.querySelector('[data-test="activity-card-requests"] .card-value');
+				// Bẫy: card render ngay với giá trị 0 trước khi API trả về —
+				// đợi giá trị != 0 (hoặc error block) mới coi là ready.
+				const filled = el && el.textContent?.trim() && el.textContent.trim() !== '0';
+				return (
+					!!filled || !!document.querySelector('[data-test="activity-error"]')
+				);
+			},
+			{ timeout: 15000, polling: 500 }
 		);
 		uiReady = true;
 		break;
