@@ -13,7 +13,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
-	import { queryMatchesText } from '$modules/highlight';
+	import { queryMatchesText, matchSegments, type TextSegment } from '$modules/highlight';
 	import { client } from '$store/basic.svelte';
 	import { setDataTableContext } from './_context';
 	import { AlertDialog } from '../alert-dialog/index.ts';
@@ -438,6 +438,18 @@
 			return `${y}-${m}-${d}`;
 		}
 		return String(value ?? '');
+	};
+
+	// ── Search highlight (mới): segments NFD cho card view (mobile) — cùng
+	// engine với td (Body.svelte). noHighlight/bỏ filter → không highlight. ──
+	const cardSegmentsOf = (
+		value: unknown,
+		col: DataTableColumn<Record<string, unknown>>,
+		row: Record<string, unknown>
+	): TextSegment[] => {
+		const text = cellTextOf(value, col, row);
+		if (!query.trim() || col.noHighlight) return [{ text, isMatch: false }];
+		return matchSegments(text, query.trim());
 	};
 
 	// ── ACTIONS edit cell / delete / row actions / lazy load ──
@@ -1588,23 +1600,27 @@
 						{#if titleCol}
 							{@const value = getCellValue(row, titleCol)}
 							{@const status = titleCol.status ? titleCol.status(value, row) : undefined}
+							{@const segments = cardSegmentsOf(value, titleCol, row)}
 							<span class="datatable-card-title">
 								{#if status}
 									<span class="datatable-status datatable-status--{status}">{cellTextOf(value, titleCol, row)}</span>
 								{:else}
-									{cellTextOf(value, titleCol, row)}
+									{#each segments as seg, si (si)}{#if seg.isMatch}<mark class="datatable-mark">{seg.text}</mark>{:else}{seg.text}{/if}{/each}
 								{/if}
 							</span>
 						{/if}
 						{#each restCols as col (col.id)}
 							{@const value = getCellValue(row, col)}
 							{@const status = col.status ? col.status(value, row) : undefined}
+							{@const segments = cardSegmentsOf(value, col, row)}
 							<span class="datatable-card-field">
 								<span class="datatable-card-label">{col.label}</span>
 								{#if status}
 									<span class="datatable-status datatable-status--{status}">{cellTextOf(value, col, row)}</span>
 								{:else}
-									<span class="datatable-card-value">{cellTextOf(value, col, row)}</span>
+									<span class="datatable-card-value">
+										{#each segments as seg, si (si)}{#if seg.isMatch}<mark class="datatable-mark">{seg.text}</mark>{:else}{seg.text}{/if}{/each}
+									</span>
 								{/if}
 							</span>
 						{/each}
@@ -1942,6 +1958,15 @@
 		width: 100%;
 		border-collapse: collapse;
 		table-layout: auto;
+	}
+
+	// ── Search highlight mark (card view — Body.svelte có bản riêng cho td) ──
+	.datatable-mark {
+		padding: 0 0.1em;
+		margin: 0;
+		background: color-mix(in srgb, var(--warning, hsl(37 91% 55%)) 24%, transparent);
+		color: inherit;
+		border-radius: 0.125rem;
 	}
 
 	.datatable-caption {
