@@ -1,6 +1,6 @@
 // hooks.server.ts
 import type { MetaUser } from '$interfaces/basic';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { systemVault, initSystemVault } from '$store/initSystemVault';
 import { initApp } from '$store/init-app';
 import { verifyAccessToken } from '$lib/server/jwt';
@@ -108,7 +108,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Public paths that don't require authentication
 	// '/store' (group route '(storefront)') + '/api/storefront': storefront công khai (Phase 5) —
 	// trang xem/giỏ/thanh toán vẫn đọc locals.user nếu có (cart API tự 401).
-	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/store', '/api/storefront', '/api/auth/webauthn/auth'];
+	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/store', '/api/storefront', '/api/auth/webauthn/auth', '/api/agent'];
 	const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
 
 	// API routes that don't require authentication
@@ -151,8 +151,40 @@ export const handle: Handle = async ({ event, resolve }) => {
 		});
 	}
 
-	return resolve(event);
+	const startedAt = Date.now();
+	const response = await resolve(event);
+	logAccess(event, response.status, Date.now() - startedAt);
+	return response;
 };
+
+// ── Access logging (fire-and-forget, không bao giờ block/crash response) ──
+const ACCESS_LOG_SKIP_PREFIXES = ['/_app', '/favicon', '/api/webhooks', '/api/health', '/api/encryption'];
+let accessLogCleanupTick = 0;
+
+function logAccess(event: RequestEvent, status: number, durationMs: number) {
+	const { pathname } = event.url;
+	if (ACCESS_LOG_SKIP_PREFIXES.some(prefix => pathname.startsWith(prefix))) return;
+	// Chỉ log route app + API (bỏ file tĩnh .png/.css/... ngoài /_app)
+	if (pathname.includes('.') && !pathname.startsWith('/api/')) return;
+	const user = event.locals.user;
+	import('$lib/server/db/activity-logs')
+		.then(({ AccessLogService }) => AccessLogService.record({
+			userId: user?.userId ?? 'anonymous',
+			path: pathname,
+			method: event.request.method,
+			status,
+			durationMs,
+			userAgent: event.request.headers.get('user-agent') ?? undefined,
+			ip: event.getClientAddress().catch(() => undefined)
+		}))
+		.catch(() => {});
+	// ~1% request: dọn log cũ > 30 ngày
+	if (++accessLogCleanupTick % 100 === 7) {
+		import('$lib/server/db/activity-logs')
+			.then(({ AccessLogService }) => AccessLogService.cleanupOld())
+			.catch(() => {});
+	}
+}
 
 export const handleError = ({ error }) => {
 	import('fs').then(fs => {
