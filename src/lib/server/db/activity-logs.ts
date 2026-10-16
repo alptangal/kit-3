@@ -43,6 +43,14 @@ function isValidDateStr(v: unknown): boolean {
 }
 
 
+/**
+ * BẪY N1QL Capella: 'at' và 'path' là RESERVED WORD — dùng trần trong SELECT/WHERE/
+ * GROUP BY/ORDER BY là syntax error (code 3000) dù backtick xung quanh tên index,
+ * alias `path AS path` cũng fail (chỉ alias khác được). Mọi tham chiếu field này
+ * PHẢI bọc backtick: `at`, `path`.
+ */
+const qf = (field: string): string => (field === 'at' || field === 'path' ? `\`${field}\`` : field);
+
 function buildRangeFilter(
 	conditions: string[],
 	args: (string | number)[],
@@ -50,13 +58,14 @@ function buildRangeFilter(
 	from?: string,
 	to?: string
 ): void {
+	const f = qf(field);
 	if (from) {
-		conditions.push(`${field} >= $${args.length + 1}`);
+		conditions.push(`${f} >= $${args.length + 1}`);
 		args.push(from);
 	}
 	if (to) {
 		// to là ngày cuối (YYYY-MM-DD) → lấy trọn trong ngày (qua 'toT23:59:59' do caller chuẩn hoá)
-		conditions.push(`${field} <= $${args.length + 1}`);
+		conditions.push(`${f} <= $${args.length + 1}`);
 		args.push(to);
 	}
 }
@@ -103,7 +112,7 @@ export class AccessLogService {
 		try {
 			const cutoff = new Date(Date.now() - RETENTION_DAYS * 86400_000).toISOString();
 			const res = await cbAccessLogs.document.query({
-				statement: `DELETE FROM ${accessLogsKeyspace} WHERE at < $1`,
+				statement: `DELETE FROM ${accessLogsKeyspace} WHERE ${qf('at')} < $1`,
 				args: [cutoff],
 				readonly: false
 			});
@@ -185,7 +194,7 @@ export class AccessLogService {
 		const dayStart = date ? `${date}T00:00:00.000Z` : new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
 		const dayEnd = new Date(new Date(dayStart).getTime() + 86400_000).toISOString();
 
-		const conditions: string[] = ['at >= $1', 'at < $2'];
+		const conditions: string[] = [`${qf('at')} >= $1`, `${qf('at')} < $2`];
 		const args: (string | number)[] = [dayStart, dayEnd];
 
 		const allowed = await this.allowedUserIds(actor);
@@ -234,7 +243,7 @@ export class AccessLogService {
 		const dayStart = (date ?? new Date().toISOString().slice(0, 10)) + 'T00:00:00.000Z';
 		const dayEnd = new Date(new Date(dayStart).getTime() + 86400_000).toISOString();
 
-		const conditions: string[] = [`at >= $1`, `at < $2`];
+		const conditions: string[] = [`${qf('at')} >= $1`, `${qf('at')} < $2`];
 		const args: (string | number)[] = [dayStart, dayEnd];
 		const allowed = await this.allowedUserIds(actor);
 		if (!this.applyVisibility(conditions, args, allowed)) {
@@ -245,8 +254,8 @@ export class AccessLogService {
 			statement: `
 				SELECT userId,
 				       COUNT(*) AS totalRequests,
-				       MIN(at) AS firstAt,
-				       MAX(at) AS lastAt,
+				       MIN(${qf('at')}) AS firstAt,
+				       MAX(${qf('at')}) AS lastAt,
 				       AVG(durationMs) AS avgDuration
 				FROM ${accessLogsKeyspace}
 				WHERE ${conditions.join(' AND ')}
@@ -307,7 +316,7 @@ export class AccessLogService {
 		// Lấy path + duration rồi aggregate ở Node (N1QL AVG + percentile khó kiểm soát qua Data API)
 		const res = await cbAccessLogs.document.query({
 			statement: `
-				SELECT path, durationMs
+				SELECT ${qf('path')} AS p, durationMs
 				FROM ${accessLogsKeyspace}
 				${where}
 				LIMIT 5000
@@ -316,19 +325,19 @@ export class AccessLogService {
 			readonly: true
 		});
 		if (!res.ok) return { success: false, messages: activityMessages.queryFailed };
-		const rows = (res.data?.results ?? []) as { path: string; durationMs: number }[];
+		const rows = (res.data?.results ?? []) as { p: string; durationMs: number }[];
 
 		const byPath = new Map<string, number[]>();
 		for (const r of rows) {
-			const arr = byPath.get(r.path) ?? [];
+			const arr = byPath.get(r.p) ?? [];
 			arr.push(Number(r.durationMs ?? 0));
-			byPath.set(r.path, arr);
+			byPath.set(r.p, arr);
 		}
-		const aggregated = [...byPath.entries()].map(([path, durations]) => {
+		const aggregated = [...byPath.entries()].map(([p, durations]) => {
 			const sorted = [...durations].sort((a, b) => a - b);
 			const avg = durations.reduce((s, d) => s + d, 0) / (durations.length || 1);
 			const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] ?? 0;
-			return { path, hits: durations.length, avgDurationMs: Math.round(avg), p95DurationMs: p95 };
+			return { path: p, hits: durations.length, avgDurationMs: Math.round(avg), p95DurationMs: p95 };
 		});
 		aggregated.sort((a, b) =>
 			orderBy === 'duration' ? b.avgDurationMs - a.avgDurationMs : b.hits - a.hits
@@ -362,10 +371,10 @@ export class AccessLogService {
 
 		const res = await cbAccessLogs.document.query({
 			statement: `
-				SELECT status, path, COUNT(*) AS hits, MAX(at) AS lastAt
+				SELECT status, ${qf('path')} AS p, COUNT(*) AS hits, MAX(${qf('at')}) AS lastAt
 				FROM ${accessLogsKeyspace}
 				${where}
-				GROUP BY status, path
+				GROUP BY status, ${qf('path')}
 				ORDER BY hits DESC
 				LIMIT $${args.length + 1}
 			`.trim(),
@@ -373,8 +382,9 @@ export class AccessLogService {
 			readonly: true
 		});
 		if (!res.ok) return { success: false, messages: activityMessages.queryFailed };
-		const rows = (res.data?.results ?? []) as { status: number; path: string; hits: number; lastAt: string }[];
-		return { success: true, rows };
+		const rows = (res.data?.results ?? []) as { status: number; p: string; hits: number; lastAt: string }[];
+		// p → path (N1QL reserved word 'path' không thể dùng làm alias — đã đổi alias p)
+		return { success: true, rows: rows.map(r => ({ status: r.status, path: r.p, hits: r.hits, lastAt: r.lastAt })) };
 	}
 
 	/**
@@ -403,7 +413,7 @@ export class AccessLogService {
 			args.push(options.userId);
 		}
 		if (options.path) {
-			conditions.push(`path = $${args.length + 1}`);
+			conditions.push(`${qf('path')} = $${args.length + 1}`);
 			args.push(options.path);
 		}
 		buildRangeFilter(conditions, args, 'at', options.from, options.to);
@@ -417,7 +427,7 @@ export class AccessLogService {
 			SELECT l.*, META().id AS _id
 			FROM ${accessLogsKeyspace} l
 			${where}
-			ORDER BY l.at DESC
+			ORDER BY l.${qf('at')} DESC
 			LIMIT $${args.length + 1} OFFSET $${args.length + 2}
 		`.trim();
 		const dataArgs = [...args, pageSize, offset];
