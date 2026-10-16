@@ -18,6 +18,8 @@
 	// muộn/không có → fallback 0px) → set CSS var trên .admin-inset để sticky
 	// thead DataTable + filters sticky dùng đúng chiều cao thật (không hardcode
 	// — filters wrap nhiều dòng ở 375px).
+	// Mới: đo thêm .admin-header (header trang con) → --admin-page-header-h
+	// cho sticky desktop (breadcrumb + header trang + filters dồn 1 hàng sticky).
 	let insetHeaderEl: HTMLDivElement | undefined = $state(undefined);
 	let insetEl: HTMLDivElement | undefined = $state(undefined);
 	let isScrolled: boolean = $state(false);
@@ -31,8 +33,12 @@
 			// .admin-filters nằm trong body (page con) — đo khi đã render.
 			const filtersEl = inset.querySelector<HTMLElement>('.admin-filters');
 			const f = filtersEl?.getBoundingClientRect().height ?? 0;
+			// .admin-header (header trang con) — cho stack sticky desktop.
+			const pageHeaderEl = inset.querySelector<HTMLElement>('.admin-header');
+			const p = pageHeaderEl?.getBoundingClientRect().height ?? 0;
 			inset.style.setProperty('--admin-header-h', `${Math.round(h)}px`);
 			inset.style.setProperty('--admin-filters-h', `${Math.round(f)}px`);
+			inset.style.setProperty('--admin-page-header-h', `${Math.round(p)}px`);
 		};
 		setVars();
 		const ro = new ResizeObserver(setVars);
@@ -40,9 +46,28 @@
 		// MutationObserver: page con mount/unmount (SvelteKit navigate) → đo lại.
 		const mo = new MutationObserver(setVars);
 		mo.observe(inset, { childList: true, subtree: true });
+		// ResizeObserver .admin-header (page con) — height đổi khi is-scrolled
+		// shrink (subtitle collapse) → theo sát để sticky offset đúng. Re-attach
+		// khi page con mount (MutationObserver bắn) — element mới cần observer mới.
+		let pageRo: ResizeObserver | undefined;
+		let pageRoEl: HTMLElement | undefined;
+		const attachPageRo = () => {
+			const ph = inset.querySelector<HTMLElement>('.admin-header');
+			if (ph && ph !== pageRoEl) {
+				pageRo?.disconnect();
+				pageRo = new ResizeObserver(setVars);
+				pageRo.observe(ph);
+				pageRoEl = ph;
+			}
+		};
+		attachPageRo();
+		const moPage = new MutationObserver(attachPageRo);
+		moPage.observe(inset, { childList: true, subtree: true });
 		return () => {
 			ro.disconnect();
 			mo.disconnect();
+			pageRo?.disconnect();
+			moPage.disconnect();
 		};
 	});
 
@@ -542,9 +567,18 @@
 		/* B5: var sticky đo bằng ResizeObserver (fallback 0 — thead top = filters). */
 		--admin-header-h: 0px;
 		--admin-filters-h: 0px;
+		--admin-page-header-h: 0px;
+		/* Padding-top của .admin-inset-body — dùng trong công thức sticky filters
+		   mobile (page tự khai top calc(header + body-pad-top)); define tại đây
+		   để mọi trang cùng nguồn sự thật. */
+		--admin-body-pad-top: 1.5rem;
 		display: flex;
 		flex-direction: column;
 		width: 100%;
+
+		@media (max-width: 767px) {
+			--admin-body-pad-top: 0.5rem;
+		}
 	}
 
 	.admin-inset-header {
@@ -553,6 +587,21 @@
 		gap: 0.75rem;
 		padding: 0.75rem 1.5rem;
 		background: var(--background, #fff);
+
+		/* Desktop: sticky breadcrumb bar — user luôn thấy vị trí đang đứng.
+		   1 scroll container duy nhất (.admin-inset body cuộn trong Container
+		   root) → sticky hoạt động mà không tạo scroll lồng. z-500 dưới
+		   sidebar overlay (999). */
+		@media (min-width: 768px) {
+			position: sticky;
+			top: 0;
+			z-index: 500;
+			transition: box-shadow 200ms ease;
+
+			&.is-scrolled {
+				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+			}
+		}
 
 		/* Mobile: bỏ padding-inline — tiết kiệm chiều ngang 375px (yêu cầu user,
 		   đồng bộ inset header demo /ui/sidebar). padding-block giữ. */
@@ -594,7 +643,6 @@
 	.admin-inset :global(.admin-header) {
 		transition: gap 200ms ease;
 	}
-
 	.admin-inset :global(.admin-header .admin-title) {
 		transition: font-size 200ms ease;
 	}
@@ -621,6 +669,39 @@
 		max-height: 0;
 		opacity: 0;
 		margin-top: 0;
+	}
+
+	/* ── Sticky desktop (mới): stack bar dọc — breadcrumb (z-500) → header trang
+	   con (z-400) → filter bar (z-390) → pagination dính đáy (z-390). Chỉ data
+	   rows cuộn; các bar luôn nhìn thấy. Mobile đã có riêng (B5 + trang tự khai)
+	   — không đụng. :global() qua anchor .admin-inset (markup trang con ngoài
+	   scope layout). Nền đặc var(--background) chống row lòi xuyên. */
+	@media (min-width: 768px) {
+		.admin-inset :global(.admin-header) {
+			position: sticky;
+			top: var(--admin-header-h, 0px);
+			z-index: 400;
+			background: var(--background, #fff);
+		}
+
+		.admin-inset :global(.admin-filters) {
+			position: sticky;
+			top: calc(var(--admin-header-h, 0px) + var(--admin-page-header-h, 0px));
+			z-index: 390;
+			background: var(--background, #fff);
+			transition: box-shadow 200ms ease;
+		}
+
+		.admin-inset.is-scrolled :global(.admin-filters) {
+			box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
+		}
+
+		.admin-inset :global(.admin-pagination) {
+			position: sticky;
+			bottom: 0;
+			z-index: 390;
+			background: var(--background, #fff);
+		}
 	}
 
 	.admin-inset-body {

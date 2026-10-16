@@ -1830,6 +1830,36 @@
 		}
 	}
 
+	// ── Sticky thead desktop (mới): stack bar admin đã sticky từ layout
+	// (breadcrumb → header trang → filters) → thead dính ngay dưới filters:
+	// top = admin-header-h + page-header-h + filters-h. Mở overflow như mobile
+	// để thead thoát scroll context (.datatable-root/table-wrap) và sticky theo
+	// scroll container chính (div.w-full.h-full). z-2 vẫn dưới các bar (390+).
+	@media (min-width: 768px) {
+		.datatable-root.datatable-sticky-head {
+			overflow: visible;
+
+			.datatable-table-wrap {
+				overflow: visible;
+			}
+
+			.datatable-caption {
+				position: sticky;
+				top: var(--admin-header-h, 0px);
+				z-index: 3;
+				background: var(--content1, #fff);
+			}
+
+			.datatable-th {
+				position: sticky;
+				top: calc(var(--admin-header-h, 0px) + var(--admin-page-header-h, 0px) + var(--admin-filters-h, 0px));
+				z-index: 2;
+				background: var(--content2, hsl(240 4.76% 95.88%));
+				box-shadow: 0 1px 0 var(--content3, hsl(240 5.88% 90%));
+			}
+		}
+	}
+
 	// ── B5: card view mobile (kiểu Lark) ──
 	.datatable-root.datatable-card-mode {
 		background: transparent;
