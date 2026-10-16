@@ -4,7 +4,7 @@ import type { TranslateContent } from '$interfaces/basic';
 import { TranslatableError } from '$lib/errors/translatable-error';
 import { cb_bucketName, cb_scopeName } from '$env/static/private';
 import { cbData } from '$modules/couchbase/clients';
-import type { Product, ProductVariant, Category, Brand } from '$modules/schema';
+import type { Product, ProductVariant, Category, Brand, VariantUnit } from '$modules/schema';
 import { PermissionChecker } from '$modules/rbac/permission-checker';
 
 const cbProducts = cbData('products');
@@ -126,6 +126,9 @@ const VARIANT_ADMIN_SAFE_FIELDS = [
 	'weight',
 	'trackLot',
 	'trackExpiry',
+	// Serial/IMEI tracking (P1) + đơn vị quy đổi (P2)
+	'trackSerial',
+	'units',
 	'lowStockThreshold',
 	'imageUrl',
 	'status',
@@ -534,6 +537,8 @@ export class ProductAdminService {
 			weight?: number;
 			trackLot?: boolean;
 			trackExpiry?: boolean;
+			trackSerial?: boolean;
+			units?: VariantUnit[];
 			lowStockThreshold?: number;
 			imageUrl?: string;
 			status?: string;
@@ -570,6 +575,8 @@ export class ProductAdminService {
 			weight: data.weight ?? null,
 			trackLot: data.trackLot ?? false,
 			trackExpiry: data.trackExpiry ?? false,
+			trackSerial: data.trackSerial ?? false,
+			units: data.units ?? null,
 			lowStockThreshold: data.lowStockThreshold ?? null,
 			imageUrl: data.imageUrl ?? null,
 			status: data.status ?? 'active',
@@ -600,6 +607,8 @@ export class ProductAdminService {
 			weight?: number | null;
 			trackLot?: boolean;
 			trackExpiry?: boolean;
+			trackSerial?: boolean;
+			units?: VariantUnit[] | null;
 			lowStockThreshold?: number | null;
 			imageUrl?: string | null;
 			status?: string;
@@ -633,6 +642,8 @@ export class ProductAdminService {
 		if (data.weight !== undefined) updatePayload.weight = data.weight;
 		if (data.trackLot !== undefined) updatePayload.trackLot = data.trackLot;
 		if (data.trackExpiry !== undefined) updatePayload.trackExpiry = data.trackExpiry;
+		if (data.trackSerial !== undefined) updatePayload.trackSerial = data.trackSerial;
+		if (data.units !== undefined) updatePayload.units = data.units;
 		if (data.lowStockThreshold !== undefined) updatePayload.lowStockThreshold = data.lowStockThreshold;
 		if (data.imageUrl !== undefined) updatePayload.imageUrl = data.imageUrl;
 		if (data.status !== undefined) updatePayload.status = data.status;

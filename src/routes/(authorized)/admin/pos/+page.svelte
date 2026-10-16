@@ -22,6 +22,11 @@
 		attributes?: Record<string, string | number | undefined>;
 		stock?: number;
 		productId?: string;
+		trackSerial?: boolean;
+		/** Số serial 'in_stock' tại branch (chỉ variant trackSerial) — 0 → hết serial. */
+		serialStock?: number;
+		/** Đơn vị quy đổi (P2): [{ name, factor, price? }] — đơn vị đầu = base. */
+		units?: Array<{ name: string; factor: number; price?: number | null }>;
 	}
 
 	interface BranchOption {
@@ -52,6 +57,14 @@
 		lineDiscount: number;
 		stock?: number;
 		attributes?: Record<string, string | number | undefined>;
+		/** Serial/IMEI đã chọn (variant trackSerial) — số lượng = quantity. */
+		serials?: string[];
+		/** Đơn vị bán (P2): index trong variant.units — undefined = đơn vị base. */
+		unitIndex?: number;
+		/** Hệ số quy đổi (1 đơn vị bán = bao nhiêu đơn vị base). */
+		unitFactor?: number;
+		/** Tên đơn vị hiển thị (vd 'Lốc'). */
+		unitName?: string;
 	}
 
 	interface PaymentLine {
@@ -76,6 +89,7 @@
 		quantity: number;
 		unitPrice: number;
 		lineDiscount: number;
+		serials?: string[];
 	}
 
 	interface ReceiptSnapshot {
@@ -118,7 +132,8 @@
 			empty: { vi: 'Không tìm thấy sản phẩm phù hợp.', en: 'No matching product found.' },
 			scanLabel: { vi: 'Quét mã vạch', en: 'Scan barcode' },
 			stock: { vi: 'Tồn', en: 'Stock' },
-			stockUnknown: { vi: 'Tồn: ?', en: 'Stock: ?' }
+			stockUnknown: { vi: 'Tồn: ?', en: 'Stock: ?' },
+			sellUnit: { vi: 'Bán theo:', en: 'Sell by:' }
 		},
 		attrs: { label: { vi: 'Thuộc tính', en: 'Attributes' } },
 		cart: {
@@ -133,7 +148,10 @@
 			removeLine: { vi: 'Xoá dòng', en: 'Remove line' },
 			lineDiscount: { vi: 'Giảm giá dòng', en: 'Line discount' },
 			stockWarn: { vi: 'Vượt tồn kho', en: 'Over stock' },
-			stockLabel: { vi: 'Tồn', en: 'Stock' }
+			stockLabel: { vi: 'Tồn', en: 'Stock' },
+			serials: { vi: 'Serial/IMEI', en: 'Serial/IMEI' },
+			editSerials: { vi: 'Đổi serial', en: 'Change serials' },
+			unitSuffix: { vi: '/ {unit}', en: '/ {unit}' }
 		},
 		payment: {
 			title: { vi: 'Thanh toán', en: 'Payment' },
@@ -216,7 +234,20 @@
 			checkoutFailed: { vi: 'Thanh toán thất bại!', en: 'Checkout failed!' },
 			added: { vi: 'Đã thêm vào giỏ', en: 'Added to cart' },
 			notFound: { vi: 'Không tìm thấy mã vạch', en: 'Barcode not found' },
-			stockExceeded: { vi: 'Vượt quá tồn kho!', en: 'Exceeds stock!' }
+			stockExceeded: { vi: 'Vượt quá tồn kho!', en: 'Exceeds stock!' },
+			serialRequired: { vi: 'Hãy chọn đủ serial/IMEI trước khi thêm vào giỏ', en: 'Select the required serials before adding to cart' },
+			serialLoadFailed: { vi: 'Không tải được danh sách serial!', en: 'Could not load serial list!' }
+		},
+		serial: {
+			title: { vi: 'Chọn serial/IMEI', en: 'Select serials / IMEIs' },
+			forVariant: { vi: 'Cho sản phẩm', en: 'For product' },
+			searchPlaceholder: { vi: 'Tìm theo số serial…', en: 'Search by serial number…' },
+			empty: { vi: 'Không còn serial nào đang tồn kho.', en: 'No in-stock serials available.' },
+			loadFailed: { vi: 'Không tải được danh sách serial.', en: 'Could not load the serial list.' },
+			selected: { vi: 'đã chọn', en: 'selected' },
+			need: { vi: 'cần chọn', en: 'need' },
+			confirm: { vi: 'Xác nhận', en: 'Confirm' },
+			pickExactly: { vi: 'Chọn đúng {n} serial để bán', en: 'Select exactly {n} serials to sell' }
 		},
 		modals: {
 			cancel: { vi: 'Đóng', en: 'Close' }
@@ -285,6 +316,27 @@
 
 	// ── Mã vạch ──
 	let scannedCodes = $state<string[]>([]);
+
+	// ── Serial/IMEI picker (variant trackSerial) ──
+	interface SerialOption {
+		serial: string;
+		status?: string;
+	}
+	let serialPickerDisplay = $state(false);
+	let serialPickerVariant = $state<VariantRow | undefined>(undefined);
+	let serialPickerOptions = $state<SerialOption[]>([]);
+	let serialPickerSelected = $state<string[]>([]);
+	let serialPickerBusy = $state(false);
+	let serialPickerKeyword = $state('');
+	let serialPickerNeed = $state(1);
+	let serialPickerError = $state<string | undefined>(undefined);
+	// Dòng cart đang sửa serial (khi bấm "Đổi serial") — undefined = đang thêm mới
+	let serialPickerEditLine = $state<CartLine | undefined>(undefined);
+	const serialPickerFiltered = $derived.by(() => {
+		const kw = serialPickerKeyword.trim().toUpperCase();
+		if (!kw) return serialPickerOptions;
+		return serialPickerOptions.filter((o) => o.serial.includes(kw));
+	});
 
 	// ── Suy dẫn tiền ──
 	const clampLineDiscount = (line: CartLine) =>
@@ -414,20 +466,37 @@
 	}
 
 	// ── Giỏ hàng ──
-	function addVariantToCart(row: VariantRow) {
-		const existing = cart.find((l) => l.variantId === row._id);
+	function addVariantToCart(row: VariantRow, unitIndex = 0) {
+		// Đơn vị quy đổi (P2): đơn vị bán ≠ base → tính giá theo units[unitIndex]
+		// (price riêng nếu có, else price base × factor làm tròn đẹp).
+		const units = row.units ?? [];
+		const unit = units[unitIndex];
+		const factor = unit && unitIndex > 0 ? Math.max(1, Math.floor(Number(unit.factor) || 1)) : 1;
+		let sellPrice = row.price ?? 0;
+		if (unit && unitIndex > 0) {
+			sellPrice = unit.price != null ? unit.price : niceRoundPrice((row.price ?? 0) * factor);
+		}
+		// Variant trackSerial (sim/điện thoại): BẮT BUỘC chọn serial cụ thể trước khi vào giỏ
+		if (row.trackSerial) {
+			void openSerialPicker(row, 1, undefined);
+			return;
+		}
+		const existing = cart.find((l) => l.variantId === row._id && (l.unitIndex ?? 0) === unitIndex);
 		if (existing) {
 			existing.quantity += 1;
 		} else {
 			cart.push({
 				variantId: row._id,
 				sku: row.sku ?? row._id,
-				displayName: row.displayName ?? row.sku ?? row._id,
-				unitPrice: row.price ?? 0,
+				displayName: unit && unitIndex > 0 ? `${row.displayName ?? row.sku ?? row._id} (${unit.name})` : row.displayName ?? row.sku ?? row._id,
+				unitPrice: sellPrice,
 				quantity: 1,
 				lineDiscount: 0,
 				stock: row.stock,
-				attributes: row.attributes
+				attributes: row.attributes,
+				unitIndex: unitIndex > 0 ? unitIndex : undefined,
+				unitFactor: factor,
+				unitName: unit && unitIndex > 0 ? unit.name : undefined
 			});
 		}
 		selectedLineId = row._id;
@@ -436,15 +505,141 @@
 		showToast(resolveServerMessage(undefined, lang, pageContents.states.added));
 	}
 
-	function removeCartLine(variantId: string) {
-		cart = cart.filter((l) => l.variantId !== variantId);
+	// Làm tròn giá theo đơn vị lớn: về số đẹp (hàng nghìn gần nhất)
+	function niceRoundPrice(v: number): number {
+		if (v <= 0) return 0;
+		if (v >= 1000) return Math.round(v / 1000) * 1000;
+		return Math.round(v);
+	}
+
+	// ── Serial/IMEI picker ──
+	async function openSerialPicker(row: VariantRow, need: number, editLine: CartLine | undefined) {
+		if (!encryptionKeys) {
+			showToast(resolveServerMessage(undefined, lang, pageContents.states.requestFailed), 'error');
+			return;
+		}
+		serialPickerVariant = row;
+		serialPickerEditLine = editLine;
+		serialPickerNeed = need;
+		serialPickerKeyword = '';
+		serialPickerError = undefined;
+		// Khi sửa dòng có sẵn: giữ lại serial đã chọn (placeholder trong danh sách)
+		serialPickerSelected = editLine ? [...(editLine.serials ?? [])] : [];
+		serialPickerDisplay = true;
+		serialPickerBusy = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/serials/in-stock',
+				{ method: 'POST', body: { variantId: row._id, branchId: branchId || undefined } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const payload = response.data as { items?: SerialOption[] } | undefined;
+				serialPickerOptions = payload?.items ?? [];
+				// Serial đã chọn trước đó có thể đã bị bán (out of stock) — vẫn giữ để hiển thị,
+				// checkout sẽ chặn nếu thiếu.
+				if (editLine) {
+					const have = new Set(serialPickerOptions.map((o) => o.serial));
+					for (const s of editLine.serials ?? []) {
+						if (!have.has(s)) serialPickerOptions = [...serialPickerOptions, { serial: s, status: 'selected' }];
+					}
+				}
+			} else {
+				serialPickerOptions = [];
+				serialPickerError = resolveServerMessage(undefined, lang, pageContents.serial.loadFailed);
+			}
+		} finally {
+			serialPickerBusy = false;
+		}
+	}
+
+	function toggleSerialPick(serial: string) {
+		const idx = serialPickerSelected.indexOf(serial);
+		if (idx >= 0) {
+			serialPickerSelected = serialPickerSelected.filter((s) => s !== serial);
+			return;
+		}
+		// Đủ số lượng cần chọn → thay serial cũ nhất (chọn nhanh bằng quét liên tiếp)
+		if (serialPickerSelected.length >= serialPickerNeed) {
+			serialPickerSelected = [...serialPickerSelected.slice(1), serial];
+			return;
+		}
+		serialPickerSelected = [...serialPickerSelected, serial];
+	}
+
+	function confirmSerialPicker() {
+		if (!serialPickerVariant) return;
+		if (serialPickerSelected.length !== serialPickerNeed) {
+			serialPickerError = resolveServerMessage(undefined, lang, {
+				vi: `Chọn đúng ${serialPickerNeed} serial để bán`,
+				en: `Select exactly ${serialPickerNeed} serials to sell`
+			});
+			return;
+		}
+		if (serialPickerEditLine) {
+			serialPickerEditLine.serials = [...serialPickerSelected].sort();
+			showToast(resolveServerMessage(undefined, lang, pageContents.states.added));
+		} else {
+			cart.push({
+				variantId: serialPickerVariant._id,
+				sku: serialPickerVariant.sku ?? serialPickerVariant._id,
+				displayName: serialPickerVariant.displayName ?? serialPickerVariant.sku ?? serialPickerVariant._id,
+				unitPrice: serialPickerVariant.price ?? 0,
+				quantity: serialPickerNeed,
+				lineDiscount: 0,
+				stock: serialPickerVariant.stock,
+				attributes: serialPickerVariant.attributes,
+				serials: [...serialPickerSelected].sort()
+			});
+			selectedLineId = serialPickerVariant._id;
+			showToast(resolveServerMessage(undefined, lang, pageContents.states.added));
+		}
+		serialPickerDisplay = false;
+		serialPickerVariant = undefined;
+		serialPickerEditLine = undefined;
+		serialPickerSelected = [];
+		serialPickerOptions = [];
+	}
+
+	function closeSerialPicker() {
+		serialPickerDisplay = false;
+		serialPickerVariant = undefined;
+		serialPickerEditLine = undefined;
+		serialPickerSelected = [];
+		serialPickerOptions = [];
+		serialPickerError = undefined;
+	}
+
+	function editCartLineSerials(line: CartLine) {
+		const row: VariantRow = {
+			_id: line.variantId,
+			sku: line.sku,
+			displayName: line.displayName,
+			price: line.unitPrice,
+			stock: line.stock,
+			attributes: line.attributes,
+			trackSerial: true
+		};
+		void openSerialPicker(row, line.quantity, line);
+	}
+
+	function removeCartLine(variantId: string, unitIndex = 0) {
+		// P2: xoá đúng dòng theo variant + đơn vị (bán lẻ và bán lốc là 2 dòng riêng)
+		cart = cart.filter((l) => !(l.variantId === variantId && (l.unitIndex ?? 0) === unitIndex));
 		if (selectedLineId === variantId) selectedLineId = undefined;
 	}
 
 	function setCartQuantity(line: CartLine, raw: string) {
 		const parsed = Math.max(1, Math.floor(Number(raw) || 1));
+		// Line trackSerial: số lượng phải bằng số serial đã chọn — đổi SL → mở lại picker
+		if (line.serials && line.serials.length > 0 && parsed !== line.quantity) {
+			void editCartLineSerials(line);
+			return;
+		}
 		line.quantity = parsed;
-		if (line.stock !== undefined && parsed > line.stock) {
+		// P2: so tồn theo quy đổi base (1 lốc = 6 chai → 10 lốc cần 60 chai)
+		const needBase = parsed * (line.unitFactor ?? 1);
+		if (line.stock !== undefined && needBase > line.stock) {
 			showToast(resolveServerMessage(undefined, lang, pageContents.states.stockExceeded), 'warning');
 		}
 	}
@@ -452,9 +647,15 @@
 	function changeQuantity(line: CartLine, delta: number) {
 		const next = line.quantity + delta;
 		if (next < 1) return;
+		// Line trackSerial: tăng/giảm SL → mở lại picker để chọn/thu hồi serial tương ứng
+		if (line.serials && line.serials.length > 0) {
+			void editCartLineSerials(line);
+			return;
+		}
 		line.quantity = next;
 		selectedLineId = line.variantId;
-		if (line.stock !== undefined && next > line.stock) {
+		const needBase = next * (line.unitFactor ?? 1);
+		if (line.stock !== undefined && needBase > line.stock) {
 			showToast(resolveServerMessage(undefined, lang, pageContents.states.stockExceeded), 'warning');
 		}
 	}
@@ -669,7 +870,8 @@
 				sku: line.sku,
 				quantity: line.quantity,
 				unitPrice: line.unitPrice,
-				lineDiscount: clampLineDiscount(line)
+				lineDiscount: clampLineDiscount(line),
+				serials: line.serials && line.serials.length > 0 ? [...line.serials] : undefined
 			})),
 			subtotal: cartTotal,
 			discountAmount: totalAmount > payable ? totalAmount - payable : 0,
@@ -715,7 +917,10 @@
 					variantId: line.variantId,
 					quantity: line.quantity,
 					unitPrice: line.unitPrice,
-					lineDiscount: line.lineDiscount > 0 ? clampLineDiscount(line) : undefined
+					lineDiscount: line.lineDiscount > 0 ? clampLineDiscount(line) : undefined,
+					serials: line.serials && line.serials.length > 0 ? line.serials : undefined,
+					unitIndex: line.unitIndex,
+					unitFactor: line.unitFactor
 				})),
 				payments: payments.map((line, i) => ({
 					method: line.method,
@@ -760,6 +965,11 @@
 	// ── Phím tắt ──
 	function onPageKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
+			if (serialPickerDisplay) {
+				closeSerialPicker();
+				e.preventDefault();
+				return;
+			}
 			if (receiptDisplay) {
 				receiptDisplay = false;
 				e.preventDefault();
@@ -892,12 +1102,41 @@
 								</span>
 								<span class="pos-result-side">
 									<span class="pos-result-meta">{row.sku} · {formatMoney(row.price)}</span>
+									{#if row.units && row.units.length > 1}
+										<!-- P2: bán theo đơn vị — chọn unit (base + quy đổi) ngay trên dòng kết quả -->
+										<select
+											class="pos-result-unit"
+											data-test="pos-result-unit"
+											onclick={(e) => e.stopPropagation()}
+											onchange={(e) => {
+												const idx = Number((e.currentTarget as HTMLSelectElement).value) || 0;
+												if (idx > 0) addVariantToCart(row, idx);
+												(e.currentTarget as HTMLSelectElement).value = '0';
+											}}
+										>
+											<option value="0">{pageContents.search.sellUnit[lang]}</option>
+											{#each row.units as unit, ui (ui)}
+												{#if ui > 0}
+													<option value={String(ui)}>
+														{unit.name} &times; {unit.factor}
+														{#if unit.price != null}
+															— {formatMoney(unit.price)}
+														{:else}
+															— {formatMoney(niceRoundPrice((row.price ?? 0) * unit.factor))}
+														{/if}
+													</option>
+												{/if}
+											{/each}
+										</select>
+									{/if}
 									<span
 										class="pos-result-stock"
-										class:pos-result-stock--out={row.stock === 0}
+										class:pos-result-stock--out={row.stock === 0 || (row.trackSerial && row.serialStock === 0)}
 										class:pos-result-stock--unknown={row.stock === undefined}
 									>
-										{#if row.stock === undefined}
+										{#if row.trackSerial}
+											{pageContents.cart.serials[lang]}: {row.serialStock ?? '…'}
+										{:else if row.stock === undefined}
 											{pageContents.search.stockUnknown[lang]}
 										{:else}
 											{pageContents.search.stock[lang]}: {row.stock}
@@ -925,13 +1164,31 @@
 				<p class="pos-hint" data-test="pos-cart-empty">{pageContents.cart.empty[lang]}</p>
 			{:else}
 				<div class="pos-cart-list" data-test="pos-cart-list">
-					{#each cart as line (line.variantId)}
+					{#each cart as line (line.variantId + ':' + (line.unitIndex ?? 0))}
 						<div class="pos-cart-line" class:pos-cart-line--selected={selectedLineId === line.variantId} data-test="pos-cart-line">
 							<div class="pos-line-info">
-								<span class="pos-line-name">{line.displayName}</span>
+								<span class="pos-line-name">
+									{line.displayName}
+									{#if line.unitName}
+										<span class="pos-line-unit" data-test="pos-line-unit">{line.unitName}</span>
+									{/if}
+								</span>
 								<span class="pos-line-meta">{line.sku} · {formatMoney(line.unitPrice)}</span>
 								{#if attributeText(line.attributes)}
 									<span class="pos-line-attrs">{attributeText(line.attributes)}</span>
+								{/if}
+								{#if line.serials && line.serials.length > 0}
+									<span class="pos-line-serials" data-test="pos-line-serials">
+										<span class="pos-line-serials-label">{pageContents.cart.serials[lang]}:</span>
+										{line.serials.join(', ')}
+										<button
+											class="pos-line-serials-edit"
+											onclick={() => editCartLineSerials(line)}
+											data-test="pos-edit-serials"
+										>
+											{pageContents.cart.editSerials[lang]}
+										</button>
+									</span>
 								{/if}
 								<span class="pos-line-stock" class:pos-line-stock--warn={line.stock !== undefined && line.quantity > line.stock}>
 									{#if line.stock !== undefined}
@@ -972,7 +1229,7 @@
 									color="error"
 									variant="ghost"
 									size="sm"
-									onClick={() => removeCartLine(line.variantId)}
+									onClick={() => removeCartLine(line.variantId, line.unitIndex ?? 0)}
 									data-test="pos-remove-line"
 									aria-label={pageContents.cart.removeLine[lang]}
 								>
@@ -1199,6 +1456,71 @@
 	</Modal>
 {/if}
 
+{#if serialPickerDisplay}
+	<Modal bind:display={serialPickerDisplay} size="sm" isDimissable>
+		<Modal.Container>
+			<Modal.Container.Header>
+				<h2 class="pos-modal-title" data-test="pos-serial-picker">
+					{pageContents.serial.title[lang]}
+					{#if serialPickerVariant?.displayName}
+						<span class="pos-serial-variant">· {serialPickerVariant.displayName}</span>
+					{/if}
+				</h2>
+			</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if serialPickerError}
+					<div class="form-error-banner" role="alert" data-test="pos-serial-error">{serialPickerError}</div>
+				{/if}
+				<p class="pos-serial-need">
+					{pageContents.serial.selected[lang]}: <strong data-test="pos-serial-count">{serialPickerSelected.length}</strong>
+					/ {serialPickerNeed}
+				</p>
+				<input
+					class="admin-input pos-serial-search"
+					type="text"
+					bind:value={serialPickerKeyword}
+					placeholder={pageContents.serial.searchPlaceholder[lang]}
+					data-test="pos-serial-search"
+				/>
+				{#if serialPickerBusy}
+					<p class="pos-hint">{pageContents.states.loading[lang]}</p>
+				{:else if serialPickerFiltered.length === 0}
+					<p class="pos-hint" data-test="pos-serial-empty">{pageContents.serial.empty[lang]}</p>
+				{:else}
+					<div class="pos-serial-list" data-test="pos-serial-list">
+						{#each serialPickerFiltered as option (option.serial)}
+							<button
+								class="pos-serial-row"
+								class:pos-serial-row--active={serialPickerSelected.includes(option.serial)}
+								onclick={() => toggleSerialPick(option.serial)}
+								data-test="pos-serial-row"
+							>
+								<span class="pos-serial-code">{option.serial}</span>
+								{#if serialPickerSelected.includes(option.serial)}
+									<span class="pos-serial-check">✓</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<Button
+					color="success"
+					disabled={serialPickerSelected.length !== serialPickerNeed}
+					onClick={confirmSerialPicker}
+					data-test="pos-serial-confirm"
+				>
+					{pageContents.serial.confirm[lang]}
+				</Button>
+				<Button color="default" variant="ghost" onClick={closeSerialPicker}>
+					{pageContents.modals.cancel[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
+{/if}
+
 {#if resultDisplay}
 	<Modal bind:display={resultDisplay} size="sm" isDimissable>
 		<Modal.Container>
@@ -1281,6 +1603,9 @@
 		{#each snapshot.items as item (item.sku + String(item.quantity))}
 			<div class="pos-receipt-item">
 				<div class="pos-receipt-item-name">{item.displayName}</div>
+				{#if item.serials && item.serials.length > 0}
+					<div class="pos-receipt-item-serials">SN: {item.serials.join(', ')}</div>
+				{/if}
 				<div class="pos-receipt-item-row">
 					<span>{item.quantity} × {formatMoney(item.unitPrice)}</span>
 					<span>{formatMoney(item.unitPrice * item.quantity - item.lineDiscount)}</span>
@@ -1428,6 +1753,17 @@
 	.pos-result-stock--unknown {
 		font-style: italic;
 	}
+	/* P2: select đơn vị bán (Lốc/Thùng) trên dòng kết quả — stopPropagation để không thêm base */
+	.pos-result-unit {
+		font: inherit;
+		font-size: 0.78rem;
+		padding: 0.15rem 0.3rem;
+		border: 1px solid var(--default-300, #cbd5e1);
+		border-radius: 0.4rem;
+		background: var(--background, #fff);
+		color: var(--foreground);
+		max-width: 12rem;
+	}
 	.pos-hint {
 		color: var(--foreground-500, #64748b);
 		font-size: 0.9rem;
@@ -1479,6 +1815,18 @@
 		font-weight: 600;
 		overflow-wrap: anywhere;
 	}
+	/* P2: badge đơn vị bán (Lốc/Thùng) cạnh tên hàng */
+	.pos-line-unit {
+		display: inline-block;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--primary);
+		background: color-mix(in srgb, var(--primary) 12%, transparent);
+		border-radius: 0.35rem;
+		padding: 0.05rem 0.35rem;
+		margin-left: 0.3rem;
+		vertical-align: middle;
+	}
 	.pos-line-meta {
 		display: block;
 		color: var(--foreground-500, #64748b);
@@ -1487,6 +1835,27 @@
 	.pos-line-attrs {
 		font-size: 0.8rem;
 		color: var(--foreground-500, #64748b);
+	}
+	.pos-line-serials {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.78rem;
+		color: var(--foreground-500, #64748b);
+		overflow-wrap: anywhere;
+	}
+	.pos-line-serials-label {
+		font-weight: 600;
+	}
+	.pos-line-serials-edit {
+		border: none;
+		background: none;
+		color: var(--primary, #2563eb);
+		cursor: pointer;
+		font-size: 0.78rem;
+		padding: 0;
+		text-decoration: underline;
 	}
 	.pos-line-stock {
 		font-size: 0.8rem;
@@ -1793,6 +2162,61 @@
 		text-align: center;
 	}
 
+	// Serial picker modal
+	.pos-serial-variant {
+		font-weight: 400;
+		font-size: 0.85rem;
+		color: var(--foreground-500, #64748b);
+	}
+	.pos-serial-need {
+		font-size: 0.9rem;
+		color: var(--foreground-500, #64748b);
+		strong {
+			color: var(--primary, #2563eb);
+			font-size: 1rem;
+		}
+	}
+	.pos-serial-search {
+		margin-bottom: 0.75rem;
+	}
+	.pos-serial-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		max-height: 18rem;
+		overflow-y: auto;
+		padding-right: 0.25rem;
+	}
+	.pos-serial-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid var(--default-300, #cbd5e1);
+		border-radius: var(--field-radius, 0.5rem);
+		background: var(--background, #fff);
+		cursor: pointer;
+		text-align: left;
+		width: 100%;
+	}
+	.pos-serial-row:hover {
+		background: var(--default-50, #f8fafc);
+	}
+	.pos-serial-row--active {
+		border-color: var(--primary, #2563eb);
+		background: var(--primary-soft, #eff6ff);
+	}
+	.pos-serial-code {
+		font-family: monospace;
+		font-size: 0.9rem;
+		overflow-wrap: anywhere;
+	}
+	.pos-serial-check {
+		color: var(--primary, #2563eb);
+		font-weight: 700;
+	}
+
 	.pos-receipt-paper-select {
 		display: flex;
 		gap: 1rem;
@@ -1851,6 +2275,10 @@
 		margin: 0.35rem 0;
 	}
 	.pos-receipt-item-name {
+		overflow-wrap: anywhere;
+	}
+	.pos-receipt-item-serials {
+		font-size: 0.68rem;
 		overflow-wrap: anywhere;
 	}
 	.pos-receipt-item-row {

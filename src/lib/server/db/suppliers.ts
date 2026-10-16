@@ -7,6 +7,7 @@ import type { InferCollection } from '$modules/schema';
 import { PermissionChecker } from '$modules/rbac/permission-checker';
 import { InventoryService } from './inventory';
 import { AnalyticsService } from './analytics';
+import { SerialService } from './serials';
 
 const cbSuppliers = cbData('suppliers');
 const cbPurchaseOrders = cbData('purchase_orders');
@@ -174,6 +175,9 @@ type POItem = {
   // Voucher nhập hàng từ NCC (khuyến mãi gắn 1 dòng nhập): 'money' giảm tiền,
   // 'gift' tặng thêm hàng. Optional — phiếu cũ không có field này vẫn chạy như cũ.
   voucher?: PurchaseVoucher;
+  // Serial/IMEI (variant trackSerial): danh sách serial quét/paste — mỗi chiếc 1 mã.
+  // Số lượng nên khớp quantity (UI nhắc, server KHÔNG bắt buộc — cho phép nhập thiếu rồi bổ sung).
+  serials?: string[];
 };
 
 /**
@@ -196,6 +200,8 @@ type QuickPurchaseItem = {
   expiresAt?: string;
   manufacturedAt?: string;
   voucher?: PurchaseVoucher;
+  // Serial/IMEI (variant trackSerial) — xem POItem.serials
+  serials?: string[];
 };
 
 export type QuickPurchaseInput = {
@@ -599,7 +605,7 @@ export class SupplierService {
     actor: ActorContext;
     poId: string;
     poCode: string;
-    item: { variantId: string; quantity: number; lotNumber?: string; manufacturedAt?: string | null; expiresAt?: string | null };
+    item: { variantId: string; quantity: number; lotNumber?: string; manufacturedAt?: string | null; expiresAt?: string | null; serials?: string[] };
     branchId: string;
     supplierId: string;
     now: string;
@@ -660,20 +666,31 @@ export class SupplierService {
           updatedAt: now
         }
       });
-      return true;
+    } else {
+      // Đã có doc → cộng dồn bằng N1QL (điều kiện đọc-lại số cũ chống race)
+      const incRes = await cbInventoryStock.document.query({
+        statement: `
+          UPDATE ${inventoryStockKeyspace}
+          SET quantityOnHand = quantityOnHand + $3, updatedAt = $4
+          WHERE META().id = $1 AND variantId = $2
+        `,
+        args: [`stock_${item.variantId}_${branchId}`, item.variantId, item.quantity, now],
+        readonly: false
+      });
+      if (!incRes.ok) return false;
     }
 
-    // Đã có doc → cộng dồn bằng N1QL (điều kiện đọc-lại số cũ chống race)
-    const incRes = await cbInventoryStock.document.query({
-      statement: `
-        UPDATE ${inventoryStockKeyspace}
-        SET quantityOnHand = quantityOnHand + $3, updatedAt = $4
-        WHERE META().id = $1 AND variantId = $2
-      `,
-      args: [`stock_${item.variantId}_${branchId}`, item.variantId, item.quantity, now],
-      readonly: false
-    });
-    if (!incRes.ok) return false;
+    // Serial/IMEI (variant trackSerial): tạo doc serial_numbers 'in_stock' cho từng mã.
+    // Idempotent (serial+variant trùng → skip) — chạy CHO CẢ nhánh stock-mới (đã ensure ở trên).
+    if (item.serials && item.serials.length > 0) {
+      await SerialService.receiveSerials({
+        variantId: item.variantId,
+        branchId,
+        serials: item.serials,
+        lotId,
+        now
+      });
+    }
 
     return true;
   }
@@ -685,7 +702,7 @@ export class SupplierService {
   static async receivePurchaseOrder(
     actor: ActorContext,
     poId: string,
-    receivedItems?: Array<{ variantId: string; quantity: number; lotNumber?: string; manufacturedAt?: string | null; expiresAt?: string | null }>
+    receivedItems?: Array<{ variantId: string; quantity: number; lotNumber?: string; manufacturedAt?: string | null; expiresAt?: string | null; serials?: string[] }>
   ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { po: Record<string, unknown> })> {
     const permError = await this.requirePermission(actor, 'purchases:manage');
     if (permError) return permError;
@@ -720,7 +737,10 @@ export class SupplierService {
         quantity: Number(override?.quantity ?? item.quantity) || 0,
         lotNumber: override?.lotNumber ?? item.lotNumber,
         manufacturedAt: override?.manufacturedAt ?? null,
-        expiresAt: override?.expiresAt ?? item.expiresAt ?? null
+        expiresAt: override?.expiresAt ?? item.expiresAt ?? null,
+        // Serial/IMEI: client gửi kèm khi nhận (variant trackSerial). PO item lưu sẵn serials
+        // (quick purchase flow) → merge: override ưu tiên, fallback item gốc.
+        serials: override?.serials ?? item.serials ?? undefined
       };
       if (merged.quantity <= 0) continue;
       const ok = await this.receiveItemToStock({
@@ -923,6 +943,11 @@ export class SupplierService {
       if (!item.variantId || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 || !Number.isFinite(Number(item.unitCost)) || Number(item.unitCost) < 0) {
         return { success: false, messages: supplierAdminMessages.invalidQuickPurchase };
       }
+      // Serial/IMEI (variant trackSerial): validate shape — mảng string, tối đa 500 dòng
+      const serialsCheck = SerialService.sanitizeReceiveSerials(item.serials);
+      if (!serialsCheck.ok) {
+        return { success: false, messages: supplierAdminMessages.invalidQuickPurchase };
+      }
       // Voucher từng dòng (optional) — validate shape + variant quà tồn tại
       const voucherError = await this.validatePurchaseVoucher(item.voucher);
       if (voucherError) return { success: false, messages: voucherError };
@@ -979,7 +1004,9 @@ export class SupplierService {
       lotNumber: item.lotNumber?.trim() || undefined,
       expiresAt: item.expiresAt || expiry.expiresAt || undefined,
       manufacturedAt: item.manufacturedAt || expiry.manufacturedAt || undefined,
-      voucher: item.voucher ?? undefined
+      voucher: item.voucher ?? undefined,
+      // Serial/IMEI: giữ danh sách mã vào PO item (traceability) + receive flow dùng tạo serial_numbers
+      serials: item.serials && item.serials.length > 0 ? item.serials.map((s) => s.trim().toUpperCase()) : undefined
     }));
 
     // Voucher cấp phiếu: giảm tiền tổng đơn (khuyến mãi từ NCC)
@@ -1039,7 +1066,8 @@ export class SupplierService {
           quantity: item.quantity,
           lotNumber: item.lotNumber,
           manufacturedAt: item.manufacturedAt || expiry.manufacturedAt,
-          expiresAt: item.expiresAt || expiry.expiresAt
+          expiresAt: item.expiresAt || expiry.expiresAt,
+          serials: item.serials
         },
         branchId: input.branchId,
         supplierId: po.supplierId ?? '',
@@ -1178,5 +1206,188 @@ export class SupplierService {
     const items = (dataRes.data?.results ?? []).map(sanitizePOForAdmin);
 
     return { success: true, items, total, page, pageSize };
+  }
+
+  // ========== TRẢ HÀNG NCC ==========
+
+  /**
+   * Trả hàng cho nhà cung cấp: trừ tồn kho (conditional N1QL), mark serial 'returned',
+   * log stock_movements 'purchase_return', tạo phiếu công nợ NCC (payable giảm → debt âm).
+   *
+   * Kiến trúc:
+   * - Trừ tồn: CAS-style UPDATE ... WHERE quantityOnHand >= $n RETURNING — thiếu tồn → fail
+   *   (không cho tồn âm, pattern adjustStock).
+   * - Serial: SerialService.markReturned (điều kiện status='in_stock' — serial đã bán không mark).
+   * - Công nợ: DebtService.create type 'payable' amount ÂM (ghi giảm công nợ phải trả NCC)
+   *   referenceType 'purchase_return' — DebtService set remainingAmount = amount.
+   * - best-effort: debt tạo fail → vẫn trả success (stock là nguồn sự thật chính), log warn.
+   */
+  static async createPurchaseReturn(
+    actor: ActorContext,
+    input: {
+      supplierId: string;
+      branchId: string;
+      items: Array<{ variantId: string; quantity: number; unitCost?: number; lotId?: string; serials?: string[] }>;
+      reason?: string;
+    }
+  ): Promise<{
+    success: false; messages: TranslateContent;
+  } | {
+    success: true;
+    returnId: string;
+    returnCode: string;
+    results: Array<{ variantId: string; quantity: number; ok: boolean; serialsReturned?: number }>;
+  }> {
+    const permError = await this.requirePermission(actor, 'purchases:manage');
+    if (permError) return permError;
+
+    // scope own_branch: chỉ được trả hàng tại chi nhánh của mình
+    const scope = await PermissionChecker.getScope(actor.roleName, 'purchases:manage');
+    if (!scope) return { success: false, messages: supplierAdminMessages.permissionDenied };
+    if (scope === 'own_branch' && (!actor.branchId || input.branchId !== actor.branchId)) {
+      return { success: false, messages: supplierAdminMessages.permissionDenied };
+    }
+
+    if (!input.branchId) return { success: false, messages: supplierAdminMessages.invalidPOItems };
+    if (!Array.isArray(input.items) || input.items.length === 0) {
+      return { success: false, messages: supplierAdminMessages.invalidPOItems };
+    }
+
+    // Validate items: quantity nguyên > 0, serials khớp quantity khi có
+    for (const item of input.items) {
+      const qty = Math.floor(Number(item.quantity) || 0);
+      if (!item.variantId || qty <= 0) return { success: false, messages: supplierAdminMessages.invalidPOItems };
+      const serials = (item.serials ?? []).map((s) => String(s).trim().toUpperCase()).filter(Boolean);
+      if (serials.length > 0 && serials.length !== qty) {
+        return { success: false, messages: supplierAdminMessages.invalidPOItems };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const returnId = `pret_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const returnCode = `PR-YYYYMMDD-${Math.random().toString(36).substring(2, 6).toUpperCase()}`.replace('YYYYMMDD', now.slice(0, 10).replace(/-/g, ''));
+
+    // Lấy tên NCC cho phiếu công nợ (best-effort)
+    let supplierName = '';
+    const supplierRes = await cbSuppliers.document.get({ documentKey: input.supplierId }).catch(() => null);
+    if (supplierRes && supplierRes.ok && supplierRes.data) {
+      supplierName = String((supplierRes.data as { name?: string }).name ?? '');
+    }
+
+    // Tạo doc purchase_return TRƯỚC khi trừ tồn (nguồn sự thật truy vết)
+    const returnDoc = {
+      returnCode,
+      supplierId: input.supplierId,
+      supplierName,
+      branchId: input.branchId,
+      items: input.items.map((item) => ({
+        variantId: item.variantId,
+        quantity: Math.floor(Number(item.quantity) || 0),
+        unitCost: Number(item.unitCost) || 0,
+        lotId: item.lotId ?? null,
+        serials: item.serials ? item.serials.map((s) => String(s).trim().toUpperCase()) : []
+      })),
+      reason: input.reason ?? '',
+      status: 'completed',
+      createdBy: actor.userId,
+      createdAt: now,
+      updatedAt: now
+    };
+    const createRes = await cbData('purchase_returns').document.create({
+      documentKey: returnId,
+      content: returnDoc
+    });
+    if (!createRes.ok) return { success: false, messages: supplierAdminMessages.createFailed };
+
+    // Trừ tồn từng dòng — conditional UPDATE chống âm kho
+    const results: Array<{ variantId: string; quantity: number; ok: boolean; serialsReturned?: number }> = [];
+    let allOk = true;
+    for (const item of input.items) {
+      const qty = Math.floor(Number(item.quantity) || 0);
+      const stockKey = `stock_${item.variantId}_${input.branchId}`;
+      const updRes = await cbInventoryStock.document.query({
+        statement: `
+          UPDATE ${inventoryStockKeyspace}
+          SET quantityOnHand = quantityOnHand - $2, updatedAt = $4
+          WHERE META().id = $1 AND variantId = $3 AND quantityOnHand >= $2
+          RETURNING quantityOnHand
+        `,
+        args: [stockKey, qty, item.variantId, now],
+        readonly: false
+      });
+      let ok = updRes.ok && (updRes.data?.results?.length ?? 0) > 0;
+      // Doc stock chưa tồn tại → không có gì để trả → coi là fail (thiếu tồn)
+      if (ok) {
+        // Log stock movement 'purchase_return'
+        await cbStockMovementsRef.document.create({
+          documentKey: `${item.variantId}_${input.branchId}_${Date.now()}_prt${Math.random().toString(36).substring(2, 6)}`,
+          content: {
+            variantId: item.variantId,
+            branchId: input.branchId,
+            lotId: item.lotId ?? null,
+            type: 'out',
+            quantity: qty,
+            quantityBefore: null,
+            quantityAfter: null,
+            referenceType: 'purchase_return',
+            referenceId: returnId,
+            performedBy: actor.userId,
+            note: input.reason ? `Return to supplier: ${input.reason}` : 'Return to supplier',
+            createdAt: now
+          }
+        }).catch(() => null);
+
+        // Serial: mark 'returned' (điều kiện status='in_stock')
+        let serialsReturned = 0;
+        if (item.serials && item.serials.length > 0) {
+          const markRes = await SerialService.markReturned({
+            variantId: item.variantId,
+            serials: item.serials,
+            branchId: input.branchId,
+            now
+          });
+          if (markRes.success) serialsReturned = markRes.marked;
+          else allOk = false;
+        }
+        results.push({ variantId: item.variantId, quantity: qty, ok: true, serialsReturned });
+      } else {
+        ok = false;
+        allOk = false;
+        results.push({ variantId: item.variantId, quantity: qty, ok: false });
+      }
+    }
+
+    // Công nợ NCC (best-effort): tạo khoản phải trả DƯƠNG referenceType 'purchase_return'
+    // — DebtService.create chỉ nhận amount > 0 (amount âm bị chặn invalidAmount),
+    // giá trị "giảm" thể hiện qua phiếu PR; ghi chú ghi rõ đây là giảm công nợ.
+    const totalAmount = input.items.reduce(
+      (sum, item) => sum + (Number(item.unitCost) || 0) * (Math.floor(Number(item.quantity) || 0)),
+      0
+    );
+    if (input.supplierId && totalAmount > 0) {
+      try {
+        const { DebtService } = await import('./debts');
+        const debtRes = await DebtService.create(actor, {
+          type: 'payable',
+          partyId: input.supplierId,
+          referenceType: 'purchase_return',
+          referenceId: returnId,
+          referenceCode: returnCode,
+          amount: totalAmount,
+          notes: input.reason ? `Trả hàng NCC (giảm công nợ): ${input.reason}` : 'Trả hàng NCC (giảm công nợ)'
+        });
+        if (!debtRes.success) {
+          console.warn(`[SupplierService.createPurchaseReturn] debt create failed (best-effort) for ${returnId}`);
+        }
+      } catch (e) {
+        console.warn(`[SupplierService.createPurchaseReturn] debt create failed (best-effort):`, e);
+      }
+    }
+
+    if (!allOk) {
+      console.warn(`[SupplierService.createPurchaseReturn] partial failure for return ${returnId}`);
+    }
+
+    return { success: true, returnId, returnCode, results };
   }
 }

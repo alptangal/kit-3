@@ -70,7 +70,32 @@ export const POST: RequestHandler = async (event) => {
 		const itemsWithStock = items.map((item) => ({
 			...item,
 			stock: stockByVariant ? Number(stockByVariant[String(item._id)] ?? 0) : undefined
-		}));
+		})) as Array<Record<string, unknown> & { stock?: number; serialStock?: number }>;
+
+		// ── Serial/IMEI: đếm serial 'in_stock' cho variant trackSerial (badge POS) ──
+		// Variant thường → bỏ qua. Chỉ trackSerial mới cần biết còn bao nhiêu serial.
+		const serialsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.serial_numbers`;
+		const trackSerialIds = itemsWithStock
+			.filter((item) => item.trackSerial === true)
+			.map((item) => String(item._id));
+		if (branchId && trackSerialIds.length > 0) {
+			const serialRes = await cbData('serial_numbers').document.query({
+				statement: `SELECT variantId, COUNT(1) AS cnt FROM ${serialsKeyspace} WHERE branchId = $1 AND variantId IN $2 AND status = 'in_stock' GROUP BY variantId`,
+				args: [branchId, trackSerialIds],
+				readonly: true
+			});
+			if (serialRes.ok && serialRes.data?.results) {
+				const cntByVariant: Record<string, number> = {};
+				for (const row of serialRes.data.results as Array<{ variantId: string; cnt?: number }>) {
+					cntByVariant[row.variantId] = Number(row.cnt ?? 0);
+				}
+				for (const item of itemsWithStock) {
+					if (item.trackSerial === true) {
+						item.serialStock = cntByVariant[String(item._id)] ?? 0;
+					}
+				}
+			}
+		}
 
 		return respond({
 			ok: true,

@@ -18,6 +18,7 @@ import { cbData } from '$modules/couchbase/clients';
 import { POSService } from '$lib/server/db/pos';
 import { InventoryService } from '$lib/server/db/inventory';
 import { QrPaymentService, isQrPaymentMethod } from '$lib/server/db/qr-payments';
+import { SerialService } from '$lib/server/db/serials';
 
 const cbOrders = cbData('orders');
 const cbPayments = cbData('payments');
@@ -42,6 +43,14 @@ interface CheckoutItem {
 	unitPrice?: number;
 	/** Giảm giá cả dòng (VND) — trừ vào price*quantity. */
 	lineDiscount?: number;
+	/** Serial/IMEI (variant trackSerial): danh sách mã bán — mỗi chiếc 1 mã.
+	 *  Bắt buộc khi variant trackSerial, số lượng phải bằng quantity. */
+	serials?: string[];
+	/** Đơn vị bán (P2): index trong variant.units — undefined/0 = base. */
+	unitIndex?: number;
+	/** Hệ số quy đổi client gửi kèm (1 đơn vị bán = unitFactor đơn vị base).
+	 *  Backend ưu tiên units từ doc variant (chống client gửi factor sai). */
+	unitFactor?: number;
 }
 
 interface PaymentInput {
@@ -102,7 +111,7 @@ export const POST: RequestHandler = async (event) => {
 				: 0;
 
 		// ── Validate items: variant active + enough stock at branch ──
-		const validated: Array<{ variantId: string; quantity: number; price: number; lineDiscount: number }> = [];
+		const validated: Array<{ variantId: string; quantity: number; baseQuantity: number; price: number; lineDiscount: number; serials: string[]; unitName?: string; unitIndex: number }> = [];
 		let totalAmount = 0;
 		for (const item of items) {
 			const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
@@ -123,6 +132,8 @@ export const POST: RequestHandler = async (event) => {
 				price?: number;
 				status?: string;
 				deletedAt?: string | null;
+				trackSerial?: boolean;
+				units?: Array<{ name?: string; factor?: number; price?: number | null }> | null;
 			};
 			if (variant.status !== 'active' || variant.deletedAt) {
 				return respond(
@@ -133,6 +144,19 @@ export const POST: RequestHandler = async (event) => {
 					400
 				);
 			}
+			// ── Đơn vị quy đổi (P2): trừ tồn theo ĐƠN VỊ BASE ──
+			// factor lấy từ doc variant (nguồn sự thật) — client chỉ gửi index.
+			const unitIndexRaw = Math.max(0, Math.floor(Number(item.unitIndex) || 0));
+			const variantUnits = Array.isArray(variant.units) ? variant.units : [];
+			const unit = unitIndexRaw > 0 ? variantUnits[unitIndexRaw] : undefined;
+			const unitFactor =
+				unit && unitIndexRaw > 0
+					? Math.max(1, Math.floor(Number(unit.factor) || 1))
+					: 1;
+			const unitName =
+				unit && unitIndexRaw > 0 && unit.name ? String(unit.name) : undefined;
+			// Số lượng quy đổi về base: 2 thùng × 24 = 48 chai trừ khỏi kho.
+			const baseQuantity = quantity * unitFactor;
 			const price = Number(
 				item.unitPrice ?? variant.price ?? 0
 			) >= 0
@@ -159,7 +183,7 @@ export const POST: RequestHandler = async (event) => {
 			}
 			const onHand =
 				(stockRes.stock as { quantityOnHand?: number } | undefined)?.quantityOnHand ?? 0;
-			if (onHand < quantity) {
+			if (onHand < baseQuantity) {
 				return respond(
 					{
 						ok: false,
@@ -171,13 +195,97 @@ export const POST: RequestHandler = async (event) => {
 					409
 				);
 			}
+			// ── Serial/IMEI (variant trackSerial): BẮT BUỘC chọn serial cụ thể ──
+			// Số serial phải đúng bằng quantity; mỗi serial phải đang 'in_stock' tại branch.
+			// Validate ở ĐÂY (trước tạo order) — markSold chạy SAU khi tạo order thành công.
+			let itemSerials: string[] = [];
+			if (variant.trackSerial) {
+				const rawSerials = Array.isArray(item.serials) ? item.serials : [];
+				itemSerials = Array.from(
+					new Set(rawSerials.map((s) => String(s ?? '').trim().toUpperCase()).filter(Boolean))
+				);
+				if (itemSerials.length === 0) {
+					return respond(
+						{
+							ok: false,
+							message: {
+								vi: 'Sản phẩm này cần chọn số serial cụ thể để bán',
+								en: 'This product requires selecting serial numbers to sell'
+							}
+						},
+						400
+					);
+				}
+				if (itemSerials.length !== quantity) {
+					return respond(
+						{
+							ok: false,
+							message: {
+								vi: `Số serial (${itemSerials.length}) phải bằng số lượng bán (${quantity})`,
+								en: `Serial count (${itemSerials.length}) must match sold quantity (${quantity})`
+							}
+						},
+						400
+					);
+				}
+			}
+
 			// Giảm giá cả dòng — clamp 0..price*quantity để tổng không âm.
 			const lineDiscount = Math.min(
 				Math.max(0, Math.round(Number(item.lineDiscount) || 0)),
 				price * quantity
 			);
-			validated.push({ variantId: item.variantId, quantity, price, lineDiscount });
+			validated.push({
+				variantId: item.variantId,
+				quantity,
+				baseQuantity,
+				price,
+				lineDiscount,
+				serials: itemSerials,
+				unitName,
+				unitIndex: unitIndexRaw
+			});
 			totalAmount += price * quantity - lineDiscount;
+		}
+
+		// ── Serial/IMEI: xác nhận mọi serial đang 'in_stock' tại branch (1 query batch IN) ──
+		// Chạy TRƯỚC tạo order — phát hiện sớm serial đã bán/đổi trạng thái (race 2 quầy).
+		const allSerials = validated.flatMap((v) => v.serials);
+		if (allSerials.length > 0 && branchId) {
+			const inStockRes = await SerialService.listInStockForVariant(actor, validated[0].variantId, branchId);
+			// Fallback per-variant: nếu giỏ có nhiều variant trackSerial thì query từng variant
+			const inStockByVariant = new Map<string, Set<string>>();
+			const trackSerialVariants = Array.from(new Set(validated.filter((v) => v.serials.length > 0).map((v) => v.variantId)));
+			for (const vid of trackSerialVariants) {
+				const res = vid === validated[0].variantId && inStockRes.success
+					? inStockRes
+					: await SerialService.listInStockForVariant(actor, vid, branchId);
+				if (res.success) {
+					inStockByVariant.set(
+						vid,
+						new Set(res.items.map((s) => String((s as { serial?: string }).serial ?? '').toUpperCase()))
+					);
+				}
+			}
+			for (const v of validated) {
+				if (v.serials.length === 0) continue;
+				const available = inStockByVariant.get(v.variantId);
+				// Query thất bại (lỗi hạ tầng) → bỏ qua pre-check, markSold sau đó vẫn chặn (N1QL điều kiện status)
+				if (!available) continue;
+				const missing = v.serials.filter((s) => !available.has(s));
+				if (missing.length > 0) {
+					return respond(
+						{
+							ok: false,
+							message: {
+								vi: `Serial không còn tồn trong kho: ${missing.join(', ')}`,
+								en: `Serials no longer in stock: ${missing.join(', ')}`
+							}
+						},
+						409
+					);
+				}
+			}
 		}
 
 		// ── Discount: % khách hàng + số tiền cả đơn (VND) ──
@@ -321,7 +429,13 @@ export const POST: RequestHandler = async (event) => {
 				lotId: undefined,
 				quantity: v.quantity,
 				price: v.price,
-				discount: v.lineDiscount
+				discount: v.lineDiscount,
+				// Serial/IMEI bán kèm — truy vết từng chiếc về đơn (serial_numbers.orderId cũng ghi)
+				serials: v.serials.length > 0 ? v.serials : undefined,
+				// Đơn vị bán (P2): unitIndex trong variant.units + hệ số đã dùng khi trừ kho
+				unitIndex: v.unitIndex > 0 ? v.unitIndex : undefined,
+				unitFactor: v.unitIndex > 0 ? Math.round(v.baseQuantity / v.quantity) : undefined,
+				unitName: v.unitName
 			})),
 			totalAmount: payableAmount,
 			discountAmount,
@@ -339,12 +453,13 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		// ── Deduct stock + record stock movements ──
+		// Trừ theo QUY ĐỔI BASE: 1 thùng (factor 24) → trừ 24 chai (baseQuantity).
 		for (const item of validated) {
 			const adjustRes = await InventoryService.adjustStock(
 				actor,
 				item.variantId,
 				branchId as string,
-				-item.quantity,
+				-item.baseQuantity,
 				'sale',
 				documentKey,
 				actor.userId,
@@ -357,6 +472,23 @@ export const POST: RequestHandler = async (event) => {
 					{ ok: false, message: adjustRes.messages },
 					statusForServiceFailure(adjustRes.messages)
 				);
+			}
+		}
+
+		// ── Serial/IMEI: chuyển status 'sold' + orderId (N1QL điều kiện status='in_stock'
+		// chống race — serial mất giữa chừng → trả lỗi, order vẫn giữ (đã trừ tồn)) ──
+		for (const item of validated) {
+			if (item.serials.length === 0 || !branchId) continue;
+			const markRes = await SerialService.markSold({
+				variantId: item.variantId,
+				serials: item.serials,
+				branchId: branchId as string,
+				orderId: documentKey,
+				now
+			});
+			if (!markRes.success) {
+				console.error(`[POST /api/admin/pos/checkout] markSold failed for ${item.variantId}:`, markRes.messages);
+				return respond({ ok: false, message: markRes.messages ?? { vi: 'Cập nhật serial thất bại', en: 'Failed to update serials' } }, 409);
 			}
 		}
 
