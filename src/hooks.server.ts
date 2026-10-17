@@ -34,17 +34,24 @@ if (!globalThis.__appInitialized || !vaultReady()) {
 	})();
 }
 
-// Ensure initialization completes before handling requests
+// Ensure initialization completes before handling requests.
+// TÁI DỤNG __initPromise đang chạy thay vì ghi đè — bản cũ check vaultReady()
+// rồi gán __initPromise MỚI: request đầu tiên vào trang khi top-level init chưa
+// xong sẽ khởi động chuỗi initApp() THỨ HAI song song (log "App initialization
+// started" ×N, push key lặp, gọi DB API song song). Chỉ tạo promise khi chưa có.
 async function ensureInitialized(): Promise<void> {
-	if (!vaultReady()) {
+	if (!globalThis.__initPromise) {
 		globalThis.__initPromise = (async () => {
 			await initApp();
 			await initSystemVault();
-		})();
+		})().catch((e) => {
+			// init lỗi → xoá promise để request sau được retry thay vì await
+			// một promise đã rejected mãi mãi
+			globalThis.__initPromise = undefined;
+			throw e;
+		});
 	}
-	if (globalThis.__initPromise) {
-		await globalThis.__initPromise;
-	}
+	await globalThis.__initPromise;
 }
 
 async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
