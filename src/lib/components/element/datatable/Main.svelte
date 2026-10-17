@@ -1835,14 +1835,25 @@
 
 			.datatable-caption {
 				position: sticky;
-				top: var(--admin-header-h, 0px);
+				/* Dính ngay DƯỚI filters sticky mobile (header + filters-h) —
+				   trước đây top = header-h để lộ caption trong khe giữa header
+				   (z-500) và filters (top = header-h, margin âm bù gap). */
+				top: calc(var(--admin-header-h, 0px) + var(--admin-filters-h, 0px));
 				z-index: 3;
 				background: var(--content1, #fff);
+				/* Mobile caption co mỏng ≈ 1.75rem để khớp offset th预留 (padding
+				   gốc 0.75rem → caption 44px chồng lên th z-2 bị che 16px). */
+				padding-block: 0.25rem;
 			}
 
 			:global(.datatable-th) {
 				position: sticky;
-				top: calc(var(--admin-header-h, 0px) + var(--admin-filters-h, 0px) + 1.75rem);
+				/* Ngay dưới caption sticky (caption mobile cao ≈ 1.75rem). Trước
+				   đây cộng body-pad-top → th dính lệch 0.5rem dưới filters,
+				   lộ td xuyên khe. */
+				top: calc(
+					var(--admin-header-h, 0px) + var(--admin-filters-h, 0px) + 1.75rem
+				);
 				z-index: 2;
 				background: var(--content2, hsl(240 4.76% 95.88%));
 				box-shadow: 0 1px 0 var(--content3, hsl(240 5.88% 90%));

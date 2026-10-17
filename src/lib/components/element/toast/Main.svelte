@@ -168,6 +168,12 @@
 <style lang="scss">
 	@use '$styles/sizes.scss';
 	.toast-root {
+		/* Nổi trên sticky stack admin (pagination/filters 390, header 400) nhưng
+		   dưới sidebar overlay 999 + modal 10000 + tooltip 10500. position:fixed
+		   neo viewport: admin/demo cuộn bằng Container nội bộ (body không cuộn)
+		   nên absolute-on-body sẽ trôi theo document khi cuộn. */
+		position: fixed;
+		z-index: 900;
 		&[data-position='bottom'],
 		&[data-position='top'] {
 			transform: translateX(-50%);

@@ -930,9 +930,16 @@
 	.admin-page {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 1.25rem;
 		padding: 1.5rem;
+		max-width: 1280px;
+		margin: 0 auto;
+		width: 100%;
 		color: var(--foreground);
+
+		@media (max-width: 720px) {
+			padding: 1rem;
+		}
 	}
 
 	.admin-header {

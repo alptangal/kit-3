@@ -836,11 +836,11 @@
 	@media (max-width: 767px) {
 		.admin-header-actions {
 			position: sticky;
-			top: calc(var(--admin-header-h, 0px) + var(--admin-body-pad-top, 0.5rem));
+			top: var(--admin-header-h, 0px);
 			z-index: 400;
 			background: var(--background, #fff);
 			padding-block: 0.25rem;
-			margin-block: -0.25rem;
+			margin-block: -1rem;
 		}
 	}
 
@@ -911,7 +911,7 @@
 			z-index: 300;
 			background: var(--background, #fff);
 			padding-block: 0.5rem;
-			margin-block: -0.25rem;
+			margin-block: -1rem;
 		}
 	}
 

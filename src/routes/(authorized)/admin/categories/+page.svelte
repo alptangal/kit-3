@@ -839,7 +839,15 @@
 	.admin-page {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 1.25rem;
+		padding: 1.5rem;
+		max-width: 1280px;
+		margin: 0 auto;
+		width: 100%;
+
+		@media (max-width: 720px) {
+			padding: 1rem;
+		}
 	}
 
 	.admin-header {
@@ -878,11 +886,11 @@
 		   trên .admin-inset). margin-block âm giữ nhịp gap 1rem của .admin-page. */
 		@media (max-width: 767px) {
 			position: sticky;
-			top: calc(var(--admin-header-h, 0px) + var(--admin-body-pad-top, 0.5rem));
+			top: var(--admin-header-h, 0px);
 			z-index: 400;
 			background: var(--background, #fff);
 			padding-block: 0.25rem;
-			margin-block: -0.25rem;
+			margin-block: -1rem;
 		}
 	}
 
@@ -914,14 +922,14 @@
 		@media (max-width: 767px) {
 			border: 0;
 			border-radius: 0;
-		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
-		   theo wrap (khong cuon) -> thead truot mat. Desktop co stickyHead:
-		   wrap phai thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
-		@media (min-width: 768px) {
-			&:has(:global(.datatable-sticky-head)) {
-				overflow-x: visible;
-			}
 		}
+
+		/* Sticky thead: wrap overflow-x auto tạo scroll context — th sticky bám
+		   theo wrap (không cuộn) → thead trượt mất. Mở overflow khi DataTable
+		   có stickyHead (cả mobile + desktop; cuộn ngang do .datatable-table-wrap
+		   tự cuộn — rule max-1024/min-768 của component đã mở overflow visible). */
+		&:has(:global(.datatable-sticky-head)) {
+			overflow-x: visible;
 		}
 	}
 
@@ -947,7 +955,7 @@
 			z-index: 300;
 			background: var(--background, #fff);
 			padding-block: 0.5rem;
-			margin-block: -0.25rem;
+			margin-block: -1rem;
 		}
 	}
 

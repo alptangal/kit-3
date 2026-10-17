@@ -739,12 +739,6 @@
 		}
 	}
 
-	.admin-inset.is-scrolled .admin-inset-body {
-		@media (min-width: 768px) {
-			padding-top: 0.5rem;
-		}
-	}
-
 	@media (min-width: 768px) {
 		.admin-inset :global(.admin-header) {
 			position: sticky;
@@ -761,6 +755,12 @@
 
 		.admin-inset.is-scrolled :global(.admin-page) {
 			gap: 0.5rem;
+		}
+
+		/* Cuộn sâu: co padding-block trang lại để bảng chiếm nhiều không gian hơn
+		   (padding-inline giữ nguyên, căn giữa max-width không đổi). */
+		.admin-inset.is-scrolled :global(.admin-page) {
+			padding-block: 0.5rem;
 		}
 
 		.admin-inset :global(.admin-filters) {
@@ -783,14 +783,24 @@
 		}
 	}
 
-	.admin-inset-body {
-		padding: 1.5rem;
-		min-height: 60dvh;
-
-		/* B5 (5a): mobile bỏ padding dày — viền tổng với .admin-page (1rem)
-		   còn 1.5rem thay vì 2.5rem. */
-		@media (max-width: 767px) {
-			padding: 0.5rem 0.5rem 0.75rem;
+	/* Mobile: sticky CHUNG cho .admin-filters trên mọi trang (trước đây chỉ
+	   6 trang tự khai rule riêng) — search/lọc luôn thấy khi cuộn. margin-block
+	   âm bù gap 1.25rem của .admin-page: dính sát header (top = header +
+	   body-pad-top), chừa 0.25rem nhịp thở — không lộ data giữa 2 lớp sticky. */
+	@media (max-width: 767px) {
+		.admin-inset :global(.admin-filters) {
+			position: sticky;
+			top: var(--admin-header-h, 0px);
+			z-index: 400;
+			background: var(--background, #fff);
+			padding-block: 0.25rem;
+			margin-block: -1rem;
 		}
+	}
+
+	.admin-inset-body {
+		/* Padding do .admin-page trên từng trang đảm nhiệm (chuẩn 1.5rem,
+		   mobile 1rem). Layout giữ min-height để footer không dính sát. */
+		min-height: 60dvh;
 	}
 </style>

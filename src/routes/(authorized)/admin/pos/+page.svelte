@@ -2310,6 +2310,11 @@
 			grid-template-columns: minmax(0, 1fr);
 		}
 	}
+	@media (max-width: 720px) {
+		.admin-page {
+			padding: 1rem;
+		}
+	}
 
 	@media print {
 		:global(body *) {

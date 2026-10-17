@@ -154,7 +154,7 @@
 						// Anchor MỘT giá trị chung cho cả nhóm ở CẢ HAI chế độ (children.offset) —
 						// stagger của stack chồng cũng đặt vào transform → chuyển trạng thái thuần
 						// transform (KHÔNG transition top/right/bottom/left — px nhảy).
-						children.ref.style.position = 'absolute';
+						children.ref.style.position = 'fixed';
 						children.ref.style.transformOrigin = pos;
 						// `pos` là string từ array — style indexable cần cast qua unknown
 						// (svelte-check: CSSStyleDeclaration không có index signature).
