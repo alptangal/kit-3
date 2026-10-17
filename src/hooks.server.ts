@@ -197,11 +197,11 @@ function logAccess(event: RequestEvent, status: number, durationMs: number) {
 	}
 }
 
+// handleError không được dùng fs + đường dẫn tuyệt đối cứng: node-file-trace của
+// adapter-vercel lần theo chuỗi path này khi build và nhặt cả các thư mục hệ thống
+// ngoài project vào function bundle (lỗi "Max serverless function size of 250 MB").
 export const handleError = ({ error }: { error: unknown }) => {
-	import('fs').then(fs => {
-		const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
-		fs.writeFileSync('d:/nodejs/svelte/kit-3/last_ssr_error.log', errorMessage);
-	});
+	console.error('[SSR error]', error);
 	return {
 		message: error instanceof Error ? error.message : 'Unknown error'
 	};

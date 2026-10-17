@@ -1,4 +1,4 @@
-import adapter from '@sveltejs/adapter-auto';
+import adapter from '@sveltejs/adapter-vercel';
 import UnoCSS from '@unocss/svelte-scoped/preprocess';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 

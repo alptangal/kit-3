@@ -8,6 +8,12 @@ import { json } from '@sveltejs/kit';
 import { requireAgentActor, agentUnauthorized } from '$lib/server/agent-auth';
 import { collectionSchemas } from '$modules/schema';
 import type { CollectionName } from '$modules/schema';
+// SỬA:KHÔNG được `await import('$env/static/private')` (namespace import) — Rollup phải
+// materialize TOÀN BỘ module env (~400 biến máy, gồm CLAUDE_CODE_EXECPATH/USERPROFILE/ProgramData...)
+// thành object namespace trong chunk → @vercel/nft coi các chuỗi path đó là file references
+// và quét cả cây C:\Users, C:\WINDOWS, C:\ProgramData khi build adapter → EPERM (adguard.db).
+// Chỉ dùng named import để Vite inline ĐÚNG các biến được dùng.
+import { cb_bucketName, cb_scopeName } from '$env/static/private';
 
 const RESERVED_WORDS = ['key', 'scope', 'value'];
 
@@ -115,8 +121,6 @@ export const GET: RequestHandler = async (event) => {
 				{ status: 403 }
 			);
 		}
-
-		const { cb_bucketName, cb_scopeName } = await import('$env/static/private');
 
 		const collections = (Object.keys(collectionSchemas) as CollectionName[]).map((name) => ({
 			name,
