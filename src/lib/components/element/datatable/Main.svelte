@@ -2193,6 +2193,9 @@
 	// khi trang cuộn (class .caption-collapsed do page đặt trên root).
 	.datatable-caption-title {
 		display: block;
+		// Tăng kích thước caption-title (yêu cầu người dùng) — 1rem đậm hơn
+		// font caption 0.8125rem cũ.
+		font-size: 1rem;
 	}
 
 	.datatable-caption-desc {

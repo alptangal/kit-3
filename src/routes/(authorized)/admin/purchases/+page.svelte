@@ -390,6 +390,8 @@
 	// ── C5/C6: scroll state ──
 	let tableScrolled = $state(false);
 	let paginationPopped = $state(false);
+	// Đã cuộn tới đáy (mobile: zero padding inset-header/page/pagination).
+	let wrapAtBottom = $state(false);
 
 	// Tìm kiếm debounce 300ms (pattern orders/customers): effect + guard armed
 	// — lần chạy đầu (init) không fetch; các lần sau reset page=1 rồi load.
@@ -428,6 +430,7 @@
 			tableScrolled = el.scrollTop > 8;
 			// C6: chạm đáy (ngưỡng 4px) → pop pagination 1 lần; rời đáy → reset.
 			const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+			wrapAtBottom = atBottom;
 			if (atBottom && !paginationPopped) {
 				paginationPopped = true;
 				// pop 1 nhịp rồi tự tắt (transform-only — không đổi layout).
@@ -1701,114 +1704,11 @@
 	<title>{pageContents.title[lang]}</title>
 </svelte:head>
 
-<section class="admin-page admin-page--fullheight">
-	<!-- ── Toolbar cố định (D1/D2/D3/D4): search + suggest + filter + 3 nút.
-	     KHÔNG admin-header (C1 — caption thay thế), KHÔNG DropdownMenu float. ── -->
-	<div class="admin-table-toolbar">
-		<div class="admin-search" data-suggest>
-			<Input
-				placeholder={pageContents.filters.searchPlaceholder[lang]}
-				bind:value={searchQuery}
-				data-test="purchases-search-input"
-				events={[
-					{
-						events: {
-							focus: {
-								handler() {
-									searchFocused = true;
-									suggestOpen = true;
-								}
-							},
-							blur: {
-								handler() {
-									searchFocused = false;
-									saveSearchKeyword();
-								}
-							}
-						}
-					}
-				]}
-			>
-				{#snippet leading(data)}
-					<Icon
-						icon={iconify['search-rounded']}
-						size={(data?.size ?? 'sm') as Size}
-						class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-					/>
-				{/snippet}
-			</Input>
-			{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
-				<div class="suggest-popover" role="listbox" data-test="purchases-suggest">
-					<div class="suggest-title">{pageContents.suggest.title[lang]}</div>
-					{#each getSearchKeywords(PREFS_KEY).slice(0, 8) as kw (kw)}
-						<button
-							type="button"
-							class="suggest-item"
-							role="option"
-							aria-selected="false"
-							onclick={() => {
-								searchQuery = kw;
-								suggestOpen = false;
-								page = 1;
-								void loadPurchases();
-							}}
-							onmousedown={(e) => e.preventDefault()}
-						>
-							<Icon icon={iconify['search-rounded']} size="xs" />
-							<span class="suggest-item-text">{kw}</span>
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-
-		<!-- Bộ lọc: nút setting cũ → button icon có badge (desktop + mobile chung) -->
-		<Button
-			color={filtersDirtyCount > 0 ? 'primary' : 'default'}
-			variant={filtersDirtyCount > 0 ? 'soft' : 'outline'}
-			class="admin-filter-btn"
-			aria-label={pageContents.filters.filterButton[lang]}
-			onClick={() => {
-				filterModalDisplay = true;
-			}}
-			data-test="purchases-filter-btn"
-		>
-			<Icon icon={iconify['tune-rounded']} size="md" />
-			{#if filtersDirtyCount > 0}
-				<span class="filter-count-badge">{filtersDirtyCount}</span>
-			{/if}
-		</Button>
-
-		<!-- D2: 3 nút hành động — layout thường, KHÔNG subcontext menu (desktop).
-		     Mobile ẩn (display:none ≤767px) → FAB thay thế (M1). -->
-		<div class="admin-actions-group">
-			<Button color="success" onClick={openQuickModal} data-test="purchases-quick-btn">
-				{pageContents.actions.createQuick[lang]}
-			</Button>
-			<Button color="primary" variant="soft" onClick={openFullModal} data-test="purchases-full-btn">
-				{pageContents.actions.createFull[lang]}
-			</Button>
-			<Button color="error" variant="soft" onClick={openReturnModal} data-test="purchases-return-btn">
-				{pageContents.actions.returnSupplier[lang]}
-			</Button>
-		</div>
-
-		<!-- C9: bulk bar khi chọn ≥1 row -->
-		{#if selectedIds.length > 0}
-			<div class="bulk-bar" data-test="purchases-bulk-bar">
-				<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{n}', String(selectedIds.length))}</span>
-				<Button color="primary" variant="soft" size="sm" onClick={() => { bulkUpdateOpen = true; }} data-test="purchases-bulk-update">
-					{pageContents.bulk.update[lang]}
-				</Button>
-				<Button color="error" variant="soft" size="sm" onClick={() => { bulkConfirmOpen = true; }} data-test="purchases-bulk-delete">
-					{pageContents.bulk.remove[lang]}
-				</Button>
-				<Button color="default" variant="ghost" size="sm" onClick={() => { selectedIds = []; }}>
-					{pageContents.bulk.clear[lang]}
-				</Button>
-			</div>
-		{/if}
-	</div>
+<section class="admin-page admin-page--fullheight" class:at-bottom={wrapAtBottom}>
+	<!-- Search + filter + 3 nút đã chuyển vào snippet `captionTools` của
+	     DataTable (nằm TRONG caption, sticky cùng caption — yêu cầu "caption
+	     chứa search field, filter/sortby, 3 buttons" + "loại bỏ table-toolbar").
+	     Bulk bar cũng trong snippet (swap khi selectedIds > 0). -->
 
 	<!-- ── Modal bộ lọc (dùng chung desktop + mobile panel "Lọc") ──
 	     Class .admin-filter-grid (KHÔNG .admin-filters) — layout admin sticky
@@ -1967,7 +1867,7 @@
 					selectable
 					showIndex
 					indexOffset={(page - 1) * pageSize}
-					checkboxHoverOnly
+					indexCheckboxes
 					checkOnRowClick
 					selectionTools={false}
 					onSelectionChange={onSelectionChange}
@@ -1979,6 +1879,111 @@
 					class={tableScrolled ? 'caption-collapsed' : undefined}
 					data-test="purchases-datatable"
 				>
+					{#snippet captionTools()}
+						<!-- Search (server-side) + suggest keywords — chuyển từ toolbar. -->
+						<div class="admin-search" data-suggest>
+							<Input
+								placeholder={pageContents.filters.searchPlaceholder[lang]}
+								bind:value={searchQuery}
+								data-test="purchases-search-input"
+								events={[
+									{
+										events: {
+											focus: {
+												handler() {
+													searchFocused = true;
+													suggestOpen = true;
+												}
+											},
+											blur: {
+												handler() {
+													searchFocused = false;
+													saveSearchKeyword();
+												}
+											}
+										}
+									}
+								]}
+							>
+								{#snippet leading(data)}
+									<Icon
+										icon={iconify['search-rounded']}
+										size={(data?.size ?? 'sm') as Size}
+										class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+									/>
+								{/snippet}
+							</Input>
+							{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
+								<div class="suggest-popover" role="listbox" data-test="purchases-suggest">
+									<div class="suggest-title">{pageContents.suggest.title[lang]}</div>
+									{#each getSearchKeywords(PREFS_KEY).slice(0, 8) as kw (kw)}
+										<button
+											type="button"
+											class="suggest-item"
+											role="option"
+											aria-selected="false"
+											onclick={() => {
+												searchQuery = kw;
+												suggestOpen = false;
+												page = 1;
+												void loadPurchases();
+											}}
+											onmousedown={(e) => e.preventDefault()}
+										>
+											<Icon icon={iconify['search-rounded']} size="xs" />
+											<span class="suggest-item-text">{kw}</span>
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
+
+						<!-- Nút filter icon + badge số điều kiện dirty -->
+						<Button
+							color={filtersDirtyCount > 0 ? 'primary' : 'default'}
+							variant={filtersDirtyCount > 0 ? 'soft' : 'outline'}
+							class="admin-filter-btn"
+							aria-label={pageContents.filters.filterButton[lang]}
+							onClick={() => {
+								filterModalDisplay = true;
+							}}
+							data-test="purchases-filter-btn"
+						>
+							<Icon icon={iconify['tune-rounded']} size="md" />
+							{#if filtersDirtyCount > 0}
+								<span class="filter-count-badge">{filtersDirtyCount}</span>
+							{/if}
+						</Button>
+
+						<!-- 3 nút hành động — desktop; mobile ẩn (FAB thay thế). -->
+						<div class="admin-actions-group">
+							<Button color="success" onClick={openQuickModal} data-test="purchases-quick-btn">
+								{pageContents.actions.createQuick[lang]}
+							</Button>
+							<Button color="primary" variant="soft" onClick={openFullModal} data-test="purchases-full-btn">
+								{pageContents.actions.createFull[lang]}
+							</Button>
+							<Button color="error" variant="soft" onClick={openReturnModal} data-test="purchases-return-btn">
+								{pageContents.actions.returnSupplier[lang]}
+							</Button>
+						</div>
+
+						<!-- Bulk bar swap tools khi chọn ≥1 row (C9). -->
+						{#if selectedIds.length > 0}
+							<div class="bulk-bar" data-test="purchases-bulk-bar">
+								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{n}', String(selectedIds.length))}</span>
+								<Button color="primary" variant="soft" size="sm" onClick={() => { bulkUpdateOpen = true; }} data-test="purchases-bulk-update">
+									{pageContents.bulk.update[lang]}
+								</Button>
+								<Button color="error" variant="soft" size="sm" onClick={() => { bulkConfirmOpen = true; }} data-test="purchases-bulk-delete">
+									{pageContents.bulk.remove[lang]}
+								</Button>
+								<Button color="default" variant="ghost" size="sm" onClick={() => { selectedIds = []; }}>
+									{pageContents.bulk.clear[lang]}
+								</Button>
+							</div>
+						{/if}
+					{/snippet}
 					{#snippet actionsContent(row)}
 						{@const r = row as unknown as PurchaseRow}
 						<div class="row-actions">
@@ -2899,15 +2904,8 @@
 		}
 	}
 
-	/* ── Toolbar 1 row (D1/D2/D3/D4): search + filter + 3 nút — KHÔNG admin-header
-	   (C1: caption DataTable thay thế title/subtitle) ── */
-	.admin-table-toolbar {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-
+	/* ── Tools trong caption (chuyển từ toolbar — yêu cầu "caption chứa search
+	   + filter/sort + 3 nút", "loại bỏ table-toolbar") ── */
 	.admin-search {
 		flex: 1;
 		min-width: 12rem;
@@ -3123,9 +3121,22 @@
 		max-width: none;
 		gap: 0.75rem;
 		padding: 1rem 1.25rem;
+		/* Zero 3 var sticky của layout (inset-header không đè lên wrap trong
+		   fullheight — caption/thead dính sát đỉnh wrap, fix lỗi lệch 48px). */
+		--admin-header-h: 0px;
+		--admin-filters-h: 0px;
+		--admin-page-header-h: 0px;
 
 		@media (max-width: 767px) {
 			padding: 0.75rem;
+		}
+	}
+
+	/* ── Mobile chạm đáy: zero padding toàn bộ (inset-header qua :has, page,
+	   pagination) — nội dung chiếm tối đa viewport. ── */
+	.admin-page--fullheight.at-bottom {
+		@media (max-width: 767px) {
+			padding: 0;
 		}
 	}
 
@@ -3187,50 +3198,65 @@
 
 	/* ── C5/C6: pagination — thu nhỏ khi cuộn (tableScrolled), phóng nhịp khi
 	   chạm đáy (paginationPopped — transform-only, không đổi layout tránh vỡ
-	   click đổi trang) ── */
+	   click đổi trang). CHỈ mobile (yêu cầu: desktop không animate). ── */
 	.admin-pagination {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		gap: 1rem;
 		flex-wrap: wrap;
-		transition: padding 200ms ease, font-size 200ms ease;
 	}
 
-	.pagination-collapsed {
-		padding-block: 0.15rem;
-
-		.total-count,
-		.page-size-label {
-			font-size: 0.75rem;
+	@media (max-width: 767px) {
+		.admin-pagination {
+			transition: padding 200ms ease, font-size 200ms ease;
 		}
-	}
 
-	.pagination-pop {
-		animation: pagination-pop 450ms ease;
-	}
+		.pagination-collapsed {
+			padding-block: 0.15rem;
 
-	@keyframes pagination-pop {
-		0% {
-			transform: scale(1);
+			.total-count,
+			.page-size-label {
+				font-size: 0.75rem;
+			}
 		}
-		40% {
-			transform: scale(1.05);
-		}
-		100% {
-			transform: scale(1);
-		}
-	}
 
-	@media (prefers-reduced-motion: reduce) {
+		/* Chạm đáy: thu nhỏ hơn nữa (padding 0 — gọn nhất có thể). */
+		.at-bottom .admin-pagination {
+			padding-block: 0;
+
+			.total-count,
+			.page-size-label {
+				font-size: 0.7rem;
+			}
+		}
+
 		.pagination-pop {
-			animation: none;
+			animation: pagination-pop 450ms ease;
 		}
 
-		.admin-pagination,
-		.admin-pagination .total-count,
-		.admin-pagination .page-size-label {
-			transition: none;
+		@keyframes pagination-pop {
+			0% {
+				transform: scale(1);
+			}
+			40% {
+				transform: scale(1.05);
+			}
+			100% {
+				transform: scale(1);
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.pagination-pop {
+				animation: none;
+			}
+
+			.admin-pagination,
+			.admin-pagination .total-count,
+			.admin-pagination .page-size-label {
+				transition: none;
+			}
 		}
 	}
 
@@ -3725,10 +3751,24 @@
 	}
 
 	/* ── M1: FAB nhóm nút nổi góc phải-dưới (mobile only) ──
-	   padding-bottom cho card view: FAB không che card cuối khi cuộn tới đáy */
+	   padding-bottom cho card view: FAB không che card cuối khi cuộn tới đáy.
+	   at-bottom: bỏ luôn padding-bottom (nội dung sát đáy viewport). */
 	:global(.admin-inset:has(.admin-page--fullheight)) .admin-page--fullheight {
 		@media (max-width: 767px) {
 			padding-bottom: 4.5rem;
+		}
+	}
+
+	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) .admin-page--fullheight {
+		@media (max-width: 767px) {
+			padding-bottom: 0;
+		}
+	}
+
+	/* Mobile chạm đáy: inset-header zero padding (header co lại hết cỡ). */
+	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) :global(.admin-inset-header) {
+		@media (max-width: 767px) {
+			padding: 0;
 		}
 	}
 
