@@ -60,7 +60,7 @@
 	// Số cột (gồm cột checkbox + STT + cột actions) cho empty/loading colspan.
 	const colCount = $derived(
 		(ctx?.columns.length ?? 0) +
-			(configs?.selectable ? 1 : 0) +
+			(configs?.selectable && !configs?.indexCheckboxes ? 1 : 0) +
 			(configs?.showIndex ? 1 : 0) +
 			(ctx?.rowActions ? 1 : 0)
 	);
@@ -178,13 +178,17 @@
 		{#if configs?.loading}
 			{#each Array.from({ length: skeletonRows }) as _, si (si)}
 				<tr class="datatable-row datatable-row--skeleton" aria-hidden="true">
-					{#if configs?.selectable}
+					{#if configs?.selectable && !configs?.indexCheckboxes}
 						<td class="datatable-td datatable-td--check">
 							<span class="datatable-skeleton datatable-skeleton--check"></span>
 						</td>
 					{/if}
 					{#if configs?.showIndex}
-						<td class="datatable-td datatable-td--index"></td>
+						<td class="datatable-td datatable-td--index">
+							{#if configs?.indexCheckboxes}
+								<span class="datatable-index-num"></span>
+							{/if}
+						</td>
 					{/if}
 					{#each ctx.columns as col (col.id)}
 						<td class="datatable-td">
@@ -212,7 +216,7 @@
 					data-row-id={rowId}
 					onclick={(e) => onRowTap(rowId, row, index, e)}
 				>
-					{#if configs?.selectable}
+					{#if configs?.selectable && !configs?.indexCheckboxes}
 						<td class="datatable-td datatable-td--check">
 											<Checkbox
 								checked={ctx.isSelected(rowId)}
@@ -225,7 +229,23 @@
 						</td>
 					{/if}
 					{#if configs?.showIndex}
-						<td class="datatable-td datatable-td--index">{ctx.rowIndexText(ri)}</td>
+						<td class="datatable-td datatable-td--index">
+							{#if configs?.indexCheckboxes}
+								<span class="datatable-index-num">{ctx.rowIndexText(ri)}</span>
+								<span class="datatable-index-check">
+									<Checkbox
+										checked={ctx.isSelected(rowId)}
+										size={configs.size}
+										color="primary"
+										aria-label={configs.rowSelectText.replace('{index}', String(index + 1))}
+										class="datatable-row-checkbox"
+										events={rowCheckEvents(rowId)}
+									/>
+				</span>
+							{:else}
+								{ctx.rowIndexText(ri)}
+							{/if}
+						</td>
 					{/if}
 					{#each ctx.columns as col (col.id)}
 						{@const value = ctx.getCellValue(row, col)}
@@ -460,6 +480,83 @@
 		font-variant-numeric: tabular-nums;
 		color: var(--muted, #71717a);
 	}
+
+	// ── indexCheckboxes: checkbox gộp vào ô STT — 2 lớp chồng nhau ──
+	// num = số STT; check = checkbox. Mặc định num hiện, check ẩn (opacity 0
+	// vẫn nhận click/tap). Hover/focus td → swap. Position relative trên td.
+	.datatable-td--index {
+		position: relative;
+	}
+
+	.datatable-index-num,
+	.datatable-index-check {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		pointer-events: none; // span chỉ là lớp phủ — tương tác thuộc td/checkbox con
+	}
+
+	.datatable-index-num {
+		opacity: 1;
+		transition: opacity 120ms ease;
+	}
+
+	.datatable-index-check {
+		opacity: 0;
+		transition: opacity 120ms ease;
+
+		// checkbox con nhận click riêng (span phủ pointer-events none).
+		:global(.datatable-row-checkbox) {
+			pointer-events: auto;
+		}
+	}
+
+	// Hover/focus ô STT → hiện check, ẩn num (chỉ thiết bị hover thật).
+	@media (hover: hover) and (pointer: fine) {
+		:global(.datatable-root.datatable-index-check)
+			.datatable-td--index:hover
+			.datatable-index-num {
+			opacity: 0;
+		}
+
+		:global(.datatable-root.datatable-index-check)
+			.datatable-td--index:hover
+			.datatable-index-check {
+			opacity: 1;
+		}
+
+		// Focus keyboard vào checkbox trong ô STT.
+		:global(.datatable-root.datatable-index-check)
+			.datatable-td--index:focus-within
+			.datatable-index-num {
+			opacity: 0;
+		}
+
+		:global(.datatable-root.datatable-index-check)
+			.datatable-td--index:focus-within
+			.datatable-index-check {
+			opacity: 1;
+		}
+	}
+
+	// Row đã chọn: check luôn hiện (kể cả không hover).
+	:global(.datatable-root.datatable-index-check)
+		.datatable-row.selected
+		.datatable-td--index
+		.datatable-index-num {
+		opacity: 0;
+	}
+
+	:global(.datatable-root.datatable-index-check)
+		.datatable-row.selected
+		.datatable-td--index
+		.datatable-index-check {
+		opacity: 1;
+	}
+
+	// Touch (không hover): tap ô STT vẫn được — checkbox pointer-events auto
+	// đè lên num, tap = toggle (behavior ghi chú cho probe).
 
 	// ── D6: checkbox hover-only — ẩn (opacity 0), hiện khi hover row hoặc row
 	// đã chọn. Root class .datatable-check-hover (Main render), td--check scoped

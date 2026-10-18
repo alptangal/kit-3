@@ -40,6 +40,7 @@
 		columns: columnsProp,
 		caption,
 		captionDescription,
+		captionTools,
 		pageSize: pageSizeProp,
 		sortable,
 		sortColumn: sortColumnProp = $bindable(undefined),
@@ -48,6 +49,7 @@
 		showIndex,
 		indexOffset: indexOffsetProp,
 		checkboxHoverOnly,
+		indexCheckboxes,
 		checkOnRowClick,
 		selectionTools: selectionToolsProp,
 		selectable,
@@ -264,6 +266,9 @@
 	const selectionToolsDerived: boolean = $derived(selectionToolsProp ?? true);
 	const showIndexDerived: boolean = $derived(!!showIndex);
 	const checkboxHoverOnlyDerived: boolean = $derived(!!checkboxHoverOnly);
+	const indexCheckboxesDerived: boolean = $derived(
+		!!indexCheckboxes && !!selectable && showIndexDerived
+	);
 	const checkOnRowClickDerived: boolean = $derived(!!checkOnRowClick);
 	// activeSort hiệu dụng: bindable khi page truyền sortColumn, không thì state nội bộ.
 	const effSortColumn: string | undefined = $derived(
@@ -1211,6 +1216,9 @@
 		get captionDescriptionText() {
 			return captionDescText;
 		},
+		get captionTools() {
+			return captionTools;
+		},
 		get showIndex() {
 			return showIndexDerived;
 		},
@@ -1219,6 +1227,9 @@
 		},
 		get checkboxHoverOnly() {
 			return checkboxHoverOnlyDerived;
+		},
+		get indexCheckboxes() {
+			return indexCheckboxesDerived;
 		},
 		get checkOnRowClick() {
 			return checkOnRowClickDerived;
@@ -1417,6 +1428,7 @@
 			this.stickyHead ? 'datatable-sticky-head' : undefined,
 			this.cardMode ? 'datatable-card-mode' : undefined,
 			this.checkboxHoverOnly ? 'datatable-check-hover' : undefined,
+			this.indexCheckboxes ? 'datatable-index-check' : undefined,
 			undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: classProp }, overwriteDefaultStyles);
@@ -1737,11 +1749,20 @@
 	<div class="datatable-table-wrap">
 		<table class="datatable" aria-label={ariaLabel ?? undefined}>
 			<caption class="datatable-caption" bind:this={captionEl}>
-			<span class="datatable-caption-title">{configs.captionText}</span>
-			{#if configs.captionDescriptionText}
-				<span class="datatable-caption-desc">{configs.captionDescriptionText}</span>
-			{/if}
-		</caption>
+				<div class="datatable-caption-row">
+					<div class="datatable-caption-heading">
+						<span class="datatable-caption-title">{configs.captionText}</span>
+						{#if configs.captionDescriptionText}
+							<span class="datatable-caption-desc">{configs.captionDescriptionText}</span>
+						{/if}
+					</div>
+					{#if configs.captionTools}
+						<!-- HTML spec: caption không khuyến khích interactive content, nhưng
+						     mọi browser render/focus/click bình thường — cần sticky tools cùng caption. -->
+						<div class="datatable-caption-tools">{@render configs.captionTools()}</div>
+					{/if}
+				</div>
+			</caption>
 			<Head />
 			<Body />
 		</table>
@@ -2136,6 +2157,36 @@
 		font-weight: 600;
 		color: var(--muted, #71717a);
 		text-align: left;
+	}
+
+	// ── captionTools: hàng tiêu đề + tools cạnh nhau (wrap khi hẹp) ──
+	.datatable-caption-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.datatable-caption-heading {
+		min-width: 0;
+	}
+
+	.datatable-caption-tools {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		// Tools chứa input/popover — cần nổi trên th sticky (caption z-3 trong
+		// sticky mode; stacking context của caption đủ vì tools là con).
+		min-width: 0;
+	}
+
+	// mobile: tools xuống dòng dưới heading (caption flex-wrap).
+	@media (max-width: 767px) {
+		.datatable-caption-tools {
+			width: 100%;
+		}
 	}
 
 	// Caption title + description (C1/C5): desc ẩn bằng max-height transition

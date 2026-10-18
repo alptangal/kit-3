@@ -137,6 +137,8 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	caption?: TranslateContent | string;
 	/** Mô tả phụ dưới tiêu đề caption (i18n — ẩn khi cuộn, C5). */
 	captionDescription?: TranslateContent | string;
+	/** Snippet tools hiển thị cạnh tiêu đề caption (search/filter/buttons — sticky cùng caption). */
+	captionTools?: Snippet;
 	/** Số row mỗi trang (default 10). */
 	pageSize?: number;
 	/** Cho phép sort (click header). */
@@ -153,6 +155,12 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	indexOffset?: number;
 	/** Checkbox cột đầu chỉ hiện khi hover row (hoặc row đã chọn). */
 	checkboxHoverOnly?: boolean;
+	/**
+	 * Gộp checkbox VÀO ô STT (không có cột checkbox riêng): td STT mặc định hiện
+	 * số, hover/focus td → đổi thành checkbox row; th '#' hover → checkbox
+	 * select-all. Yêu cầu `selectable` + `showIndex` đồng thời bật.
+	 */
+	indexCheckboxes?: boolean;
 	/** Click vùng nào của row cũng toggle chọn khi đã chọn ≥1 row (D6). */
 	checkOnRowClick?: boolean;
 	/** Ẩn toolbar selection tools built-in (copy/delete/clear local) — trang tự làm bulk bar. */
@@ -370,12 +378,16 @@ export interface DataTableConfigs extends BasicConfigs {
 	stickyHead: boolean;
 	/** Mô tả phụ caption (i18n đã resolve — ''). */
 	captionDescriptionText: string;
+	/** Snippet tools cạnh caption (search/filter/quick actions). */
+	captionTools?: Snippet;
 	/** Cột STT đầu bảng bật? */
 	showIndex: boolean;
 	/** Offset STT (indexOffset). */
 	indexOffset: number;
 	/** Checkbox ẩn đến khi hover row? */
 	checkboxHoverOnly: boolean;
+	/** Checkbox gộp vào ô STT (thay cột checkbox riêng)? */
+	indexCheckboxes: boolean;
 	/** Click row toggle chọn khi đã chọn ≥1? */
 	checkOnRowClick: boolean;
 	/** Toolbar selection tools built-in bật? */

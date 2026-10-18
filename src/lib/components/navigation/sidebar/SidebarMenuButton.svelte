@@ -232,8 +232,12 @@
 
 		&.active {
 			background: var(--content2, hsl(240 4.8% 96%));
+			// Active đánh dấu cả LABEL + viền trái (yêu cầu 4a — trước chỉ icon).
+			// box-shadow inset: không đổi layout/padding như border-left thật.
+			box-shadow: inset 3px 0 0 0 var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
 
-			.leading {
+			.leading,
+			.label {
 				color: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
 			}
 		}

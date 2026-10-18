@@ -47,7 +47,7 @@
 {#if ctx}
 	<thead class="datatable-head">
 		<tr>
-			{#if configs?.selectable}
+			{#if configs?.selectable && !configs?.indexCheckboxes}
 				<th class="datatable-th datatable-th--check" scope="col">
 					<Checkbox
 						checked={ctx.allPageSelected}
@@ -61,7 +61,24 @@
 				</th>
 			{/if}
 			{#if configs?.showIndex}
-				<th class="datatable-th datatable-th--index" scope="col">#</th>
+				<th class="datatable-th datatable-th--index" scope="col">
+					{#if configs?.indexCheckboxes}
+						<span class="datatable-index-num">#</span>
+						<span class="datatable-index-check">
+							<Checkbox
+								checked={ctx.allPageSelected}
+								indeterminate={indeterminate}
+								size={configs.size}
+								color="primary"
+								aria-label={configs.selectAllText}
+								class="datatable-selectall-checkbox"
+								events={selectAllEvents()}
+							/>
+						</span>
+					{:else}
+						#
+					{/if}
+				</th>
 			{/if}
 			{#each ctx.columns as col, ci (col.id)}
 				{#if configs?.sortable && col.sortable !== false}
@@ -181,6 +198,68 @@
 	.datatable-th--index {
 		width: 3rem;
 		text-align: center;
+	}
+
+	// ── indexCheckboxes: th '#' đổi thành checkbox select-all khi hover ──
+	// Cùng pattern td--index (Body): 2 lớp num/check chồng nhau.
+	.datatable-th--index {
+		position: relative;
+	}
+
+	.datatable-index-num,
+	.datatable-index-check {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		pointer-events: none;
+	}
+
+	.datatable-index-num {
+		opacity: 1;
+		transition: opacity 120ms ease;
+	}
+
+	.datatable-index-check {
+		opacity: 0;
+		transition: opacity 120ms ease;
+
+		:global(.datatable-selectall-checkbox) {
+			pointer-events: auto;
+		}
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		:global(.datatable-root.datatable-index-check)
+			.datatable-th--index:hover
+			.datatable-index-num,
+		:global(.datatable-root.datatable-index-check)
+			.datatable-th--index:focus-within
+			.datatable-index-num {
+			opacity: 0;
+		}
+
+		:global(.datatable-root.datatable-index-check)
+			.datatable-th--index:hover
+			.datatable-index-check,
+		:global(.datatable-root.datatable-index-check)
+			.datatable-th--index:focus-within
+			.datatable-index-check {
+			opacity: 1;
+		}
+	}
+
+	// Có row trang nào được chọn → select-all luôn hiện (mirror indeterminate).
+	:global(.datatable-root.datatable-index-check.has-selection)
+		.datatable-th--index
+		.datatable-index-num {
+		opacity: 0;
+	}
+
+	:global(.datatable-root.datatable-index-check.has-selection)
+		.datatable-th--index
+		.datatable-index-check {
+		opacity: 1;
 	}
 
 	// B6.2: th cột actions — căn phải khớp td, không kẹp width.
