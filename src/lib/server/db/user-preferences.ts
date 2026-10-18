@@ -19,6 +19,10 @@ export interface DataTablePagePrefs {
 	stickyColumns?: string[];
 	/** colId -> aggregation type */
 	aggregations?: Record<string, string>;
+	/** sort server-side đã persist (D5): field + hướng */
+	sort?: { field?: string; direction?: 'asc' | 'desc' };
+	/** M3: template field hiển thị card mobile — mảng id cột */
+	cardFields?: string[];
 	pageSize?: number;
 }
 
@@ -29,6 +33,8 @@ export interface UserPreferences {
 	language?: 'vi' | 'en';
 	/** key = route path, vd '/admin/brands' */
 	datatable?: Record<string, DataTablePagePrefs>;
+	/** C7: từ khóa tìm kiếm đã dùng — key = route path, mới nhất đầu, cross-device */
+	searchKeywords?: Record<string, string[]>;
 	updatedAt?: string;
 }
 
@@ -98,9 +104,48 @@ function sanitizePatch(patch: UserPreferencesPatch | undefined): UserPreferences
 			if (typeof v.pageSize === 'number' && Number.isFinite(v.pageSize) && v.pageSize > 0) {
 				page.pageSize = Math.round(v.pageSize);
 			}
+			// D5: sort { field, direction } — whitelist kiểu, field ≤32 chars.
+			if (v.sort && typeof v.sort === 'object') {
+				const s: { field?: string; direction?: 'asc' | 'desc' } = {};
+				if (typeof v.sort.field === 'string' && v.sort.field.length > 0 && v.sort.field.length <= 32) {
+					s.field = v.sort.field;
+				}
+				if (v.sort.direction === 'asc' || v.sort.direction === 'desc') {
+					s.direction = v.sort.direction;
+				}
+				if (s.field || s.direction) page.sort = s;
+			}
+			// M3: cardFields — tối đa 10 id, mỗi id ≤32 chars.
+			if (Array.isArray(v.cardFields)) {
+				const cf = v.cardFields
+					.filter((c): c is string => typeof c === 'string' && c.length > 0 && c.length <= 32)
+					.slice(0, 10);
+				if (cf.length > 0) page.cardFields = cf;
+			}
 			datatable[key] = page;
 		}
 		clean.datatable = datatable;
+	}
+	// C7: searchKeywords — tối đa 10 route, mỗi route ≤20 từ khóa ≤100 chars,
+	// dedupe, mới nhất đầu.
+	if (patch.searchKeywords && typeof patch.searchKeywords === 'object') {
+		const entries = Object.entries(patch.searchKeywords as Record<string, unknown>).slice(0, 10);
+		const keywords: Record<string, string[]> = {};
+		for (const [key, value] of entries) {
+			if (typeof key !== 'string' || key.length === 0 || key.length > 100) continue;
+			if (!Array.isArray(value)) continue;
+			const seen = new Set<string>();
+			const list: string[] = [];
+			for (const kw of value) {
+				if (typeof kw !== 'string' || kw.length === 0 || kw.length > 100) continue;
+				if (seen.has(kw)) continue;
+				seen.add(kw);
+				list.push(kw);
+				if (list.length >= 20) break;
+			}
+			if (list.length > 0) keywords[key] = list;
+		}
+		clean.searchKeywords = keywords;
 	}
 	return clean;
 }
@@ -113,6 +158,7 @@ function mergePrefs(
 		theme: current?.theme,
 		language: current?.language,
 		datatable: { ...(current?.datatable ?? {}) },
+		searchKeywords: { ...(current?.searchKeywords ?? {}) },
 		updatedAt: new Date().toISOString()
 	};
 	if (patch.theme) merged.theme = patch.theme;
@@ -124,6 +170,22 @@ function mergePrefs(
 				...(merged.datatable[key] ?? {}),
 				...pagePrefs
 			};
+		}
+	}
+	if (patch.searchKeywords && merged.searchKeywords) {
+		// C7: merge per-route — từ khóa mới ghép TRƯỚC từ khóa cũ (mới nhất đầu),
+		// dedupe, giới hạn 20/route.
+		for (const [key, list] of Object.entries(patch.searchKeywords)) {
+			const old = merged.searchKeywords[key] ?? [];
+			const seen = new Set<string>();
+			const mergedList: string[] = [];
+			for (const kw of [...list, ...old]) {
+				if (seen.has(kw)) continue;
+				seen.add(kw);
+				mergedList.push(kw);
+				if (mergedList.length >= 20) break;
+			}
+			merged.searchKeywords[key] = mergedList;
 		}
 	}
 	return merged;
@@ -140,6 +202,7 @@ export class UserPreferencesService {
 				theme: raw.theme,
 				language: raw.language,
 				datatable: raw.datatable,
+				searchKeywords: raw.searchKeywords,
 				updatedAt: raw.updatedAt
 			};
 		} catch {

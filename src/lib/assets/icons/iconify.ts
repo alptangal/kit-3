@@ -17,5 +17,6 @@ export const iconify = {
 	'search-rounded': 'material-symbols-light:search-rounded',
 	'info-i-rounded': 'material-symbols-light:info-i-rounded',
 	'more-horiz-rounded': 'material-symbols-light:more-horiz-rounded',
-	'tune-rounded': 'material-symbols-light:tune-rounded'
+	'tune-rounded': 'material-symbols-light:tune-rounded',
+	'add-rounded': 'material-symbols-light:add-rounded'
 };

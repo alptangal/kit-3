@@ -16,6 +16,13 @@ let prefsQueue: Record<string, unknown> = {};
 export function saveUserPrefs(patch: Record<string, unknown>): void {
 	if (typeof window === 'undefined') return;
 	prefsQueue = { ...prefsQueue, ...patch };
+	// searchKeywords: merge per-route (2 route lưu liên tiếp không ghi đè nhau).
+	if (patch.searchKeywords && prefsQueue.searchKeywords) {
+		prefsQueue.searchKeywords = {
+			...(prefsQueue.searchKeywords === patch.searchKeywords ? {} : (prefsQueue.searchKeywords as Record<string, string[]>)),
+			...(patch.searchKeywords as Record<string, string[]>)
+		};
+	}
 	if (prefsTimer) clearTimeout(prefsTimer);
 	prefsTimer = setTimeout(flushUserPrefs, PENDING_DELAY);
 }

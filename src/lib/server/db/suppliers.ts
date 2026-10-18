@@ -53,6 +53,10 @@ const supplierAdminMessages = {
     vi: 'Trạng thái không hợp lệ',
     en: 'Invalid status'
   } as TranslateContent,
+  invalidInput: {
+    vi: 'Dữ liệu không hợp lệ',
+    en: 'Invalid data'
+  } as TranslateContent,
   invalidPOItems: {
     vi: 'Danh sách mục PO không hợp lệ',
     en: 'Invalid PO items'
@@ -1129,6 +1133,8 @@ export class SupplierService {
       supplierId?: string;
       categoryId?: string;
       source?: string;
+      sortField?: string;
+      sortDirection?: string;
       status?: string;
       dateFrom?: string;
       dateTo?: string;
@@ -1142,6 +1148,19 @@ export class SupplierService {
     const page = Math.max(1, options.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 20));
     const offset = (page - 1) * pageSize;
+
+    // D5: sort server-side — whitelist field (ORDER BY không nhận $n trong N1QL
+    // layer này), fallback createdAt DESC. Field lạ → fallback âm thầm về mặc định.
+    const PO_SORT_FIELDS: Record<string, string> = {
+      poCode: 'poCode',
+      status: 'status',
+      source: 'source',
+      totalCost: 'totalCost',
+      createdAt: 'createdAt',
+      receivedAt: 'receivedAt'
+    };
+    const sortField = (options.sortField && PO_SORT_FIELDS[options.sortField]) || 'createdAt';
+    const sortDirection = options.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
     const conditions: string[] = [];
     const args: (string | number)[] = [];
@@ -1209,7 +1228,7 @@ export class SupplierService {
         readonly: true
       }),
       cbPurchaseOrders.document.query({
-        statement: `SELECT ${selectClause} FROM ${purchaseOrdersKeyspace} ${whereClause} ORDER BY createdAt DESC LIMIT ${pageSize} OFFSET ${offset}`,
+        statement: `SELECT ${selectClause} FROM ${purchaseOrdersKeyspace} ${whereClause} ORDER BY ${sortField} ${sortDirection} LIMIT ${pageSize} OFFSET ${offset}`,
         args,
         readonly: true
       })
@@ -1223,6 +1242,106 @@ export class SupplierService {
     const items = (dataRes.data?.results ?? []).map(sanitizePOForAdmin);
 
     return { success: true, items, total, page, pageSize };
+  }
+
+  // ========== XÓA / CẬP NHẬT HÀNG LOẠT (C9) ==========
+
+  /**
+   * Bulk delete/update-status nhiều PO theo pattern expiry (batch IN $1, không
+   * loop N+1). Kiểm tra TỪNG PO: tồn tại + branch scope (own_branch → chỉ PO
+   * cùng branch). Delete CHỈ cho PO draft/cancelled — PO đã nhận hàng gắn lot/
+   * công nợ, xóa vỡ dữ liệu → trả failed với reason.
+   */
+  static async bulkPurchaseOrders(
+    actor: ActorContext,
+    input: {
+      ids: string[];
+      action: 'delete' | 'status';
+      status?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    messages?: TranslateContent;
+    deleted?: string[];
+    updated?: string[];
+    failed?: Array<{ id: string; reason: string }>;
+  }> {
+    const permError = await this.requirePermission(actor, 'suppliers:manage');
+    if (permError) return permError;
+
+    const ids = (input.ids ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, 100);
+    if (ids.length === 0) return { success: false, messages: supplierAdminMessages.invalidInput };
+
+    const scope = await PermissionChecker.getScope(actor.roleName, 'suppliers:manage');
+
+    // Batch 1 query lấy docs — tránh N+1.
+    const getRes = await cbPurchaseOrders.document.query({
+      statement: `SELECT META().id AS _id, branchId, status FROM ${purchaseOrdersKeyspace} WHERE META().id IN $1`,
+      args: [ids],
+      readonly: true
+    });
+    if (!getRes.ok) return { success: false, messages: supplierAdminMessages.queryFailed };
+
+    const found = new Map<string, { branchId?: string; status?: string }>();
+    for (const row of (getRes.data?.results ?? []) as Array<{ _id: string; branchId?: string; status?: string }>) {
+      found.set(row._id, { branchId: row.branchId, status: row.status });
+    }
+
+    const failed: Array<{ id: string; reason: string }> = [];
+    const deletable: string[] = [];
+    const updatable: string[] = [];
+    const now = new Date().toISOString();
+
+    for (const id of ids) {
+      const po = found.get(id);
+      if (!po) {
+        failed.push({ id, reason: 'not_found' });
+        continue;
+      }
+      if (scope === 'own_branch' && actor.branchId && po.branchId !== actor.branchId) {
+        failed.push({ id, reason: 'forbidden_branch' });
+        continue;
+      }
+      if (input.action === 'delete') {
+        // Chỉ draft/cancelled được xóa.
+        if (po.status !== 'draft' && po.status !== 'cancelled') {
+          failed.push({ id, reason: 'not_deletable' });
+          continue;
+        }
+        deletable.push(id);
+      } else {
+        if (!VALID_PO_STATUSES.includes((input.status ?? '') as POStatus)) {
+          failed.push({ id, reason: 'invalid_status' });
+          continue;
+        }
+        updatable.push(id);
+      }
+    }
+
+    const deleted: string[] = [];
+    const updated: string[] = [];
+
+    if (input.action === 'delete' && deletable.length > 0) {
+      const delRes = await cbPurchaseOrders.document.query({
+        statement: `DELETE FROM ${purchaseOrdersKeyspace} WHERE META().id IN $1`,
+        args: [deletable],
+        readonly: false
+      });
+      if (!delRes.ok) return { success: false, messages: supplierAdminMessages.queryFailed };
+      deleted.push(...deletable);
+    }
+
+    if (input.action === 'status' && updatable.length > 0) {
+      const updRes = await cbPurchaseOrders.document.query({
+        statement: `UPDATE ${purchaseOrdersKeyspace} SET status = $2, updatedAt = $3 WHERE META().id IN $1`,
+        args: [updatable, input.status, now],
+        readonly: false
+      });
+      if (!updRes.ok) return { success: false, messages: supplierAdminMessages.queryFailed };
+      updated.push(...updatable);
+    }
+
+    return { success: true, deleted, updated, failed };
   }
 
   // ========== TRẢ HÀNG NCC ==========

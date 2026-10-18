@@ -30,7 +30,9 @@ export const userPrefs = $state({
 	loaded: false,
 	theme: undefined as AppTheme | undefined,
 	language: undefined as 'vi' | 'en' | undefined,
-	datatable: {} as Record<string, DataTablePagePrefs>
+	datatable: {} as Record<string, DataTablePagePrefs>,
+	/** C7: từ khóa tìm kiếm per-route (mới nhất đầu) — hydrate từ layout server */
+	searchKeywords: {} as Record<string, string[]>
 });
 
 /** Flag chống vòng lặp: apply bootstrap → setter → persist (không mong muốn). */
@@ -51,6 +53,14 @@ export function applyUserPrefsFromLayout(data: LayoutData | undefined): void {
 
 	const prefs = data.prefs ?? {};
 	const system = data.system ?? { theme: 'system', density: 'comfortable', defaultLang: 'en' };
+
+	// ── C7: SEARCH KEYWORDS ──
+	// Hydrate từ DB (cross-device) — merge với giá trị trong session (client có thể
+	// đã lưu trước khi layout reload).
+	userPrefs.searchKeywords = {
+		...userPrefs.searchKeywords,
+		...(prefs.searchKeywords ?? {})
+	};
 
 	// ── THEME ──
 	// localStorage cũ (chưa có DB bao giờ) → migrate 1 lần vào DB rồi tiếp tục dùng
@@ -110,4 +120,22 @@ export function setLanguage(lang: 'vi' | 'en'): void {
 /** Ghi datatable prefs 1 trang (read-merge theo key route trong server). */
 export function saveDataTablePrefs(key: string, partial: DataTablePagePrefs): void {
 	saveUserPrefs({ datatable: { [key]: partial } });
+}
+
+/**
+ * C7: lưu từ khóa tìm kiếm 1 route — mới nhất đầu, dedupe, tối đa 20.
+ * Ghi DB qua saveUserPrefs (merge per-route phía server) + cập nhật store local.
+ */
+export function recordSearchKeyword(routeKey: string, keyword: string): void {
+	const kw = keyword.trim();
+	if (!kw) return;
+	const old = userPrefs.searchKeywords[routeKey] ?? [];
+	const next = [kw, ...old.filter((k) => k !== kw)].slice(0, 20);
+	userPrefs.searchKeywords[routeKey] = next;
+	saveUserPrefs({ searchKeywords: { [routeKey]: next } });
+}
+
+/** Đọc danh sách từ khóa đã lưu 1 route (mới nhất đầu). */
+export function getSearchKeywords(routeKey: string): string[] {
+	return userPrefs.searchKeywords[routeKey] ?? [];
 }

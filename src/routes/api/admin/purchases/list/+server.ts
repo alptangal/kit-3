@@ -20,6 +20,8 @@ export const POST: RequestHandler = async (event) => {
 			categoryId?: string;
 			source?: string;
 			status?: string;
+			sortField?: string;
+			sortDirection?: string;
 			dateFrom?: string;
 			dateTo?: string;
 			page?: number;
@@ -52,6 +54,8 @@ export const POST: RequestHandler = async (event) => {
 			categoryId: read.data.categoryId,
 			source: read.data.source,
 			status: read.data.status,
+			sortField: read.data.sortField,
+			sortDirection: read.data.sortDirection,
 			dateFrom: read.data.dateFrom,
 			dateTo: read.data.dateTo,
 			page: read.data.page,
