@@ -26,6 +26,8 @@
 	let insetHeaderEl: HTMLDivElement | undefined = $state(undefined);
 	let insetEl: HTMLDivElement | undefined = $state(undefined);
 	let isScrolled: boolean = $state(false);
+	// Yêu cầu 1: ẩn inset-header khi cuộn xuống sâu (mobile only qua CSS).
+	let headerHidden: boolean = $state(false);
 
 	$effect(() => {
 		if (typeof document === 'undefined' || !insetEl) return;
@@ -78,6 +80,9 @@
 	// scroll container là div.w-full.h-full của Container root (window không cuộn).
 	// Ngưỡng 80px: user cuộn qua phần đầu trang (header + filters) → header
 	// trang con thu gọn; cuộn về gần top → trả nguyên trạng thái.
+	// Yêu cầu 1 (mobile): cuộn XUỐNG sâu (> 240px) → ẩn hẳn inset-header
+	// (trượt lên bằng margin-top âm, KHÔNG display:none — ResizeObserver vẫn
+	// đo được --admin-header-h); cuộn LÊN hoặc gần top → hiện lại.
 	$effect(() => {
 		if (typeof document === 'undefined') return;
 		const findScrollEl = (): HTMLElement | undefined => {
@@ -89,11 +94,32 @@
 			return document.scrollingElement as HTMLElement | undefined;
 		};
 		let raf = 0;
+		let lastTop = 0;
 		const onScroll = () => {
 			if (raf) return;
 			raf = requestAnimationFrame(() => {
 				raf = 0;
-				isScrolled = (scrollEl?.scrollTop ?? window.scrollY) > 80;
+				if (!scrollEl) return;
+				const top = scrollEl.scrollTop;
+				isScrolled = top > 80;
+				// Hướng cuộn (delta > 0 = xuống). Sai số 4px chống jitter khi
+				// dừng (iOS momentum/firefox smooth sẽ nhấp nhô vài px).
+				const delta = top - lastTop;
+				// Bỏ qua delta âm do trình duyệt CLAMP scrollTop khi nội dung
+				// co lại (ẩn header đổi padding → docH giảm ~14px, đang ở đáy
+				// trang → scrollTop bị kéo lùi vài px ≈ "bounce"). Đây không
+				// phải cuộn lên thật — nếu không lọc sẽ nháy ẩn→hiện ngay.
+				const maxTop = scrollEl.scrollHeight - scrollEl.clientHeight;
+				const clampBounce =
+					delta < 0 && lastTop >= maxTop - 2 && top >= maxTop - 16;
+				if (top < 80) {
+					headerHidden = false;
+				} else if (delta > 4 && top > 240) {
+					headerHidden = true;
+				} else if (delta < -4 && !clampBounce) {
+					headerHidden = false;
+				}
+				lastTop = top;
 			});
 		};
 		let scrollEl = findScrollEl();
@@ -202,8 +228,7 @@
 		</Sidebar.Header>
 
 		<Sidebar.Content>
-			<Sidebar.Group id="overview">
-				<Sidebar.GroupLabel>{lang === 'vi' ? 'Tổng quan' : 'Overview'}</Sidebar.GroupLabel>
+			<Sidebar.MenuGroup id="overview" label={lang === 'vi' ? 'Tổng quan' : 'Overview'} icon="lucide:layout-dashboard">
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
@@ -251,10 +276,9 @@
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
-			</Sidebar.Group>
+			</Sidebar.MenuGroup>
 
-			<Sidebar.Group id="catalog">
-				<Sidebar.GroupLabel>{lang === 'vi' ? 'Danh mục' : 'Catalog'}</Sidebar.GroupLabel>
+			<Sidebar.MenuGroup id="catalog" label={lang === 'vi' ? 'Danh mục' : 'Catalog'} icon="lucide:folder-tree">
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
@@ -293,10 +317,9 @@
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
-			</Sidebar.Group>
+			</Sidebar.MenuGroup>
 
-			<Sidebar.Group id="sales">
-				<Sidebar.GroupLabel>{lang === 'vi' ? 'Bán hàng' : 'Sales'}</Sidebar.GroupLabel>
+			<Sidebar.MenuGroup id="sales" label={lang === 'vi' ? 'Bán hàng' : 'Sales'} icon="lucide:shopping-cart">
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
@@ -415,10 +438,9 @@
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
-			</Sidebar.Group>
+			</Sidebar.MenuGroup>
 
-			<Sidebar.Group id="operations">
-				<Sidebar.GroupLabel>{lang === 'vi' ? 'Vận hành' : 'Operations'}</Sidebar.GroupLabel>
+			<Sidebar.MenuGroup id="operations" label={lang === 'vi' ? 'Vận hành' : 'Operations'} icon="lucide:receipt">
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
@@ -439,10 +461,9 @@
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
-			</Sidebar.Group>
+			</Sidebar.MenuGroup>
 
-			<Sidebar.Group id="system">
-				<Sidebar.GroupLabel>{lang === 'vi' ? 'Hệ thống' : 'System'}</Sidebar.GroupLabel>
+			<Sidebar.MenuGroup id="system" label={lang === 'vi' ? 'Hệ thống' : 'System'} icon="lucide:shield-user">
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
@@ -499,10 +520,9 @@
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
-			</Sidebar.Group>
+			</Sidebar.MenuGroup>
 
-			<Sidebar.Group id="content">
-				<Sidebar.GroupLabel>{lang === 'vi' ? 'Nội dung' : 'Content'}</Sidebar.GroupLabel>
+			<Sidebar.MenuGroup id="content" label={lang === 'vi' ? 'Nội dung' : 'Content'} icon="lucide:newspaper">
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
@@ -523,10 +543,9 @@
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
-			</Sidebar.Group>
+			</Sidebar.MenuGroup>
 
-			<Sidebar.Group id="marketing">
-				<Sidebar.GroupLabel>{lang === 'vi' ? 'Marketing' : 'Marketing'}</Sidebar.GroupLabel>
+			<Sidebar.MenuGroup id="marketing" label={lang === 'vi' ? 'Marketing' : 'Marketing'} icon="lucide:megaphone">
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
@@ -556,7 +575,7 @@
 						/>
 					</Sidebar.MenuItem>
 				</Sidebar.Menu>
-			</Sidebar.Group>
+			</Sidebar.MenuGroup>
 		</Sidebar.Content>
 
 		<Sidebar.Footer>
@@ -584,7 +603,12 @@
 	</Sidebar>
 
 	<Sidebar.Inset>
-		<div class="admin-inset" class:is-scrolled={isScrolled} bind:this={insetEl}>
+		<div
+			class="admin-inset"
+			class:is-scrolled={isScrolled}
+			class:admin-header-hidden={headerHidden}
+			bind:this={insetEl}
+		>
 			<div
 				class="admin-inset-header"
 				class:is-scrolled={isScrolled}
@@ -674,6 +698,19 @@
 
 	/* Mobile: hiện nút mở sidebar trong inset header. Desktop ẩn (trigger-row
 	   trong sidebar header đã có — B3 brand + trigger cùng row). */
+	/* ── Yêu cầu 10: brand-row chiếm toàn bộ width còn lại của sidebar header
+	   sau trigger-row (expanded 1-row: TeamSwitcher giãn full, trigger sát mép
+	   phải — như demo /ui/sidebar). Collapsed/peek: _styles.scss đã có rule
+	   riêng (width 100% / auto + min-height) đè qua specificity cao hơn. */
+	:global(.sidebar-header .brand-row) {
+		flex: 1;
+		min-width: 0;
+	}
+
+	:global(.sidebar-header .trigger-row) {
+		flex: none;
+	}
+
 	.admin-mobile-trigger {
 		display: none;
 
@@ -796,6 +833,43 @@
 			padding-block: 0.25rem;
 			margin-block: -1rem;
 		}
+	}
+
+	/* ── Yêu cầu 1 (mobile): ẩn inset-header khi cuộn XUỐNG sâu ──
+	   Dùng transform (KHÔNG margin-top âm, KHÔNG display:none): transform
+	   không đổi layout/scrollHeight → không gây scroll-anchoring loop (bẫy
+	   thực tế: margin âm làm header co layout → browser clamp/anchor scrollTop
+	   → sinh scroll event ngược → nhấp nháy ẩn/hiện vô hạn). Element vẫn trong
+	   flow → ResizeObserver vẫn đo --admin-header-h; các sticky offset khác
+	   không nhảy. Header trượt lên mượt qua transition transform. Khi ẩn:
+	   filters sticky top về 0 (trượt lên chiếm chỗ header). Desktop không
+	   áp — sticky stack desktop đã tối ưu. */
+	@media (max-width: 767px) {
+		/* transition đặt trên base (không chỉ .admin-header-hidden) để cả
+		   lúc HIỆN lại (cuộn lên) cũng mượt. */
+		.admin-inset .admin-inset-header {
+			transition: transform 0.25s ease;
+		}
+
+		.admin-inset.admin-header-hidden .admin-inset-header {
+			transform: translateY(calc(var(--admin-header-h, 0px) * -1));
+		}
+
+		.admin-inset.admin-header-hidden :global(.admin-filters) {
+			top: 0;
+		}
+
+		/* ── Yêu cầu 7 (mobile): khi cuộn sâu, bỏ đệm dọc → pagination sticky
+		   sát đáy viewport, tối đa dòng data hiển thị. Chỉ khi header ẩn
+		   (đang ở vùng cuộn sâu); cuộn lên → trả đệm. LƯU Ý: KHÔNG đổi padding
+		   của .admin-page khi ẩn — padding thay đổi giữa chừng cuộn cũng gây
+		   scroll-anchor loop như margin âm (đã thử, bỏ). Padding-top body
+		   (--admin-body-pad-top) đủ để nhường chỗ. */
+		.admin-inset.admin-header-hidden .admin-inset-body {
+			--admin-body-pad-top: 0;
+		}
+		/* Pagination sticky bottom đã sát đáy sẵn — không cần đụng padding
+		   .admin-page (tránh anchor loop). */
 	}
 
 	.admin-inset-body {

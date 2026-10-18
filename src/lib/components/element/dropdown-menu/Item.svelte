@@ -21,6 +21,9 @@
 
 	const ctx = getDropdownMenuContext();
 
+	// Tách class khỏi spread (bẫy giống Trigger: {...props} đè class={styleDerived}).
+	const { class: classProp, ...restProps } = props;
+
 	const styleDerived = $derived.by(() => {
 		const defaultStyles: (string | undefined)[] = [
 			'dropdown-menu-item',
@@ -28,7 +31,7 @@
 			inset ? 'inset' : undefined,
 			variant === 'destructive' ? 'destructive' : undefined
 		];
-		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
+		return styleSynced({ defaultStyles, propStyles: classProp }, props.overwriteDefaultStyles);
 	});
 
 	function activate(e: MouseEvent) {
@@ -48,7 +51,7 @@
 	aria-disabled={disabled || undefined}
 	tabindex={disabled ? -1 : 0}
 	onclick={(e) => activate(e)}
-	{...props}
+	{...restProps}
 >
 	{#if leading}
 		<span class="leading" aria-hidden="true">{@render leading()}</span>

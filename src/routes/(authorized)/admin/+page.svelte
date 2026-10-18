@@ -831,18 +831,9 @@
 		flex-wrap: wrap;
 	}
 
-	/* B5: users page không có .admin-filters — header actions đóng vai trò filter
-	   (checkbox show deleted). Sticky dưới admin header (mobile). */
-	@media (max-width: 767px) {
-		.admin-header-actions {
-			position: sticky;
-			top: var(--admin-header-h, 0px);
-			z-index: 400;
-			background: var(--background, #fff);
-			padding-block: 0.25rem;
-			margin-block: -1rem;
-		}
-	}
+	/* Trước đây sticky riêng mobile (top = header-h, z-400) — che caption
+	   sticky của DataTable khi cuộn (caption top = header-h). Giờ bar nằm
+	   trong flow header (caption desktop đã dính dưới filters, đồng bộ). */
 
 	.admin-state {
 		display: flex;
@@ -879,14 +870,12 @@
 		@media (max-width: 767px) {
 			border: 0;
 			border-radius: 0;
-		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
-		   theo wrap (khong cuon) -> thead truot mat. Desktop co stickyHead:
-		   wrap phai thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
-		@media (min-width: 768px) {
-			&:has(:global(.datatable-sticky-head)) {
-				overflow-x: visible;
-			}
 		}
+		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
+		   theo wrap (khong cuon) -> thead truot mat. Co stickyHead: wrap phai
+		   thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
+		&:has(:global(.datatable-sticky-head)) {
+			overflow-x: visible;
 		}
 	}
 

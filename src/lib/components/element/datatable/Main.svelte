@@ -1050,6 +1050,39 @@
 		return () => observer.disconnect();
 	});
 
+	// ── STICKY #4: đo caption height động → CSS var --datatable-caption-h ──
+	// offset th sticky = caption top + caption height THỰC (caption có thể wrap
+	// 2 dòng ~44px; hard-code 1.75rem làm th chồng caption). bind:this + đọc
+	// clientHeight trong $effect; ghi var lên caption element (th trong Head
+	// hash riêng không set được từ Main — var inherit qua table). Fallback CSS
+	// 1.75rem khi chưa đo.
+	let captionEl: HTMLTableCaptionElement | undefined = $state(undefined);
+	let captionH = $state(0);
+	// Var đặt trên TABLE (cha chung của caption + thead) — đặt trên caption thì
+	// th (sibling trong thead) không inherit ngược được, th rơi về fallback
+	// 1.75rem → th đè caption khi caption cao hơn fallback.
+	const setCaptionHVar = (h: number): void => {
+		const table = captionEl?.parentElement;
+		if (table) table.style.setProperty('--datatable-caption-h', `${h || 44}px`);
+	};
+	$effect(() => {
+		if (!stickyHead || !captionEl) return;
+		captionH = captionEl.clientHeight;
+		setCaptionHVar(captionH);
+	});
+	// resize/font đổi → đo lại (wrap text phụ thuộc chiều rộng → caption
+	// height đổi theo).
+	$effect(() => {
+		if (!stickyHead || !captionEl || typeof ResizeObserver === 'undefined') return;
+		const el = captionEl;
+		const ro = new ResizeObserver(() => {
+			captionH = el.clientHeight;
+			setCaptionHVar(captionH);
+		});
+		ro.observe(el);
+		return () => ro.disconnect();
+	});
+
 	// ── LABELS (i18n, template {n}/{page}/{index} thay ở nơi dùng) ──
 	const captionText = $derived(getText(caption, { en: 'Data table', vi: 'Bảng dữ liệu' }));
 	const searchPlaceholderText = $derived(getText(searchPlaceholder, { en: 'Search…', vi: 'Tìm kiếm…' }));
@@ -1631,7 +1664,7 @@
 	{:else}
 	<div class="datatable-table-wrap">
 		<table class="datatable" aria-label={ariaLabel ?? undefined}>
-			<caption class="datatable-caption">{configs.captionText}</caption>
+			<caption class="datatable-caption" bind:this={captionEl}>{configs.captionText}</caption>
 			<Head />
 			<Body />
 		</table>
@@ -1848,15 +1881,38 @@
 
 			:global(.datatable-th) {
 				position: sticky;
-				/* Ngay dưới caption sticky (caption mobile cao ≈ 1.75rem). Trước
-				   đây cộng body-pad-top → th dính lệch 0.5rem dưới filters,
-				   lộ td xuyên khe. */
+				/* Ngay dưới caption sticky: caption cao THỰC đo động qua
+				   --datatable-caption-h (đo ở Main script), fallback 1.75rem
+				   khi chưa đo. Trước đây hard-code 1.75rem → caption wrap
+				   2 dòng (~44px) làm th chồng caption. */
 				top: calc(
-					var(--admin-header-h, 0px) + var(--admin-filters-h, 0px) + 1.75rem
+					var(--admin-header-h, 0px) + var(--admin-filters-h, 0px) +
+						var(--datatable-caption-h, 1.75rem)
 				);
 				z-index: 2;
 				background: var(--content2, hsl(240 4.76% 95.88%));
 				box-shadow: 0 1px 0 var(--content3, hsl(240 5.88% 90%));
+			}
+		}
+
+		/* Yêu cầu 1: header admin ẨN khi cuộn sâu (class .admin-header-hidden
+		   trên .admin-inset) → sticky offset phải trừ luôn header-h, không
+		   caption/th treo lơ lửng lộ khe data phía trên (bug thực tế: header
+		   đã trượt đi nhưng caption vẫn top = header-h, hở ~47px). Chỉ ≤767 —
+		   ẩn header chỉ áp mobile (tablet 768–1024 class vẫn đặt nhưng
+		   không transform, offset phải giữ nguyên). LƯU Ý: .admin-header-hidden
+		   là tổ ANCESTOR (trên .admin-inset, ngoài component) → phải
+		   :global() bọc ngoài, nếu không Svelte scope thành
+		   .admin-header-hidden.s-hash (cùng phần tử) → không bao giờ khớp. */
+		@media (max-width: 767px) {
+			:global(.admin-header-hidden) .datatable-root.datatable-sticky-head .datatable-caption {
+				top: calc(var(--admin-filters-h, 0px));
+			}
+
+			:global(.admin-header-hidden) .datatable-root.datatable-sticky-head :global(.datatable-th) {
+				top: calc(
+					var(--admin-filters-h, 0px) + var(--datatable-caption-h, 1.75rem)
+				);
 			}
 		}
 	}
@@ -1876,14 +1932,26 @@
 
 			.datatable-caption {
 				position: sticky;
-				top: var(--admin-header-h, 0px);
+				/* Fix #4: trước đây top = header-h → khi cuộn, caption bị
+				   page-header (z-400) + filters (z-390) che hoàn toàn, chỉ th
+				   lộ → cảm giác "thead không ở đầu table". Giờ caption dính
+				   NGAY DƯỚI filters (cùng stack với th) — header nằm đầu table. */
+				top: calc(
+					var(--admin-header-h, 0px) + var(--admin-page-header-h, 0px) +
+						var(--admin-filters-h, 0px)
+				);
 				z-index: 3;
 				background: var(--content1, #fff);
 			}
 
 			:global(.datatable-th) {
 				position: sticky;
-				top: calc(var(--admin-header-h, 0px) + var(--admin-page-header-h, 0px) + var(--admin-filters-h, 0px));
+				/* th = caption top + caption height THỰC (đo động) — đồng bộ
+				   cả 2 media, hết lệch khi caption wrap 2 dòng. */
+				top: calc(
+					var(--admin-header-h, 0px) + var(--admin-page-header-h, 0px) +
+						var(--admin-filters-h, 0px) + var(--datatable-caption-h, 1.75rem)
+				);
 				z-index: 2;
 				background: var(--content2, hsl(240 4.76% 95.88%));
 				box-shadow: 0 1px 0 var(--content3, hsl(240 5.88% 90%));

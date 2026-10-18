@@ -1124,6 +1124,7 @@ export class SupplierService {
   static async listPurchases(
     actor: ActorContext,
     options: {
+      search?: string;
       branchId?: string;
       supplierId?: string;
       categoryId?: string;
@@ -1153,6 +1154,22 @@ export class SupplierService {
       args.push(actor.branchId);
     }
 
+    if (options.search?.trim()) {
+      // Tìm theo mã phiếu / ghi chú. LƯU Ý: LOWER()/UPPER() trong N1QL layer
+      // này không có hiệu lực (thực nghiệm: '%po%' ≠ 'QN-…', không match) →
+      // cung cấp cả 2 biến thể upper/lower của term, match case-sensitive.
+      const term = options.search.trim();
+      const upper = `%${term.toUpperCase()}%`;
+      const lower = `%${term.toLowerCase()}%`;
+      args.push(upper, lower, upper, lower);
+      const u1 = args.length - 3;
+      const l1 = args.length - 2;
+      const u2 = args.length - 1;
+      const l2 = args.length;
+      conditions.push(
+        `(poCode LIKE $${u1} OR poCode LIKE $${l1} OR note LIKE $${u2} OR note LIKE $${l2})`
+      );
+    }
     if (options.branchId) {
       conditions.push('branchId = $' + (args.length + 1));
       args.push(options.branchId);

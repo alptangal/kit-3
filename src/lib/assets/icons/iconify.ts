@@ -15,5 +15,7 @@ export const iconify = {
 	'password-2-off-rounded': 'material-symbols-light:password-2-off-rounded',
 	'password-2-rounded': 'material-symbols-light:password-2-rounded',
 	'search-rounded': 'material-symbols-light:search-rounded',
-	'info-i-rounded': 'material-symbols-light:info-i-rounded'
+	'info-i-rounded': 'material-symbols-light:info-i-rounded',
+	'more-horiz-rounded': 'material-symbols-light:more-horiz-rounded',
+	'tune-rounded': 'material-symbols-light:tune-rounded'
 };

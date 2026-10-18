@@ -13,6 +13,12 @@
 		...props
 	}: DropdownMenuTriggerProps = $props();
 
+	// Tách class khỏi spread: nếu để trong {...props} đặt sau class={styleDerived},
+	// spread ghi đè mất class mặc định (dropdown-menu-trigger) + hash scope → CSS
+	// scoped chết (thực tế: trigger trong admin purchases w=0 vì không match
+	// :global(.dropdown-menu-trigger.admin-toolbar-menu-trigger)).
+	const { class: classProp, ...restProps } = props;
+
 	const ctx = getDropdownMenuContext();
 	const open = $derived(ctx?.open ?? false);
 
@@ -22,7 +28,7 @@
 			disabled ? 'disabled' : undefined,
 			open ? 'open' : undefined
 		];
-		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
+		return styleSynced({ defaultStyles, propStyles: classProp }, props.overwriteDefaultStyles);
 	});
 
 	function handleClick(e: MouseEvent) {
@@ -42,7 +48,7 @@
 	aria-controls={ctx?.contentId}
 	class={styleDerived}
 	onclick={handleClick}
-	{...props}
+	{...restProps}
 >
 	{@render children?.()}
 </button>

@@ -14,6 +14,7 @@ export const POST: RequestHandler = async (event) => {
 
 	try {
 		const read = await readAdminRequest<{
+			search?: string;
 			branchId?: string;
 			supplierId?: string;
 			categoryId?: string;
@@ -45,6 +46,7 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		const result = await SupplierService.listPurchases(actor, {
+			search: read.data.search,
 			branchId: read.data.branchId,
 			supplierId: read.data.supplierId,
 			categoryId: read.data.categoryId,

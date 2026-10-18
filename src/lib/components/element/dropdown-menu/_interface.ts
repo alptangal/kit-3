@@ -26,6 +26,8 @@ export interface DropdownMenuRootProps extends BasicProps {
 
 export interface DropdownMenuTriggerProps extends BasicProps {
 	disabled?: boolean;
+	/** label vô hình cho trigger icon-only (button spread {...props}) */
+	'aria-label'?: string;
 	onclick?: (e: MouseEvent) => void;
 	children?: Snippet;
 }

@@ -11,6 +11,7 @@
 	// Khi sidebar collapsed (icon rail): group luôn đóng, chevron ẩn — consistent
 	// với label menu (mở rộng tạm = CSS :hover "peek" của _styles.scss).
 	import { SvelteSet } from 'svelte/reactivity';
+	import { browser } from '$app/environment';
 	import { matchSegments, queryMatchesText, type TextSegment } from '$modules';
 	import { client } from '$store/basic.svelte';
 	import { Icon } from '$components/element';
@@ -38,7 +39,33 @@
 	);
 
 	// open nội bộ (user click / defaultOpen); auto-open khi search có con khớp.
-	let userOpen = $state(defaultOpen);
+	// Yêu cầu 9: persist trạng thái mở qua localStorage key 'sidebar-group-open'
+	// (JSON map id→bool) — chỉ khi có prop id (không id → không persist). Load
+	// 1 lần lúc init (SSR browser=false → defaultOpen); ghi trong toggle().
+	// try/catch: localStorage có thể throw (private mode/disabled).
+	const GROUP_OPEN_KEY = 'sidebar-group-open';
+	function loadGroupOpenMap(): Record<string, boolean> {
+		if (!browser) return {};
+		try {
+			const raw = localStorage.getItem(GROUP_OPEN_KEY);
+			const parsed = raw ? JSON.parse(raw) : null;
+			return parsed && typeof parsed === 'object' ? (parsed as Record<string, boolean>) : {};
+		} catch {
+			return {};
+		}
+	}
+	function saveGroupOpenValue(gid: string, open: boolean): void {
+		if (!browser) return;
+		try {
+			const map = loadGroupOpenMap();
+			map[gid] = open;
+			localStorage.setItem(GROUP_OPEN_KEY, JSON.stringify(map));
+		} catch {
+			// ghi fail (quota/disabled) — bỏ qua, trạng thái vẫn dùng được trong phiên
+		}
+	}
+	const persistedOpen: boolean | undefined = id ? loadGroupOpenMap()[id] : undefined;
+	let userOpen = $state(persistedOpen ?? defaultOpen);
 
 	// Con trực tiếp (probe register từ MenuItem / MenuGroup lồng trong submenu).
 	// SvelteSet: iterate trong $derived → reactive khi add/delete (source version).
@@ -118,6 +145,8 @@
 
 	function toggle() {
 		userOpen = !userOpen;
+		// Yêu cầu 9: persist theo id group (không id → bỏ qua).
+		if (id) saveGroupOpenValue(id, userOpen);
 	}
 </script>
 
@@ -190,7 +219,9 @@
 	</li>
 
 <style lang="scss">
-	/* Nút cha — mirror .sidebar-menu-button (font/padding/active) + chevron trailing */
+	/* Nút cha — mirror .sidebar-menu-button (font/padding/active) + chevron trailing.
+	   Yêu cầu 9: nhãn group hiện dạng UPPERCASE muted (thay SidebarGroupLabel
+	   uppercase bị bỏ khi đổi từ Sidebar.Group sang MenuGroup accordion). */
 	.sidebar-menu-group__trigger {
 		display: inline-flex;
 		align-items: center;
@@ -199,9 +230,11 @@
 		width: 100%;
 		padding: 0.375rem 0.75rem;
 		border-radius: var(--border-radius-sm, 0.375rem);
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--content2-foreground, var(--foreground));
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.025em;
+		text-transform: uppercase;
+		color: var(--muted, var(--foreground));
 		text-decoration: none;
 		cursor: var(--cursor-interactive);
 		background: transparent;

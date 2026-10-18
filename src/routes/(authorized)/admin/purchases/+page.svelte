@@ -1,7 +1,10 @@
 <!-- src/routes/(authorized)/admin/purchases/+page.svelte -->
 <script lang="ts">
-	import { Button, DataTable, Pagination, Accordion } from '$components/element';
+	import { Button, DataTable, Pagination, Accordion, DropdownMenu } from '$components/element';
+	import { Icon } from '$components/element/icon';
+	import { iconify } from '$assets/icons/iconify';
 	import type { DataTableColumn } from '$components/element/datatable';
+	import type { Size } from '$components/interface';
 	import { Input, Select } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { encryption } from '$modules/encryption';
@@ -109,7 +112,14 @@
 			allSuppliers: { vi: 'Tất cả nhà cung cấp', en: 'All suppliers' },
 			allCategories: { vi: 'Tất cả thể loại', en: 'All categories' },
 			from: { vi: 'Từ ngày', en: 'From' },
-			to: { vi: 'Đến ngày', en: 'To' }
+			to: { vi: 'Đến ngày', en: 'To' },
+			searchPlaceholder: { vi: 'Tìm theo mã phiếu / ghi chú…', en: 'Search by PO code / note…' },
+			filterButton: { vi: 'Bộ lọc', en: 'Filters' },
+			filtersModalTitle: { vi: 'Bộ lọc đơn nhập', en: 'Purchase filters' },
+			reset: { vi: 'Đặt lại', en: 'Reset' },
+			apply: { vi: 'Áp dụng', en: 'Apply' },
+			moreActions: { vi: 'Thao tác khác', en: 'More actions' },
+			activeCount: { vi: 'đang lọc', en: 'active' }
 		},
 		sourceLabels: {
 			quick: { vi: 'Nhập nhanh', en: 'Quick' },
@@ -303,6 +313,59 @@
 	let categoryFilter = $state('');
 	let dateFrom = $state('');
 	let dateTo = $state('');
+
+	// ── Toolbar (yêu cầu 2+3+5+6): search + dropdown actions + filters modal ──
+	let searchQuery = $state('');
+	let filterModalDisplay = $state(false);
+
+	// Tìm kiếm debounce 300ms (pattern orders/customers): effect + guard armed
+	// — lần chạy đầu (init) không fetch; các lần sau reset page=1 rồi load.
+	let searchDebounce: ReturnType<typeof setTimeout>;
+	let searchArmed = false;
+	$effect(() => {
+		void searchQuery;
+		if (!searchArmed) {
+			searchArmed = true;
+			return;
+		}
+		clearTimeout(searchDebounce);
+		searchDebounce = setTimeout(() => {
+			page = 1;
+			void loadPurchases();
+		}, 300);
+	});
+
+	// Indicator "đang lọc": khác mặc định ('') ở bất kỳ control nào → nút setting
+	// đổi màu + đếm số filter đang áp.
+	const filtersDirtyCount = $derived(
+		[
+			sourceFilter,
+			statusFilter,
+			branchFilter,
+			supplierFilter,
+			categoryFilter,
+			dateFrom,
+			dateTo
+		].filter((v) => v !== '').length
+	);
+
+	function mergeIconClasses(
+		styles: ReadonlyArray<string | undefined> | undefined,
+		extra: string
+	): string[] {
+		return [...(styles ?? []).filter((c): c is string => typeof c === 'string'), extra];
+	}
+
+	function resetFilters() {
+		sourceFilter = '';
+		statusFilter = '';
+		branchFilter = '';
+		supplierFilter = '';
+		categoryFilter = '';
+		dateFrom = '';
+		dateTo = '';
+		onFilterChange();
+	}
 
 	// ── Options cho filter + form ──
 	let branches = $state<BranchOption[]>([]);
@@ -588,6 +651,7 @@
 					body: {
 						page,
 						pageSize,
+						search: searchQuery.trim() || undefined,
 						source: sourceFilter || undefined,
 						status: statusFilter || undefined,
 						branchId: branchFilter || undefined,
@@ -1438,59 +1502,142 @@
 			<h1 class="admin-title">{pageContents.title[lang]}</h1>
 			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
-		<div class="admin-header-actions">
-			<!-- Quy ước màu nút: create = success, destructive (trả NCC trừ tồn) = error soft -->
-			<Button color="error" variant="soft" onClick={openReturnModal} data-test="purchases-return-btn">
-				{pageContents.actions.returnSupplier[lang]}
-			</Button>
-			<Button color="primary" variant="soft" onClick={openFullModal}>{pageContents.actions.createFull[lang]}</Button>
-			<Button color="success" onClick={openQuickModal}>{pageContents.actions.createQuick[lang]}</Button>
-		</div>
-	</header>
+		<!-- ── Toolbar 1 row (yêu cầu 2+3+5+6): search + float actions + setting ──
+		     3 nút hành động gom vào 1 DropdownMenu float; 7 control filter chuyển
+		     vào Modal mở qua nút setting (đổi màu khi dirty); search inline. -->
+		<div class="admin-toolbar">
+			<div class="admin-search">
+				<Input placeholder={pageContents.filters.searchPlaceholder[lang]} bind:value={searchQuery} data-test="purchases-search-input">
+					{#snippet leading(data)}
+						<Icon
+							icon={iconify['search-rounded']}
+							size={(data?.size ?? 'sm') as Size}
+							class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+						/>
+					{/snippet}
+				</Input>
+			</div>
 
-	<!-- ── Filter ── -->
-	<div class="admin-filters">
-		<select class="admin-select" bind:value={sourceFilter} onchange={onFilterChange}>
-			<option value="">{pageContents.filters.allSources[lang]}</option>
-			<option value="quick">{pageContents.sourceLabels.quick[lang]}</option>
-			<option value="order">{pageContents.sourceLabels.order[lang]}</option>
-		</select>
-		<select class="admin-select" bind:value={statusFilter} onchange={onFilterChange}>
-			<option value="">{pageContents.filters.allStatuses[lang]}</option>
-			{#each Object.entries(pageContents.statusLabels) as [key, label]}
-				<option value={key}>{(label as any)[lang]}</option>
-			{/each}
-		</select>
-		<Select
-			class="admin-filter-select"
-			bind:value={branchFilter}
-			options={branchSelectOptions}
-			searchable
-			clearable
-			placeholder={pageContents.filters.allBranches[lang]}
-			onValueChange={() => onFilterChange()}
-		/>
-		<Select
-			class="admin-filter-select"
-			bind:value={supplierFilter}
-			options={supplierSelectOptions}
-			searchable
-			clearable
-			placeholder={pageContents.filters.allSuppliers[lang]}
-			onValueChange={() => onFilterChange()}
-		/>
-		<Select
-			class="admin-filter-select"
-			bind:value={categoryFilter}
-			options={categorySelectOptions}
-			searchable
-			clearable
-			placeholder={pageContents.filters.allCategories[lang]}
-			onValueChange={() => onFilterChange()}
-		/>
-		<input class="admin-input admin-date" type="date" bind:value={dateFrom} onchange={onFilterChange} aria-label={pageContents.filters.from[lang]} />
-		<input class="admin-input admin-date" type="date" bind:value={dateTo} onchange={onFilterChange} aria-label={pageContents.filters.to[lang]} />
-	</div>
+			<DropdownMenu aria-label={pageContents.filters.moreActions[lang]}>
+				<DropdownMenu.Trigger class="admin-toolbar-menu-trigger" aria-label={pageContents.filters.moreActions[lang]} data-test="purchases-more-btn">
+					<Icon icon={iconify['more-horiz-rounded']} size="md" />
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end">
+					<!-- Quy ước màu nút giữ nguyên: quick = success, full = primary,
+					     trả NCC (destructive trừ tồn) = destructive -->
+					<DropdownMenu.Item onselect={openQuickModal} data-test="purchases-quick-item">
+						{pageContents.actions.createQuick[lang]}
+					</DropdownMenu.Item>
+					<DropdownMenu.Item onselect={openFullModal}>
+						{pageContents.actions.createFull[lang]}
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item variant="destructive" onselect={openReturnModal} data-test="purchases-return-item">
+						{pageContents.actions.returnSupplier[lang]}
+					</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu>
+
+			<Button
+				color={filtersDirtyCount > 0 ? 'primary' : 'default'}
+				variant={filtersDirtyCount > 0 ? 'soft' : 'outline'}
+				class="admin-toolbar-filter-btn"
+				aria-label={pageContents.filters.filterButton[lang]}
+				onClick={() => {
+					filterModalDisplay = true;
+				}}
+				data-test="purchases-filter-btn"
+			>
+				<Icon icon={iconify['tune-rounded']} size="md" />
+				{#if filtersDirtyCount > 0}
+					<span class="filter-count-badge">{filtersDirtyCount}</span>
+				{/if}
+			</Button>
+		</div>
+
+		<!-- ── Modal bộ lọc (yêu cầu 3): 7 control cũ chuyển từ .admin-filters ──
+		     Class .admin-filter-grid (KHÔNG .admin-filters) — layout admin sticky
+		     hoá mọi .admin-filters qua :global, modal nằm ngoài scroll container
+		     nên rule đó sẽ vỡ layout modal. -->
+		{#if filterModalDisplay}
+			<Modal bind:display={filterModalDisplay} size="sm" isDimissable>
+				<Modal.Container>
+					<Modal.Container.Header>{pageContents.filters.filtersModalTitle[lang]}</Modal.Container.Header>
+					<Modal.Container.Body>
+						<div class="admin-filter-grid">
+							<label class="form-field">
+								<span class="form-label">{pageContents.table.source[lang]}</span>
+								<select class="admin-select" bind:value={sourceFilter} onchange={onFilterChange}>
+									<option value="">{pageContents.filters.allSources[lang]}</option>
+									<option value="quick">{pageContents.sourceLabels.quick[lang]}</option>
+									<option value="order">{pageContents.sourceLabels.order[lang]}</option>
+								</select>
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.table.status[lang]}</span>
+								<select class="admin-select" bind:value={statusFilter} onchange={onFilterChange}>
+									<option value="">{pageContents.filters.allStatuses[lang]}</option>
+									{#each Object.entries(pageContents.statusLabels) as [key, label]}
+										<option value={key}>{(label as any)[lang]}</option>
+									{/each}
+								</select>
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.filters.allBranches[lang]}</span>
+								<Select
+									class="admin-filter-select"
+									bind:value={branchFilter}
+									options={branchSelectOptions}
+									searchable
+									clearable
+									placeholder={pageContents.filters.allBranches[lang]}
+									onValueChange={() => onFilterChange()}
+								/>
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.filters.allSuppliers[lang]}</span>
+								<Select
+									class="admin-filter-select"
+									bind:value={supplierFilter}
+									options={supplierSelectOptions}
+									searchable
+									clearable
+									placeholder={pageContents.filters.allSuppliers[lang]}
+									onValueChange={() => onFilterChange()}
+								/>
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.filters.allCategories[lang]}</span>
+								<Select
+									class="admin-filter-select"
+									bind:value={categoryFilter}
+									options={categorySelectOptions}
+									searchable
+									clearable
+									placeholder={pageContents.filters.allCategories[lang]}
+									onValueChange={() => onFilterChange()}
+								/>
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.filters.from[lang]}</span>
+								<input class="admin-input" type="date" bind:value={dateFrom} onchange={onFilterChange} aria-label={pageContents.filters.from[lang]} />
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.filters.to[lang]}</span>
+								<input class="admin-input" type="date" bind:value={dateTo} onchange={onFilterChange} aria-label={pageContents.filters.to[lang]} />
+							</label>
+						</div>
+					</Modal.Container.Body>
+					<Modal.Container.Footer>
+						<Button color="default" variant="outline" onClick={resetFilters}>{pageContents.filters.reset[lang]}</Button>
+						<Button color="primary" onClick={() => {
+							filterModalDisplay = false;
+						}}>{pageContents.filters.apply[lang]}</Button>
+					</Modal.Container.Footer>
+				</Modal.Container>
+			</Modal>
+		{/if}
+	</header>
 
 	<!-- ── Danh sách ── -->
 	{#if listError}
@@ -2309,13 +2456,6 @@
 		flex-wrap: wrap;
 	}
 
-	.admin-header-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-	}
-
 	.admin-title {
 		font-size: 1.75rem;
 		font-weight: 700;
@@ -2329,18 +2469,64 @@
 		margin: 0.25rem 0 0;
 	}
 
-	.admin-filters {
+	/* ── Toolbar 1 row (yêu cầu 6): search flex:1 + dropdown + setting ── */
+	.admin-toolbar {
 		display: flex;
-		gap: 0.75rem;
-		flex-wrap: wrap;
 		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
 	}
 
-	/* .admin-input (width:100%) viết sau .admin-date cùng specificity → date
-	   full-width rơi từng ô 1 hàng (filtersH 140px). Tăng specificity thắng. */
-	.admin-input.admin-date {
-		width: auto;
-		min-width: 9.5rem;
+	.admin-search {
+		flex: 1;
+		min-width: 0;
+	}
+
+	/* DropdownMenu.Trigger icon-only: default padding 0 0.75rem giành cho
+	   text — vuông hoá + thu gọn. Màu theo nút setting (soft default). */
+	:global(.dropdown-menu-trigger.admin-toolbar-menu-trigger) {
+		aspect-ratio: 1;
+		padding: 0;
+		width: 2.5rem;
+		justify-content: center;
+		border: 1px solid var(--default-300);
+		border-radius: var(--field-radius, 0.75rem);
+		background: var(--default-50, transparent);
+	}
+
+	/* Nút setting bộ lọc — cao bằng Input (2.5rem), dirty → primary soft
+	   (đổi màu qua props color/variant, CSS chỉ chuẩn hoá kích thước). */
+	.admin-toolbar-filter-btn {
+		aspect-ratio: 1;
+		width: 2.5rem;
+		padding: 0;
+		position: relative;
+	}
+
+	/* Đếm filter đang áp — dot badge góc nút setting */
+	.filter-count-badge {
+		position: absolute;
+		top: -0.25rem;
+		right: -0.25rem;
+		min-width: 1rem;
+		height: 1rem;
+		padding: 0 0.2rem;
+		border-radius: 999px;
+		background: var(--primary);
+		color: var(--primary-contrast, #fff);
+		font-size: 0.65rem;
+		font-weight: 700;
+		line-height: 1rem;
+		text-align: center;
+	}
+
+	/* ── Filter grid trong modal (yêu cầu 3) — KHÔNG dùng class .admin-filters
+	   (layout admin sticky hoá mọi .admin-filters qua :global; modal portal
+	   ngoài scroll container → rule đó vỡ layout). ── */
+	.admin-filter-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
 	}
 
 	.admin-select {
@@ -2359,17 +2545,14 @@
 		}
 	}
 
-	// Component Select trong admin-filters + form-field: class đặt trên
-	// .select-root (as=div) — không inline TS trong attr class (unocss/acorn).
-	// Trigger cao bằng .admin-select, root width auto trong filters /
-	// 100% trong form-grid.
-	// BẪY scoped: .admin-filter-select scoped trang không match (element mang
-	// hash Select) → width:100% mặc định thắng, filter wrap full-row. Nhắm qua
-	// anchor .admin-filters / .form-field + :global().
-	.admin-filters :global(.admin-filter-select) {
-		width: auto;
-		min-width: 11rem;
-		max-width: 16rem;
+	// Component Select trong modal + form-field: class đặt trên .select-root
+	// (as=div) — không inline TS trong attr class (unocss/acorn). BẪY scoped:
+	// .admin-filter-select scoped trang không match (element mang hash Select)
+	// → width:100% mặc định thắng. Nhắm qua anchor .admin-filter-grid /
+	// .form-field + :global().
+	.admin-filter-grid :global(.admin-filter-select) {
+		width: 100%;
+		max-width: 100%;
 
 		:global(.select-trigger) {
 			height: 2.25rem;
@@ -2430,12 +2613,10 @@
 		border: 1px solid var(--default-300);
 		background: var(--background);
 		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
-		   theo wrap (khong cuon) -> thead truot mat. Desktop co stickyHead:
-		   wrap phai thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
-		@media (min-width: 768px) {
-			&:has(:global(.datatable-sticky-head)) {
-				overflow-x: visible;
-			}
+		   theo wrap (khong cuon) -> thead truot mat. Co stickyHead: wrap phai
+		   thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
+		&:has(:global(.datatable-sticky-head)) {
+			overflow-x: visible;
 		}
 	}
 
