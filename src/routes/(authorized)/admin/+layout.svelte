@@ -877,4 +877,27 @@
 		   mobile 1rem). Layout giữ min-height để footer không dính sát. */
 		min-height: 60dvh;
 	}
+
+	/* ══ FULLHEIGHT MODIFIER (purchases redesign C2/C3/C4) ══
+	   Trang khai .admin-page--fullheight → .admin-inset thành cột flex cao 100dvh,
+	   body chiếm phần còn lại (100% - header - separator); trang tự cuộn trong
+	   .admin-table-wrap (không cuộn ở Container root — không sticky stack cũ).
+	   DÙNG 100dvh: .sidebar-inset chỉ có min-height:100dvh (không height) →
+	   height:100% không resolve. min-height bỏ (flex:1 + min-height:0 giữ khung
+	   không tràn). Các trang khác không có modifier → không ảnh hưởng.
+	   Vars sticky (--admin-header-h v.v.) trang tự zero hoá. */
+	/* BẪY scoped: .admin-page--fullheight render từ component TRANG (hash svelte
+	   riêng) → selector scoped thành :has(.admin-page--fullheight.s-layouthash)
+	   không bao giờ khớp. Phải :global() cả modifier. */
+	.admin-inset:has(:global(.admin-page--fullheight)) {
+		display: flex;
+		flex-direction: column;
+		height: 100dvh;
+		min-height: 0;
+	}
+
+	.admin-inset:has(:global(.admin-page--fullheight)) .admin-inset-body {
+		flex: 1;
+		min-height: 0;
+	}
 </style>

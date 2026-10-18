@@ -12,6 +12,7 @@
 	import { formatDate as formatDateShared } from '$modules/i18n';
 	import { onMount } from 'svelte';
 	import { resolveServerMessage } from '../_interface';
+	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs } from '$store/user-prefs.svelte';
 
 	interface PurchaseRow {
 		_id?: string;
@@ -130,11 +131,48 @@
 			source: { vi: 'Kiểu nhập', en: 'Source' },
 			supplier: { vi: 'Nhà cung cấp', en: 'Supplier' },
 			branch: { vi: 'Chi nhánh', en: 'Branch' },
+			category: { vi: 'Thể loại', en: 'Category' },
 			status: { vi: 'Trạng thái', en: 'Status' },
 			items: { vi: 'Số dòng', en: 'Items' },
 			totalCost: { vi: 'Tổng tiền', en: 'Total cost' },
 			receivedAt: { vi: 'Nhận lúc', en: 'Received at' },
 			actions: { vi: 'Thao tác', en: 'Actions' }
+		},
+		sort: {
+			asc: { vi: 'Tăng dần', en: 'Ascending' },
+			desc: { vi: 'Giảm dần', en: 'Descending' },
+			panelTitle: { vi: 'Sắp xếp', en: 'Sort' },
+			field: { vi: 'Trường', en: 'Field' },
+			direction: { vi: 'Hướng', en: 'Direction' }
+		},
+		cardDisplay: {
+			panelTitle: { vi: 'Hiển thị', en: 'Display' },
+			hint: { vi: 'Chọn các trường hiển thị trên thẻ mobile (lưu theo tài khoản)', en: 'Pick fields shown on mobile cards (saved to your account)' }
+		},
+		bulk: {
+			selected: { vi: 'Đã chọn {n}', en: '{n} selected' },
+			update: { vi: 'Cập nhật', en: 'Update' },
+			remove: { vi: 'Xoá', en: 'Delete' },
+			clear: { vi: 'Bỏ chọn', en: 'Clear' },
+			updateTitle: { vi: 'Cập nhật trạng thái hàng loạt', en: 'Bulk update status' },
+			newStatus: { vi: 'Trạng thái mới', en: 'New status' },
+			deleteTitle: { vi: 'Xoá phiếu nhập?', en: 'Delete purchase orders?' },
+			deleteDesc: { vi: 'Chỉ phiếu nháp/đã huỷ được xoá. Phiếu đã nhận hàng sẽ bị từ chối.', en: 'Only draft/cancelled orders are deleted. Received orders will be rejected.' },
+			deleted: { vi: 'Đã xoá {n} phiếu', en: 'Deleted {n} orders' },
+			updated: { vi: 'Đã cập nhật {n} phiếu', en: 'Updated {n} orders' },
+			failed: { vi: '{n} phiếu lỗi', en: '{n} failed' },
+			none: { vi: 'Không có phiếu nào được xử lý', en: 'No orders were processed' }
+		},
+		suggest: {
+			title: { vi: 'Tìm kiếm gần đây', en: 'Recent searches' },
+			empty: { vi: 'Chưa có từ khoá nào', en: 'No keywords yet' }
+		},
+		mobilePanel: {
+			title: { vi: 'Tuỳ chọn', en: 'Options' },
+			tabFilter: { vi: 'Lọc', en: 'Filter' },
+			tabSort: { vi: 'Sắp xếp', en: 'Sort' },
+			tabDisplay: { vi: 'Hiển thị', en: 'Display' },
+			apply: { vi: 'Áp dụng', en: 'Apply' }
 		},
 		statusLabels: {
 			draft: { vi: 'Nháp', en: 'Draft' },
@@ -276,11 +314,15 @@
 			submit: { vi: 'Xác nhận trả hàng', en: 'Confirm return' }
 		},
 		toasts: {
-			created: { vi: 'Tạo phiếu nhập thành công', en: 'Purchase created successfully' },
-			received: { vi: 'Nhận hàng thành công', en: 'Received successfully' },
-			returned: { vi: 'Trả hàng NCC thành công', en: 'Purchase return created successfully' },
+			created: { vi: 'Tạo phiếu nhập thành công', en: 'Purchase created' },
+			received: { vi: 'Nhận hàng thành công', en: 'Purchase received' },
+			returned: { vi: 'Trả hàng NCC thành công', en: 'Return submitted' },
 			failed: { vi: 'Thao tác thất bại', en: 'Action failed' },
-			requestFailed: { vi: 'Lỗi kết nối máy chủ', en: 'Server request failed' }
+			requestFailed: { vi: 'Gửi yêu cầu thất bại', en: 'Request failed' }
+		},
+		captionDescription: {
+			vi: 'Quản lý đơn nhập hàng — tìm kiếm, lọc, sắp xếp và nhận hàng',
+			en: 'Manage purchase orders — search, filter, sort and receive'
 		},
 		states: {
 			loading: { vi: 'Đang tải…', en: 'Loading…' },
@@ -318,6 +360,37 @@
 	let searchQuery = $state('');
 	let filterModalDisplay = $state(false);
 
+	// ── D5: sort server-side (prefs persist) ──
+	const PREFS_KEY = '/admin/purchases';
+	let sortField = $state('');
+	let sortDirection = $state<'asc' | 'desc'>('desc');
+	// chọn trong panel mobile (áp khi bấm nút)
+	let panelSortField = $state('');
+	let panelSortDirection = $state<'asc' | 'desc'>('desc');
+
+	// ── M3: cardFields (template field hiển thị mobile, đồng bộ DB) ──
+	let cardFieldIds = $state<string[]>([]);
+
+	// ── C9: bulk selection ──
+	let selectedIds = $state<string[]>([]);
+	let bulkConfirmOpen = $state(false);
+	let bulkUpdateOpen = $state(false);
+	let bulkStatus = $state('received');
+	let bulkSubmitting = $state(false);
+
+	// ── C7: search suggest ──
+	let searchFocused = $state(false);
+	let suggestOpen = $state(false);
+
+	// ── M2: panel mobile (filter/sort/display) ──
+	let mobilePanelOpen = $state(false);
+	let mobilePanelTab = $state<'filter' | 'sort' | 'display'>('filter');
+	let mobileFabOpen = $state(false);
+
+	// ── C5/C6: scroll state ──
+	let tableScrolled = $state(false);
+	let paginationPopped = $state(false);
+
 	// Tìm kiếm debounce 300ms (pattern orders/customers): effect + guard armed
 	// — lần chạy đầu (init) không fetch; các lần sau reset page=1 rồi load.
 	let searchDebounce: ReturnType<typeof setTimeout>;
@@ -334,6 +407,44 @@
 			void loadPurchases();
 		}, 300);
 	});
+
+	// ── C7: blur khi có từ khoá → lưu suggest (DB per-user); focus → mở popover ──
+	// (blur handler trong markup gọi saveSearchKeyword; focus mở suggestOpen.)
+	function saveSearchKeyword() {
+		const kw = searchQuery.trim();
+		if (kw) recordSearchKeyword(PREFS_KEY, kw);
+		suggestOpen = false;
+	}
+
+	// ── C5/C6: scroll handler trên .admin-table-wrap (rAF throttle) ──
+	let wrapEl: HTMLElement | undefined = $state();
+	let scrollRaf = 0;
+	function onTableScroll() {
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			const el = wrapEl;
+			if (!el) return;
+			tableScrolled = el.scrollTop > 8;
+			// C6: chạm đáy (ngưỡng 4px) → pop pagination 1 lần; rời đáy → reset.
+			const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+			if (atBottom && !paginationPopped) {
+				paginationPopped = true;
+				// pop 1 nhịp rồi tự tắt (transform-only — không đổi layout).
+				setTimeout(() => {
+					paginationPopped = false;
+				}, 450);
+			} else if (!atBottom && paginationPopped) {
+				// rời đáy giữa chừng: cho phép pop lại lần sau chạm đáy.
+			}
+			if (!atBottom) {
+				// reset khả năng pop khi rời đáy đủ xa
+				if (el.scrollHeight - el.scrollTop - el.clientHeight > 40) {
+					paginationPopped = false;
+				}
+			}
+		});
+	}
 
 	// Indicator "đang lọc": khác mặc định ('') ở bất kỳ control nào → nút setting
 	// đổi màu + đếm số filter đang áp.
@@ -365,6 +476,89 @@
 		dateFrom = '';
 		dateTo = '';
 		onFilterChange();
+	}
+
+	// ── C9: bulk handlers ──
+	function onSelectionChange(ids: string[]) {
+		selectedIds = ids;
+	}
+
+	async function submitBulkDelete() {
+		if (selectedIds.length === 0 || bulkSubmitting) return;
+		bulkSubmitting = true;
+		try {
+			const res = await encryption.fetchSecure('/api/admin/purchases/bulk', {
+				body: { ids: selectedIds, action: 'delete' }
+			});
+			const data = res?.data as { deleted?: string[]; failed?: Array<{ id: string }> } | undefined;
+			const deleted = data?.deleted?.length ?? 0;
+			const failed = data?.failed?.length ?? 0;
+			if (res.ok) {
+				if (deleted > 0) showToast(pageContents.bulk.deleted[lang].replace('{n}', String(deleted)), 'success');
+				if (failed > 0) showToast(pageContents.bulk.failed[lang].replace('{n}', String(failed)), 'warning');
+				if (deleted === 0 && failed === 0) showToast(pageContents.bulk.none[lang], 'warning');
+			} else {
+				showToast(resolveServerMessage(res.message, lang, pageContents.toasts.failed), 'error');
+			}
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			bulkSubmitting = false;
+			bulkConfirmOpen = false;
+			selectedIds = [];
+			page = 1;
+			void loadPurchases();
+		}
+	}
+
+	async function submitBulkStatus() {
+		if (selectedIds.length === 0 || bulkSubmitting) return;
+		bulkSubmitting = true;
+		try {
+			const res = await encryption.fetchSecure('/api/admin/purchases/bulk', {
+				body: { ids: selectedIds, action: 'status', status: bulkStatus }
+			});
+			const data = res?.data as { updated?: string[]; failed?: Array<{ id: string }> } | undefined;
+			const updated = data?.updated?.length ?? 0;
+			const failed = data?.failed?.length ?? 0;
+			if (res.ok) {
+				if (updated > 0) showToast(pageContents.bulk.updated[lang].replace('{n}', String(updated)), 'success');
+				if (failed > 0) showToast(pageContents.bulk.failed[lang].replace('{n}', String(failed)), 'warning');
+				if (updated === 0 && failed === 0) showToast(pageContents.bulk.none[lang], 'warning');
+			} else {
+				showToast(resolveServerMessage(res.message, lang, pageContents.toasts.failed), 'error');
+			}
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			bulkSubmitting = false;
+			bulkUpdateOpen = false;
+			selectedIds = [];
+			page = 1;
+			void loadPurchases();
+		}
+	}
+
+	// ── D5: sort handler (DataTable onSortChange) — persist prefs + reload ──
+	function onSortChange(columnId: string, order: 'asc' | 'desc' | null) {
+		if (!order || !columnId) {
+			sortField = '';
+			sortDirection = 'desc';
+		} else {
+			sortField = columnId;
+			sortDirection = order;
+		}
+		panelSortField = sortField;
+		panelSortDirection = sortDirection;
+		saveDataTablePrefs(PREFS_KEY, { sort: sortField ? { field: sortField, direction: sortDirection } : undefined });
+		page = 1;
+		void loadPurchases();
+	}
+
+	// ── M3: cardFields persist ──
+	function applyCardFields(ids: string[]) {
+		cardFieldIds = ids;
+		saveDataTablePrefs(PREFS_KEY, { cardFields: ids });
 	}
 
 	// ── Options cho filter + form ──
@@ -488,8 +682,8 @@
 		return new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(value ?? 0);
 	}
 
-	function showToast(text: string, color: 'success' | 'error') {
-		client.browser?.toasts?.create({ title: text, color });
+	function showToast(text: string, color: 'success' | 'error' | 'warning' | 'danger' | 'primary' | 'default') {
+		client.browser?.toasts?.create({ title: text, color: color === 'danger' || color === 'error' ? 'error' : color === 'warning' ? 'warning' : color === 'success' ? 'success' : 'default' } as never);
 	}
 
 	function sourceLabel(source?: string): string {
@@ -657,6 +851,8 @@
 						branchId: branchFilter || undefined,
 						supplierId: supplierFilter || undefined,
 						categoryId: categoryFilter || undefined,
+						sortField: sortField || undefined,
+						sortDirection: sortField ? sortDirection : undefined,
 						dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
 						dateTo: dateTo ? new Date(`${dateTo}T23:59:59`).toISOString() : undefined
 					}
@@ -1486,6 +1682,15 @@
 
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
+		// D5/M3: khởi tạo sort + cardFields từ prefs DB (trước lần load đầu).
+		const pagePrefs = userPrefs.datatable[PREFS_KEY];
+		if (pagePrefs?.sort?.field) {
+			sortField = pagePrefs.sort.field;
+			sortDirection = pagePrefs.sort.direction ?? 'desc';
+		}
+		panelSortField = sortField;
+		panelSortDirection = sortDirection;
+		cardFieldIds = pagePrefs?.cardFields?.length ? pagePrefs.cardFields : ['code', 'status', 'totalCost', 'receivedAt'];
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadBranches(), loadSuppliers(), loadCategories(), loadPurchases()]);
@@ -1496,74 +1701,374 @@
 	<title>{pageContents.title[lang]}</title>
 </svelte:head>
 
-<section class="admin-page">
-	<header class="admin-header">
-		<div class="admin-header-text">
-			<h1 class="admin-title">{pageContents.title[lang]}</h1>
-			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
-		</div>
-		<!-- ── Toolbar 1 row (yêu cầu 2+3+5+6): search + float actions + setting ──
-		     3 nút hành động gom vào 1 DropdownMenu float; 7 control filter chuyển
-		     vào Modal mở qua nút setting (đổi màu khi dirty); search inline. -->
-		<div class="admin-toolbar">
-			<div class="admin-search">
-				<Input placeholder={pageContents.filters.searchPlaceholder[lang]} bind:value={searchQuery} data-test="purchases-search-input">
-					{#snippet leading(data)}
-						<Icon
-							icon={iconify['search-rounded']}
-							size={(data?.size ?? 'sm') as Size}
-							class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-						/>
-					{/snippet}
-				</Input>
-			</div>
-
-			<DropdownMenu aria-label={pageContents.filters.moreActions[lang]}>
-				<DropdownMenu.Trigger class="admin-toolbar-menu-trigger" aria-label={pageContents.filters.moreActions[lang]} data-test="purchases-more-btn">
-					<Icon icon={iconify['more-horiz-rounded']} size="md" />
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end">
-					<!-- Quy ước màu nút giữ nguyên: quick = success, full = primary,
-					     trả NCC (destructive trừ tồn) = destructive -->
-					<DropdownMenu.Item onselect={openQuickModal} data-test="purchases-quick-item">
-						{pageContents.actions.createQuick[lang]}
-					</DropdownMenu.Item>
-					<DropdownMenu.Item onselect={openFullModal}>
-						{pageContents.actions.createFull[lang]}
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item variant="destructive" onselect={openReturnModal} data-test="purchases-return-item">
-						{pageContents.actions.returnSupplier[lang]}
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu>
-
-			<Button
-				color={filtersDirtyCount > 0 ? 'primary' : 'default'}
-				variant={filtersDirtyCount > 0 ? 'soft' : 'outline'}
-				class="admin-toolbar-filter-btn"
-				aria-label={pageContents.filters.filterButton[lang]}
-				onClick={() => {
-					filterModalDisplay = true;
-				}}
-				data-test="purchases-filter-btn"
+<section class="admin-page admin-page--fullheight">
+	<!-- ── Toolbar cố định (D1/D2/D3/D4): search + suggest + filter + 3 nút.
+	     KHÔNG admin-header (C1 — caption thay thế), KHÔNG DropdownMenu float. ── -->
+	<div class="admin-table-toolbar">
+		<div class="admin-search" data-suggest>
+			<Input
+				placeholder={pageContents.filters.searchPlaceholder[lang]}
+				bind:value={searchQuery}
+				data-test="purchases-search-input"
+				events={[
+					{
+						events: {
+							focus: {
+								handler() {
+									searchFocused = true;
+									suggestOpen = true;
+								}
+							},
+							blur: {
+								handler() {
+									searchFocused = false;
+									saveSearchKeyword();
+								}
+							}
+						}
+					}
+				]}
 			>
-				<Icon icon={iconify['tune-rounded']} size="md" />
-				{#if filtersDirtyCount > 0}
-					<span class="filter-count-badge">{filtersDirtyCount}</span>
-				{/if}
+				{#snippet leading(data)}
+					<Icon
+						icon={iconify['search-rounded']}
+						size={(data?.size ?? 'sm') as Size}
+						class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+					/>
+				{/snippet}
+			</Input>
+			{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
+				<div class="suggest-popover" role="listbox" data-test="purchases-suggest">
+					<div class="suggest-title">{pageContents.suggest.title[lang]}</div>
+					{#each getSearchKeywords(PREFS_KEY).slice(0, 8) as kw (kw)}
+						<button
+							type="button"
+							class="suggest-item"
+							role="option"
+							aria-selected="false"
+							onclick={() => {
+								searchQuery = kw;
+								suggestOpen = false;
+								page = 1;
+								void loadPurchases();
+							}}
+							onmousedown={(e) => e.preventDefault()}
+						>
+							<Icon icon={iconify['search-rounded']} size="xs" />
+							<span class="suggest-item-text">{kw}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+
+		<!-- Bộ lọc: nút setting cũ → button icon có badge (desktop + mobile chung) -->
+		<Button
+			color={filtersDirtyCount > 0 ? 'primary' : 'default'}
+			variant={filtersDirtyCount > 0 ? 'soft' : 'outline'}
+			class="admin-filter-btn"
+			aria-label={pageContents.filters.filterButton[lang]}
+			onClick={() => {
+				filterModalDisplay = true;
+			}}
+			data-test="purchases-filter-btn"
+		>
+			<Icon icon={iconify['tune-rounded']} size="md" />
+			{#if filtersDirtyCount > 0}
+				<span class="filter-count-badge">{filtersDirtyCount}</span>
+			{/if}
+		</Button>
+
+		<!-- D2: 3 nút hành động — layout thường, KHÔNG subcontext menu (desktop).
+		     Mobile ẩn (display:none ≤767px) → FAB thay thế (M1). -->
+		<div class="admin-actions-group">
+			<Button color="success" onClick={openQuickModal} data-test="purchases-quick-btn">
+				{pageContents.actions.createQuick[lang]}
+			</Button>
+			<Button color="primary" variant="soft" onClick={openFullModal} data-test="purchases-full-btn">
+				{pageContents.actions.createFull[lang]}
+			</Button>
+			<Button color="error" variant="soft" onClick={openReturnModal} data-test="purchases-return-btn">
+				{pageContents.actions.returnSupplier[lang]}
 			</Button>
 		</div>
 
-		<!-- ── Modal bộ lọc (yêu cầu 3): 7 control cũ chuyển từ .admin-filters ──
-		     Class .admin-filter-grid (KHÔNG .admin-filters) — layout admin sticky
-		     hoá mọi .admin-filters qua :global, modal nằm ngoài scroll container
-		     nên rule đó sẽ vỡ layout modal. -->
-		{#if filterModalDisplay}
-			<Modal bind:display={filterModalDisplay} size="sm" isDimissable>
-				<Modal.Container>
-					<Modal.Container.Header>{pageContents.filters.filtersModalTitle[lang]}</Modal.Container.Header>
-					<Modal.Container.Body>
+		<!-- C9: bulk bar khi chọn ≥1 row -->
+		{#if selectedIds.length > 0}
+			<div class="bulk-bar" data-test="purchases-bulk-bar">
+				<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{n}', String(selectedIds.length))}</span>
+				<Button color="primary" variant="soft" size="sm" onClick={() => { bulkUpdateOpen = true; }} data-test="purchases-bulk-update">
+					{pageContents.bulk.update[lang]}
+				</Button>
+				<Button color="error" variant="soft" size="sm" onClick={() => { bulkConfirmOpen = true; }} data-test="purchases-bulk-delete">
+					{pageContents.bulk.remove[lang]}
+				</Button>
+				<Button color="default" variant="ghost" size="sm" onClick={() => { selectedIds = []; }}>
+					{pageContents.bulk.clear[lang]}
+				</Button>
+			</div>
+		{/if}
+	</div>
+
+	<!-- ── Modal bộ lọc (dùng chung desktop + mobile panel "Lọc") ──
+	     Class .admin-filter-grid (KHÔNG .admin-filters) — layout admin sticky
+	     hoá mọi .admin-filters qua :global, modal nằm ngoài scroll container
+	     nên rule đó sẽ vỡ layout modal. -->
+	{#if filterModalDisplay}
+		<Modal bind:display={filterModalDisplay} size="sm" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>{pageContents.filters.filtersModalTitle[lang]}</Modal.Container.Header>
+				<Modal.Container.Body>
+					<div class="admin-filter-grid">
+						<label class="form-field">
+							<span class="form-label">{pageContents.table.source[lang]}</span>
+							<select class="admin-select" bind:value={sourceFilter} onchange={onFilterChange}>
+								<option value="">{pageContents.filters.allSources[lang]}</option>
+								<option value="quick">{pageContents.sourceLabels.quick[lang]}</option>
+								<option value="order">{pageContents.sourceLabels.order[lang]}</option>
+							</select>
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.table.status[lang]}</span>
+							<select class="admin-select" bind:value={statusFilter} onchange={onFilterChange}>
+								<option value="">{pageContents.filters.allStatuses[lang]}</option>
+								{#each Object.entries(pageContents.statusLabels) as [key, label]}
+									<option value={key}>{(label as any)[lang]}</option>
+								{/each}
+							</select>
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.filters.allBranches[lang]}</span>
+							<Select
+								class="admin-filter-select"
+								bind:value={branchFilter}
+								options={branchSelectOptions}
+								searchable
+								clearable
+								placeholder={pageContents.filters.allBranches[lang]}
+								onValueChange={() => onFilterChange()}
+							/>
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.filters.allSuppliers[lang]}</span>
+							<Select
+								class="admin-filter-select"
+								bind:value={supplierFilter}
+								options={supplierSelectOptions}
+								searchable
+								clearable
+								placeholder={pageContents.filters.allSuppliers[lang]}
+								onValueChange={() => onFilterChange()}
+							/>
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.filters.allCategories[lang]}</span>
+							<Select
+								class="admin-filter-select"
+								bind:value={categoryFilter}
+								options={categorySelectOptions}
+								searchable
+								clearable
+								placeholder={pageContents.filters.allCategories[lang]}
+								onValueChange={() => onFilterChange()}
+							/>
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.filters.from[lang]}</span>
+							<input class="admin-input" type="date" bind:value={dateFrom} onchange={onFilterChange} aria-label={pageContents.filters.from[lang]} />
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.filters.to[lang]}</span>
+							<input class="admin-input" type="date" bind:value={dateTo} onchange={onFilterChange} aria-label={pageContents.filters.to[lang]} />
+						</label>
+					</div>
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button color="default" variant="outline" onClick={resetFilters}>{pageContents.filters.reset[lang]}</Button>
+					<Button color="primary" onClick={() => {
+						filterModalDisplay = false;
+					}}>{pageContents.filters.apply[lang]}</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
+	<!-- ── C9 modal: cập nhật trạng thái hàng loạt ── -->
+	{#if bulkUpdateOpen}
+		<Modal bind:display={bulkUpdateOpen} size="sm" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>{pageContents.bulk.updateTitle[lang]}</Modal.Container.Header>
+				<Modal.Container.Body>
+					<label class="form-field">
+						<span class="form-label">{pageContents.bulk.newStatus[lang]}</span>
+						<select class="admin-select" bind:value={bulkStatus} data-test="purchases-bulk-status">
+							{#each Object.entries(pageContents.statusLabels) as [key, label]}
+								<option value={key}>{(label as any)[lang]}</option>
+							{/each}
+						</select>
+					</label>
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button color="default" variant="outline" onClick={() => { bulkUpdateOpen = false; }}>{pageContents.actions.cancel[lang]}</Button>
+					<Button color="primary" loading={bulkSubmitting} onClick={() => void submitBulkStatus()} data-test="purchases-bulk-status-submit">
+						{pageContents.bulk.update[lang]}
+					</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
+	<!-- ── C9 confirm: xoá hàng loạt ── -->
+	{#if bulkConfirmOpen}
+		<Modal bind:display={bulkConfirmOpen} size="sm" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>{pageContents.bulk.deleteTitle[lang]}</Modal.Container.Header>
+				<Modal.Container.Body>
+					<p class="bulk-delete-desc">{pageContents.bulk.deleteDesc[lang]}</p>
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button color="default" variant="outline" onClick={() => { bulkConfirmOpen = false; }}>{pageContents.actions.cancel[lang]}</Button>
+					<Button color="error" loading={bulkSubmitting} onClick={() => void submitBulkDelete()} data-test="purchases-bulk-delete-confirm">
+						{pageContents.bulk.remove[lang]}
+					</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
+	<!-- ── Danh sách ── -->
+	{#if listError}
+		<div class="admin-state error" role="alert">
+			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
+			<p class="state-detail">{listError}</p>
+			<Button color="primary" variant="outline" onClick={() => void loadPurchases()}>{pageContents.states.retry[lang]}</Button>
+		</div>
+	{:else}
+		<!-- ── Bảng đơn nhập — DataTable — server sort (D5) + selection hover (D6).
+		     C5: class .caption-collapsed khi cuộn (thu caption + ẩn desc). -->
+		<div class="admin-table-area">
+			<div class="admin-table-wrap" bind:this={wrapEl} onscroll={onTableScroll}>
+				<DataTable
+					data={purchasesAny}
+					{columns}
+					pageSize={pageSize}
+					showPagination={false}
+					loading={loading && !loadedOnce}
+					visual={{ striped: true, hoverable: true }}
+					emptyLabel={pageContents.states.empty[lang]}
+					loadingLabel={pageContents.states.loading[lang]}
+					caption={{ vi: 'Danh sách đơn nhập hàng', en: 'Purchase orders list' }}
+					captionDescription={pageContents.captionDescription}
+					sortable
+					sortMode="server"
+					bind:sortColumn={sortField}
+					bind:sortDirection={sortDirection}
+					onSortChange={onSortChange}
+					selectable
+					showIndex
+					indexOffset={(page - 1) * pageSize}
+					checkboxHoverOnly
+					checkOnRowClick
+					selectionTools={false}
+					onSelectionChange={onSelectionChange}
+					onRowClick={(row) => openDetail(row as unknown as PurchaseRow)}
+					cardFields={cardFieldIds}
+					mobileTapMode="callback"
+					actionsLabel={{ vi: pageContents.table.actions[lang], en: pageContents.table.actions[lang] }}
+					stickyHead
+					class={tableScrolled ? 'caption-collapsed' : undefined}
+					data-test="purchases-datatable"
+				>
+					{#snippet actionsContent(row)}
+						{@const r = row as unknown as PurchaseRow}
+						<div class="row-actions">
+							{#if r.status === 'ordered' || r.status === 'partially_received'}
+								<Button color="primary" variant="ghost" size="sm" loading={receiveSubmitting} onClick={() => receivePO(r)}>
+									{pageContents.actions.receive[lang]}
+								</Button>
+							{/if}
+							<Button color="default" variant="ghost" size="sm" onClick={() => openDetail(r)}>
+								{pageContents.actions.detail[lang]}
+							</Button>
+						</div>
+					{/snippet}
+				</DataTable>
+			</div>
+
+			<!-- ── Phân trang (server-side) — C5 thu nhỏ khi cuộn, C6 pop khi chạm đáy ── -->
+			<footer class="admin-pagination" class:pagination-collapsed={tableScrolled} class:pagination-pop={paginationPopped}>
+				<span class="total-count">{pageContents.pagination.total[lang]} {total} {pageContents.pagination.records[lang]}</span>
+				<div class="page-controls">
+					<Pagination
+						bind:page={page}
+						totalPages={totalPages}
+						loading={loading}
+						variant="compact"
+						prevLabel={pageContents.pagination.prev[lang]}
+						nextLabel={pageContents.pagination.next[lang]}
+						aria-label={pageContents.title[lang]}
+					/>
+					<span class="page-size">
+						<span class="page-size-label">{pageContents.pagination.pageSize[lang]}</span>
+						<select class="admin-select" bind:value={pageSize} onchange={onPageSizeChange}>
+							{#each pageSizes as s (s)}
+								<option value={s}>{s}</option>
+							{/each}
+						</select>
+					</span>
+				</div>
+			</footer>
+		</div>
+	{/if}
+
+	<!-- ── M1: FAB chính (mobile only) — gom 3 nút hành động ── -->
+	<div class="fab-group">
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.mobilePanel.title[lang]}
+			onclick={() => {
+				mobilePanelTab = 'filter';
+				mobilePanelOpen = true;
+			}}
+			data-test="purchases-fab-settings"
+		>
+			<Icon icon={iconify['tune-rounded']} size="md" />
+			{#if filtersDirtyCount > 0}
+				<span class="filter-count-badge">{filtersDirtyCount}</span>
+			{/if}
+		</button>
+		<button type="button" class="fab fab--primary" aria-label={pageContents.filters.moreActions[lang]} onclick={() => (mobileFabOpen = !mobileFabOpen)} data-test="purchases-fab-main">
+			<Icon icon={mobileFabOpen ? iconify['close-rounded'] : iconify['add-rounded']} size="md" />
+		</button>
+		{#if mobileFabOpen}
+			<div class="fab-menu" data-test="purchases-fab-menu">
+				<button type="button" class="fab-menu-item" onclick={() => { mobileFabOpen = false; openQuickModal(); }}>
+					{pageContents.actions.createQuick[lang]}
+				</button>
+				<button type="button" class="fab-menu-item" onclick={() => { mobileFabOpen = false; openFullModal(); }}>
+					{pageContents.actions.createFull[lang]}
+				</button>
+				<button type="button" class="fab-menu-item fab-menu-item--danger" onclick={() => { mobileFabOpen = false; openReturnModal(); }}>
+					{pageContents.actions.returnSupplier[lang]}
+				</button>
+			</div>
+		{/if}
+	</div>
+
+	<!-- ── M2/M3: panel mobile — filter/sort/display 3 tab ── -->
+	{#if mobilePanelOpen}
+		<Modal bind:display={mobilePanelOpen} size="sm" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>{pageContents.mobilePanel.title[lang]}</Modal.Container.Header>
+				<Modal.Container.Body>
+					<div class="mobile-panel-tabs" role="tablist">
+						<button type="button" role="tab" class:active={mobilePanelTab === 'filter'} aria-selected={mobilePanelTab === 'filter'} onclick={() => (mobilePanelTab = 'filter')}>{pageContents.mobilePanel.tabFilter[lang]}</button>
+						<button type="button" role="tab" class:active={mobilePanelTab === 'sort'} aria-selected={mobilePanelTab === 'sort'} onclick={() => (mobilePanelTab = 'sort')}>{pageContents.mobilePanel.tabSort[lang]}</button>
+						<button type="button" role="tab" class:active={mobilePanelTab === 'display'} aria-selected={mobilePanelTab === 'display'} onclick={() => (mobilePanelTab = 'display')}>{pageContents.mobilePanel.tabDisplay[lang]}</button>
+					</div>
+
+					{#if mobilePanelTab === 'filter'}
 						<div class="admin-filter-grid">
 							<label class="form-field">
 								<span class="form-label">{pageContents.table.source[lang]}</span>
@@ -1584,39 +2089,15 @@
 							</label>
 							<label class="form-field">
 								<span class="form-label">{pageContents.filters.allBranches[lang]}</span>
-								<Select
-									class="admin-filter-select"
-									bind:value={branchFilter}
-									options={branchSelectOptions}
-									searchable
-									clearable
-									placeholder={pageContents.filters.allBranches[lang]}
-									onValueChange={() => onFilterChange()}
-								/>
+								<Select class="admin-filter-select" bind:value={branchFilter} options={branchSelectOptions} searchable clearable placeholder={pageContents.filters.allBranches[lang]} onValueChange={() => onFilterChange()} />
 							</label>
 							<label class="form-field">
 								<span class="form-label">{pageContents.filters.allSuppliers[lang]}</span>
-								<Select
-									class="admin-filter-select"
-									bind:value={supplierFilter}
-									options={supplierSelectOptions}
-									searchable
-									clearable
-									placeholder={pageContents.filters.allSuppliers[lang]}
-									onValueChange={() => onFilterChange()}
-								/>
+								<Select class="admin-filter-select" bind:value={supplierFilter} options={supplierSelectOptions} searchable clearable placeholder={pageContents.filters.allSuppliers[lang]} onValueChange={() => onFilterChange()} />
 							</label>
 							<label class="form-field">
 								<span class="form-label">{pageContents.filters.allCategories[lang]}</span>
-								<Select
-									class="admin-filter-select"
-									bind:value={categoryFilter}
-									options={categorySelectOptions}
-									searchable
-									clearable
-									placeholder={pageContents.filters.allCategories[lang]}
-									onValueChange={() => onFilterChange()}
-								/>
+								<Select class="admin-filter-select" bind:value={categoryFilter} options={categorySelectOptions} searchable clearable placeholder={pageContents.filters.allCategories[lang]} onValueChange={() => onFilterChange()} />
 							</label>
 							<label class="form-field">
 								<span class="form-label">{pageContents.filters.from[lang]}</span>
@@ -1627,85 +2108,55 @@
 								<input class="admin-input" type="date" bind:value={dateTo} onchange={onFilterChange} aria-label={pageContents.filters.to[lang]} />
 							</label>
 						</div>
-					</Modal.Container.Body>
-					<Modal.Container.Footer>
-						<Button color="default" variant="outline" onClick={resetFilters}>{pageContents.filters.reset[lang]}</Button>
-						<Button color="primary" onClick={() => {
-							filterModalDisplay = false;
-						}}>{pageContents.filters.apply[lang]}</Button>
-					</Modal.Container.Footer>
-				</Modal.Container>
-			</Modal>
-		{/if}
-	</header>
-
-	<!-- ── Danh sách ── -->
-	{#if listError}
-		<div class="admin-state error" role="alert">
-			<p class="state-title">{pageContents.states.errorTitle[lang]}</p>
-			<p class="state-detail">{listError}</p>
-			<Button color="primary" variant="outline" onClick={() => void loadPurchases()}>{pageContents.states.retry[lang]}</Button>
-		</div>
-	{:else}
-		<!-- ── Bảng đơn nhập — DataTable (component có sẵn) ──
-		     Server-side paging: data = 1 trang server, paging trong DataTable TẮT,
-		     Pagination element bên dưới bind:page điều khiển server.
-		     Skeleton/empty do DataTable tự render qua loadingLabel/emptyLabel. -->
-		<div class="admin-table-wrap">
-			<DataTable
-				data={purchasesAny}
-				{columns}
-				pageSize={pageSize}
-				showPagination={false}
-				loading={loading && !loadedOnce}
-				visual={{ striped: true, hoverable: true }}
-				emptyLabel={pageContents.states.empty[lang]}
-				loadingLabel={pageContents.states.loading[lang]}
-				caption={{ vi: 'Danh sách đơn nhập hàng', en: 'Purchase orders list' }}
-				actionsLabel={{ vi: pageContents.table.actions[lang], en: pageContents.table.actions[lang] }}
-				stickyHead
-				data-test="purchases-datatable"
-			>
-				{#snippet actionsContent(row)}
-					{@const r = row as unknown as PurchaseRow}
-					<div class="row-actions">
-						{#if r.status === 'ordered' || r.status === 'partially_received'}
-							<!-- update = primary -->
-							<Button color="primary" variant="ghost" size="sm" loading={receiveSubmitting} onClick={() => receivePO(r)}>
-								{pageContents.actions.receive[lang]}
-							</Button>
-						{/if}
-						<Button color="default" variant="ghost" size="sm" onClick={() => openDetail(r)}>
-							{pageContents.actions.detail[lang]}
-						</Button>
-					</div>
-				{/snippet}
-			</DataTable>
-		</div>
-
-		<!-- ── Phân trang (server-side) ── -->
-		<div class="admin-pagination">
-			<span class="total-count">{pageContents.pagination.total[lang]} {total} {pageContents.pagination.records[lang]}</span>
-			<div class="page-controls">
-				<Pagination
-					bind:page={page}
-					totalPages={totalPages}
-					loading={loading}
-					variant="compact"
-					prevLabel={pageContents.pagination.prev[lang]}
-					nextLabel={pageContents.pagination.next[lang]}
-					aria-label={pageContents.title[lang]}
-				/>
-				<span class="page-size">
-					<span class="page-size-label">{pageContents.pagination.pageSize[lang]}</span>
-					<select class="admin-select" bind:value={pageSize} onchange={onPageSizeChange}>
-						{#each pageSizes as s (s)}
-							<option value={s}>{s}</option>
-						{/each}
-					</select>
-				</span>
-			</div>
-		</div>
+					{:else if mobilePanelTab === 'sort'}
+						<div class="mobile-sort-grid">
+							<label class="form-field">
+								<span class="form-label">{pageContents.sort.field[lang]}</span>
+								<select class="admin-select" bind:value={panelSortField} data-test="purchases-sort-field">
+									<option value="createdAt">{pageContents.table.receivedAt[lang]}</option>
+									<option value="poCode">{pageContents.table.code[lang]}</option>
+									<option value="status">{pageContents.table.status[lang]}</option>
+									<option value="totalCost">{pageContents.table.totalCost[lang]}</option>
+									<option value="receivedAt">{pageContents.table.receivedAt[lang]}</option>
+								</select>
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.sort.direction[lang]}</span>
+								<select class="admin-select" bind:value={panelSortDirection} data-test="purchases-sort-direction">
+									<option value="desc">{pageContents.sort.desc[lang]}</option>
+									<option value="asc">{pageContents.sort.asc[lang]}</option>
+								</select>
+							</label>
+						</div>
+					{:else}
+						<div class="mobile-display-panel" data-test="purchases-cardfields-panel">
+							<p class="display-hint">{pageContents.cardDisplay.hint[lang]}</p>
+							{#each ['code', 'source', 'status', 'totalCost', 'receivedAt', 'supplier', 'branch'] as fid (fid)}
+								<label class="display-check">
+									<input
+										type="checkbox"
+										checked={cardFieldIds.includes(fid)}
+										onchange={(e) => {
+											const target = e.currentTarget as HTMLInputElement;
+											applyCardFields(target.checked ? [...cardFieldIds, fid] : cardFieldIds.filter((c) => c !== fid));
+										}}
+									/>
+									<span>{pageContents.table[fid]?.[lang] ?? fid}</span>
+								</label>
+							{/each}
+						</div>
+					{/if}
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button color="primary" onClick={() => {
+						if (mobilePanelTab === 'sort') {
+							onSortChange(panelSortField || 'createdAt', panelSortDirection);
+						}
+						mobilePanelOpen = false;
+					}}>{pageContents.mobilePanel.apply[lang]}</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
 	{/if}
 
 	<!-- ── Modal nhập nhanh ── -->
@@ -2448,62 +2899,82 @@
 		}
 	}
 
-	.admin-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-end;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.admin-title {
-		font-size: 1.75rem;
-		font-weight: 700;
-		color: var(--foreground);
-		margin: 0;
-	}
-
-	.admin-subtitle {
-		font-size: 0.9rem;
-		color: var(--foreground-500);
-		margin: 0.25rem 0 0;
-	}
-
-	/* ── Toolbar 1 row (yêu cầu 6): search flex:1 + dropdown + setting ── */
-	.admin-toolbar {
+	/* ── Toolbar 1 row (D1/D2/D3/D4): search + filter + 3 nút — KHÔNG admin-header
+	   (C1: caption DataTable thay thế title/subtitle) ── */
+	.admin-table-toolbar {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-top: 0.75rem;
+		flex-wrap: wrap;
 	}
 
 	.admin-search {
 		flex: 1;
-		min-width: 0;
+		min-width: 12rem;
+		position: relative;
 	}
 
-	/* DropdownMenu.Trigger icon-only: default padding 0 0.75rem giành cho
-	   text — vuông hoá + thu gọn. Màu theo nút setting (soft default). */
-	:global(.dropdown-menu-trigger.admin-toolbar-menu-trigger) {
-		aspect-ratio: 1;
-		padding: 0;
-		width: 2.5rem;
-		justify-content: center;
+	/* C7: suggest popover — absolute dưới input, nền đậm hơn trang */
+	.suggest-popover {
+		position: absolute;
+		top: calc(100% + 0.25rem);
+		left: 0;
+		right: 0;
+		z-index: 50;
+		background: var(--background);
 		border: 1px solid var(--default-300);
 		border-radius: var(--field-radius, 0.75rem);
-		background: var(--default-50, transparent);
+		box-shadow: var(--shadow-md, 0 4px 16px hsl(0 0% 0% / 0.12));
+		max-height: 16rem;
+		overflow-y: auto;
 	}
 
-	/* Nút setting bộ lọc — cao bằng Input (2.5rem), dirty → primary soft
-	   (đổi màu qua props color/variant, CSS chỉ chuẩn hoá kích thước). */
-	.admin-toolbar-filter-btn {
+	.suggest-title {
+		padding: 0.4rem 0.75rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--foreground-500);
+	}
+
+	.suggest-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.4rem 0.75rem;
+		border: 0;
+		background: transparent;
+		color: var(--foreground);
+		font-size: 0.85rem;
+		text-align: left;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--default-100);
+		}
+	}
+
+	.suggest-item-text {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Nút setting bộ lọc — icon square 2.5rem, dirty → primary soft */
+	.admin-filter-btn {
 		aspect-ratio: 1;
 		width: 2.5rem;
 		padding: 0;
 		position: relative;
+		flex-shrink: 0;
 	}
 
-	/* Đếm filter đang áp — dot badge góc nút setting */
+	/* Đếm filter đang áp — dot badge góc nút */
 	.filter-count-badge {
 		position: absolute;
 		top: -0.25rem;
@@ -2518,6 +2989,42 @@
 		font-weight: 700;
 		line-height: 1rem;
 		text-align: center;
+	}
+
+	/* D2: nhóm 3 nút hành động — desktop hiển thị, mobile ẩn (FAB thay) */
+	.admin-actions-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+
+		@media (max-width: 767px) {
+			display: none;
+		}
+	}
+
+	/* C9: bulk bar — hàng công cụ khi chọn ≥1 row */
+	.bulk-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		border-radius: var(--field-radius, 0.75rem);
+		background: var(--primary-soft, hsl(239 84% 67% / 0.12));
+	}
+
+	.bulk-count {
+		font-size: 0.85rem;
+		font-weight: 600;
+		margin-right: auto;
+	}
+
+	.bulk-delete-desc {
+		margin: 0;
+		color: var(--foreground);
+		font-size: 0.9rem;
+		line-height: 1.5;
 	}
 
 	/* ── Filter grid trong modal (yêu cầu 3) — KHÔNG dùng class .admin-filters
@@ -2607,17 +3114,36 @@
 		}
 	}
 
+	/* ── C2/C3/C4: vùng bảng co giãn — admin-page--fullheight là flex column
+	   100% (layout :has cung cấp height), table-area chiếm phần còn lại,
+	   wrap CUỘN TẠI ĐÂY (cả 2 trục — overflow-x visible không thể cùng tồn tại với
+	   overflow-y auto; sticky thead vẫn hoạt động trong chính wrap). ── */
+	.admin-page--fullheight {
+		height: 100%;
+		max-width: none;
+		gap: 0.75rem;
+		padding: 1rem 1.25rem;
+
+		@media (max-width: 767px) {
+			padding: 0.75rem;
+		}
+	}
+
+	.admin-table-area {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
 	.admin-table-wrap {
-		overflow-x: auto;
+		flex: 1;
+		min-height: 0;
+		overflow: auto;
 		border-radius: 0.75rem;
 		border: 1px solid var(--default-300);
 		background: var(--background);
-		/* Sticky thead: wrap overflow-x auto tao scroll context - th sticky bam
-		   theo wrap (khong cuon) -> thead truot mat. Co stickyHead: wrap phai
-		   thoat scroll context (beng ngang do .datatable-table-wrap tu cuon). */
-		&:has(:global(.datatable-sticky-head)) {
-			overflow-x: visible;
-		}
 	}
 
 	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
@@ -2659,12 +3185,53 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	/* ── C5/C6: pagination — thu nhỏ khi cuộn (tableScrolled), phóng nhịp khi
+	   chạm đáy (paginationPopped — transform-only, không đổi layout tránh vỡ
+	   click đổi trang) ── */
 	.admin-pagination {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		gap: 1rem;
 		flex-wrap: wrap;
+		transition: padding 200ms ease, font-size 200ms ease;
+	}
+
+	.pagination-collapsed {
+		padding-block: 0.15rem;
+
+		.total-count,
+		.page-size-label {
+			font-size: 0.75rem;
+		}
+	}
+
+	.pagination-pop {
+		animation: pagination-pop 450ms ease;
+	}
+
+	@keyframes pagination-pop {
+		0% {
+			transform: scale(1);
+		}
+		40% {
+			transform: scale(1.05);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.pagination-pop {
+			animation: none;
+		}
+
+		.admin-pagination,
+		.admin-pagination .total-count,
+		.admin-pagination .page-size-label {
+			transition: none;
+		}
 	}
 
 	.total-count {
@@ -3155,5 +3722,156 @@
 		> .admin-input {
 			flex: 1;
 		}
+	}
+
+	/* ── M1: FAB nhóm nút nổi góc phải-dưới (mobile only) ──
+	   padding-bottom cho card view: FAB không che card cuối khi cuộn tới đáy */
+	:global(.admin-inset:has(.admin-page--fullheight)) .admin-page--fullheight {
+		@media (max-width: 767px) {
+			padding-bottom: 4.5rem;
+		}
+	}
+
+	.fab-group {
+		position: fixed;
+		right: 1rem;
+		bottom: calc(1rem + var(--admin-pagination-h, 3rem));
+		display: flex;
+		flex-direction: column-reverse;
+		align-items: center;
+		gap: 0.6rem;
+		z-index: 400;
+
+		@media (min-width: 768px) {
+			display: none;
+		}
+	}
+
+	.fab {
+		width: 3.25rem;
+		height: 3.25rem;
+		border-radius: 999px;
+		border: 1px solid var(--default-300);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		position: relative;
+		box-shadow: var(--shadow-md, 0 4px 16px hsl(0 0% 0% / 0.16));
+	}
+
+	.fab--primary {
+		background: var(--primary);
+		color: var(--primary-contrast, #fff);
+		border-color: transparent;
+	}
+
+	.fab--secondary {
+		background: var(--background);
+		color: var(--foreground);
+		width: 2.75rem;
+		height: 2.75rem;
+	}
+
+	.fab-menu {
+		position: absolute;
+		right: 0;
+		bottom: calc(100% + 0.5rem);
+		min-width: 11rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: var(--field-radius, 0.75rem);
+		box-shadow: var(--shadow-lg, 0 8px 24px hsl(0 0% 0% / 0.18));
+		display: flex;
+		flex-direction: column;
+		padding: 0.35rem;
+		overflow: hidden;
+	}
+
+	.fab-menu-item {
+		display: block;
+		width: 100%;
+		padding: 0.55rem 0.75rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground);
+		font-size: 0.875rem;
+		text-align: left;
+		cursor: pointer;
+		white-space: nowrap;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--default-100);
+		}
+	}
+
+	.fab-menu-item--danger {
+		color: var(--danger-600, hsl(358 75% 59%));
+	}
+
+	/* ── M2/M3: tabs panel mobile — active state rõ ── */
+	.mobile-panel-tabs {
+		display: flex;
+		gap: 0.25rem;
+		margin-bottom: 1rem;
+		border-bottom: 1px solid var(--default-200);
+
+		button {
+			flex: 1;
+			padding: 0.5rem 0.25rem;
+			border: 0;
+			border-bottom: 2px solid transparent;
+			background: transparent;
+			color: var(--foreground-500);
+			font-size: 0.85rem;
+			cursor: pointer;
+		}
+
+		button.active {
+			color: var(--primary);
+			border-bottom-color: var(--primary);
+			font-weight: 600;
+		}
+	}
+
+	.mobile-panel-fields {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+
+		label {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			white-space: nowrap;
+		}
+	}
+
+	.mobile-sort-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+
+	.mobile-display-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.display-hint {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--foreground-500);
+	}
+
+	.display-check {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		white-space: nowrap;
+		font-size: 0.875rem;
 	}
 </style>
