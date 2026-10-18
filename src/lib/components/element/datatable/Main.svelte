@@ -29,7 +29,8 @@
 		DataTableConfigs,
 		DataTableDensity,
 		DataTableRootProps,
-		DataTableSortOrder
+		DataTableSortOrder,
+		DataTableSortMode
 	} from './_interface';
 	import type { Size } from '$components/interface';
 	import type { TranslateContent } from '$interfaces/basic';
@@ -38,8 +39,17 @@
 		data = $bindable<Record<string, unknown>[] | undefined>(undefined),
 		columns: columnsProp,
 		caption,
+		captionDescription,
 		pageSize: pageSizeProp,
 		sortable,
+		sortColumn: sortColumnProp = $bindable(undefined),
+		sortDirection: sortDirectionProp = $bindable('asc' as DataTableSortOrder),
+		sortMode,
+		showIndex,
+		indexOffset: indexOffsetProp,
+		checkboxHoverOnly,
+		checkOnRowClick,
+		selectionTools: selectionToolsProp,
 		selectable,
 		searchable,
 		searchPlaceholder,
@@ -233,6 +243,8 @@
 
 	// ── STATE (source of truth) ──
 	let query = $state('');
+	// Sort: bindable (sortColumn/sortDirection) khi page truyền vào (server mode
+	// hoặc điều khiển từ ngoài); fallback state nội bộ activeSort/sortOrder.
 	let activeSort: string | undefined = $state(undefined);
 	let sortOrder: DataTableSortOrder = $state('asc');
 	// page là bindable prop (source of truth), không phải $state riêng.
@@ -241,6 +253,25 @@
 	const pageSize: number = $derived(pageSizeState ?? pageSizeProp ?? 10);
 	const pageSizeOptions: number[] = $derived(pageSizeOptionsProp ?? [5, 10, 20]);
 	const selected = new SvelteSet<string>();
+
+	// ── Sort bindable + mode (purchases redesign) ──
+	// sortMode 'server': pipeline BỎ stage sort client (server đã sort — client
+	// localeCompare xáo trộn thứ tự + sai trang). sortColumn/sortDirection là
+	// bindable props (khai báo trong $props() trên) — page đọc/ghi trực tiếp,
+	// đồng bộ cả chiều ngược từ Head click.
+	const sortModeDerived: DataTableSortMode = $derived(sortMode ?? 'client');
+	const indexOffsetDerived: number = $derived(indexOffsetProp ?? 0);
+	const selectionToolsDerived: boolean = $derived(selectionToolsProp ?? true);
+	const showIndexDerived: boolean = $derived(!!showIndex);
+	const checkboxHoverOnlyDerived: boolean = $derived(!!checkboxHoverOnly);
+	const checkOnRowClickDerived: boolean = $derived(!!checkOnRowClick);
+	// activeSort hiệu dụng: bindable khi page truyền sortColumn, không thì state nội bộ.
+	const effSortColumn: string | undefined = $derived(
+		sortColumnProp !== undefined ? sortColumnProp : activeSort
+	);
+	const effSortOrder: DataTableSortOrder = $derived(
+		sortColumnProp !== undefined ? sortDirectionProp : sortOrder
+	);
 
 	// ── STATE edit cell / delete confirm / row actions / lazy load ──
 	// editCell: {rowId, columnId, value} — value 2-way với input editor.
@@ -313,12 +344,13 @@
 	// 2b) Nút create "cuống" khi bảng trống hoặc filter không khớp kết quả nào —
 	// gợi ý người dùng có thể tạo data thay vì nhìn bảng rỗng.
 	const createAttention: boolean = $derived(creatableDerived && filtered.length === 0);
-	// 3) sort (bảo toàn index gốc)
+	// 3) sort (bảo toàn index gốc) — sortMode 'server' bỏ stage này.
 	const sorted: { row: Record<string, unknown>; index: number }[] = $derived.by(() => {
-		if (!activeSort) return filtered;
-		const col = columns.find((c) => c.id === activeSort);
+		if (sortModeDerived === 'server') return filtered;
+		if (!effSortColumn) return filtered;
+		const col = columns.find((c) => c.id === effSortColumn);
 		if (!col) return filtered;
-		const dir = sortOrder === 'asc' ? 1 : -1;
+		const dir = effSortOrder === 'asc' ? 1 : -1;
 		return [...filtered].sort((a, b) => {
 			const av = getCellValue(a.row, col);
 			const bv = getCellValue(b.row, col);
@@ -357,14 +389,20 @@
 
 	// ── ACTIONS (gọi từ sub qua context) ──
 	const toggleSort = (columnId: string): void => {
-		if (activeSort === columnId) {
-			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+		// Ghi vào bindable props (sortColumnProp/sortDirectionProp — page bind: sortColumn)
+		// HOẶC state nội bộ — cùng lúc để cả 2 luồng (server + client mode) chạy đúng.
+		if (effSortColumn === columnId) {
+			const next: DataTableSortOrder = effSortOrder === 'asc' ? 'desc' : 'asc';
+			sortDirectionProp = next;
+			sortOrder = next;
 		} else {
+			sortColumnProp = columnId;
+			sortDirectionProp = 'asc';
 			activeSort = columnId;
 			sortOrder = 'asc';
 		}
 		page = 1; // reset page khi đổi sort (kế thừa table v1)
-		onSortChange?.(columnId, sortOrder);
+		onSortChange?.(columnId, sortDirectionProp);
 	};
 
 	const goToPage = (p: number): void => {
@@ -403,6 +441,18 @@
 	const handleRowClick = (row: Record<string, unknown>, index: number): void => {
 		onRowClick?.(row as never, idOf(row, index));
 	};
+
+	// D6: click vùng nào của row cũng toggle chọn khi đã chọn ≥1 row.
+	// Trả true nếu đã tiêu hóa tap (caller bỏ onRowClick/detail).
+	const tryToggleRowOnTap = (rowId: string): boolean => {
+		if (!checkOnRowClickDerived || selected.size === 0) return false;
+		toggleRow(rowId);
+		return true;
+	};
+
+	// STT hiển thị (showIndex): offset phân trang server + vị trí trong trang.
+	const rowIndexText = (indexInPage: number): string =>
+		String(indexOffsetDerived + indexInPage + 1);
 
 	// ── B5: card view helpers (template đọc) ──
 	const getRowIdPublic = (row: Record<string, unknown>, index: number): string => idOf(row, index);
@@ -1085,6 +1135,7 @@
 
 	// ── LABELS (i18n, template {n}/{page}/{index} thay ở nơi dùng) ──
 	const captionText = $derived(getText(caption, { en: 'Data table', vi: 'Bảng dữ liệu' }));
+	const captionDescText = $derived(captionDescription ? getText(captionDescription) : '');
 	const searchPlaceholderText = $derived(getText(searchPlaceholder, { en: 'Search…', vi: 'Tìm kiếm…' }));
 	const searchText = $derived(getText(searchLabel, { en: 'Search', vi: 'Tìm kiếm' }));
 	const clearText = $derived(getText(clearFilterLabel, { en: 'Clear search', vi: 'Xóa tìm kiếm' }));
@@ -1156,6 +1207,24 @@
 		},
 		get captionText() {
 			return captionText;
+		},
+		get captionDescriptionText() {
+			return captionDescText;
+		},
+		get showIndex() {
+			return showIndexDerived;
+		},
+		get indexOffset() {
+			return indexOffsetDerived;
+		},
+		get checkboxHoverOnly() {
+			return checkboxHoverOnlyDerived;
+		},
+		get checkOnRowClick() {
+			return checkOnRowClickDerived;
+		},
+		get selectionTools() {
+			return selectionToolsDerived;
 		},
 		get searchPlaceholderText() {
 			return searchPlaceholderText;
@@ -1347,6 +1416,7 @@
 				this.editable ? 'editable' : undefined,
 			this.stickyHead ? 'datatable-sticky-head' : undefined,
 			this.cardMode ? 'datatable-card-mode' : undefined,
+			this.checkboxHoverOnly ? 'datatable-check-hover' : undefined,
 			undefined
 			];
 			return styleSynced({ defaultStyles, propStyles: classProp }, overwriteDefaultStyles);
@@ -1385,10 +1455,10 @@
 			return pageSizeOptions;
 		},
 		get activeSort() {
-			return activeSort;
+			return effSortColumn;
 		},
 		get sortOrder() {
-			return sortOrder;
+			return effSortOrder;
 		},
 		get allPageSelected() {
 			const ids = pageRows.map(({ row, index }) => idOf(row, index));
@@ -1473,6 +1543,8 @@
 		get detailOpen() {
 			return detailOpen;
 		},
+		rowIndexText,
+		tryToggleRowOnTap,
 		get rowDetail() {
 			return rowDetailDerived;
 		},
@@ -1556,7 +1628,7 @@
 				</span>
 			{/if}
 
-			{#if configs.selectable && selectedCount > 0}
+			{#if configs.selectable && selectedCount > 0 && configs.selectionTools}
 				<span class="datatable-selection-tools" data-role="selection-tools">
 					<span class="datatable-selection-count">{selectedCount}</span>
 					{#if copyableDerived}
@@ -1664,7 +1736,12 @@
 	{:else}
 	<div class="datatable-table-wrap">
 		<table class="datatable" aria-label={ariaLabel ?? undefined}>
-			<caption class="datatable-caption" bind:this={captionEl}>{configs.captionText}</caption>
+			<caption class="datatable-caption" bind:this={captionEl}>
+			<span class="datatable-caption-title">{configs.captionText}</span>
+			{#if configs.captionDescriptionText}
+				<span class="datatable-caption-desc">{configs.captionDescriptionText}</span>
+			{/if}
+		</caption>
 			<Head />
 			<Body />
 		</table>
@@ -2059,6 +2136,40 @@
 		font-weight: 600;
 		color: var(--muted, #71717a);
 		text-align: left;
+	}
+
+	// Caption title + description (C1/C5): desc ẩn bằng max-height transition
+	// khi trang cuộn (class .caption-collapsed do page đặt trên root).
+	.datatable-caption-title {
+		display: block;
+	}
+
+	.datatable-caption-desc {
+		display: block;
+		margin-top: 0.125rem;
+		font-size: 0.75rem;
+		font-weight: 400;
+		color: var(--muted, #71717a);
+		max-height: 3rem;
+		overflow: hidden;
+		transition: max-height 200ms ease, opacity 200ms ease, margin-top 200ms ease;
+	}
+
+	.datatable-root.caption-collapsed .datatable-caption {
+		padding-block: 0.25rem;
+		font-size: 0.9375rem;
+	}
+
+	.datatable-root.caption-collapsed .datatable-caption-desc {
+		max-height: 0;
+		opacity: 0;
+		margin-top: 0;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.datatable-caption-desc {
+			transition: none;
+		}
 	}
 
 	// ── Toolbar (search + results) ──

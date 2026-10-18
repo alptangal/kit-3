@@ -9,6 +9,7 @@ import type { TranslateContent } from '$interfaces/basic';
 import type { Snippet } from 'svelte';
 
 export type DataTableSortOrder = 'asc' | 'desc';
+export type DataTableSortMode = 'client' | 'server';
 export type DataTableDensity = 'default' | 'compact';
 export type DataTableColumnAlign = 'left' | 'center' | 'right';
 /** Status semantic cho pill (map token: success→--success, danger→--danger, ...). */
@@ -134,10 +135,28 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	columns: DataTableColumn<T>[];
 	/** Tiêu đề cho `<caption>` (i18n). */
 	caption?: TranslateContent | string;
+	/** Mô tả phụ dưới tiêu đề caption (i18n — ẩn khi cuộn, C5). */
+	captionDescription?: TranslateContent | string;
 	/** Số row mỗi trang (default 10). */
 	pageSize?: number;
 	/** Cho phép sort (click header). */
 	sortable?: boolean;
+	/** Cột đang sort (bindable — source of truth page khi sortMode='server'). */
+	sortColumn?: string;
+	/** Hướng sort (bindable — đi cùng sortColumn). */
+	sortDirection?: DataTableSortOrder;
+	/** 'client' (default): sort trong page; 'server': bỏ stage sort client (server đã sort). */
+	sortMode?: DataTableSortMode;
+	/** Cột số thứ tự đầu bảng (td = indexOffset + i + 1). */
+	showIndex?: boolean;
+	/** Offset STT khi phân trang server (vd (page-1)*pageSize). */
+	indexOffset?: number;
+	/** Checkbox cột đầu chỉ hiện khi hover row (hoặc row đã chọn). */
+	checkboxHoverOnly?: boolean;
+	/** Click vùng nào của row cũng toggle chọn khi đã chọn ≥1 row (D6). */
+	checkOnRowClick?: boolean;
+	/** Ẩn toolbar selection tools built-in (copy/delete/clear local) — trang tự làm bulk bar. */
+	selectionTools?: boolean;
 	/** Cho phép chọn row (checkbox). */
 	selectable?: boolean;
 	/** Hiện ô search (client-side, mọi cột). */
@@ -349,6 +368,18 @@ export interface DataTableConfigs extends BasicConfigs {
 	cardFields: string[];
 	/** B5: sticky thead bật? (media ≤1024 xử lý ở CSS). */
 	stickyHead: boolean;
+	/** Mô tả phụ caption (i18n đã resolve — ''). */
+	captionDescriptionText: string;
+	/** Cột STT đầu bảng bật? */
+	showIndex: boolean;
+	/** Offset STT (indexOffset). */
+	indexOffset: number;
+	/** Checkbox ẩn đến khi hover row? */
+	checkboxHoverOnly: boolean;
+	/** Click row toggle chọn khi đã chọn ≥1? */
+	checkOnRowClick: boolean;
+	/** Toolbar selection tools built-in bật? */
+	selectionTools: boolean;
 }
 
 /** Shared state root → sub (Head/Body/Pagination), bỏ writable store của v1. */
@@ -387,8 +418,7 @@ export interface DataTableSharedState {
 	/** column hiện đang sort (undefined nếu chưa). */
 	activeSort: string | undefined;
 	/** order hiện tại (chỉ dùng khi activeSort). */
-	sortOrder: DataTableSortOrder;
-	/** Điều hướng trang. */
+	sortOrder: DataTableSortOrder;	/** Điều hướng trang. */
 	goToPage: (page: number) => void;
 	/** Đổi page size. */
 	changePageSize: (size: number) => void;
@@ -486,6 +516,10 @@ export interface DataTableSharedState {
 	cellDetail: boolean;
 	/** Cell (columnId) cần focus khi mở modal chi tiết từ cell click. */
 	detailFocusColumn: string | undefined;
+	/** STT của row hiển thị (indexOffset + vị trí trong trang) — Body đọc. */
+	rowIndexText: (indexInPage: number) => string;
+	/** Click row → toggle chọn (checkOnRowClick, selectedCount ≥ 1). */
+	tryToggleRowOnTap: (rowId: string) => boolean;
 	/** Xác định editor type cho cell (col.editor > oldValue number → number). */
 	getEditorType: (
 		col: DataTableColumn<Record<string, unknown>>,

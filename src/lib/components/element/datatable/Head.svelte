@@ -60,6 +60,9 @@
 					/>
 				</th>
 			{/if}
+			{#if configs?.showIndex}
+				<th class="datatable-th datatable-th--index" scope="col">#</th>
+			{/if}
 			{#each ctx.columns as col, ci (col.id)}
 				{#if configs?.sortable && col.sortable !== false}
 					<th
@@ -172,6 +175,12 @@
 
 	.datatable-th--check {
 		width: 2.5rem;
+	}
+
+	// Cột STT (showIndex): hẹp, căn giữa.
+	.datatable-th--index {
+		width: 3rem;
+		text-align: center;
 	}
 
 	// B6.2: th cột actions — căn phải khớp td, không kẹp width.

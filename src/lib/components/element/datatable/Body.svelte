@@ -57,9 +57,12 @@
 		return true;
 	};
 
-	// Số cột (gồm cột checkbox + cột actions) cho empty/loading colspan.
+	// Số cột (gồm cột checkbox + STT + cột actions) cho empty/loading colspan.
 	const colCount = $derived(
-		(ctx?.columns.length ?? 0) + (configs?.selectable ? 1 : 0) + (ctx?.rowActions ? 1 : 0)
+		(ctx?.columns.length ?? 0) +
+			(configs?.selectable ? 1 : 0) +
+			(configs?.showIndex ? 1 : 0) +
+			(ctx?.rowActions ? 1 : 0)
 	);
 	const hasRows = $derived(ctx ? ctx.pageRows.length > 0 : true);
 	// số row skeleton khi loading (mặc định = pageSize, tối thiểu 3).
@@ -118,6 +121,8 @@
 		// B5: guard chung mọi nhánh — không tap control/button/cell editor đang mở.
 		const target = e.target as HTMLElement;
 		if (target.closest('input, button, a, [role="checkbox"], [data-no-tap], .datatable-cell-editor')) return;
+		// D6: đã chọn ≥1 row + checkOnRowClick → click bất kỳ đâu trên row toggle chọn.
+		if (ctx?.tryToggleRowOnTap(rowId)) return;
 		if (ctx?.isMobile) {
 			const mode = ctx.configs?.mobileTapMode ?? 'actions';
 			if (mode === 'callback') {
@@ -129,10 +134,13 @@
 			if (ctx.rowActions) ctx.toggleRowActions(rowId);
 			return;
 		}
-		// PC: rowDetail bật → click row mở modal.
+		// PC: rowDetail bật → click row mở modal nội bộ; ngược lại bắn callback
+		// trang (onRowClick — purchases/customers dùng để mở modal chi tiết).
 		if (ctx?.rowDetail) {
 			ctx.openRowDetail(rowId);
+			return;
 		}
+		ctx?.handleRowClick(row, index);
 	};
 
 	// ── Auto focus input editor ngay khi mount (rAF — caret cuối text) ──
@@ -175,6 +183,9 @@
 							<span class="datatable-skeleton datatable-skeleton--check"></span>
 						</td>
 					{/if}
+					{#if configs?.showIndex}
+						<td class="datatable-td datatable-td--index"></td>
+					{/if}
 					{#each ctx.columns as col (col.id)}
 						<td class="datatable-td">
 							<span class="datatable-skeleton"></span>
@@ -212,6 +223,9 @@
 								events={rowCheckEvents(rowId)}
 							/>
 						</td>
+					{/if}
+					{#if configs?.showIndex}
+						<td class="datatable-td datatable-td--index">{ctx.rowIndexText(ri)}</td>
 					{/if}
 					{#each ctx.columns as col (col.id)}
 						{@const value = ctx.getCellValue(row, col)}
@@ -438,6 +452,34 @@
 
 	.datatable-body {
 		display: table-row-group;
+	}
+
+	// Cột STT (showIndex): hẹp, căn giữa, số tabular.
+	.datatable-td--index {
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+		color: var(--muted, #71717a);
+	}
+
+	// ── D6: checkbox hover-only — ẩn (opacity 0), hiện khi hover row hoặc row
+	// đã chọn. Root class .datatable-check-hover (Main render), td--check scoped
+	// ở đây; :global() root vì khác scope hash. Checkbox root class
+	// .datatable-row-checkbox do prop class của Checkbox → :global() (khác hash). ──
+	:global(.datatable-root.datatable-check-hover) .datatable-td--check :global(.datatable-row-checkbox) {
+		opacity: 0;
+		transition: opacity 120ms ease;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		:global(.datatable-root.datatable-check-hover) .datatable-row:hover .datatable-td--check :global(.datatable-row-checkbox),
+		:global(.datatable-root.datatable-check-hover) .datatable-row:focus-within .datatable-td--check :global(.datatable-row-checkbox) {
+			opacity: 1;
+		}
+	}
+
+	// Row đã chọn: checkbox LUÔN hiện (kể cả không hover).
+	:global(.datatable-root.datatable-check-hover) .datatable-row.selected .datatable-td--check :global(.datatable-row-checkbox) {
+		opacity: 1;
 	}
 
 	.datatable-row {
