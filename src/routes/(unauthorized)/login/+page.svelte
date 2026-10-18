@@ -18,6 +18,7 @@
 	import { getDpopPublicJwk } from '$lib/dpop/keypair';
 	import {
 		browserSupportsWebAuthn,
+		platformAuthenticatorIsAvailable,
 		startAuthentication
 	} from '@simplewebauthn/browser';
 	import { client } from '$store/basic.svelte';
@@ -353,11 +354,24 @@ $effect(() => {
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { private: privateKey, public: publicKey };
 
-		// WebAuthn support check (SSR-safe — chỉ chạy client)
-		passkeySupported =
-			typeof window !== 'undefined' &&
-			typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
-			browserSupportsWebAuthn();
+		// WebAuthn support check (SSR-safe — chỉ chạy client).
+		// platformAuthenticatorIsAvailable: chỉ hiện biometric khi thiết bị CÓ
+		// platform authenticator (Touch ID / Face ID / vân tay / Windows Hello) —
+		// desktop không có → ẩn nút. Check trong try vì một số browser ném lỗi
+		// khi gọi trong iframe không cấp quyền.
+		passkeySupported = false;
+		try {
+			if (
+				typeof window !== 'undefined' &&
+				typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
+				browserSupportsWebAuthn() &&
+				(await platformAuthenticatorIsAvailable())
+			) {
+				passkeySupported = true;
+			}
+		} catch {
+			passkeySupported = false;
+		}
 
 		try {
 			if (typeof localStorage !== 'undefined') {
@@ -494,6 +508,27 @@ $effect(() => {
 			</Button>
 		</div>
 
+		{#if passkeySupported}
+			<!-- Đăng nhập bằng Passkey (Touch ID / Face ID / Windows Hello / vân tay Android).
+			     Hàng riêng PHÍA TRÊN nút Sign in theo yêu cầu. -->
+			<div class="passkey-section">
+				<Button
+					class="auth-btn-passkey"
+					color="primary"
+					variant="ghost"
+					icon="lucide:fingerprint"
+					loading={passkeyLoading}
+					disabled={passkeyLoading}
+					onclick={handlePasskeyLogin}
+				>
+					{pageContents.passkeyLogin[lang] ?? (lang === 'vi' ? 'Đăng nhập bằng sinh trắc học' : 'Sign in with biometrics')}
+				</Button>
+				<div class="passkey-divider">
+					<span>{pageContents.passkeyOr[lang] ?? (lang === 'vi' ? 'hoặc' : 'or')}</span>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Nút hành động -->
 		<div class="auth-actions">
 			<Button
@@ -520,24 +555,6 @@ $effect(() => {
 			>
 				{pageContents.reset[lang] ?? 'Reset'}
 			</Button>
-
-			{#if passkeySupported}
-				<!-- Đăng nhập bằng Passkey (Touch ID / Face ID / Windows Hello / vân tay Android) -->
-				<div class="passkey-divider">
-					<span>{pageContents.passkeyOr[lang] ?? (lang === 'vi' ? 'hoặc' : 'or')}</span>
-				</div>
-				<Button
-					class="auth-btn-passkey"
-					color="primary"
-					variant="ghost"
-					icon="lucide:fingerprint"
-					loading={passkeyLoading}
-					disabled={passkeyLoading}
-					onclick={handlePasskeyLogin}
-				>
-					{pageContents.passkeyLogin[lang] ?? (lang === 'vi' ? 'Đăng nhập bằng sinh trắc học' : 'Sign in with biometrics')}
-				</Button>
-			{/if}
 		</div>
 	</Form>
 
@@ -657,13 +674,19 @@ $effect(() => {
 		}
 	}
 
-	/* Passkey divider + button */
+	/* Passkey: hàng riêng PHÍA TRÊN nút Sign in (nút + divider "hoặc") */
+	.passkey-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		margin-top: 0.5rem;
+	}
+
 	.passkey-divider {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		width: 100%;
-		margin-top: 0.25rem;
 		color: var(--foreground-500, #9ca3af);
 		font-size: 0.8rem;
 
