@@ -23,6 +23,11 @@
 		...props
 	}: SidebarSearchProps = $props();
 
+	// restAttrs: forward data-*/aria-*/title/id/onclick (bẫy chung: Input không
+	// spread data-test — wrap div mang nó giúp probe/gọi ra ngoài).
+	const { 'data-test': _dataTest, ...rest } = props as Record<string, string | ((e: Event) => void)>;
+	const restAttrs = $derived({ ...rest });
+
 	const ctx = getSidebarContext();
 
 	// i18n: string | TranslateContent (fallback en → vi)
@@ -47,7 +52,7 @@
 	</span>
 {/snippet}
 
-<div class="sidebar-search" data-test="sidebar-search">
+<div class="sidebar-search" data-test="sidebar-search" {...restAttrs}>
 	<Input
 		type="text"
 		size="sm"

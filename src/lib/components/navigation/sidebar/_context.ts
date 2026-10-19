@@ -76,3 +76,22 @@ export function setMenuGroupContext(registry: MenuGroupRegistry) {
 export function getMenuGroupContext(): MenuGroupRegistry | undefined {
 	return getContext(GROUP_NAME);
 }
+
+// ── Label bridge (search không cần truyền `match` tay từng item): MenuItem
+// tạo $state slot, MenuButton CON điền labelText qua $effect. BẮT BUỘC hướng
+// này — setContext trong MenuButton chỉ thấy bởi CON CHÁU của nó, còn MenuItem
+// là CHA (init trước, đọc context của MenuButton luôn undefined). Slot $state
+// reactive: child effect ghi → derived matchText của cha re-run.
+export interface MenuLabelSlot {
+	current: string;
+}
+
+const ITEM_LABEL_SLOT = Symbol('sidebar-menu-item-label-slot');
+
+export function setMenuItemLabelSlot(slot: MenuLabelSlot) {
+	setContext(ITEM_LABEL_SLOT, slot);
+}
+
+export function getMenuItemLabelSlot(): MenuLabelSlot | undefined {
+	return getContext(ITEM_LABEL_SLOT);
+}

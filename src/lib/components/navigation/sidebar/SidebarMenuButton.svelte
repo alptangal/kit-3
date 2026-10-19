@@ -6,7 +6,7 @@
 	import { styleSynced, matchSegments, type TextSegment } from '$modules';
 	import { client } from '$store/basic.svelte';
 	import { Icon, Tooltip } from '$components/element';
-	import { getSidebarContext } from './_context';
+	import { getSidebarContext, getMenuItemLabelSlot } from './_context';
 	import type { SidebarMenuButtonProps } from './_interface';
 
 	let {
@@ -46,6 +46,14 @@
 	const labelSegments = $derived.by((): TextSegment[] =>
 		labelText && searchQuery ? matchSegments(labelText, searchQuery) : []
 	);
+
+	// Label bridge: MenuItem CHA tạo labelSlot qua context; MenuButton điền
+	// labelText qua $effect ($state ghi từ effect con → derived matchText của
+	// cha re-run). setContext từ con lên cha KHÔNG được (bẫy hướng context).
+	const labelSlot = getMenuItemLabelSlot();
+	$effect(() => {
+		if (labelSlot) labelSlot.current = labelText;
+	});
 
 	const isLink = $derived(!!href && !disabled);
 

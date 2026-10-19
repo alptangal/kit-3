@@ -115,6 +115,7 @@
 			from: { vi: 'Từ ngày', en: 'From' },
 			to: { vi: 'Đến ngày', en: 'To' },
 			searchPlaceholder: { vi: 'Tìm theo mã phiếu / ghi chú…', en: 'Search by PO code / note…' },
+			searchLabel: { vi: 'Tìm kiếm', en: 'Search' },
 			filterButton: { vi: 'Bộ lọc', en: 'Filters' },
 			filtersModalTitle: { vi: 'Bộ lọc đơn nhập', en: 'Purchase filters' },
 			reset: { vi: 'Đặt lại', en: 'Reset' },
@@ -416,7 +417,7 @@
 
 	// ── M2: panel mobile (filter/sort/display) ──
 	let mobilePanelOpen = $state(false);
-	let mobilePanelTab = $state<'filter' | 'sort' | 'display'>('filter');
+	let mobilePanelTab = $state<'search' | 'filter' | 'sort' | 'display'>('search');
 	let mobileFabOpen = $state(false);
 
 	// ── C5/C6: scroll state ──
@@ -445,7 +446,9 @@
 	// ── C7: blur khi có từ khoá → lưu suggest (DB per-user); focus → mở popover ──
 	// (blur handler trong markup gọi saveSearchKeyword; focus mở suggestOpen.)
 	function saveSearchKeyword() {
-		const kw = searchQuery.trim();
+		// BẪY: card mode mobile unmount Input trong caption → onDestroy emit
+		// undefined qua bind → searchQuery undefined. Guard mọi chỗ đọc.
+		const kw = (searchQuery ?? '').trim();
 		if (kw) recordSearchKeyword(PREFS_KEY, kw);
 		suggestOpen = false;
 	}
@@ -950,6 +953,9 @@
 		loading = true;
 		listError = undefined;
 		try {
+			// BẪY mobile: searchQuery có thể undefined (Input $bindable không default —
+			// emit undefined khi re-mount caption tools) → .trim() crash → listError.
+			const q = (searchQuery ?? '').trim();
 			const response = await encryption.fetchSecure(
 				'/api/admin/purchases/list',
 				{
@@ -957,7 +963,7 @@
 					body: {
 						page,
 						pageSize,
-						search: searchQuery.trim() || undefined,
+						search: q || undefined,
 						source: sourceFilter || undefined,
 						status: statusFilter || undefined,
 						branchId: branchFilter || undefined,
@@ -1081,13 +1087,14 @@
 	let dirtyCloseDisplay = $state(false);
 	let dirtyCloseAction = $state<(() => void) | null>(null);
 
-	function requestCloseIfDirty(isDirty: boolean, doClose: () => void) {
+	function requestCloseIfDirty(isDirty: boolean, doClose: () => void): boolean {
 		if (!isDirty) {
 			doClose();
-			return;
+			return true;
 		}
 		dirtyCloseAction = doClose;
 		dirtyCloseDisplay = true;
+		return false; // chặn đóng — AlertDialog hỏi giữ/bỏ thay đổi
 	}
 
 	// Snapshot so sánh: modal nào đã sửa gì đó chưa (quick/full/return)
@@ -2398,7 +2405,7 @@
 			class="fab fab--secondary"
 			aria-label={pageContents.mobilePanel.title[lang]}
 			onclick={() => {
-				mobilePanelTab = 'filter';
+				mobilePanelTab = 'search';
 				mobilePanelOpen = true;
 			}}
 			data-test="purchases-fab-settings"
@@ -2433,12 +2440,43 @@
 				<Modal.Container.Header>{pageContents.mobilePanel.title[lang]}</Modal.Container.Header>
 				<Modal.Container.Body>
 					<div class="mobile-panel-tabs" role="tablist">
+						<button type="button" role="tab" class:active={mobilePanelTab === 'search'} aria-selected={mobilePanelTab === 'search'} onclick={() => (mobilePanelTab = 'search')}>{pageContents.filters.searchLabel[lang]}</button>
 						<button type="button" role="tab" class:active={mobilePanelTab === 'filter'} aria-selected={mobilePanelTab === 'filter'} onclick={() => (mobilePanelTab = 'filter')}>{pageContents.mobilePanel.tabFilter[lang]}</button>
 						<button type="button" role="tab" class:active={mobilePanelTab === 'sort'} aria-selected={mobilePanelTab === 'sort'} onclick={() => (mobilePanelTab = 'sort')}>{pageContents.mobilePanel.tabSort[lang]}</button>
 						<button type="button" role="tab" class:active={mobilePanelTab === 'display'} aria-selected={mobilePanelTab === 'display'} onclick={() => (mobilePanelTab = 'display')}>{pageContents.mobilePanel.tabDisplay[lang]}</button>
 					</div>
 
-					{#if mobilePanelTab === 'filter'}
+					{#if mobilePanelTab === 'search'}
+						<!-- BẪY card-mode: caption (chứa Input search) unmount trên mobile →
+						     search field chuyển sang panel FAB. Input riêng instance (không
+						     bind chung searchQuery với Input caption — tránh emit ngược undefined
+						     qua bind khi caption unmount) — sync 1 chiều qua onchange. -->
+						<div class="admin-filter-grid">
+							<label class="form-field">
+								<span class="form-label">{pageContents.filters.searchLabel[lang]}</span>
+								<input
+									class="admin-input"
+									type="text"
+									value={(searchQuery ?? '')}
+									onchange={(e) => { searchQuery = (e.currentTarget as HTMLInputElement).value ?? ''; page = 1; void loadPurchases(); }}
+									placeholder={pageContents.filters.searchPlaceholder[lang]}
+									data-test="purchases-mobile-search"
+								/>
+								{#if getSearchKeywords(PREFS_KEY).length > 0}
+									<div class="mobile-suggest">
+										{#each getSearchKeywords(PREFS_KEY).slice(0, 8) as kw (kw)}
+											<button type="button" class="mobile-suggest-item" onclick={() => { searchQuery = kw; page = 1; void loadPurchases(); mobilePanelOpen = false; }}>
+												{kw}
+											</button>
+										{/each}
+										<button type="button" class="mobile-suggest-item mobile-suggest-clear" onclick={() => { searchQuery = ''; page = 1; void loadPurchases(); }}>
+											{pageContents.filters.reset[lang]}
+										</button>
+									</div>
+								{/if}
+							</label>
+						</div>
+					{:else if mobilePanelTab === 'filter'}
 						<div class="admin-filter-grid">
 							<label class="form-field">
 								<span class="form-label">{pageContents.table.source[lang]}</span>
@@ -2531,7 +2569,7 @@
 
 	<!-- ── Modal nhập nhanh ── -->
 	{#if quickModalDisplay}
-		<Modal bind:display={quickModalDisplay} size="lg" isDimissable onCloseAttempt={() => { requestCloseIfDirty(quickDirty, () => { quickModalDisplay = false; }); }}>
+		<Modal bind:display={quickModalDisplay} size="lg" isDimissable onCloseAttempt={() => requestCloseIfDirty(quickDirty, () => { quickModalDisplay = false; })}>
 			<Modal.Container>
 				<Modal.Container.Header>
 						<div class="modal-header-receipt">
@@ -2710,7 +2748,7 @@
 
 	<!-- ── Modal nhập hàng đầy đủ (3 bước) ── -->
 	{#if fullModalDisplay}
-		<Modal bind:display={fullModalDisplay} size="xl" isDimissable onCloseAttempt={() => { requestCloseIfDirty(fullDirty, () => { fullModalDisplay = false; }); }}>
+		<Modal bind:display={fullModalDisplay} size="xl" isDimissable onCloseAttempt={() => requestCloseIfDirty(fullDirty, () => { fullModalDisplay = false; })}>
 			<Modal.Container>
 				<Modal.Container.Header>
 						<div class="modal-header-receipt">
@@ -3109,7 +3147,7 @@
 
 	<!-- ── Modal trả hàng NCC ── -->
 	{#if returnModalDisplay}
-		<Modal bind:display={returnModalDisplay} size="lg" isDimissable onCloseAttempt={() => { requestCloseIfDirty(returnDirty, () => { returnModalDisplay = false; }); }}>
+		<Modal bind:display={returnModalDisplay} size="lg" isDimissable onCloseAttempt={() => requestCloseIfDirty(returnDirty, () => { returnModalDisplay = false; })}>
 			<Modal.Container>
 				<Modal.Container.Header>{pageContents.returnModal.title[lang]}</Modal.Container.Header>
 				<Modal.Container.Body>
@@ -4572,6 +4610,34 @@
 	}
 
 	.fab-menu-item--danger {
+		color: var(--danger-600, hsl(358 75% 59%));
+	}
+
+	/* ── C7: mobile search tab (caption tools unmount ở card mode) ── */
+	.mobile-suggest {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		margin-top: 0.5rem;
+	}
+
+	.mobile-suggest-item {
+		padding: 0.3rem 0.6rem;
+		border: 1px solid var(--default-300);
+		border-radius: 999px;
+		background: var(--background);
+		color: var(--foreground);
+		font-size: 0.75rem;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--default-100);
+		}
+	}
+
+	.mobile-suggest-clear {
+		border-color: var(--danger-300, hsl(358 75% 90%));
 		color: var(--danger-600, hsl(358 75% 59%));
 	}
 
