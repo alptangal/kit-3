@@ -1303,6 +1303,8 @@
 			id: 'totalCost',
 			label: pageContents.table.totalCost[lang],
 			accessor: (row) => formatMoney((row as unknown as PurchaseRow).totalCost),
+			// Chuẩn cột tiền: căn phải (số có đơn vị dễ so sánh theo hàng dọc).
+			align: 'right',
 			noHighlight: true
 		},
 		{

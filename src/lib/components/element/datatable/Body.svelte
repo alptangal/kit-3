@@ -481,6 +481,14 @@
 		color: var(--muted, #71717a);
 	}
 
+	// Align theo cột (col.align — td mặc định kế thừa left; Head đã có rule riêng).
+	.datatable-td.align-right {
+		text-align: right;
+	}
+	.datatable-td.align-center {
+		text-align: center;
+	}
+
 	// ── indexCheckboxes: checkbox gộp vào ô STT — 2 lớp chồng nhau ──
 	// num = số STT; check = checkbox. Mặc định num hiện, check ẩn (opacity 0
 	// vẫn nhận click/tap). Hover/focus td → swap. Position relative trên td.
