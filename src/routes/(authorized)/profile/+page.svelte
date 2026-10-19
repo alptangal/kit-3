@@ -1,10 +1,10 @@
 <!-- src/routes/(authorized)/profile/+page.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Button, Icon, AlertDialog } from '$components/element';
+	import { Button, Icon, AlertDialog, Tabs, Accordion } from '$components/element';
 	import { Input } from '$components/form';
 	import { encryption } from '$modules/encryption';
-	import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
+	import { browserSupportsWebAuthn, startRegistration, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
 	import { client } from '$store/basic.svelte';
 
 	// data.user từ (authorized)/+layout.server.ts (MetaUser)
@@ -32,6 +32,20 @@
 		roleUnknown: {
 			vi: 'Chưa xác định',
 			en: 'Unknown'
+		},
+
+		// ── C6: tabs profile hiện đại ──
+		tabOverview: {
+			vi: 'Tổng quan',
+			en: 'Overview'
+		},
+		tabSecurity: {
+			vi: 'Bảo mật',
+			en: 'Security'
+		},
+		tabApiKeys: {
+			vi: 'Khóa API',
+			en: 'API keys'
 		},
 
 		// ── Passkey / sinh trắc học ──
@@ -269,6 +283,9 @@
 		[data.user.lastName, data.user.firstName].filter(Boolean).join(' ') || data.user.username || '—'
 	);
 
+	// ── C6: tabs profile (overview / security / api-keys) ──
+	let profileTab = $state('overview');
+
 	// ── Passkey state ──
 	interface CredentialRow {
 		credentialId: string;
@@ -429,11 +446,20 @@
 	}
 
 	onMount(() => {
-		passkeySupported =
-			typeof window !== 'undefined' &&
-			typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
-			browserSupportsWebAuthn();
-		if (passkeySupported) void loadCredentials();
+		// Đồng bộ login: chỉ hiện passkey khi thiết bị CÓ platform authenticator
+		// (Touch ID / Face ID / vân tay / Windows Hello) — desktop trần không có → ẩn.
+		void (async () => {
+			try {
+				passkeySupported =
+					typeof window !== 'undefined' &&
+					typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
+					browserSupportsWebAuthn() &&
+					(await platformAuthenticatorIsAvailable());
+			} catch {
+				passkeySupported = false;
+			}
+			if (passkeySupported) void loadCredentials();
+		})();
 	});
 
 	// ── Đổi mật khẩu ──
@@ -592,26 +618,30 @@
 		</div>
 	</header>
 
-	<dl class="profile-info">
-		<div class="info-row">
-			<dt>{pageContents.name[lang]}</dt>
-			<dd>{displayName}</dd>
-		</div>
-		<div class="info-row">
-			<dt>{pageContents.username[lang]}</dt>
-			<dd>{data.user.username}</dd>
-		</div>
-		<div class="info-row">
-			<dt>{pageContents.role[lang]}</dt>
-			<dd>
-				<span class="role-badge">
-					{data.user.roleName ?? data.user.roleId ?? pageContents.roleUnknown[lang]}
-				</span>
-			</dd>
-		</div>
-	</dl>
-	<!-- Passkey / biometrics section -->
-	<section class="passkey-section">
+	{#snippet tabOverviewContent()}
+		<dl class="profile-info">
+			<div class="info-row">
+				<dt>{pageContents.name[lang]}</dt>
+				<dd>{displayName}</dd>
+			</div>
+			<div class="info-row">
+				<dt>{pageContents.username[lang]}</dt>
+				<dd>{data.user.username}</dd>
+			</div>
+			<div class="info-row">
+				<dt>{pageContents.role[lang]}</dt>
+				<dd>
+					<span class="role-badge">
+						{data.user.roleName ?? data.user.roleId ?? pageContents.roleUnknown[lang]}
+					</span>
+				</dd>
+			</div>
+		</dl>
+	{/snippet}
+
+	{#snippet tabSecurityContent()}
+		<!-- Passkey / biometrics section -->
+		<section class="passkey-section">
 		<header class="passkey-header">
 			<div class="passkey-heading">
 				<Icon class="passkey-icon" icon="lucide:fingerprint" size="md" />
@@ -746,9 +776,11 @@
 			</div>
 		</form>
 	</section>
+	{/snippet}
 
-	<!-- Secret Key API -->
-	<section class="keys-section">
+	{#snippet tabApiKeysContent()}
+		<!-- Secret Key API -->
+		<section class="keys-section">
 		<header class="pwd-header">
 			<div class="passkey-heading">
 				<Icon class="passkey-icon" icon="lucide:shield-keyhole" size="md" />
@@ -802,7 +834,91 @@
 				{/each}
 			</ul>
 		{/if}
-	</section>
+		</section>
+	{/snippet}
+
+	<!-- ── C6: Tabs desktop — wrapper div mang data-test (Tabs.Root không forward) ── -->
+	<div class="profile-tabs" data-test="profile-tabs">
+	<Tabs bind:value={profileTab} type="underline">
+		<Tabs.List>
+			<Tabs.Trigger value="overview" icon="lucide:user" data-test="profile-tab-overview">
+				{pageContents.tabOverview[lang]}
+			</Tabs.Trigger>
+			<Tabs.Trigger value="security" icon="lucide:shield" data-test="profile-tab-security">
+				{pageContents.tabSecurity[lang]}
+			</Tabs.Trigger>
+			<Tabs.Trigger value="api-keys" icon="lucide:shield-keyhole" data-test="profile-tab-api-keys">
+				{pageContents.tabApiKeys[lang]}
+			</Tabs.Trigger>
+		</Tabs.List>
+
+		<Tabs.Content value="overview" data-test="profile-tab-content-overview">
+			{@render tabOverviewContent()}
+		</Tabs.Content>
+
+		<Tabs.Content value="security" data-test="profile-tab-content-security">
+			{@render tabSecurityContent()}
+		</Tabs.Content>
+
+		<Tabs.Content value="api-keys" data-test="profile-tab-content-api-keys">
+			{@render tabApiKeysContent()}
+		</Tabs.Content>
+	</Tabs>
+	</div>
+
+	<!-- ── C6: ACCORDION mobile <768px — cùng pattern settings, chia sẻ
+	     state profileTab: mở item = chọn tab, đổi breakpoint giữ mục đang xem ── -->
+	<div class="profile-accordion" data-test="profile-accordion">
+		<Accordion type="single" collapsible bind:value={profileTab}>
+			<Accordion.Item value="overview">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:user" data-test="profile-acc-trigger-overview">
+						{pageContents.tabOverview[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="profile-acc-content-overview">
+					<dl class="profile-info">
+						<div class="info-row">
+							<dt>{pageContents.name[lang]}</dt>
+							<dd>{displayName}</dd>
+						</div>
+						<div class="info-row">
+							<dt>{pageContents.username[lang]}</dt>
+							<dd>{data.user.username}</dd>
+						</div>
+						<div class="info-row">
+							<dt>{pageContents.role[lang]}</dt>
+							<dd>
+								<span class="role-badge">
+									{data.user.roleName ?? data.user.roleId ?? pageContents.roleUnknown[lang]}
+								</span>
+							</dd>
+						</div>
+					</dl>
+				</Accordion.Content>
+			</Accordion.Item>
+			<Accordion.Item value="security">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:shield" data-test="profile-acc-trigger-security">
+						{pageContents.tabSecurity[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="profile-acc-content-security">
+					<p class="profile-acc-hint">{pageContents.tabSecurity[lang]}</p>
+				</Accordion.Content>
+			</Accordion.Item>
+			<Accordion.Item value="api-keys">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:shield-keyhole" data-test="profile-acc-trigger-api-keys">
+						{pageContents.tabApiKeys[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="profile-acc-content-api-keys">
+					<p class="profile-acc-hint">{pageContents.tabApiKeys[lang]}</p>
+				</Accordion.Content>
+			</Accordion.Item>
+		</Accordion>
+	</div>
 </section>
 
 <!-- Modal tạo key mới -->
@@ -966,6 +1082,27 @@
 			grid-template-columns: 1fr;
 			gap: 0.25rem;
 		}
+	}
+
+	/* ── C6: Tabs desktop / Accordion mobile — chia sẻ state profileTab ── */
+	.profile-accordion {
+		display: none;
+	}
+
+	@media (max-width: 767px) {
+		.profile-tabs {
+			display: none;
+		}
+
+		.profile-accordion {
+			display: block;
+		}
+	}
+
+	.profile-acc-hint {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--fg-500);
 	}
 
 	/* ── Passkey section ── */

@@ -208,7 +208,7 @@
 		'/admin/returns': tc('Đổi trả', 'Returns'),
 		'/admin/debts': tc('Công nợ', 'Debts'),
 		'/admin/expiry': tc('Hạn sử dụng', 'Expiry'),
-		'/settings': tc('Cấu hình hệ thống', 'System settings')
+		'/admin/settings': tc('Cấu hình hệ thống', 'System settings')
 	};
 	const crumbs = $derived<BreadcrumbItem[]>([
 		{ label: lang === 'vi' ? 'Trang chủ' : 'Home', href: '/', icon: 'lucide:home' },
@@ -587,7 +587,8 @@
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton
 						label={tc('Cấu hình hệ thống', 'System settings')}
-						href="/settings"
+						href="/admin/settings"
+						active={isActive('/admin/settings')}
 						icon="lucide:settings"
 						data-test="admin-nav-settings"
 					/>

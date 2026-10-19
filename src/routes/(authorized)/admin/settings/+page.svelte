@@ -8,9 +8,9 @@
 	import { encryption } from '$modules/encryption';
 	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
 	import { client } from '$store/basic.svelte';
-	import { resolveServerMessage } from '../admin/_interface';
+	import { resolveServerMessage } from '../_interface';
 	import type { TranslateContent } from '$interfaces/basic';
-	import DraftRestoreDialog from '../_DraftRestoreDialog.svelte';
+	import DraftRestoreDialog from '../../_DraftRestoreDialog.svelte';
 
 	// ── Shape settings (đồng bộ service SystemSettingsService) ──
 	// Enum fields dùng string để bind 2 chiều với Select được (Select.value là
