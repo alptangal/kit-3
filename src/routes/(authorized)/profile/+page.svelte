@@ -1038,7 +1038,7 @@
 					</Accordion.Trigger>
 				</Accordion.Header>
 				<Accordion.Content data-test="profile-acc-content-security">
-					<p class="profile-acc-hint">{pageContents.tabSecurity[lang]}</p>
+					{@render tabSecurityContent()}
 				</Accordion.Content>
 			</Accordion.Item>
 			<Accordion.Item value="api-keys">
@@ -1048,7 +1048,7 @@
 					</Accordion.Trigger>
 				</Accordion.Header>
 				<Accordion.Content data-test="profile-acc-content-api-keys">
-					<p class="profile-acc-hint">{pageContents.tabApiKeys[lang]}</p>
+					{@render tabApiKeysContent()}
 				</Accordion.Content>
 			</Accordion.Item>
 			<Accordion.Item value="search">
@@ -1241,12 +1241,6 @@
 		.profile-accordion {
 			display: block;
 		}
-	}
-
-	.profile-acc-hint {
-		margin: 0;
-		font-size: 0.8125rem;
-		color: var(--fg-500);
 	}
 
 	/* ── Passkey section ── */

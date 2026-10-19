@@ -2,40 +2,37 @@
 // POST { name } — tạo Secret Key mới CHO CHÍNH user (session).
 // Response chứa raw key ĐÚNG 1 LẦN (data.key) — client hiển thị + bắt user copy;
 // DB chỉ lưu keyHash. Bearer không được tự cấp key mới.
+// fetchSecure contract: body mã hoá server-key, response mã hoá session-key.
 
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
-import { getActorContext } from '$lib/server/admin/api';
+import { readAdminRequest, respondEncrypted, getActorContext } from '$lib/server/admin/api';
 import { ApiKeyService } from '$lib/server/db/api-keys';
-import { resolveLang, localize } from '$lib/server/i18n';
 
 export const POST: RequestHandler = async (event) => {
-	const lang = resolveLang(event.request.headers.get('accept-language'));
 	try {
+		const read = await readAdminRequest<{ name?: string }>(event);
+		if (!read.ok) return read.response;
+		const { lang, publicKeyB64, data } = read;
+
+		const respond = (payload: Parameters<typeof respondEncrypted>[1], status = 200) =>
+			respondEncrypted(publicKeyB64, payload, lang, status);
+
 		const actor = await getActorContext(event.locals);
 		if (!actor) {
-			return json(
-				{ ok: false, message: localize({ vi: 'Phiên đăng nhập đã hết hạn', en: 'Session expired' }, lang) },
-				{ status: 401 }
+			return respond(
+				{ ok: false, message: { vi: 'Phiên đăng nhập đã hết hạn', en: 'Session expired' } },
+				401
 			);
 		}
-		let name: string | undefined;
-		try {
-			const body = (await event.request.json()) as { name?: string };
-			name = body?.name;
-		} catch {
-			name = undefined;
-		}
-		const result = await ApiKeyService.createOwn(actor, name ?? '');
+		const name = typeof data.name === 'string' ? data.name : '';
+		const result = await ApiKeyService.createOwn(actor, name);
 		if (!result.success) {
-			return json({ ok: false, message: localize(result.messages, lang) }, { status: 400 });
+			return respond({ ok: false, message: result.messages }, 400);
 		}
-		return json({ ok: true, data: result.data });
+		return respond({ ok: true, data: result.data });
 	} catch (e) {
 		console.error('[POST /api/agent/keys/create]', e);
-		return json(
-			{ ok: false, message: localize({ vi: 'Lỗi máy chủ', en: 'Server error' }, lang) },
-			{ status: 500 }
-		);
+		return json({ ok: false, message: 'Server error' }, { status: 500 });
 	}
 };
