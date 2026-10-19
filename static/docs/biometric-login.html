@@ -45,10 +45,10 @@
 		<li>Trình duyệt hỗ trợ WebAuthn (Chrome, Edge, Firefox, Safari bản gần đây).</li>
 	</ul>
 
-	<div class="note">Trang đăng nhập chỉ mở tính năng này qua địa chỉ HTTPS chính thức của hệ thống
-	(ví dụ <code>https://192-168-2-30.sslip.io:3000</code>). Truy cập bằng IP thường hoặc
-	<code>localhost</code> sẽ báo <em>“Sai miền truy cập”</em> — đây là cơ chế bảo mật của chuẩn WebAuthn,
-	không phải lỗi.</div>
+	<div class="note">Trang đăng nhập chỉ mở tính năng này qua địa chỉ HTTPS khớp với miền
+	đã cấu hình cho hệ thống. Hiện tại dev dùng <code>https://localhost:3000</code> (cần bật
+	Windows Hello trước). Truy cập bằng IP thường (vd <code>https://192.168.2.27:3000</code>) sẽ báo
+	<em>“Sai miền truy cập”</em> — đây là cơ chế bảo mật của chuẩn WebAuthn, không phải lỗi.</div>
 
 	<h2>2. Đăng ký thiết bị (làm 1 lần mỗi thiết bị)</h2>
 	<ol>
