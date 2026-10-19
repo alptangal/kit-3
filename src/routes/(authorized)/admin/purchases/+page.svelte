@@ -5035,7 +5035,9 @@
 	.fab-group {
 		position: fixed;
 		right: 1rem;
-		bottom: calc(1rem + var(--admin-pagination-h, 3rem));
+		/* Tránh đè select "Rows per page" (footer pagination mobile cao ~2 hàng):
+		   nâng đáy FAB lên trên footer (footer sticky z-390 < FAB z-400). */
+		bottom: 7.25rem;
 		display: flex;
 		flex-direction: column-reverse;
 		align-items: center;
