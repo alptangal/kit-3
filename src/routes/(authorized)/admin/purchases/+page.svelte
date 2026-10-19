@@ -1,6 +1,6 @@
 <!-- src/routes/(authorized)/admin/purchases/+page.svelte -->
 <script lang="ts">
-	import { Button, DataTable, Pagination, Accordion, DropdownMenu } from '$components/element';
+	import { Button, DataTable, Pagination, Accordion, DropdownMenu, AlertDialog } from '$components/element';
 	import { Icon } from '$components/element/icon';
 	import { iconify } from '$assets/icons/iconify';
 	import type { DataTableColumn } from '$components/element/datatable';
@@ -291,6 +291,29 @@
 				en: 'Receiving will create lots and add stock for each line. Continue?'
 			}
 		},
+		entityEditor: {
+			productTitle: { vi: 'Chi tiết sản phẩm', en: 'Product detail' },
+			variantTitle: { vi: 'Chi tiết phân loại', en: 'Variant detail' },
+			name: { vi: 'Tên sản phẩm', en: 'Product name' },
+			categoryId: { vi: 'Thể loại', en: 'Category' },
+			brandId: { vi: 'Thương hiệu', en: 'Brand' },
+			status: { vi: 'Trạng thái', en: 'Status' },
+			displayName: { vi: 'Tên hiển thị', en: 'Display name' },
+			sku: { vi: 'Mã SKU', en: 'SKU' },
+			barcode: { vi: 'Mã vạch', en: 'Barcode' },
+			price: { vi: 'Giá bán', en: 'Sell price' },
+			costPrice: { vi: 'Giá vốn', en: 'Cost price' },
+			save: { vi: 'Đã lưu thay đổi', en: 'Changes saved' },
+			deleted: { vi: 'Đã xóa', en: 'Deleted' },
+			deleteConfirm: {
+				vi: 'Xóa vĩnh viễn dữ liệu này?',
+				en: 'Delete this permanently?'
+			},
+			delete: { vi: 'Xóa', en: 'Delete' },
+			cancel: { vi: 'Hủy', en: 'Cancel' },
+			loading: { vi: 'Đang tải…', en: 'Loading…' },
+			notFound: { vi: 'Không tìm thấy dữ liệu', en: 'Not found' }
+		},
 		returnModal: {
 			title: { vi: 'Trả hàng nhà cung cấp', en: 'Return to supplier' },
 			intro: {
@@ -491,8 +514,9 @@
 		bulkSubmitting = true;
 		try {
 			const res = await encryption.fetchSecure('/api/admin/purchases/bulk', {
+				method: 'POST',
 				body: { ids: selectedIds, action: 'delete' }
-			});
+			}, encryptionKeys);
 			const data = res?.data as { deleted?: string[]; failed?: Array<{ id: string }> } | undefined;
 			const deleted = data?.deleted?.length ?? 0;
 			const failed = data?.failed?.length ?? 0;
@@ -519,8 +543,9 @@
 		bulkSubmitting = true;
 		try {
 			const res = await encryption.fetchSecure('/api/admin/purchases/bulk', {
+				method: 'POST',
 				body: { ids: selectedIds, action: 'status', status: bulkStatus }
-			});
+			}, encryptionKeys);
 			const data = res?.data as { updated?: string[]; failed?: Array<{ id: string }> } | undefined;
 			const updated = data?.updated?.length ?? 0;
 			const failed = data?.failed?.length ?? 0;
@@ -587,6 +612,78 @@
 	const brandSelectOptions = $derived(
 		brands.map((b) => ({ value: b._id, label: b.displayName ?? b.name ?? b._id }))
 	);
+
+	// ── Meta variant/sản phẩm (id khó nhớ → tên hiển thị) ──
+	// Map variantId → {displayName, sku, productId, productName, price,
+	// costPrice, units}; fetch batch qua /api/admin/variants/list-by-ids
+	// (JOIN product.name server-side). Cột items + detail modal + form items
+	// đều đọc từ đây (id phụ = tên sản phẩm/phân loại).
+	type VariantMeta = {
+		displayName?: string;
+		sku?: string;
+		productId?: string;
+		productName?: string;
+		price?: number;
+		costPrice?: number;
+		units?: { name: string; factor: number; price?: number }[];
+	};
+	let variantMeta = $state(new Map<string, VariantMeta>());
+	let variantMetaLoading = $state(false);
+
+	async function ensureVariants(ids: string[]): Promise<void> {
+		const missing = [...new Set(ids.filter((id) => id && !variantMeta.has(id)))];
+		if (missing.length === 0 || variantMetaLoading) return;
+		variantMetaLoading = true;
+		try {
+			const res = await encryption.fetchSecure('/api/admin/variants/list-by-ids', {
+				method: 'POST',
+				body: { ids: missing.slice(0, 200) }
+			}, encryptionKeys);
+			const items = (res.data?.items ?? []) as (VariantMeta & { _id: string })[];
+			const next = new Map(variantMeta);
+			for (const it of items) {
+				next.set(it._id, {
+					displayName: it.displayName,
+					sku: it.sku,
+					productId: it.productId,
+					productName: it.productName,
+					price: it.price,
+					costPrice: it.costPrice,
+					units: it.units
+				});
+			}
+			variantMeta = next;
+		} catch {
+			// im lặng — fallback hiển thị id ngắn.
+		} finally {
+			variantMetaLoading = false;
+		}
+	}
+
+	// Nhãn variant: tên phân loại (sku) — fallback id rút gọn khi chưa load.
+	function variantLabel(variantId: string | undefined): string {
+		if (!variantId) return '—';
+		const meta = variantMeta.get(variantId);
+		return meta?.displayName || variantId.slice(-8);
+	}
+
+	// $effect: purchases đổi → fetch meta cho mọi variantId trong các PO trang này.
+	$effect(() => {
+		const ids = purchases.flatMap((po) => (po.items ?? []).map((it) => it.variantId));
+		if (ids.length > 0) void ensureVariants(ids);
+	});
+
+	// Nhãn item trong bảng: "tên ×qty" — 2 dòng đầu + "+N".
+	function itemsCellText(po: PurchaseRow): { text: string; title: string; extra: number } {
+		const items = po.items ?? [];
+		if (items.length === 0) return { text: '—', title: '', extra: 0 };
+		const lines = items.slice(0, 2).map((it) => `${variantLabel(it.variantId)} ×${it.quantity}`);
+		return {
+			text: lines.join(', '),
+			title: items.map((it) => `${variantLabel(it.variantId)} ×${it.quantity}`).join('\n'),
+			extra: Math.max(0, items.length - 2)
+		};
+	}
 
 	// ── Modal nhập nhanh ──
 	let quickModalDisplay = $state(false);
@@ -924,7 +1021,11 @@
 		{
 			id: 'items',
 			label: pageContents.table.items[lang],
-			accessor: (row) => String((row as unknown as PurchaseRow).items?.length ?? 0),
+			// ID phụ = tên phân loại (meta JOIN product) — "tên ×qty", tối đa 2 dòng.
+			accessor: (row) => {
+				const { text } = itemsCellText(row as unknown as PurchaseRow);
+				return text;
+			},
 			noHighlight: true
 		},
 		{
@@ -1652,6 +1753,122 @@
 	function openZoom(dataUrl: string) {
 		detailZoom = dataUrl;
 		zoomModalDisplay = true;
+	}
+
+	// ── Modal chi tiết sản phẩm/phân loại (từ breadcrumb trong detail PO) ──
+	// entity = 'product' | 'variant'; load từ endpoint get sẵn có, sửa qua
+	// update + xóa qua AlertDialog (khác detail PO — đây là entity gốc).
+	type EntityKind = 'product' | 'variant';
+	let entityEditorDisplay = $state(false);
+	let entityEditorKind = $state<EntityKind>('variant');
+	let entityEditorLoading = $state(false);
+	let entityEditorSubmitting = $state(false);
+	let entityEditorDoc = $state<Record<string, unknown> | null>(null);
+	let entityEditorDeleteOpen = $state(false);
+
+	// draft fields bind 2 chiều trong form (chỉ những field admin-safe).
+	let entityName = $state('');
+	let entityCategoryId = $state('');
+	let entityBrandId = $state('');
+	let entityStatus = $state('');
+	let entityDisplayName = $state('');
+	let entitySku = $state('');
+	let entityBarcode = $state('');
+	let entityPrice = $state(0);
+	let entityCostPrice = $state(0);
+
+	function metaFor(variantId: string | undefined): VariantMeta | undefined {
+		return variantId ? variantMeta.get(variantId) : undefined;
+	}
+
+	async function openEntityEditor(kind: EntityKind, id: string | undefined): Promise<void> {
+		if (!id) return;
+		entityEditorKind = kind;
+		entityEditorDoc = null;
+		entityEditorDisplay = true;
+		entityEditorLoading = true;
+		try {
+			const endpoint = kind === 'product' ? '/api/admin/products/detail' : '/api/admin/variants/detail';
+			const res = await encryption.fetchSecure(endpoint, {
+				method: 'POST',
+				body: { documentKey: id }
+			}, encryptionKeys);
+			if (res.ok) {
+				const doc = (res.data ?? null) as Record<string, unknown> | null;
+				entityEditorDoc = doc;
+				if (doc) {
+					if (kind === 'product') {
+						entityName = String(doc.name ?? '');
+						entityCategoryId = String(doc.categoryId ?? '');
+						entityBrandId = String(doc.brandId ?? '');
+						entityStatus = String(doc.status ?? '');
+					} else {
+						entityDisplayName = String(doc.displayName ?? '');
+						entitySku = String(doc.sku ?? '');
+						entityBarcode = String(doc.barcode ?? '');
+						entityPrice = Number(doc.price ?? 0);
+						entityCostPrice = Number(doc.costPrice ?? 0);
+					}
+				}
+			} else {
+				entityEditorDoc = null;
+				showToast(resolveServerMessage(res.message, lang, pageContents.toasts.requestFailed), 'error');
+			}
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			entityEditorLoading = false;
+		}
+	}
+
+	async function submitEntityEditor(): Promise<void> {
+		if (!entityEditorDoc || entityEditorSubmitting) return;
+		entityEditorSubmitting = true;
+		try {
+			const id = String(entityEditorDoc._id ?? '');
+			if (entityEditorKind === 'product') {
+				await encryption.fetchSecure('/api/admin/products/update', {
+					method: 'POST',
+					body: { documentKey: id, name: entityName, categoryId: entityCategoryId || null, brandId: entityBrandId || null, status: entityStatus || undefined }
+				}, encryptionKeys);
+			} else {
+				await encryption.fetchSecure('/api/admin/variants/update', {
+					method: 'POST',
+					body: { documentKey: id, displayName: entityDisplayName, sku: entitySku, barcode: entityBarcode || null, price: entityPrice, costPrice: entityCostPrice || null }
+				}, encryptionKeys);
+			}
+			entityEditorDisplay = false;
+			showToast(pageContents.entityEditor.saved[lang], 'success');
+			// meta stale → refetch meta + reload danh sách PO.
+			variantMeta = new Map();
+			await ensureVariants(
+				(detailPO?.items ?? []).map((it) => it.variantId).concat(purchases.flatMap((po) => (po.items ?? []).map((it) => it.variantId)))
+			);
+			void loadPurchases();
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			entityEditorSubmitting = false;
+		}
+	}
+
+	async function deleteEntity(): Promise<void> {
+		if (!entityEditorDoc || entityEditorSubmitting) return;
+		entityEditorSubmitting = true;
+		try {
+			const id = String(entityEditorDoc._id ?? '');
+			const endpoint = entityEditorKind === 'product' ? '/api/admin/products/delete' : '/api/admin/variants/delete';
+			await encryption.fetchSecure(endpoint, { method: 'POST', body: { documentKey: id } }, encryptionKeys);
+			entityEditorDisplay = false;
+			entityEditorDeleteOpen = false;
+			showToast(pageContents.entityEditor.deleted[lang], 'success');
+			variantMeta = new Map();
+			void loadPurchases();
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			entityEditorSubmitting = false;
+		}
 	}
 
 	async function receivePO(row: PurchaseRow) {
@@ -2848,7 +3065,26 @@
 							<tbody>
 								{#each detailPO.items ?? [] as item (item.variantId + String(item.quantity))}
 									<tr>
-										<td>{getVariantLabel(item.variantId)}</td>
+										<td>
+											<!-- breadcrumb: sản phẩm › phân loại — click mở modal chi tiết (sửa/xóa) -->
+											<div class="item-breadcrumb">
+												<button
+													type="button"
+													class="item-crumb"
+													onclick={() => void openEntityEditor('product', metaFor(item.variantId)?.productId)}
+												>
+													{metaFor(item.variantId)?.productName ?? '—'}
+												</button>
+												<span class="item-crumb-sep">›</span>
+												<button
+													type="button"
+													class="item-crumb"
+													onclick={() => void openEntityEditor('variant', item.variantId)}
+												>
+													{metaFor(item.variantId)?.displayName ?? getVariantLabel(item.variantId)}
+												</button>
+											</div>
+										</td>
 										<td class="col-num">{item.quantity}</td>
 										<td class="col-num">{formatMoney(item.unitCost)}</td>
 										<td>{item.lotNumber ?? '—'}</td>
@@ -2887,6 +3123,128 @@
 			</Modal.Container>
 		</Modal>
 	{/if}
+
+	<!-- ── Modal chi tiết sản phẩm/phân loại (từ breadcrumb) — sửa/xóa được ── -->
+	{#if entityEditorDisplay}
+		<Modal bind:display={entityEditorDisplay} size="sm" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>
+					{entityEditorKind === 'product'
+						? pageContents.entityEditor.productTitle[lang]
+						: pageContents.entityEditor.variantTitle[lang]}
+				</Modal.Container.Header>
+				<Modal.Container.Body>
+					{#if entityEditorLoading}
+						<p class="entity-loading">{pageContents.entityEditor.loading[lang]}</p>
+					{:else if !entityEditorDoc}
+						<p class="entity-loading">{pageContents.entityEditor.notFound[lang]}</p>
+					{:else if entityEditorKind === 'product'}
+						<div class="entity-form">
+							<div class="form-field">
+								<label class="form-label" for="entity-name">{pageContents.entityEditor.name[lang]}</label>
+								<input id="entity-name" class="admin-input" type="text" bind:value={entityName} />
+							</div>
+							<div class="form-field">
+								<label class="form-label" for="entity-category">{pageContents.entityEditor.categoryId[lang]}</label>
+								<Select
+									class="admin-filter-select"
+									options={categorySelectOptions}
+									bind:value={entityCategoryId}
+									searchable
+									clearable
+								/>
+							</div>
+							<div class="form-field">
+								<label class="form-label" for="entity-brand">{pageContents.entityEditor.brandId[lang]}</label>
+								<Select
+									class="admin-filter-select"
+									options={brandSelectOptions}
+									bind:value={entityBrandId}
+									searchable
+									clearable
+								/>
+							</div>
+							<div class="form-field">
+								<label class="form-label" for="entity-status">{pageContents.entityEditor.status[lang]}</label>
+								<select id="entity-status" class="admin-select" bind:value={entityStatus}>
+									<option value="active">active</option>
+									<option value="inactive">inactive</option>
+								</select>
+							</div>
+						</div>
+					{:else}
+						<div class="entity-form">
+							<div class="form-field">
+								<label class="form-label" for="entity-display-name">{pageContents.entityEditor.displayName[lang]}</label>
+								<input id="entity-display-name" class="admin-input" type="text" bind:value={entityDisplayName} />
+							</div>
+							<div class="form-grid-2">
+								<div class="form-field">
+									<label class="form-label" for="entity-sku">{pageContents.entityEditor.sku[lang]}</label>
+									<input id="entity-sku" class="admin-input" type="text" bind:value={entitySku} />
+								</div>
+								<div class="form-field">
+									<label class="form-label" for="entity-barcode">{pageContents.entityEditor.barcode[lang]}</label>
+									<input id="entity-barcode" class="admin-input" type="text" bind:value={entityBarcode} />
+								</div>
+							</div>
+							<div class="form-grid-2">
+								<div class="form-field">
+									<label class="form-label" for="entity-price">{pageContents.entityEditor.price[lang]}</label>
+									<input id="entity-price" class="admin-input" type="number" bind:value={entityPrice} min="0" />
+								</div>
+								<div class="form-field">
+									<label class="form-label" for="entity-cost">{pageContents.entityEditor.costPrice[lang]}</label>
+									<input id="entity-cost" class="admin-input" type="number" bind:value={entityCostPrice} min="0" />
+								</div>
+							</div>
+						</div>
+					{/if}
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<div class="entity-footer">
+						<Button
+							variant="ghost"
+							color="danger"
+							onclick={() => {
+								entityEditorDeleteOpen = true;
+							}}
+						>
+							{pageContents.entityEditor.delete[lang]}
+						</Button>
+						<div class="entity-footer-actions">
+							<Button
+								variant="ghost"
+								onclick={() => {
+									entityEditorDisplay = false;
+								}}
+							>
+								{pageContents.entityEditor.cancel[lang]}
+							</Button>
+							<Button color="primary" loading={entityEditorSubmitting} onclick={submitEntityEditor}>
+								OK
+							</Button>
+						</div>
+					</div>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
+	<!-- ── AlertDialog xóa entity ── -->
+	<AlertDialog bind:open={entityEditorDeleteOpen}>
+		<AlertDialog.Content>
+			<AlertDialog.Header variant="danger">
+				<AlertDialog.Title>{pageContents.entityEditor.deleteConfirm[lang]}</AlertDialog.Title>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{pageContents.entityEditor.cancel[lang]}</AlertDialog.Cancel>
+				<AlertDialog.Action onclick={deleteEntity}>
+					{pageContents.entityEditor.delete[lang]}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
 </section>
 
 <style lang="scss">
@@ -3520,6 +3878,65 @@
 		font-weight: 600;
 		color: var(--foreground);
 		margin: 1rem 0 0.5rem;
+	}
+
+	/* ── C3: breadcrumb sản phẩm › phân loại trong dòng chi tiết ── */
+	.item-breadcrumb {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+		flex-wrap: wrap;
+	}
+
+	.item-crumb {
+		background: none;
+		border: none;
+		padding: 0;
+		font: inherit;
+		font-size: 0.85rem;
+		color: var(--primary, #4f46e5);
+		cursor: pointer;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		text-decoration-color: transparent;
+		transition: text-decoration-color 120ms ease;
+
+		&:hover {
+			text-decoration-color: currentColor;
+		}
+	}
+
+	.item-crumb-sep {
+		color: var(--foreground-500);
+		font-size: 0.8rem;
+	}
+
+	/* ── C3: modal entity editor ── */
+	.entity-loading {
+		font-size: 0.85rem;
+		color: var(--foreground-500);
+		padding: 1.5rem 0;
+		text-align: center;
+	}
+
+	.entity-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+
+	.entity-footer {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 0.75rem;
+		width: 100%;
+	}
+
+	.entity-footer-actions {
+		display: flex;
+		gap: 0.5rem;
 	}
 
 	/* class truyền qua prop của component (compiler scoped không thấy) — :global để rule áp lên element component */

@@ -182,6 +182,13 @@ type POItem = {
   // Serial/IMEI (variant trackSerial): danh sách serial quét/paste — mỗi chiếc 1 mã.
   // Số lượng nên khớp quantity (UI nhắc, server KHÔNG bắt buộc — cho phép nhập thiếu rồi bổ sung).
   serials?: string[];
+  // Giá bán dự kiến tại thời điểm nhập (C4: quyết định user m02086 — lưu DB
+  // để sau truy vết lãi nhập; optional — phiếu cũ không có field vẫn hợp lệ).
+  sellPrice?: number;
+  // Đơn vị nhập tại thời điểm nhập (vd 'thùng' factor 48): lưu nguyên trạng
+  // để sau xem lại phiếu hiểu "48 chai/thùng" mà không phụ thuộc units hiện tại của variant.
+  unitName?: string;
+  unitFactor?: number;
 };
 
 /**
@@ -206,6 +213,10 @@ type QuickPurchaseItem = {
   voucher?: PurchaseVoucher;
   // Serial/IMEI (variant trackSerial) — xem POItem.serials
   serials?: string[];
+  // C4: giá bán dự kiến + đơn vị nhập (optional — backward-compatible).
+  sellPrice?: number;
+  unitName?: string;
+  unitFactor?: number;
 };
 
 export type QuickPurchaseInput = {
@@ -1010,7 +1021,12 @@ export class SupplierService {
       manufacturedAt: item.manufacturedAt || expiry.manufacturedAt || undefined,
       voucher: item.voucher ?? undefined,
       // Serial/IMEI: giữ danh sách mã vào PO item (traceability) + receive flow dùng tạo serial_numbers
-      serials: item.serials && item.serials.length > 0 ? item.serials.map((s) => s.trim().toUpperCase()) : undefined
+      serials: item.serials && item.serials.length > 0 ? item.serials.map((s) => s.trim().toUpperCase()) : undefined,
+      // C4: giá bán dự kiến + đơn vị nhập (snapshot tại thời điểm nhập — BẮT
+      // BUỘC map tường minh, bỏ qua = field rơi âm thầm).
+      sellPrice: typeof item.sellPrice === 'number' && item.sellPrice > 0 ? item.sellPrice : undefined,
+      unitName: item.unitName?.trim() || undefined,
+      unitFactor: typeof item.unitFactor === 'number' && item.unitFactor > 0 ? item.unitFactor : undefined
     }));
 
     // Voucher cấp phiếu: giảm tiền tổng đơn (khuyến mãi từ NCC)

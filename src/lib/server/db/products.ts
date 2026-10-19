@@ -509,6 +509,41 @@ export class ProductAdminService {
 		return { success: true, items, total, page, pageSize };
 	}
 
+	/**
+	 * List variants theo danh sách id (cho trang purchases hiển thị tên
+	 * sản phẩm/phân loại thay vì dãy id khó nhớ). JOIN product lấy tên cha;
+	 * phân trang server không đủ khi cần đúng N id bất kỳ.
+	 */
+	static async listVariantsByIds(
+		actor: ActorContext,
+		ids: string[]
+	): Promise<
+		{ success: false; messages: TranslateContent } | { success: true; items: Record<string, unknown>[] }
+	> {
+		const denied = await this.requirePermission(actor, 'products:read');
+		if (denied) return denied;
+
+		// dedupe + loại giá trị rỗng + clamp (JOIN IN có limit thực dụng).
+		const unique = [...new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0))].slice(0, 200);
+		if (unique.length === 0) return { success: true, items: [] };
+
+		const selectClause = `META(variant).id AS _id, ${VARIANT_ADMIN_SAFE_FIELDS.map((f) => `\`variant\`.\`${f}\``).join(', ')}, \`product\`.name AS productName`;
+
+		const res = await cbVariants.document.query({
+			statement: `SELECT ${selectClause} FROM ${variantsKeyspace} AS variant
+				JOIN ${productsKeyspace} AS product ON KEYS variant.productId
+				WHERE META(variant).id IN $1 AND (variant.deletedAt IS NULL OR variant.deletedAt IS MISSING)`,
+			args: [unique],
+			readonly: true
+		});
+		if (!res.ok) return { success: false, messages: adminMessages.queryFailed };
+
+		const items = (res.data?.results ?? []).map((doc: Record<string, unknown>) =>
+			sanitizeVariantForAdmin(doc as VariantDocument & { productName?: string })
+		);
+		return { success: true, items };
+	}
+
 	static async getVariantById(
 		actor: ActorContext,
 		documentKey: string
