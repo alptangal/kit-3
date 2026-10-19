@@ -139,3 +139,29 @@ export function recordSearchKeyword(routeKey: string, keyword: string): void {
 export function getSearchKeywords(routeKey: string): string[] {
 	return userPrefs.searchKeywords[routeKey] ?? [];
 }
+
+/** Nhóm 4: toàn bộ map route → keywords (bản sao, cho UI quản lí ở profile). */
+export function getAllSearchKeywords(): Record<string, string[]> {
+	return { ...userPrefs.searchKeywords };
+}
+
+/**
+ * Nhóm 4: xóa lịch sử tìm kiếm — 1 route (routeKey) hoặc TOÀN BỘ route đã biết.
+ * Server: patch mảng rỗng = xóa route (mergePrefs delete). Không truyền routeKey
+ * → iterate mọi route trong store, patch rỗng từng route.
+ */
+export function clearSearchKeywords(routeKey?: string): void {
+	if (routeKey) {
+		userPrefs.searchKeywords[routeKey] = [];
+		saveUserPrefs({ searchKeywords: { [routeKey]: [] } });
+		return;
+	}
+	const routes = Object.keys(userPrefs.searchKeywords);
+	if (!routes.length) return;
+	const patch: Record<string, string[]> = {};
+	for (const r of routes) {
+		userPrefs.searchKeywords[r] = [];
+		patch[r] = [];
+	}
+	saveUserPrefs({ searchKeywords: patch });
+}

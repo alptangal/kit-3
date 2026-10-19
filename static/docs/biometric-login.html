@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="vi">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Hướng dẫn đăng nhập sinh trắc học (Passkey)</title>
+	<style>
+		:root { color-scheme: light dark; }
+		body {
+			font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+			max-width: 46rem;
+			margin: 0 auto;
+			padding: 2rem 1.25rem 4rem;
+			line-height: 1.65;
+		}
+		h1 { font-size: 1.5rem; }
+		h2 { font-size: 1.1rem; margin-top: 2rem; }
+		code {
+			background: rgba(127, 127, 127, 0.15);
+			padding: 0.1rem 0.35rem;
+			border-radius: 0.3rem;
+			font-size: 0.9em;
+		}
+		ol li, ul li { margin: 0.35rem 0; }
+		.note {
+			border-left: 3px solid #f59e0b;
+			padding: 0.5rem 0.9rem;
+			margin: 1rem 0;
+			background: rgba(245, 158, 11, 0.08);
+		}
+	</style>
+</head>
+<body>
+	<h1>Hướng dẫn đăng nhập sinh trắc học (Passkey)</h1>
+
+	<p>Đăng nhập sinh trắc học dùng <strong>Passkey (WebAuthn)</strong>: vân tay, khuôn mặt,
+	hoặc PIN của thiết bị thay cho mật khẩu. Mỗi thiết bị cần đăng ký một lần.</p>
+
+	<h2>1. Điều kiện thiết bị</h2>
+	<ul>
+		<li><strong>Windows</strong>: bật <em>Windows Hello</em> — PIN, vân tay hoặc nhận diện khuôn mặt
+			(<code>Cài đặt → Tài khoản → Tùy chọn đăng nhập</code>).</li>
+		<li><strong>macOS</strong>: Touch ID sẵn có trên MacBook Pro/Air có cảm biến.</li>
+		<li><strong>iOS / Android</strong>: vân tay / khuôn mặt / mật khẩu màn hình khóa.</li>
+		<li>Trình duyệt hỗ trợ WebAuthn (Chrome, Edge, Firefox, Safari bản gần đây).</li>
+	</ul>
+
+	<div class="note">Trang đăng nhập chỉ mở tính năng này qua địa chỉ HTTPS chính thức của hệ thống
+	(ví dụ <code>https://192-168-2-30.sslip.io:3000</code>). Truy cập bằng IP thường hoặc
+	<code>localhost</code> sẽ báo <em>“Sai miền truy cập”</em> — đây là cơ chế bảo mật của chuẩn WebAuthn,
+	không phải lỗi.</div>
+
+	<h2>2. Đăng ký thiết bị (làm 1 lần mỗi thiết bị)</h2>
+	<ol>
+		<li>Đăng nhập bằng mật khẩu như bình thường.</li>
+		<li>Vào <strong>Hồ sơ cá nhân → tab Bảo mật</strong> (Profile → Security).</li>
+		<li>Ở mục <em>Đăng nhập sinh trắc học (Passkey)</em>, bấm <strong>“Đăng ký thiết bị mới”</strong>.</li>
+		<li>Xác nhận bằng vân tay / khuôn mặt / PIN khi trình duyệt hỏi.</li>
+		<li>Thiết bị xuất hiện trong danh sách — có thể đổi tên hoặc xóa bất kỳ lúc nào.</li>
+	</ol>
+
+	<h2>3. Đăng nhập bằng sinh trắc học</h2>
+	<ol>
+		<li>Mở trang đăng nhập qua địa chỉ HTTPS chính thức.</li>
+		<li>Bấm <strong>“Đăng nhập bằng sinh trắc học”</strong> phía trên nút Đăng nhập.</li>
+		<li>Xác nhận vân tay / khuôn mặt / PIN — trình duyệt đăng nhập luôn, không cần gõ mật khẩu.</li>
+	</ol>
+
+	<h2>4. Xử lý sự cố</h2>
+	<ul>
+		<li><strong>Không thấy nút sinh trắc học</strong>: trình duyệt không hỗ trợ WebAuthn — thử Chrome/Edge mới.</li>
+		<li><strong>Nút mờ kèm dòng “Thiết bị chưa có authenticator”</strong>: bật Windows Hello / Touch ID rồi tải lại trang.</li>
+		<li><strong>“Thiết bị này chưa đăng ký passkey”</strong>: đăng ký theo mục 2 trước.</li>
+		<li><strong>“Sai miền truy cập”</strong>: mở đúng địa chỉ HTTPS chính thức (xem ghi chú ở trên).</li>
+		<li><strong>Bấm xong không có gì xảy ra</strong>: xác nhận popup của trình duyệt không bị chặn; thử lại sau vài giây.</li>
+	</ul>
+</body>
+</html>

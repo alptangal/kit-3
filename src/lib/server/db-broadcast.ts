@@ -36,6 +36,9 @@ export type DbChangeCollection =
 	// Công nợ 2 chiều (AR/AP) + lịch sử thanh toán
 	| 'debts'
 	| 'debt_payments'
+	// Mua hàng / nhà cung cấp (purchase detail modal sửa entity)
+	| 'suppliers'
+	| 'purchase_orders'
 	| 'system';
 
 /** Hành động gây thay đổi — chỉ để log/debug, client v1 refetch mọi event. */

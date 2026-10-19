@@ -12,7 +12,7 @@
 	import { formatDate as formatDateShared } from '$modules/i18n';
 	import { onMount } from 'svelte';
 	import { resolveServerMessage } from '../_interface';
-	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs } from '$store/user-prefs.svelte';
+	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, clearSearchKeywords, userPrefs } from '$store/user-prefs.svelte';
 
 	interface PurchaseRow {
 		_id?: string;
@@ -26,6 +26,7 @@
 		vouchers?: Array<{ type: 'money' | 'gift'; value?: number; giftVariantId?: string; giftQuantity?: number; note?: string }>;
 		items?: POItem[];
 		totalCost?: number;
+		expectedAt?: string | null;
 		receivedAt?: string | null;
 		createdAt?: string | null;
 	}
@@ -34,6 +35,7 @@
 		variantId: string;
 		quantity: number;
 		unitCost: number;
+		sellPrice?: number;
 		lotNumber?: string;
 		expiresAt?: string;
 		manufacturedAt?: string;
@@ -239,8 +241,7 @@
 			createNew: { vi: 'Tạo mới', en: 'Create new' },
 			scanBarcode: { vi: 'Quét barcode / QR', en: 'Scan barcode / QR' },
 			barcodeFound: { vi: 'Đã tìm thấy sản phẩm theo barcode', en: 'Product found by barcode' },
-			barcodeNotFound: { vi: 'Không có sản phẩm nào với barcode này', en: 'No product with this barcode' },
-			itemNo: { vi: 'STT', en: 'No.' },
+			barcodeNotFound: { vi: 'Không có sản phẩm nào với barcode này', en: 'No product with this barcode' },			itemNo: { vi: 'STT', en: 'No.' },
 			itemName: { vi: 'Sản phẩm', en: 'Product' },
 			itemQty: { vi: 'SL', en: 'Qty' },
 			itemCost: { vi: 'Đơn giá', en: 'Unit cost' },
@@ -293,6 +294,15 @@
 			},
 			discard: { vi: 'Bỏ thay đổi', en: 'Discard' },
 			continueEdit: { vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' },
+			editBtn: { vi: 'Chỉnh sửa', en: 'Edit' },
+			save: { vi: 'Lưu', en: 'Save' },
+			infoBtn: { vi: 'Xem chi tiết', en: 'View detail' },
+			contactPerson: { vi: 'Người liên hệ', en: 'Contact person' },
+			address: { vi: 'Địa chỉ', en: 'Address' },
+			branchReadOnly: {
+				vi: 'Chi nhánh chỉ xem được tại đây — sửa qua trang Inventory.',
+				en: 'Branch is read-only here — edit it from the Inventory page.'
+			},
 			receiptImages: { vi: 'Ảnh hóa đơn', en: 'Receipt images' },
 			noImages: { vi: 'Không có ảnh hóa đơn', en: 'No receipt images' },
 			items: { vi: 'Dòng nhập', en: 'Line items' },
@@ -428,6 +438,9 @@
 
 	// Tìm kiếm debounce 300ms (pattern orders/customers): effect + guard armed
 	// — lần chạy đầu (init) không fetch; các lần sau reset page=1 rồi load.
+	// 1.5: searching = trạng thái "đang tìm/sort/filter" → DataTable skeleton
+	// cả các lần search SAU (loading thuần chỉ dành cho lần đầu loadedOnce).
+	let searching = $state(false);
 	let searchDebounce: ReturnType<typeof setTimeout>;
 	let searchArmed = false;
 	$effect(() => {
@@ -437,6 +450,7 @@
 			return;
 		}
 		clearTimeout(searchDebounce);
+		searching = true;
 		searchDebounce = setTimeout(() => {
 			page = 1;
 			void loadPurchases();
@@ -591,6 +605,7 @@
 		panelSortField = sortField;
 		panelSortDirection = sortDirection;
 		saveDataTablePrefs(PREFS_KEY, { sort: sortField ? { field: sortField, direction: sortDirection } : undefined });
+		searching = true; // 1.5: skeleton cả khi sort lại
 		page = 1;
 		void loadPurchases();
 	}
@@ -623,6 +638,15 @@
 	);
 	const brandSelectOptions = $derived(
 		brands.map((b) => ({ value: b._id, label: b.displayName ?? b.name ?? b._id }))
+	);
+
+	// 1.8: options variant cho Select per-item (quick + detail edit) — label
+	// "tên (sku)" giống native select cũ.
+	const variantSelectOptions = $derived(
+		variantOptions.map((v) => ({
+			value: v._id,
+			label: `${v.displayName ?? v._id}${v.sku ? ` (${v.sku})` : ''}`
+		}))
 	);
 
 	// ── Meta variant/sản phẩm (id khó nhớ → tên hiển thị) ──
@@ -756,11 +780,15 @@
 	// C5: auto-parse cost '120000/40' → unitCost=3000 + quantity=40
 	let lastCostParse = $state<{ key: string; raw: string } | null>(null);
 
-	// Search sản phẩm trong full modal
-	let fullSearch = $state('');
-	let fullSearchResults = $state<VariantOption[]>([]);
-	let fullSearching = $state(false);
-	let fullSearched = $state(false);
+	// 1.8: search sản phẩm trong full modal — TÁCH state per-item (Record theo
+	// it.key) khỏi block step-2 cũ (bỏ). Mỗi item chưa có variantId có picker
+	// riêng: query + results + loading + allowCreate.
+	type FullItemSearch = { query: string; results: VariantOption[]; loading: boolean };
+	let itemSearchState = $state<Record<string, FullItemSearch>>({});
+
+	// 1.9: barcode per-item — bind:codes theo key item (pattern POS: $effect
+	// nhìn length tăng → lấy mã cuối → search variant theo barcode).
+	let itemBarcodeCodes = $state<Record<string, string[]>>({});
 
 
 	// Lark-style create-on-the-fly
@@ -783,6 +811,216 @@
 	let detailZoom = $state<string | null>(null);
 	let zoomModalDisplay = $state(false);
 	let receiveSubmitting = $state(false);
+
+	// ── Detail edit mode (yêu cầu "detail modal cho phép thay đổi giá trị, có
+	// can thiệp data → hiện button save") ──
+	// detailDraft = bản sao editable (status/expectedAt/receivedAt/note + items
+	// qty/unitCost/sellPrice). dirty = so snapshot JSON. Chỉ draft được sửa —
+	// received/cancelled khóa (server cũng chặn 409).
+	let detailEditing = $state(false);
+	let detailSaving = $state(false);
+	let detailDraft = $state<{
+		status: string;
+		supplierId: string;
+		branchId: string;
+		categoryId: string;
+		expectedAt: string;
+		receivedAt: string;
+		note: string;
+		items: Array<{ variantId: string; quantity: number; unitCost: number; sellPrice?: number; lotNumber?: string }>;
+	} | null>(null);
+	let detailDirty = $state(false);
+
+	function beginDetailEdit() {
+		if (!detailPO) return;
+		detailDraft = {
+			status: detailPO.status ?? 'draft',
+			supplierId: detailPO.supplierId ?? '',
+			branchId: detailPO.branchId ?? '',
+			categoryId: detailPO.categoryId ?? '',
+			expectedAt: detailPO.expectedAt ? String(detailPO.expectedAt).slice(0, 10) : '',
+			receivedAt: detailPO.receivedAt ? String(detailPO.receivedAt).slice(0, 10) : '',
+			note: detailPO.note ?? '',
+			items: (detailPO.items ?? []).map((it) => ({
+				variantId: it.variantId,
+				quantity: Number(it.quantity) || 0,
+				unitCost: Number(it.unitCost) || 0,
+				sellPrice: it.sellPrice != null ? Number(it.sellPrice) : undefined,
+				lotNumber: it.lotNumber ?? ''
+			}))
+		};
+		detailEditing = true;
+		detailDirty = false;
+	}
+
+	function cancelDetailEdit() {
+		detailEditing = false;
+		detailDraft = null;
+		detailDirty = false;
+	}
+
+	function detailDraftTotal(): number {
+		if (!detailDraft) return detailPO?.totalCost ?? 0;
+		return detailDraft.items.reduce((sum, it) => sum + Number(it.quantity || 0) * Number(it.unitCost || 0), 0);
+	}
+
+	async function submitDetailEdit() {
+		if (!detailPO || !detailDraft || !encryptionKeys || detailSaving) return;
+		if (!detailDraft.items.length) {
+			showToast(pageContents.quickModal.requireItems[lang], 'error');
+			return;
+		}
+		detailSaving = true;
+		try {
+			const response = await encryption.fetchSecure('/api/admin/purchases/update', {
+				method: 'POST',
+				body: {
+					poId: detailPO._id,
+					patch: {
+						status: detailDraft.status,
+						supplierId: detailDraft.supplierId || null,
+						branchId: detailDraft.branchId || undefined,
+						categoryId: detailDraft.categoryId || null,
+						expectedAt: detailDraft.expectedAt || undefined,
+						receivedAt: detailDraft.receivedAt || undefined,
+						note: detailDraft.note,
+						items: detailDraft.items.map((it) => ({
+							variantId: it.variantId,
+							quantity: Number(it.quantity) || 0,
+							unitCost: Number(it.unitCost) || 0,
+							sellPrice: it.sellPrice != null && Number(it.sellPrice) > 0 ? Number(it.sellPrice) : undefined,
+							lotNumber: it.lotNumber || undefined
+						})),
+						totalCost: detailDraftTotal()
+					}
+				}
+			}, encryptionKeys);
+			if (response.ok) {
+				detailEditing = false;
+				detailDirty = false;
+				detailDraft = null;
+				showToast(pageContents.entityEditor.saved[lang], 'success');
+				const po = response.data as (PurchaseRow & { receiptImages?: string[] }) | undefined;
+				if (po) detailPO = po;
+				void loadPurchases();
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.requestFailed), 'error');
+			}
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			detailSaving = false;
+		}
+	}
+
+	// ── Info modal relationship (supplier/category/branch từ detail) ──
+	// Yêu cầu: field relationship có nút info → modal chi tiết data (có thể
+	// update/delete). Branch không có endpoint update riêng → read-only.
+	type InfoKind = 'supplier' | 'category' | 'branch';
+	let infoModalDisplay = $state(false);
+	let infoKind = $state<InfoKind>('supplier');
+	let infoDoc = $state<Record<string, unknown> | null>(null);
+	let infoLoading = $state(false);
+	let infoSubmitting = $state(false);
+	let infoDeleteOpen = $state(false);
+	// draft info fields (supplier: name/contactPerson/status; category: name)
+	let infoName = $state('');
+	let infoContact = $state('');
+	let infoStatus = $state('');
+
+	function openInfoModal(kind: InfoKind, id?: string) {
+		if (!id) return;
+		infoKind = kind;
+		infoDoc = null;
+		infoName = '';
+		infoContact = '';
+		infoStatus = '';
+		infoModalDisplay = true;
+		void loadInfoDoc(id);
+	}
+
+	async function loadInfoDoc(id: string) {
+		infoLoading = true;
+		try {
+			// supplier: endpoint /get riêng (body supplierId); category: /detail (documentKey).
+			const res = infoKind === 'supplier'
+				? await encryption.fetchSecure('/api/admin/suppliers/get', { method: 'POST', body: { supplierId: id } }, encryptionKeys)
+				: await encryption.fetchSecure('/api/admin/categories/detail', { method: 'POST', body: { documentKey: id } }, encryptionKeys);
+			if (res.ok) {
+				const doc = (res.data?.supplier ?? res.data ?? null) as Record<string, unknown> | null;
+				infoDoc = doc;
+				if (doc) {
+					infoName = String(doc.name ?? '');
+					infoContact = String((doc as any).contactPerson ?? '');
+					infoStatus = String(doc.status ?? '');
+				}
+			} else {
+				infoModalDisplay = false;
+				showToast(resolveServerMessage(res.message, lang, pageContents.toasts.requestFailed), 'error');
+			}
+		} catch {
+			infoModalDisplay = false;
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			infoLoading = false;
+		}
+	}
+
+	async function submitInfoEdit() {
+		if (!infoDoc || infoSubmitting) return;
+		infoSubmitting = true;
+		try {
+			const id = String(infoDoc._id ?? '');
+			if (infoKind === 'supplier') {
+				await encryption.fetchSecure('/api/admin/suppliers/update', {
+					method: 'POST',
+					body: {
+						supplierId: id,
+						patch: {
+							name: infoName,
+							contactPerson: infoContact || null,
+							status: infoStatus || 'active'
+						}
+					}
+				}, encryptionKeys);
+				void loadSuppliers();
+			} else if (infoKind === 'category') {
+				await encryption.fetchSecure('/api/admin/categories/update', {
+					method: 'POST',
+					body: { documentKey: id, name: infoName, status: infoStatus || undefined }
+				}, encryptionKeys);
+				void loadCategories();
+			}
+			infoModalDisplay = false;
+			showToast(pageContents.entityEditor.saved[lang], 'success');
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			infoSubmitting = false;
+		}
+	}
+
+	async function deleteInfoDoc() {
+		if (!infoDoc || infoSubmitting) return;
+		infoSubmitting = true;
+		try {
+			const id = String(infoDoc._id ?? '');
+			const endpoint = infoKind === 'supplier' ? '/api/admin/suppliers/delete' : '/api/admin/categories/delete';
+			await encryption.fetchSecure(endpoint, { method: 'POST', body: { documentKey: id } }, encryptionKeys);
+			infoModalDisplay = false;
+			infoDeleteOpen = false;
+			showToast(pageContents.entityEditor.deleted[lang], 'success');
+			if (infoKind === 'supplier') void loadSuppliers();
+			else void loadCategories();
+			if (detailPO && ((infoKind === 'supplier' && detailPO.supplierId === id) || (infoKind === 'category' && detailPO.categoryId === id))) {
+				detailModalDisplay = false;
+			}
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			infoSubmitting = false;
+		}
+	}
 
 	// ── Phân trang ──
 	const pageSizes = [10, 20, 50, 100];
@@ -978,6 +1216,7 @@
 				encryptionKeys
 			);
 			loading = false;
+			searching = false;
 			loadedOnce = true;
 			if (response.ok) {
 				const data = response.data as { items?: PurchaseRow[]; total?: number } | undefined;
@@ -988,6 +1227,7 @@
 			}
 		} catch (err) {
 			loading = false;
+			searching = false;
 			loadedOnce = true;
 			listError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
 			if (import.meta.env.DEV) console.error('[admin/purchases] fetch error:', err);
@@ -995,7 +1235,20 @@
 	}
 
 	function onFilterChange() {
+		searching = true;
 		page = 1;
+		// 1.4: filter sync DB — persist cùng sort/cardFields (merge theo route key).
+		saveDataTablePrefs(PREFS_KEY, {
+			filters: {
+				source: sourceFilter || null,
+				status: statusFilter || null,
+				branchId: branchFilter || null,
+				supplierId: supplierFilter || null,
+				categoryId: categoryFilter || null,
+				dateFrom: dateFrom || null,
+				dateTo: dateTo || null
+			}
+		});
 		void loadPurchases();
 	}
 
@@ -1462,9 +1715,9 @@
 		// C5: không còn expire chung (mỗi dòng tự nhập)
 		fullPoVouchers = [];
 		fullOpenKeys = [fullItems[0].key];
-		fullSearch = '';
-		fullSearchResults = [];
-		fullSearched = false;
+		itemSearchState = {};
+		itemBarcodeCodes = {};
+		lastBarcodeLen = {};
 		createSectionOpen = false;
 		newProductDocId = '';
 		fullError = undefined;
@@ -1510,42 +1763,78 @@
 		}
 	}
 
-	async function runFullSearch() {
-		if (!encryptionKeys) return;
-		const term = fullSearch.trim();
-		if (!term) {
-			fullSearchResults = [];
-			fullSearched = false;
-			return;
-		}
-		fullSearching = true;
-		fullError = undefined;
+	// 1.8: search per-item — theo item key (thay runFullSearch dùng chung state).
+	// Trả SelectOption[] (value/label) đúng contract loadOptions của Select.
+	async function searchItemVariants(itemKey: string, term: string): Promise<{ value: string; label: string }[]> {
+		if (!encryptionKeys) return [];
+		const trimmed = term.trim();
+		if (!trimmed) return [];
+		itemSearchState[itemKey] = { ...(itemSearchState[itemKey] ?? { query: '', results: [], loading: false }), loading: true };
 		try {
 			const response = await encryption.fetchSecure(
 				'/api/admin/variants/list',
-				{ method: 'POST', body: { page: 1, pageSize: 20, search: term } },
+				{ method: 'POST', body: { page: 1, pageSize: 20, search: trimmed } },
 				encryptionKeys
 			);
 			if (response.ok) {
 				const data = response.data as { items?: VariantOption[] } | undefined;
-				fullSearchResults = data?.items ?? [];
-				fullSearched = true;
-			} else {
-				fullError = resolveServerMessage(response.message, lang, pageContents.toasts.failed);
+				const results = data?.items ?? [];
+				itemSearchState[itemKey] = { query: trimmed, results, loading: false };
+				return results.map((v) => ({
+					value: v._id,
+					label: `${v.displayName ?? v._id}${v.sku ? ` · ${v.sku}` : ''}`
+				}));
 			}
+			return [];
 		} catch (err) {
-			fullError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
 			if (import.meta.env.DEV) console.error('[admin/purchases] search variants failed:', err);
-		} finally {
-			fullSearching = false;
+			itemSearchState[itemKey] = { query: trimmed, results: [], loading: false };
+			return [];
 		}
 	}
 
-	// barcode ở step2 đã remove); scan giờ nằm trong từng item (search field
-	// chấp nhận mã vạch — runFullSearch tìm theo barcode trực tiếp).
+	// 1.9: scan barcode trên 1 item → tìm variant theo mã → điền; không thấy →
+	// toast + mở tạo mới (điền barcode vào form variant Lark-style).
+	async function scanItemBarcode(it: FullItem, code: string) {
+		if (!code || !encryptionKeys) return;
+		await searchItemVariants(it.key, code);
+		const results = itemSearchState[it.key]?.results ?? [];
+		const hit = results.find((v) => (v as VariantOption & { barcode?: string }).barcode === code) ?? results[0];
+		if (hit) {
+			addFullItemFromVariant(hit);
+		} else {
+			showToast(pageContents.fullModal.barcodeNotFound[lang], 'warning');
+			newVariantBarcode = code;
+			newProductName = code;
+			createSectionOpen = true;
+		}
+	}
+
+	// 1.9: $effect per-item barcode — length tăng so mốc đã xử lý → scan.
+	// Mốc lưu riêng từng key (lastBarcodeLen) — nhiều item scan song song.
+	let lastBarcodeLen = $state<Record<string, number>>({});
+	$effect(() => {
+		for (const [key, codes] of Object.entries(itemBarcodeCodes)) {
+			const prev = lastBarcodeLen[key] ?? 0;
+			if (codes.length > prev) {
+				const code = codes[codes.length - 1];
+				lastBarcodeLen[key] = codes.length;
+				const it = fullItems.find((x) => x.key === key);
+				if (it && !it.variantId && code) void scanItemBarcode(it, code);
+				// item đã có variant → bỏ qua (không đổi dòng đã điền)
+			} else if (codes.length < prev) {
+				lastBarcodeLen[key] = codes.length;
+			}
+		}
+	});
+
+	// 1.8/1.9: full-search-block step-2 đã BỎ — scan nằm trong từng item
+	// (Select searchable + Input barcode per-item).
 
 	function removeFullItem(index: number) {
+		const key = fullItems[index]?.key;
 		fullItems = fullItems.filter((_, i) => i !== index);
+		if (key) delete itemSearchState[key];
 		// Giữ keys còn hợp lệ trong accordion
 		fullOpenKeys = fullOpenKeys.filter((k) => fullItems.some((it) => it.key === k));
 	}
@@ -2057,7 +2346,7 @@
 
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
-		// D5/M3: khởi tạo sort + cardFields từ prefs DB (trước lần load đầu).
+		// D5/M3/1.4: khởi tạo sort + cardFields + filters từ prefs DB (trước lần load đầu).
 		const pagePrefs = userPrefs.datatable[PREFS_KEY];
 		if (pagePrefs?.sort?.field) {
 			sortField = pagePrefs.sort.field;
@@ -2066,6 +2355,19 @@
 		panelSortField = sortField;
 		panelSortDirection = sortDirection;
 		cardFieldIds = pagePrefs?.cardFields?.length ? pagePrefs.cardFields : ['code', 'status', 'totalCost', 'receivedAt'];
+		// 1.4: khôi phục filter đã persist (chỉ nhận giá trị string — filter trang
+		// đều là select/text; null = "đặt lại" → bỏ qua).
+		const savedFilters = pagePrefs?.filters;
+		if (savedFilters) {
+			const pick = (v: unknown) => (typeof v === 'string' ? v : '');
+			sourceFilter = pick(savedFilters.source);
+			statusFilter = pick(savedFilters.status);
+			branchFilter = pick(savedFilters.branchId);
+			supplierFilter = pick(savedFilters.supplierId);
+			categoryFilter = pick(savedFilters.categoryId);
+			dateFrom = pick(savedFilters.dateFrom);
+			dateTo = pick(savedFilters.dateTo);
+		}
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadBranches(), loadSuppliers(), loadCategories(), loadPurchases()]);
@@ -2225,7 +2527,7 @@
 					{columns}
 					pageSize={pageSize}
 					showPagination={false}
-					loading={loading && !loadedOnce}
+					loading={loading || searching}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.empty[lang]}
 					loadingLabel={pageContents.states.loading[lang]}
@@ -2379,7 +2681,7 @@
 					<Pagination
 						bind:page={page}
 						totalPages={totalPages}
-						loading={loading}
+						loading={loading || searching}
 						variant="compact"
 						prevLabel={pageContents.pagination.prev[lang]}
 						nextLabel={pageContents.pagination.next[lang]}
@@ -2469,7 +2771,7 @@
 												{kw}
 											</button>
 										{/each}
-										<button type="button" class="mobile-suggest-item mobile-suggest-clear" onclick={() => { searchQuery = ''; page = 1; void loadPurchases(); }}>
+										<button type="button" class="mobile-suggest-item mobile-suggest-clear" onclick={() => { searchQuery = ''; page = 1; void loadPurchases(); clearSearchKeywords(PREFS_KEY); }}>
 											{pageContents.filters.reset[lang]}
 										</button>
 									</div>
@@ -2649,12 +2951,14 @@
 						{/if}
 						{#each quickItems as item, index}
 							<div class="po-item">
-								<select class="admin-select" bind:value={item.variantId} aria-label={pageContents.quickModal.variant[lang]}>
-									<option value="">—</option>
-									{#each variantOptions as v (v._id)}
-										<option value={v._id}>{v.displayName ?? v._id}{v.sku ? ` (${v.sku})` : ''}</option>
-									{/each}
-								</select>
+								<Select
+									options={variantSelectOptions}
+									bind:value={item.variantId}
+									searchable
+									clearable
+									placeholder="—"
+									data-test={`quick-item-variant-${index}`}
+								/>
 								<input class="admin-input po-item-num" type="number" min="1" bind:value={item.quantity} aria-label={pageContents.quickModal.quantity[lang]} />
 								<input class="admin-input po-item-num" type="number" min="0" step="1000" bind:value={item.unitCost} aria-label={pageContents.quickModal.unitCost[lang]} />
 								{#if quickItemProfit(item) !== null}
@@ -2827,46 +3131,9 @@
 						</label>
 					{/if}
 
-					<!-- Bước 2: search + scan + tạo mới + accordion items -->
+					<!-- Bước 2: accordion items (1.8: BỎ full-search-block — mỗi item
+					     tự search/scan trong picker riêng của nó) -->
 					{#if fullStep === 2}
-						<div class="full-search-block">
-							<div class="full-search-row">
-								<input
-									class="admin-input full-search-input"
-									type="text"
-									placeholder={pageContents.fullModal.searchPlaceholder[lang]}
-									bind:value={fullSearch}
-									onkeydown={(e) => { if (e.key === 'Enter') void runFullSearch(); }}
-									data-test="full-search-input"
-								/>
-								<Button color="primary" variant="soft" loading={fullSearching} onclick={runFullSearch} data-test="full-search-btn">
-									{pageContents.fullModal.search[lang]}
-								</Button>
-							</div>
-							{#if fullSearched}
-								{#if fullSearchResults.length > 0}
-									<div class="full-search-results" data-test="full-search-results">
-										{#each fullSearchResults as v (v._id)}
-											<div class="full-search-result">
-												<span class="full-search-result__name">{v.displayName ?? v._id}{v.sku ? ` · ${v.sku}` : ''}</span>
-												<Button color="success" variant="soft" size="sm" onclick={() => addFullItemFromVariant(v)}>
-													{pageContents.fullModal.addFromSearch[lang]}
-												</Button>
-											</div>
-										{/each}
-									</div>
-								{:else}
-									<div class="full-search-empty">
-										<span>{pageContents.fullModal.notFound[lang]}</span>
-										<Button color="primary" variant="soft" onclick={() => { createSectionOpen = true; }}>
-											{pageContents.fullModal.createNew[lang]}
-										</Button>
-									</div>
-								{/if}
-							{/if}
-						</div>
-
-						<!-- C5: BỎ full-scan-block (mỗi item có search/scan riêng trong full-item-form) -->
 
 						<!-- Tạo mới Lark-style -->
 						{#if createSectionOpen}
@@ -2953,24 +3220,40 @@
 										<Accordion.Content>
 											<div class="full-item-form">
 												{#if !it.variantId}
-													<div class="full-search-row">
-														<input class="admin-input" type="text" placeholder={pageContents.fullModal.searchPlaceholder[lang]} bind:value={fullSearch} />
-														<Button color="primary" variant="soft" size="sm" loading={fullSearching} onclick={runFullSearch}>
-															{pageContents.fullModal.search[lang]}
-														</Button>
+													<!-- 1.8/1.9: picker per-item — Select searchable remote +
+													     allowCreate + barcode scan. KHÔNG dùng state chung
+													     fullSearch nữa (2 item rỗng mở cùng lúc xung đột). -->
+													<div class="full-item-picker">
+														<Select
+															searchable
+															remoteSearch
+															clearable
+															loading={itemSearchState[it.key]?.loading ?? false}
+															placeholder={pageContents.fullModal.searchPlaceholder[lang]}
+															options={itemSearchState[it.key]?.results.map((v) => ({
+																value: v._id,
+																label: `${v.displayName ?? v._id}${v.sku ? ` · ${v.sku}` : ''}`
+															})) ?? []}
+															loadOptions={(query) => searchItemVariants(it.key, query ?? '')}
+															onValueChange={(value) => {
+																const v = (itemSearchState[it.key]?.results ?? []).find((x) => x._id === value);
+																if (v) addFullItemFromVariant(v);
+															}}
+															onOptionCreate={(name) => {
+																// chưa tìm thấy → mở tạo mới Lark-style, điền tên
+																newProductName = name;
+																createSectionOpen = true;
+															}}
+															data-test={`full-item-variant-select-${i}`}
+														/>
+														<Input
+															type="barcode"
+															bind:codes={itemBarcodeCodes[it.key]}
+															beepOn
+															placeholder={pageContents.fullModal.searchPlaceholder?.[lang] ?? 'Scan'}
+															data-test={`full-item-barcode-${i}`}
+														/>
 													</div>
-													{#if fullSearched && fullSearchResults.length > 0}
-														<div class="full-search-results">
-															{#each fullSearchResults as v (v._id)}
-																<div class="full-search-result">
-																	<span class="full-search-result__name">{v.displayName ?? v._id}{v.sku ? ` · ${v.sku}` : ''}</span>
-																	<Button color="success" variant="soft" size="sm" onclick={() => addFullItemFromVariant(v)}>
-																		{pageContents.fullModal.addFromSearch[lang]}
-																	</Button>
-																</div>
-															{/each}
-														</div>
-													{/if}
 												{/if}
 												<div class="form-grid-2">
 													<label class="form-field">
@@ -3247,23 +3530,93 @@
 		</Modal>
 	{/if}
 
-	<!-- ── Modal chi tiết ── -->
+	<!-- ── Modal chi tiết ──
+	     Edit mode (yêu cầu): nút "Chỉnh sửa" → field thành input; dirty → footer
+	     Lưu/Hủy (onCloseAttempt dirty-guard). Chỉ draft được sửa.
+	     Info modal relationship: nút info cạnh supplier/category/branch → modal
+	     chi tiết entity (sửa/xóa; branch read-only). -->
 	{#if detailModalDisplay && detailPO}
-		<Modal bind:display={detailModalDisplay} size="lg" isDimissable>
+		<Modal bind:display={detailModalDisplay} size="lg" isDimissable onCloseAttempt={() => requestCloseIfDirty(detailEditing && detailDirty, () => { detailModalDisplay = false; cancelDetailEdit(); })}>
 			<Modal.Container>
 				<Modal.Container.Header>{pageContents.detailModal.title[lang]}</Modal.Container.Header>
 				<Modal.Container.Body>
 					<div class="detail-grid">
 						<div><span class="detail-label">{pageContents.table.code[lang]}:</span> {detailPO.poCode ?? '—'}</div>
 						<div><span class="detail-label">{pageContents.table.source[lang]}:</span> {sourceLabel(detailPO.source)}</div>
-						<div><span class="detail-label">{pageContents.table.supplier[lang]}:</span> {getSupplierLabel(detailPO.supplierId)}</div>
-						<div><span class="detail-label">{pageContents.table.branch[lang]}:</span> {getBranchLabel(detailPO.branchId)}</div>
-						<div><span class="detail-label">{pageContents.table.category[lang] ?? 'Thể loại'}:</span> {getCategoryLabel(detailPO.categoryId)}</div>
-						<div><span class="detail-label">{pageContents.table.status[lang]}:</span> {statusLabel(detailPO.status)}</div>
-						<div><span class="detail-label">{pageContents.table.totalCost[lang]}:</span> {formatMoney(detailPO.totalCost)}</div>
-						<div><span class="detail-label">{pageContents.table.receivedAt[lang]}:</span> {formatDate(detailPO.receivedAt)}</div>
+						<div class="detail-rel">
+							<span class="detail-label">{pageContents.table.supplier[lang]}:</span>
+							{#if detailEditing && detailDraft}
+								<Select
+									options={suppliers.map((s) => ({ value: s._id, label: s.displayName ?? s.name ?? s._id }))}
+									bind:value={detailDraft.supplierId}
+									searchable
+									clearable
+								/>
+							{:else}
+								<span>{getSupplierLabel(detailPO.supplierId)}</span>
+								<button type="button" class="detail-info-btn" aria-label={pageContents.detailModal.infoBtn[lang]} onclick={() => openInfoModal('supplier', detailPO!.supplierId ?? undefined)}>i</button>
+							{/if}
+						</div>
+						<div class="detail-rel">
+							<span class="detail-label">{pageContents.table.branch[lang]}:</span>
+							{#if detailEditing && detailDraft}
+								<Select options={branches.map((b) => ({ value: b._id, label: b.name ?? b._id }))} bind:value={detailDraft.branchId} searchable clearable />
+							{:else}
+								<span>{getBranchLabel(detailPO.branchId)}</span>
+								<button type="button" class="detail-info-btn" aria-label={pageContents.detailModal.infoBtn[lang]} onclick={() => openInfoModal('branch', detailPO!.branchId ?? undefined)}>i</button>
+							{/if}
+						</div>
+						<div class="detail-rel">
+							<span class="detail-label">{pageContents.table.category[lang] ?? 'Thể loại'}:</span>
+							{#if detailEditing && detailDraft}
+								<Select
+									options={categories.map((c) => ({ value: c._id, label: c.displayName ?? c.name ?? c._id }))}
+									bind:value={detailDraft.categoryId}
+									searchable
+									clearable
+									allowCreate
+									onOptionCreate={(value: string, label: string) => openCreateEntity('category', label, (id) => { if (detailDraft) detailDraft.categoryId = id; })}
+								/>
+							{:else}
+								<span>{getCategoryLabel(detailPO.categoryId)}</span>
+								<button type="button" class="detail-info-btn" aria-label={pageContents.detailModal.infoBtn[lang]} onclick={() => openInfoModal('category', detailPO!.categoryId ?? undefined)}>i</button>
+							{/if}
+						</div>
+						<div class="detail-rel">
+							<span class="detail-label">{pageContents.table.status[lang]}:</span>
+							{#if detailEditing && detailDraft}
+								<select class="admin-select" bind:value={detailDraft.status}>
+									{#each ['draft'] as st}
+										<option value={st}>{statusLabel(st)}</option>
+									{/each}
+								</select>
+							{:else}
+								<span>{statusLabel(detailPO.status)}</span>
+							{/if}
+						</div>
+						{#if detailEditing && detailDraft}
+							<div class="detail-dates">
+								<label class="form-field">
+									<span class="form-label">{pageContents.fullModal.manufacturedAt[lang]}</span>
+									<input class="admin-input" type="date" bind:value={detailDraft.expectedAt} />
+								</label>
+								<label class="form-field">
+									<span class="form-label">{pageContents.fullModal.expiresAt[lang]}</span>
+									<input class="admin-input" type="date" bind:value={detailDraft.receivedAt} />
+								</label>
+							</div>
+						{:else}
+							<div><span class="detail-label">{pageContents.table.expectedAt?.[lang] ?? 'Dự kiến nhận'}:</span> {formatDate(detailPO.expectedAt)}</div>
+							<div><span class="detail-label">{pageContents.table.receivedAt[lang]}:</span> {formatDate(detailPO.receivedAt)}</div>
+						{/if}
+						<div><span class="detail-label">{pageContents.table.totalCost[lang]}:</span> {formatMoney(detailEditing ? detailDraftTotal() : detailPO.totalCost)}</div>
 					</div>
-					{#if detailPO.note}
+					{#if detailEditing && detailDraft}
+						<label class="form-field">
+							<span class="form-label">{pageContents.quickModal.note[lang]}</span>
+							<textarea class="admin-input" rows={2} bind:value={detailDraft.note}></textarea>
+						</label>
+					{:else if detailPO.note}
 						<p class="detail-note">{detailPO.note}</p>
 					{/if}
 
@@ -3275,37 +3628,57 @@
 									<th scope="col">{pageContents.quickModal.variant[lang]}</th>
 									<th scope="col">{pageContents.quickModal.quantity[lang]}</th>
 									<th scope="col">{pageContents.quickModal.unitCost[lang]}</th>
+									<th scope="col">{pageContents.fullModal.sellPrice[lang]}</th>
 									<th scope="col">{pageContents.quickModal.lotNumber[lang]}</th>
 								</tr>
 							</thead>
 							<tbody>
-								{#each detailPO.items ?? [] as item (item.variantId + String(item.quantity))}
-									<tr>
-										<td>
-											<!-- breadcrumb: sản phẩm › phân loại — click mở modal chi tiết (sửa/xóa) -->
-											<div class="item-breadcrumb">
-												<button
-													type="button"
-													class="item-crumb"
-													onclick={() => void openEntityEditor('product', metaFor(item.variantId)?.productId)}
-												>
-													{metaFor(item.variantId)?.productName ?? '—'}
-												</button>
-												<span class="item-crumb-sep">›</span>
-												<button
-													type="button"
-													class="item-crumb"
-													onclick={() => void openEntityEditor('variant', item.variantId)}
-												>
-													{metaFor(item.variantId)?.displayName ?? getVariantLabel(item.variantId)}
-												</button>
-											</div>
-										</td>
-										<td class="col-num">{item.quantity}</td>
-										<td class="col-num">{formatMoney(item.unitCost)}</td>
-										<td>{item.lotNumber ?? '—'}</td>
-									</tr>
-								{/each}
+								{#if detailEditing && detailDraft}
+									{#each detailDraft.items as dItem, dIdx (dIdx)}
+										<tr>
+											<td>
+												<div class="item-breadcrumb">
+													<span class="item-crumb-static">{metaFor(dItem.variantId)?.productName ?? '—'}</span>
+													<span class="item-crumb-sep">›</span>
+													<span class="item-crumb-static">{metaFor(dItem.variantId)?.displayName ?? getVariantLabel(dItem.variantId)}</span>
+												</div>
+											</td>
+											<td><input class="admin-input col-num" type="number" min="1" bind:value={dItem.quantity} oninput={() => { detailDirty = true; }} /></td>
+											<td><input class="admin-input col-num" type="number" min="0" step="1000" bind:value={dItem.unitCost} oninput={() => { detailDirty = true; }} /></td>
+											<td><input class="admin-input col-num" type="number" min="0" step="1000" bind:value={dItem.sellPrice} oninput={() => { detailDirty = true; }} /></td>
+											<td><input class="admin-input" type="text" bind:value={dItem.lotNumber} oninput={() => { detailDirty = true; }} /></td>
+										</tr>
+									{/each}
+								{:else}
+									{#each detailPO.items ?? [] as item (item.variantId + String(item.quantity))}
+										<tr>
+											<td>
+												<!-- breadcrumb: sản phẩm › phân loại — click mở modal chi tiết (sửa/xóa) -->
+												<div class="item-breadcrumb">
+													<button
+														type="button"
+														class="item-crumb"
+														onclick={() => void openEntityEditor('product', metaFor(item.variantId)?.productId)}
+													>
+														{metaFor(item.variantId)?.productName ?? '—'}
+													</button>
+													<span class="item-crumb-sep">›</span>
+													<button
+														type="button"
+														class="item-crumb"
+														onclick={() => void openEntityEditor('variant', item.variantId)}
+													>
+														{metaFor(item.variantId)?.displayName ?? getVariantLabel(item.variantId)}
+													</button>
+												</div>
+											</td>
+											<td class="col-num">{item.quantity}</td>
+											<td class="col-num">{formatMoney(item.unitCost)}</td>
+											<td class="col-num">{item.sellPrice != null ? formatMoney(item.sellPrice) : '—'}</td>
+											<td>{item.lotNumber ?? '—'}</td>
+										</tr>
+									{/each}
+								{/if}
 							</tbody>
 						</table>
 					</div>
@@ -3323,8 +3696,85 @@
 						</div>
 					{/if}
 				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					{#if detailEditing}
+						<Button color="default" variant="ghost" onclick={cancelDetailEdit}>{pageContents.entityEditor.cancel[lang]}</Button>
+						<Button color="primary" loading={detailSaving} disabled={!detailDirty || detailSaving} onclick={() => void submitDetailEdit()}>
+							{pageContents.detailModal.save[lang]}
+						</Button>
+					{:else if detailPO.status === 'draft'}
+						<Button color="primary" variant="soft" onclick={beginDetailEdit}>{pageContents.detailModal.editBtn[lang]}</Button>
+					{/if}
+				</Modal.Container.Footer>
 			</Modal.Container>
 		</Modal>
+	{/if}
+
+	<!-- ── Info modal relationship (supplier/category/branch) ──
+	     Sửa/Xóa trực tiếp entity; branch KHÔNG có endpoint update → read-only. -->
+	{#if infoModalDisplay}
+		<Modal bind:display={infoModalDisplay} size="md" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>
+					{infoKind === 'supplier' ? pageContents.table.supplier[lang] : infoKind === 'category' ? (pageContents.table.category[lang] ?? 'Thể loại') : pageContents.table.branch[lang]}
+				</Modal.Container.Header>
+				<Modal.Container.Body>
+					{#if infoLoading}
+						<p class="detail-note">{pageContents.entityEditor.loading[lang]}</p>
+					{:else if !infoDoc}
+						<p class="detail-note">{pageContents.entityEditor.notFound[lang]}</p>
+					{:else if infoKind === 'branch'}
+						<div class="detail-grid">
+							<div><span class="detail-label">{pageContents.entityEditor.name[lang]}:</span> {String(infoDoc.name ?? '—')}</div>
+							<div><span class="detail-label">{pageContents.entityEditor.status[lang]}:</span> {String(infoDoc.status ?? '—')}</div>
+							{#if infoDoc.address}<div><span class="detail-label">{pageContents.detailModal.address[lang]}:</span> {String(infoDoc.address)}</div>{/if}
+						</div>
+						<p class="detail-note">{pageContents.detailModal.branchReadOnly[lang]}</p>
+					{:else}
+						<label class="form-field">
+							<span class="form-label">{pageContents.entityEditor.name[lang]}</span>
+							<input class="admin-input" type="text" bind:value={infoName} />
+						</label>
+						{#if infoKind === 'supplier'}
+							<label class="form-field">
+								<span class="form-label">{pageContents.detailModal.contactPerson[lang]}</span>
+								<input class="admin-input" type="text" bind:value={infoContact} />
+							</label>
+						{/if}
+						<label class="form-field">
+							<span class="form-label">{pageContents.entityEditor.status[lang]}</span>
+							<select class="admin-select" bind:value={infoStatus}>
+								<option value="active">active</option>
+								<option value="inactive">inactive</option>
+							</select>
+						</label>
+					{/if}
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					{#if infoDoc && infoKind !== 'branch'}
+						<Button color="error" variant="soft" onclick={() => { infoDeleteOpen = true; }}>{pageContents.entityEditor.delete[lang]}</Button>
+					{/if}
+					<Button color="default" variant="ghost" onclick={() => { infoModalDisplay = false; }}>{pageContents.entityEditor.cancel[lang]}</Button>
+					{#if infoDoc && infoKind !== 'branch'}
+						<Button color="primary" loading={infoSubmitting} onclick={() => void submitInfoEdit()}>{pageContents.detailModal.save[lang]}</Button>
+					{/if}
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+		<AlertDialog bind:open={infoDeleteOpen} title={pageContents.entityEditor.delete[lang]} description={pageContents.entityEditor.deleteConfirm[lang]}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.entityEditor.delete[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>{pageContents.entityEditor.deleteConfirm[lang]}</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.entityEditor.cancel[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action color="danger" onselect={() => void deleteInfoDoc()}>
+						{pageContents.entityEditor.delete[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
 	{/if}
 
 	<!-- ── Modal phóng to ảnh (bind:display bắt buộc) ── -->
@@ -3562,11 +4012,31 @@
 	}
 
 	/* ── Tools trong caption (chuyển từ toolbar — yêu cầu "caption chứa search
-	   + filter/sort + 3 nút", "loại bỏ table-toolbar") ── */
+	   + filter/sort + 3 nút", "loại bỏ table-toolbar") ──
+	   1.6: search lấp khoảng còn lại của caption — tools chiếm toàn bộ phần
+	   flex còn lại (heading giữ auto width), search flex:1 bên trong tools. */
 	.admin-search {
 		flex: 1;
 		min-width: 12rem;
+		max-width: none;
 		position: relative;
+	}
+
+	/* 1.6: tools dãn full phần còn lại của caption-row (mặc định space-between
+	   chỉ kéo heading↔tools — giờ tools ăn hết khoảng trống giữa). */
+	:global(.datatable-caption-tools) {
+		flex: 1 1 auto;
+		/* 1.7: badge filter-count là absolute top/right -0.25rem — không được
+		   bị caption/tools overflow cắt mất góc trên phải. */
+		overflow: visible;
+	}
+
+	@media (max-width: 767px) {
+		/* Mobile: tools wrap width 100% (style DataTable đã có) — search giữ
+		   flex:1 trong hàng riêng của nó. */
+		.admin-search {
+			min-width: 9rem;
+		}
 	}
 
 	/* C7: suggest popover — absolute dưới input, nền đậm hơn trang */
@@ -4080,6 +4550,11 @@
 		gap: 0.5rem;
 		align-items: center;
 
+		/* 1.8: Select component thay native select — trigger ăn hết cột 1 */
+		& :global(.select-trigger) {
+			width: 100%;
+		}
+
 		@media (max-width: 860px) {
 			grid-template-columns: 1fr 1fr;
 		}
@@ -4193,6 +4668,68 @@
 
 	.detail-label {
 		font-weight: 600;
+		color: var(--foreground-500);
+	}
+
+	/* ── Detail edit + info button (relationship field) ── */
+	.detail-rel {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+
+		& > span:last-child {
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		/* Select trong grid 2 cột cần chiếm phần còn lại */
+		& :global(.select-trigger) {
+			flex: 1;
+			min-width: 0;
+		}
+	}
+
+	.detail-info-btn {
+		flex-shrink: 0;
+		width: 1.25rem;
+		height: 1.25rem;
+		padding: 0;
+		border: 1px solid var(--default-300);
+		border-radius: 999px;
+		background: transparent;
+		color: var(--foreground-500);
+		font-size: 0.65rem;
+		font-weight: 700;
+		font-style: italic;
+		font-family: Georgia, 'Times New Roman', serif;
+		line-height: 1;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+
+		&:hover {
+			background: var(--default-100);
+			color: var(--primary);
+			border-color: var(--primary);
+		}
+	}
+
+	.detail-dates {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem 1rem;
+
+		@media (max-width: 680px) {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Item variant khi edit mode — text tĩnh (không sửa được variant qua đây) */
+	.item-crumb-static {
+		font-size: 0.85rem;
 		color: var(--foreground-500);
 	}
 
@@ -4323,62 +4860,23 @@
 		}
 	}
 
-	.full-search-block {
-		margin-bottom: 1rem;
-	}
-
-	.full-search-row {
-		display: flex;
+	/* 1.8: picker per-item (Select + barcode input) — thay full-search-block
+	   step-2 (đã bỏ). Select trigger + input barcode xếp dọc, gap nhỏ. */
+	.full-item-picker {
+		display: grid;
+		grid-template-columns: 1fr auto;
 		gap: 0.5rem;
 		align-items: center;
+		margin-bottom: 0.75rem;
 
-		> :first-child {
-			flex: 1;
+		& :global(.select-trigger) {
+			width: 100%;
+		}
+
+		@media (max-width: 640px) {
+			grid-template-columns: 1fr;
 		}
 	}
-
-	.full-search-results {
-		margin-top: 0.5rem;
-		border: 1px solid var(--default-200);
-		border-radius: 0.5rem;
-		max-height: 12rem;
-		overflow-y: auto;
-	}
-
-	.full-search-result {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 0.4rem 0.6rem;
-
-		& + .full-search-result {
-			border-top: 1px solid var(--default-100);
-		}
-	}
-
-	.full-search-result__name {
-		flex: 1;
-		font-size: 0.85rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.full-search-empty {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		margin-top: 0.5rem;
-		padding: 0.5rem 0.6rem;
-		border: 1px dashed var(--default-300);
-		border-radius: 0.5rem;
-		font-size: 0.85rem;
-		color: var(--foreground-500);
-	}
-
-
 
 	.full-create-section {
 		margin-bottom: 1rem;

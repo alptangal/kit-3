@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { Button, Icon, AlertDialog, Tabs, Accordion } from '$components/element';
 	import { Input } from '$components/form';
+	import { getAllSearchKeywords, clearSearchKeywords, recordSearchKeyword } from '$store/user-prefs.svelte';
 	import { encryption } from '$modules/encryption';
 	import { browserSupportsWebAuthn, startRegistration, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
 	import { client } from '$store/basic.svelte';
@@ -46,6 +47,40 @@
 		tabApiKeys: {
 			vi: 'Khóa API',
 			en: 'API keys'
+		},
+		tabSearch: {
+			vi: 'Tìm kiếm',
+			en: 'Search'
+		},
+
+		// ── Lịch sử tìm kiếm ──
+		searchHistoryTitle: {
+			vi: 'Lịch sử tìm kiếm',
+			en: 'Search history'
+		},
+		searchHistoryHint: {
+			vi: 'Các từ khóa bạn đã dùng trên các trang quản trị. Xóa những mục không cần để gọn gợi ý tìm kiếm.',
+			en: 'Keywords you used across admin pages. Clear unneeded ones to tidy up search suggestions.'
+		},
+		searchHistoryEmpty: {
+			vi: 'Chưa có từ khóa nào được lưu.',
+			en: 'No keywords saved yet.'
+		},
+		searchHistoryClearOne: {
+			vi: 'Xóa',
+			en: 'Delete'
+		},
+		searchHistoryClearRoute: {
+			vi: 'Xóa cả trang',
+			en: 'Clear page'
+		},
+		searchHistoryClearAll: {
+			vi: 'Xóa tất cả',
+			en: 'Clear all'
+		},
+		searchHistoryDeleted: {
+			vi: 'Đã xóa lịch sử tìm kiếm',
+			en: 'Search history cleared'
 		},
 
 		// ── Passkey / sinh trắc học ──
@@ -304,6 +339,35 @@
 	let renameDraft = $state('');
 	let deleteTarget = $state<CredentialRow | undefined>(undefined);
 	let deleteDialogOpen = $state(false);
+
+	// ── Lịch sử tìm kiếm (từ user-prefs store) ──
+	let searchHistoryVersion = $state(0);
+	const searchHistory = $derived.by(() => {
+		void searchHistoryVersion;
+		return getAllSearchKeywords(); // Record<route, string[]>
+	});
+
+	function removeSearchKeyword(routeKey: string, keyword: string) {
+		const remaining = (getAllSearchKeywords()[routeKey] ?? []).filter((k) => k !== keyword);
+		clearSearchKeywords(routeKey);
+		if (remaining.length > 0) {
+			for (const k of [...remaining].reverse()) recordSearchKeyword(routeKey, k);
+		}
+		searchHistoryVersion += 1;
+		toast(msg('searchHistoryDeleted'), undefined, 'success');
+	}
+
+	function removeSearchRoute(routeKey: string) {
+		clearSearchKeywords(routeKey);
+		searchHistoryVersion += 1;
+		toast(msg('searchHistoryDeleted'), undefined, 'success');
+	}
+
+	function removeAllSearchHistory() {
+		clearSearchKeywords();
+		searchHistoryVersion += 1;
+		toast(msg('searchHistoryDeleted'), undefined, 'success');
+	}
 
 	// Toast helper — cùng pattern login page
 	function toast(title: string, description: string | undefined, color: 'success' | 'error') {
@@ -837,6 +901,69 @@
 		</section>
 	{/snippet}
 
+	{#snippet tabSearchContent()}
+		<!-- ── Nhóm 4: quản lí lịch sử tìm kiếm ── -->
+		<section class="keys-section" data-test="search-history">
+			<header class="pwd-header">
+				<div class="passkey-heading">
+					<Icon class="passkey-icon" icon="lucide:search" size="md" />
+					<div>
+						<h2 class="passkey-title">{msg('searchHistoryTitle')}</h2>
+						<p class="passkey-subtitle">{msg('searchHistoryHint')}</p>
+					</div>
+				</div>
+				{#if Object.keys(searchHistory).some((r) => (searchHistory[r] ?? []).length > 0)}
+					<Button
+						color="error"
+						variant="soft"
+						size="sm"
+						onclick={removeAllSearchHistory}
+						data-test="search-history-clear-all"
+					>
+						{msg('searchHistoryClearAll')}
+					</Button>
+				{/if}
+			</header>
+
+			{#if Object.keys(searchHistory).length === 0 || !Object.keys(searchHistory).some((r) => (searchHistory[r] ?? []).length > 0)}
+				<p class="passkey-empty" data-test="search-history-empty">{msg('searchHistoryEmpty')}</p>
+			{:else}
+				{#each Object.entries(searchHistory) as [routeKey, keywords] (routeKey)}
+					{#if keywords.length > 0}
+						<div class="sh-route" data-test="search-history-route">
+							<div class="sh-route-head">
+								<span class="sh-route-key">{routeKey}</span>
+								<Button
+									color="default"
+									variant="ghost"
+									size="sm"
+									onclick={() => removeSearchRoute(routeKey)}
+									data-test="search-history-clear-route"
+								>
+									{msg('searchHistoryClearRoute')}
+								</Button>
+							</div>
+							<div class="sh-chips">
+								{#each keywords as kw (kw)}
+									<span class="sh-chip">
+										<span class="sh-chip-text">{kw}</span>
+										<button
+											type="button"
+											class="sh-chip-x"
+											aria-label="{msg('searchHistoryClearOne')}: {kw}"
+											onclick={() => removeSearchKeyword(routeKey, kw)}
+											data-test="search-history-remove-kw"
+										>✕</button>
+									</span>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				{/each}
+			{/if}
+		</section>
+	{/snippet}
+
 	<!-- ── C6: Tabs desktop — wrapper div mang data-test (Tabs.Root không forward) ── -->
 	<div class="profile-tabs" data-test="profile-tabs">
 	<Tabs bind:value={profileTab} type="underline">
@@ -850,6 +977,9 @@
 			<Tabs.Trigger value="api-keys" icon="lucide:shield-keyhole" data-test="profile-tab-api-keys">
 				{pageContents.tabApiKeys[lang]}
 			</Tabs.Trigger>
+			<Tabs.Trigger value="search" icon="lucide:search" data-test="profile-tab-search">
+				{pageContents.tabSearch[lang]}
+			</Tabs.Trigger>
 		</Tabs.List>
 
 		<Tabs.Content value="overview" data-test="profile-tab-content-overview">
@@ -862,6 +992,10 @@
 
 		<Tabs.Content value="api-keys" data-test="profile-tab-content-api-keys">
 			{@render tabApiKeysContent()}
+		</Tabs.Content>
+
+		<Tabs.Content value="search" data-test="profile-tab-content-search">
+			{@render tabSearchContent()}
 		</Tabs.Content>
 	</Tabs>
 	</div>
@@ -915,6 +1049,16 @@
 				</Accordion.Header>
 				<Accordion.Content data-test="profile-acc-content-api-keys">
 					<p class="profile-acc-hint">{pageContents.tabApiKeys[lang]}</p>
+				</Accordion.Content>
+			</Accordion.Item>
+			<Accordion.Item value="search">
+				<Accordion.Header>
+					<Accordion.Trigger icon="lucide:search" data-test="profile-acc-trigger-search">
+						{pageContents.tabSearch[lang]}
+					</Accordion.Trigger>
+				</Accordion.Header>
+				<Accordion.Content data-test="profile-acc-content-search">
+					{@render tabSearchContent()}
 				</Accordion.Content>
 			</Accordion.Item>
 		</Accordion>
@@ -1181,6 +1325,75 @@
 	@keyframes passkey-spin {
 		to {
 			transform: rotate(360deg);
+		}
+	}
+
+	/* ── Nhóm 4: lịch sử tìm kiếm ── */
+	.sh-route {
+		margin-bottom: 0.75rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--default-200);
+		border-radius: 0.5rem;
+	}
+
+	.sh-route-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin-bottom: 0.4rem;
+	}
+
+	.sh-route-key {
+		font-family: var(--font-mono, monospace);
+		font-size: 0.8rem;
+		color: var(--foreground-500);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.sh-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+
+	.sh-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.3rem 0.2rem 0.6rem;
+		border: 1px solid var(--default-200);
+		border-radius: 999px;
+		font-size: 0.82rem;
+		background: var(--content1, transparent);
+	}
+
+	.sh-chip-text {
+		max-width: 14rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.sh-chip-x {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.1rem;
+		height: 1.1rem;
+		border: none;
+		border-radius: 50%;
+		background: transparent;
+		color: var(--foreground-500);
+		font-size: 0.7rem;
+		line-height: 1;
+		cursor: pointer;
+
+		&:hover {
+			background: var(--error, hsl(0 84% 60%));
+			color: white;
 		}
 	}
 

@@ -15,7 +15,13 @@
 	import { matchSegments, queryMatchesText, type TextSegment } from '$modules';
 	import { client } from '$store/basic.svelte';
 	import { Icon } from '$components/element';
-	import { getSidebarContext, setMenuGroupContext, getMenuGroupContext, collectProbes } from './_context';
+	import {
+		getSidebarContext,
+		setMenuGroupContext,
+		getMenuGroupContext,
+		collectProbes,
+		setActiveSlot
+	} from './_context';
 	import type { MenuItemProbe, MenuGroupRegistry } from './_context';
 	import type { SidebarMenuGroupProps } from './_interface';
 
@@ -75,6 +81,11 @@
 	// CỦA CHÍNH MÌNH (không phải cha) → selfProbe tự register vào chính nó,
 	// group ông không thấy được cây của group con (search đệ quy "cháy" ở cấp 1).
 	const parentGroup = getMenuGroupContext();
+	// Active tracking: slot cho con ĐIỀN khi MenuButton active (kể cả group đóng
+	// — submenu unmount nên :has() không thấy .active). data-active-group gắn
+	// trên <li> → CSS chấm mép trái.
+	const activeSlot = $state({ current: false });
+	setActiveSlot(activeSlot);
 	setMenuGroupContext({
 		register: (probe: MenuItemProbe) => {
 			childProbes.add(probe);
@@ -153,7 +164,13 @@
 <!-- P3: KHÔNG {#if groupVisible} — unmount <li> sẽ GIẾT probe của chính group
      (và toàn cây con) → gõ query khác không bao giờ hiện lại (chicken-and-egg).
      Ẩn bằng class .sb-hidden (CSS display:none) khi không khớp. -->
-<li class="sidebar-menu-group" class:open={isOpen} class:sb-hidden={!groupVisible} data-sb-group-id={id}>
+<li
+	class="sidebar-menu-group"
+	class:open={isOpen}
+	class:sb-hidden={!groupVisible}
+	class:active-group={activeSlot.current}
+	data-sb-group-id={id}
+>
 		<button
 			type="button"
 			class="sidebar-menu-group__trigger"
@@ -277,6 +294,44 @@
 	   selector phải là .sidebar-menu-group.sb-hidden (top-level, KHÔNG "&"). */
 	.sidebar-menu-group.sb-hidden {
 		display: none;
+	}
+
+	/* li.sidebar-menu-group nằm TRỰC TIẾP trong div.sidebar-content (không ul
+	   cha) → display:list-item mặc định sinh ::marker "•" trước label — chỉ ló
+	   trên mobile (aside fixed, không bị clip như desktop). Kill marker. */
+	.sidebar-menu-group {
+		list-style: none;
+	}
+
+	/* Chấm active ở mép trái sidebar, thẳng hàng header group (yêu cầu mới:
+	   KHÔNG border trên item — chấm gắn vào trigger luôn-mount vì submenu
+	   unmount khi group đóng). :has đã dùng an toàn trong layout. */
+	.sidebar-menu-group__trigger {
+		position: relative;
+	}
+
+	.sidebar-menu-group__trigger::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 50%;
+		translate: 0 -50%;
+		width: 6px;
+		height: 6px;
+		border-radius: 999px;
+		background: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
+		opacity: 0;
+		transition: opacity var(--transition-duration, 150ms) ease;
+	}
+
+	.sidebar-menu-group:has(.sidebar-menu-button.active) .sidebar-menu-group__trigger::before {
+		opacity: 1;
+	}
+
+	/* Group ĐÓNG: submenu unmount → :has() chết — dùng class active-group do con
+	   điền qua ActiveSlot context (MenuButton $effect). Cùng một ::before. */
+	.sidebar-menu-group.active-group .sidebar-menu-group__trigger::before {
+		opacity: 1;
 	}
 
 	.sidebar-menu-group__submenu.sb-hidden {

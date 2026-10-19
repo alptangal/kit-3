@@ -66,6 +66,8 @@ $effect(() => {
 	// ── Passkey (WebAuthn) state ──
 	/** Browser hỗ trợ WebAuthn? — check ở onMount (SSR-safe) */
 	let passkeySupported = $state(false);
+	/** Thiết bị có platform authenticator (false → nút disabled + hint bật Windows Hello) */
+	let passkeyAuthenticator = $state(false);
 	let passkeyLoading = $state(false);	// Ngôn ngữ hiện tại
 	const lang = $derived(client.browser?.language ?? 'en');
 	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
@@ -301,8 +303,14 @@ $effect(() => {
 	// ===== Đăng nhập bằng Passkey (WebAuthn) =====
 	// Username field (nếu có) được gửi kèm để server ràng buộc allowCredentials —
 	// trống → discoverable credential (authenticator tự chọn).
+	// Nhóm 3: KHÔNG nuốt lỗi im lặng — phân loại rõ (chưa đăng ký / huỷ / origin).
 	async function handlePasskeyLogin() {
-		if (passkeyLoading || !encryptionKeys) return;
+		if (passkeyLoading) return;
+		if (!encryptionKeys) {
+			// vault chưa init xong (keypair RSA đang sinh) — báo trạng thái thay vì bỏ click
+			formError = pageContents.passkeyInitializing[lang];
+			return;
+		}
 		passkeyLoading = true;
 		formError = undefined;
 		try {
@@ -338,9 +346,19 @@ $effect(() => {
 			const redirectTo = page.url.searchParams.get('redirect') ?? '/';
 			await goto(redirectTo);
 		} catch (e) {
-			// User huỷ prompt authenticator (NotAllowedError) — không hiện lỗi to
 			const em = e instanceof Error ? e.message : String(e);
-			if (!/NotAllowed|aborted/i.test(em)) {
+			const ename = e instanceof DOMException ? e.name : /Error/.test(em) ? em.split(':')[0].trim() : '';
+			// Phân loại lỗi WebAuthn — mỗi nhóm một thông điệp rõ (không swallow):
+			if (/NotAllowed/i.test(ename) && /timed out|user|aborted|cancel/i.test(em)) {
+				// user tự huỷ prompt hoặc timeout — thông báo nhẹ, không phải lỗi hệ thống
+				formError = pageContents.passkeyCancelled[lang];
+			} else if (/NotAllowed|InvalidState/i.test(ename)) {
+				// không có credential nào đăng ký trên thiết bị này / đã đăng ký rồi
+				formError = pageContents.passkeyNoCredential[lang];
+			} else if (/SecurityError/i.test(ename)) {
+				// rpId/origin mismatch — truy cập bằng IP/localhost thay vì domain HTTPS đúng
+				formError = pageContents.passkeyOriginMismatch[lang];
+			} else {
 				formError = em;
 			}
 		} finally {
@@ -355,22 +373,25 @@ $effect(() => {
 		encryptionKeys = { private: privateKey, public: publicKey };
 
 		// WebAuthn support check (SSR-safe — chỉ chạy client).
-		// platformAuthenticatorIsAvailable: chỉ hiện biometric khi thiết bị CÓ
-		// platform authenticator (Touch ID / Face ID / vân tay / Windows Hello) —
-		// desktop không có → ẩn nút. Check trong try vì một số browser ném lỗi
-		// khi gọi trong iframe không cấp quyền.
+		// passkeySupported: WebAuthn API sẵn sàng (hiện nút, có thể disabled).
+		// passkeyAuthenticator: thiết bị CÓ platform authenticator (Touch ID /
+		// Face ID / Windows Hello / vân tay Android) — FALSE → nút disabled + hint
+		// hướng dẫn bật (thay vì ẩn hoàn toàn — user không biết chức năng tồn tại).
+		// Check trong try vì một số browser ném lỗi khi gọi trong iframe không cấp quyền.
 		passkeySupported = false;
+		passkeyAuthenticator = false;
 		try {
 			if (
 				typeof window !== 'undefined' &&
 				typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
-				browserSupportsWebAuthn() &&
-				(await platformAuthenticatorIsAvailable())
+				browserSupportsWebAuthn()
 			) {
 				passkeySupported = true;
+				passkeyAuthenticator = await platformAuthenticatorIsAvailable();
 			}
 		} catch {
 			passkeySupported = false;
+			passkeyAuthenticator = false;
 		}
 
 		try {
@@ -510,7 +531,8 @@ $effect(() => {
 
 		{#if passkeySupported}
 			<!-- Đăng nhập bằng Passkey (Touch ID / Face ID / Windows Hello / vân tay Android).
-			     Hàng riêng PHÍA TRÊN nút Sign in theo yêu cầu. -->
+			     Hàng riêng PHÍA TRÊN nút Sign in theo yêu cầu. Nhóm 3: không có
+			     authenticator → nút disabled + hint (thay vì ẩn hoàn toàn). -->
 			<div class="passkey-section">
 				<Button
 					class="auth-btn-passkey"
@@ -518,7 +540,7 @@ $effect(() => {
 					variant="ghost"
 					icon="lucide:fingerprint"
 					loading={passkeyLoading}
-					disabled={passkeyLoading}
+					disabled={passkeyLoading || !passkeyAuthenticator}
 					onclick={handlePasskeyLogin}
 				>
 					{pageContents.passkeyLogin[lang] ?? (lang === 'vi' ? 'Đăng nhập bằng sinh trắc học' : 'Sign in with biometrics')}
@@ -526,6 +548,15 @@ $effect(() => {
 				<div class="passkey-divider">
 					<span>{pageContents.passkeyOr[lang] ?? (lang === 'vi' ? 'hoặc' : 'or')}</span>
 				</div>
+				{#if !passkeyAuthenticator}
+					<p class="passkey-hint" data-test="passkey-authenticator-hint">
+						{pageContents.passkeyUnavailableHint[lang]}
+					</p>
+				{:else}
+					<a class="passkey-guide-link" href="/docs/biometric-login.html" target="_blank" rel="noopener" data-test="passkey-guide-link">
+						{pageContents.passkeyGuide[lang]}
+					</a>
+				{/if}
 			</div>
 		{/if}
 
@@ -705,5 +736,24 @@ $effect(() => {
 		justify-content: center !important;
 		gap: 0.5rem !important;
 		width: 100%;
+	}
+
+	/* Nhóm 3: hint khi thiếu authenticator + link hướng dẫn */
+	.passkey-hint {
+		margin: 0.25rem 0 0;
+		font-size: 0.78rem;
+		color: var(--foreground-500, #9ca3af);
+		text-align: center;
+	}
+
+	.passkey-guide-link {
+		margin-top: 0.15rem;
+		font-size: 0.78rem;
+		color: var(--primary-600, hsl(221 83% 53%));
+		text-decoration: none;
+
+		&:hover {
+			text-decoration: underline;
+		}
 	}
 </style>

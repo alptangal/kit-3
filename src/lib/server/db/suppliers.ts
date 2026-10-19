@@ -366,6 +366,47 @@ export class SupplierService {
     return { success: true, supplier: sanitizeSupplierForAdmin({...supplier, _id: supplierId}) };
   }
 
+  /**
+   * Update a supplier (info modal từ purchase detail — name/contact/address/status).
+   * Whitelist SUPPLIER_ADMIN_SAFE_FIELDS (trừ createdAt/updatedAt).
+   */
+  static async updateSupplier(
+    actor: ActorContext,
+    supplierId: string,
+    patch: Record<string, unknown>
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { supplier: Record<string, unknown> })> {
+    const permError = await this.requirePermission(actor, 'suppliers:manage');
+    if (permError) return permError;
+
+    const getRes = await cbSuppliers.document.get({ documentKey: supplierId });
+    if (!getRes.ok) {
+      return { success: false, messages: supplierAdminMessages.notFound };
+    }
+
+    const now = new Date().toISOString();
+    const updateData: Record<string, unknown> = { ...(getRes as any).data };
+
+    for (const field of ['name', 'contactPerson', 'address', 'status'] as const) {
+      if (field in patch) updateData[field] = patch[field];
+    }
+    if (typeof updateData.name !== 'string' || !updateData.name.trim()) {
+      return { success: false, messages: supplierAdminMessages.invalidInput };
+    }
+    updateData.updatedAt = now;
+
+    const updateRes = await cbSuppliers.document.update({
+      documentKey: supplierId,
+      content: updateData
+    });
+
+    if (!updateRes.ok) {
+      return { success: false, messages: supplierAdminMessages.updateFailed };
+    }
+
+    const updatedSupplier = (updateRes as any).data;
+    return { success: true, supplier: sanitizeSupplierForAdmin({...updatedSupplier, _id: supplierId}) };
+  }
+
   // ========== PURCHASE ORDERS ==========
 
   /**
@@ -562,6 +603,118 @@ export class SupplierService {
     if (newStatus === 'received') {
       updateData.receivedAt = now;
     }
+
+    const updateRes = await cbPurchaseOrders.document.update({
+      documentKey: poId,
+      content: updateData
+    });
+
+    if (!updateRes.ok) {
+      return { success: false, messages: supplierAdminMessages.updateFailed };
+    }
+
+    const updatedPO = (updateRes as any).data;
+    return { success: true, po: sanitizePOForAdmin({...updatedPO, _id: poId}) };
+  }
+
+  /**
+   * Update PO (detail modal edit — chỉnh field chung + dòng nhập khi draft).
+   * Chỉ draft được sửa: received/cancelled gắn lot/công nợ, sửa vỡ dữ liệu.
+   * - PO_UPDATE tương tự updatePOStatus (suppliers:manage).
+   * - Field whitelist PO_ADMIN_SAFE_FIELDS; items validate từng dòng (variantId,
+   *   quantity>0, unitCost>=0) — server KHÔNG parse biểu thức giá (client lo).
+   * - totalCost/vouchers chấp nhận từ client (modal tính lại + gửi lên).
+   */
+  static async updatePurchaseOrder(
+    actor: ActorContext,
+    poId: string,
+    patch: Record<string, unknown>
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { po: Record<string, unknown> })> {
+    const permError = await this.requirePermission(actor, 'suppliers:manage');
+    if (permError) return permError;
+
+    const getRes = await cbPurchaseOrders.document.get({ documentKey: poId });
+    if (!getRes.ok) {
+      return { success: false, messages: supplierAdminMessages.poNotFound };
+    }
+
+    const po = (getRes as any).data;
+
+    if (po.status && po.status !== 'draft') {
+      return { success: false, messages: supplierAdminMessages.poNotReceivable };
+    }
+
+    if (actor.branchId && po.branchId !== actor.branchId) {
+      const scope = await PermissionChecker.getScope(actor.roleName, 'suppliers:manage');
+      if (scope === 'own_branch') {
+        return { success: false, messages: supplierAdminMessages.permissionDenied };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const updateData: Record<string, unknown> = { ...po };
+
+    // Whitelist field PO: chỉ nhận các key admin-safe từ patch.
+    const editableFields: Array<(typeof PO_ADMIN_SAFE_FIELDS)[number]> = [
+      'poCode', 'supplierId', 'branchId', 'status', 'items', 'totalCost',
+      'vouchers', 'expectedAt', 'receivedAt', 'note', 'categoryId'
+    ];
+    for (const field of editableFields) {
+      if (field in patch) updateData[field] = patch[field];
+    }
+
+    // Validate items (nếu patch): từng dòng variantId string + quantity > 0 + unitCost >= 0.
+    if ('items' in updateData) {
+      const items = updateData.items;
+      if (!Array.isArray(items)) return { success: false, messages: supplierAdminMessages.invalidPOItems };
+      for (const it of items) {
+        if (!it || typeof it !== 'object') return { success: false, messages: supplierAdminMessages.invalidPOItems };
+        const rec = it as Record<string, unknown>;
+        if (typeof rec.variantId !== 'string' || !rec.variantId) {
+          return { success: false, messages: supplierAdminMessages.invalidPOItems };
+        }
+        if (!Number.isFinite(Number(rec.quantity)) || Number(rec.quantity) <= 0) {
+          return { success: false, messages: supplierAdminMessages.invalidPOItems };
+        }
+        if (!Number.isFinite(Number(rec.unitCost)) || Number(rec.unitCost) < 0) {
+          return { success: false, messages: supplierAdminMessages.invalidPOItems };
+        }
+      }
+      updateData.items = items;
+    }
+
+    // totalCost/vouchers: số dương / mảng voucher money hợp lệ (pattern create).
+    if ('totalCost' in updateData) {
+      const total = Number(updateData.totalCost);
+      if (!Number.isFinite(total) || total < 0) {
+        return { success: false, messages: supplierAdminMessages.invalidInput };
+      }
+      updateData.totalCost = total;
+    }
+    if ('vouchers' in updateData) {
+      const vouchers = updateData.vouchers;
+      if (vouchers !== undefined && vouchers !== null && !Array.isArray(vouchers)) {
+        return { success: false, messages: supplierAdminMessages.invalidVoucher };
+      }
+      if (Array.isArray(vouchers)) {
+        for (const v of vouchers) {
+          if (!v || typeof v !== 'object' || (v as Record<string, unknown>).type !== 'money') {
+            return { success: false, messages: supplierAdminMessages.invalidVoucher };
+          }
+          if (!Number.isFinite(Number((v as Record<string, unknown>).value)) || Number((v as Record<string, unknown>).value) < 0) {
+            return { success: false, messages: supplierAdminMessages.invalidVoucher };
+          }
+        }
+      }
+    }
+
+    // status (nếu patch): phải draft (không cho sửa sang received/cancelled qua update —
+    // luồng nhận hàng riêng qua get?receive=true / update-status).
+    if ('status' in updateData && updateData.status !== 'draft') {
+      return { success: false, messages: supplierAdminMessages.invalidStatus };
+    }
+
+    updateData.updatedAt = now;
 
     const updateRes = await cbPurchaseOrders.document.update({
       documentKey: poId,

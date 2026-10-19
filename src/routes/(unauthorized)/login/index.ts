@@ -75,5 +75,30 @@ export const pageContents: { [k: string]: TranslateContent } = {
 	passkeyOr: {
 		vi: 'hoặc',
 		en: 'or'
+	},
+	// ── Nhóm 3: thông điệp lỗi passkey (không nuốt im lặng) + hướng dẫn ──
+	passkeyInitializing: {
+		vi: 'Đang khởi tạo mã hoá, thử lại sau ít giây...',
+		en: 'Encrypting handshake in progress, retry in a few seconds...'
+	},
+	passkeyCancelled: {
+		vi: 'Bạn đã huỷ yêu cầu sinh trắc học.',
+		en: 'Biometric prompt was cancelled.'
+	},
+	passkeyNoCredential: {
+		vi: 'Thiết bị này chưa đăng ký passkey. Đăng ký ở Hồ sơ → Bảo mật sau khi đăng nhập.',
+		en: 'No passkey registered on this device. Register in Profile → Security after signing in.'
+	},
+	passkeyOriginMismatch: {
+		vi: 'Sai miền truy cập — mở qua địa chỉ HTTPS chính thức của hệ thống (xem hướng dẫn passkey).',
+		en: 'Wrong origin — open via the official HTTPS address of the system (see the passkey guide).'
+	},
+	passkeyGuide: {
+		vi: 'Cách bật và dùng đăng nhập sinh trắc học',
+		en: 'How to enable and use biometric sign-in'
+	},
+	passkeyUnavailableHint: {
+		vi: 'Thiết bị chưa có authenticator — bật Windows Hello / Touch ID rồi tải lại trang.',
+		en: 'No authenticator on this device — enable Windows Hello / Touch ID and reload.'
 	}
 };

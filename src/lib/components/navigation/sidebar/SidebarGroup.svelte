@@ -8,7 +8,13 @@
 	// group hiện lại (không chicken-and-egg "group chết").
 	import { SvelteSet } from 'svelte/reactivity';
 	import { queryMatchesText } from '$modules';
-	import { getSidebarContext, setMenuGroupContext, getMenuGroupContext, collectProbes } from './_context';
+	import {
+		getSidebarContext,
+		setMenuGroupContext,
+		getMenuGroupContext,
+		collectProbes,
+		setActiveSlot
+	} from './_context';
 	import type { MenuItemProbe, MenuGroupRegistry } from './_context';
 	import type { SidebarGroupProps } from './_interface';
 
@@ -22,6 +28,9 @@
 	// context object của CHÍNH component → getContext gọi sau sẽ trả registry
 	// CỦA CHÍNH MÌNH (không phải cha) → selfProbe tự register vào chính nó.
 	const parentGroup = getMenuGroupContext();
+	// Active tracking: slot con điền (MenuButton active) — đồng bộ MenuGroup.
+	const activeSlot = $state({ current: false });
+	setActiveSlot(activeSlot);
 	setMenuGroupContext({
 		register: (probe: MenuItemProbe) => {
 			childProbes.add(probe);
@@ -64,7 +73,12 @@
 <!-- P3: KHÔNG {#if groupVisible} — unmount sẽ GIẾT probe của con (deregister)
      → group không bao giờ hiện lại khi gõ query khớp (chicken-and-egg). Ẩn bằng
      class .sb-hidden (CSS display:none) khi không có con khớp. -->
-<div class="sidebar-group" class:sb-hidden={!groupVisible} data-sb-group-id={id}>
+<div
+	class="sidebar-group"
+	class:sb-hidden={!groupVisible}
+	class:active-group={activeSlot.current}
+	data-sb-group-id={id}
+>
 	{@render children?.()}
 </div>
 

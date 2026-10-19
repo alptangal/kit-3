@@ -6,7 +6,7 @@
 	import { styleSynced, matchSegments, type TextSegment } from '$modules';
 	import { client } from '$store/basic.svelte';
 	import { Icon, Tooltip } from '$components/element';
-	import { getSidebarContext, getMenuItemLabelSlot } from './_context';
+	import { getSidebarContext, getMenuItemLabelSlot, getActiveSlot } from './_context';
 	import type { SidebarMenuButtonProps } from './_interface';
 
 	let {
@@ -53,6 +53,13 @@
 	const labelSlot = getMenuItemLabelSlot();
 	$effect(() => {
 		if (labelSlot) labelSlot.current = labelText;
+	});
+
+	// Active tracking: điền slot group cha (kể cả group ĐÓNG — submenu unmount
+	// nên :has() không thấy .active trong DOM; slot $state reactive 2 chiều).
+	const activeSlot = getActiveSlot();
+	$effect(() => {
+		if (activeSlot) activeSlot.current = active;
 	});
 
 	const isLink = $derived(!!href && !disabled);
@@ -240,9 +247,8 @@
 
 		&.active {
 			background: var(--content2, hsl(240 4.8% 96%));
-			// Active đánh dấu cả LABEL + viền trái (yêu cầu 4a — trước chỉ icon).
-			// box-shadow inset: không đổi layout/padding như border-left thật.
-			box-shadow: inset 3px 0 0 0 var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
+			// Active đánh dấu cả LABEL (yêu cầu 4a — trước chỉ icon). Vệt trái đã
+			// chuyển sang chấm nhỏ ở mép sidebar trên trigger group (SidebarMenuGroup).
 
 			.leading,
 			.label {

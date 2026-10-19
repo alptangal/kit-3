@@ -23,6 +23,8 @@ export interface DataTablePagePrefs {
 	sort?: { field?: string; direction?: 'asc' | 'desc' };
 	/** M3: template field hiển thị card mobile — mảng id cột */
 	cardFields?: string[];
+	/** 1.4: filter trang đã persist — key = tên filter, value JSON-safe (string/number/boolean) */
+	filters?: Record<string, string | number | boolean | null>;
 	pageSize?: number;
 }
 
@@ -122,18 +124,37 @@ function sanitizePatch(patch: UserPreferencesPatch | undefined): UserPreferences
 					.slice(0, 10);
 				if (cf.length > 0) page.cardFields = cf;
 			}
+			// 1.4: filters — tối đa 20 key, value scalar JSON-safe (string ≤100 chars,
+			// number finite, boolean, null). null = "đặt lại về tất cả".
+			if (v.filters && typeof v.filters === 'object' && !Array.isArray(v.filters)) {
+				const fEntries = Object.entries(v.filters).slice(0, 20);
+				const filters: Record<string, string | number | boolean | null> = {};
+				for (const [fKey, fVal] of fEntries) {
+					if (typeof fKey !== 'string' || fKey.length === 0 || fKey.length > 32) continue;
+					if (fVal === null) filters[fKey] = null;
+					else if (typeof fVal === 'string' && fVal.length <= 100) filters[fKey] = fVal;
+					else if (typeof fVal === 'number' && Number.isFinite(fVal)) filters[fKey] = fVal;
+					else if (typeof fVal === 'boolean') filters[fKey] = fVal;
+				}
+				page.filters = filters;
+			}
 			datatable[key] = page;
 		}
 		clean.datatable = datatable;
 	}
 	// C7: searchKeywords — tối đa 10 route, mỗi route ≤20 từ khóa ≤100 chars,
-	// dedupe, mới nhất đầu.
+	// dedupe, mới nhất đầu. MẢNG RỖNG = XÓA ROUTE (yêu cầu "quản lí lịch sử
+	// tìm kiếm — xóa data không cần thiết") — giữ marker rỗng cho mergePrefs.
 	if (patch.searchKeywords && typeof patch.searchKeywords === 'object') {
 		const entries = Object.entries(patch.searchKeywords as Record<string, unknown>).slice(0, 10);
 		const keywords: Record<string, string[]> = {};
 		for (const [key, value] of entries) {
 			if (typeof key !== 'string' || key.length === 0 || key.length > 100) continue;
 			if (!Array.isArray(value)) continue;
+			if (value.length === 0) {
+				keywords[key] = [];
+				continue;
+			}
 			const seen = new Set<string>();
 			const list: string[] = [];
 			for (const kw of value) {
@@ -143,7 +164,8 @@ function sanitizePatch(patch: UserPreferencesPatch | undefined): UserPreferences
 				list.push(kw);
 				if (list.length >= 20) break;
 			}
-			if (list.length > 0) keywords[key] = list;
+			// sanitize xong rỗng → cũng coi như xóa route
+			keywords[key] = list;
 		}
 		clean.searchKeywords = keywords;
 	}
@@ -174,8 +196,12 @@ function mergePrefs(
 	}
 	if (patch.searchKeywords && merged.searchKeywords) {
 		// C7: merge per-route — từ khóa mới ghép TRƯỚC từ khóa cũ (mới nhất đầu),
-		// dedupe, giới hạn 20/route.
+		// dedupe, giới hạn 20/route. MẢNG RỖNG trong patch = XÓA route.
 		for (const [key, list] of Object.entries(patch.searchKeywords)) {
+			if (list.length === 0) {
+				delete merged.searchKeywords[key];
+				continue;
+			}
 			const old = merged.searchKeywords[key] ?? [];
 			const seen = new Set<string>();
 			const mergedList: string[] = [];

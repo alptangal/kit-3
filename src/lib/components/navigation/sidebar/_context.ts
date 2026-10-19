@@ -67,6 +67,24 @@ export interface MenuGroupRegistry {
 	register: (probe: MenuItemProbe) => () => void;
 }
 
+// ── Active tracking: MenuButton active đăng ký VÀO group cha để group biết
+// đang có item active (kể cả khi group ĐÓNG — submenu unmount, :has() chết).
+// Boolean reactive qua getter (slot pattern như MenuLabelSlot). Bẫy hướng
+// context: MenuItem tạo slot, MenuButton CON điền qua $effect.
+export interface ActiveSlot {
+	current: boolean;
+}
+
+const ACTIVE_SLOT = Symbol('sidebar-menu-group-active-slot');
+
+export function setActiveSlot(slot: ActiveSlot) {
+	setContext(ACTIVE_SLOT, slot);
+}
+
+export function getActiveSlot(): ActiveSlot | undefined {
+	return getContext(ACTIVE_SLOT);
+}
+
 const GROUP_NAME = Symbol('sidebar-menu-group-context');
 
 export function setMenuGroupContext(registry: MenuGroupRegistry) {
