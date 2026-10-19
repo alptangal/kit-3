@@ -244,6 +244,8 @@
 			itemQty: { vi: 'SL', en: 'Qty' },
 			itemCost: { vi: 'Đơn giá', en: 'Unit cost' },
 			quantity: { vi: 'Số lượng', en: 'Quantity' },
+			sellPrice: { vi: 'Giá bán', en: 'Sell price' },
+			unit: { vi: 'Đơn vị nhập', en: 'Purchase unit' },
 			lotNumber: { vi: 'Số lô', en: 'Lot number' },
 			perLineManufacturedAt: { vi: 'NSX riêng dòng', en: 'Per-line mfg date' },
 			perLineExpiresAt: { vi: 'HSD riêng dòng', en: 'Per-line expiry' },
@@ -283,6 +285,13 @@
 		},
 		detailModal: {
 			title: { vi: 'Chi tiết phiếu nhập', en: 'Purchase detail' },
+			dirtyCloseTitle: { vi: 'Bỏ thay đổi?', en: 'Discard changes?' },
+			dirtyCloseDesc: {
+				vi: 'Bạn có thay đổi chưa lưu. Thoát sẽ mất dữ liệu đã nhập.',
+				en: 'You have unsaved changes. Leaving now will lose them.'
+			},
+			discard: { vi: 'Bỏ thay đổi', en: 'Discard' },
+			continueEdit: { vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' },
 			receiptImages: { vi: 'Ảnh hóa đơn', en: 'Receipt images' },
 			noImages: { vi: 'Không có ảnh hóa đơn', en: 'No receipt images' },
 			items: { vi: 'Dòng nhập', en: 'Line items' },
@@ -711,6 +720,9 @@
 		sku: string;
 		quantity: number;
 		unitCost: number;
+		sellPrice: number; // C5: giá bán dự kiến — 0 → rơi về variant.price
+		unitName: string; // C5: đơn vị nhập (vd 'thùng') — '' → chai đơn lẻ
+		unitFactor: number; // C5: số chai/đơn vị (48 chai/thùng) — 1 → 1:1
 		lotNumber: string;
 		manufacturedAt: string; // rỗng → dùng expiry chung
 		expiresAt: string; // rỗng → dùng expiry chung
@@ -731,12 +743,15 @@
 	let fullNote = $state('');
 	let fullItems = $state<FullItem[]>([]);
 	let fullReceiptImages = $state<ReceiptImage[]>([]);
-	let fullExpiryMode = $state<'direct' | 'days'>('direct');
-	let fullManufacturedAt = $state('');
-	let fullExpiresAt = $state('');
-	let fullManufacturedDaysAgo = $state(0);
-	let fullExpiresInDays = $state(7);
+	// C5: BỎ expire chung (user m01848: expire tùy từng phân loại trong hóa đơn —
+	// mỗi dòng tự nhập expiry riêng; server resolveQuickExpiry nhận input thiếu
+	// expiry → trả {null, null} là hợp lệ).
 	let fullPoVouchers = $state<PoVoucherDraft[]>([]);
+	// C5: Accordion items — bind:value type 'multiple', set [keyMới] khi thêm item
+	// → tự collapse các item khác (yêu cầu m01848 tab items).
+	let fullOpenKeys = $state<string[]>([]);
+	// C5: auto-parse cost '120000/40' → unitCost=3000 + quantity=40
+	let lastCostParse = $state<{ key: string; raw: string } | null>(null);
 
 	// Search sản phẩm trong full modal
 	let fullSearch = $state('');
@@ -744,9 +759,6 @@
 	let fullSearching = $state(false);
 	let fullSearched = $state(false);
 
-	// Scan barcode trong full modal
-	let fullBarcodeCodes = $state<string[]>([]);
-	let fullBarcodeMessage = $state<string | undefined>(undefined);
 
 	// Lark-style create-on-the-fly
 	let createSectionOpen = $state(false);
@@ -1063,6 +1075,45 @@
 	let returnItems = $state<ReturnItem[]>([]);
 	let returnStockLoading = $state(false);
 
+	// ── C5: confirm-close khi form có thay đổi (onCloseAttempt trả false chặn) ──
+	// onCloseAttempt fire khi đóng qua ESC/backdrop/nút X — KHÔNG fire khi đóng
+	// programmatic (display=false trong submit) → nút OK/submit không bị hỏi.
+	let dirtyCloseDisplay = $state(false);
+	let dirtyCloseAction = $state<(() => void) | null>(null);
+
+	function requestCloseIfDirty(isDirty: boolean, doClose: () => void) {
+		if (!isDirty) {
+			doClose();
+			return;
+		}
+		dirtyCloseAction = doClose;
+		dirtyCloseDisplay = true;
+	}
+
+	// Snapshot so sánh: modal nào đã sửa gì đó chưa (quick/full/return)
+	const quickDirty = $derived(
+		quickItems.some((it) => it.variantId || Number(it.quantity) !== 1 || Number(it.unitCost) > 0 || it.lotNumber.trim() !== '') ||
+			!!quickSupplierId ||
+			!!quickCategoryId ||
+			!!quickBranchId ||
+			!!quickNote.trim() ||
+			receiptImages.length > 0
+	);
+	const fullDirty = $derived(
+		fullItems.some((it) => it.variantId || Number(it.quantity) !== 1 || Number(it.unitCost) > 0 || Number(it.sellPrice) > 0 || it.lotNumber.trim() !== '' || it.note.trim() !== '') ||
+			!!fullSupplierId ||
+			!!fullBranchId ||
+			!!fullNote.trim() ||
+			fullReceiptImages.length > 0 ||
+			fullPoVouchers.some((v) => Number(v.value) > 0)
+	);
+	const returnDirty = $derived(
+		!!returnSupplierId ||
+			!!returnBranchId ||
+			!!returnReason.trim() ||
+			returnItems.some((it) => Number(it.quantity) > 0)
+	);
+
 	function openReturnModal() {
 		returnSupplierId = '';
 		returnBranchId = branchFilter || '';
@@ -1362,6 +1413,9 @@
 			sku: '',
 			quantity: 1,
 			unitCost: 0,
+			sellPrice: 0,
+			unitName: '',
+			unitFactor: 1,
 			lotNumber: '',
 			manufacturedAt: '',
 			expiresAt: '',
@@ -1398,17 +1452,12 @@
 		fullNote = '';
 		fullItems = [newFullItem()];
 		fullReceiptImages = [];
-		fullExpiryMode = 'direct';
-		fullManufacturedAt = '';
-		fullExpiresAt = '';
-		fullManufacturedDaysAgo = 0;
-		fullExpiresInDays = 7;
+		// C5: không còn expire chung (mỗi dòng tự nhập)
 		fullPoVouchers = [];
+		fullOpenKeys = [fullItems[0].key];
 		fullSearch = '';
 		fullSearchResults = [];
 		fullSearched = false;
-		fullBarcodeCodes = [];
-		fullBarcodeMessage = undefined;
 		createSectionOpen = false;
 		newProductDocId = '';
 		fullError = undefined;
@@ -1417,28 +1466,40 @@
 	}
 
 	function addFullItemFromVariant(v: VariantOption) {
+		// C5: mọi cách thêm (search/scan/barcode) đều collapse-other — mở đúng item mới
+		const openAndReveal = (key: string) => {
+			fullOpenKeys = [key];
+		};
 		// Trùng variant → cộng dồn số lượng dòng hiện có
 		const existing = fullItems.find((it) => it.variantId === v._id);
 		if (existing) {
 			existing.quantity += 1;
 			fullItems = [...fullItems];
+			openAndReveal(existing.key);
 			return;
 		}
 		// Dòng trống đầu tiên → điền vào; không thì thêm dòng mới
+		const fillItem = (it: FullItem) => {
+			it.variantId = v._id;
+			it.displayName = v.displayName ?? v._id;
+			it.sku = v.sku ?? '';
+			it.unitCost = Number(v.costPrice) || 0;
+			// C5: giá bán mặc định từ variant (fallback variantMeta — search chỉ trả 20 field)
+			const meta = variantMeta.get(v._id);
+			it.sellPrice = Number(v.price ?? meta?.price ?? 0) || 0;
+			it.unitName = '';
+			it.unitFactor = 1;
+		};
 		const emptyIdx = fullItems.findIndex((it) => !it.variantId);
 		if (emptyIdx >= 0) {
-			fullItems[emptyIdx] = newFullItem({
-				variantId: v._id,
-				displayName: v.displayName ?? v._id,
-				sku: v.sku ?? '',
-				unitCost: Number(v.costPrice) || 0
-			});
+			fillItem(fullItems[emptyIdx]);
 			fullItems = [...fullItems];
+			openAndReveal(fullItems[emptyIdx].key);
 		} else {
-			fullItems = [
-				...fullItems,
-				newFullItem({ variantId: v._id, displayName: v.displayName ?? v._id, sku: v.sku ?? '', unitCost: Number(v.costPrice) || 0 })
-			];
+			const item = newFullItem();
+			fillItem(item);
+			fullItems = [...fullItems, item];
+			openAndReveal(item.key);
 		}
 	}
 
@@ -1473,44 +1534,55 @@
 		}
 	}
 
-	// Barcode detect → tìm variant theo barcode → tự điền dòng nhập
-	$effect(() => {
-		const codes = fullBarcodeCodes;
-		const code = codes?.[codes.length - 1];
-		if (!code || !encryptionKeys) return;
-		void (async () => {
-			fullBarcodeMessage = undefined;
-			try {
-				const response = await encryption.fetchSecure(
-					'/api/admin/variants/list',
-					{ method: 'POST', body: { page: 1, pageSize: 5, search: code } },
-					encryptionKeys
-				);
-				if (response.ok) {
-					const items = (response.data as { items?: Array<VariantOption & { barcode?: string }> } | undefined)?.items ?? [];
-					const exact = items.find((v) => v.barcode === code) ?? (items.length === 1 ? items[0] : undefined);
-					if (exact) {
-						addFullItemFromVariant(exact);
-						fullBarcodeMessage = `${pageContents.fullModal.barcodeFound[lang]}: ${exact.displayName ?? exact._id}`;
-					} else {
-						// Không tìm thấy → mở sẵn form tạo mới kiểu Lark, barcode điền sẵn
-						createSectionOpen = true;
-						newVariantBarcode = code;
-						fullBarcodeMessage = pageContents.fullModal.barcodeNotFound[lang];
-					}
-				}
-			} catch (err) {
-				if (import.meta.env.DEV) console.error('[admin/purchases] barcode lookup failed:', err);
-			}
-		})();
-	});
+	// barcode ở step2 đã remove); scan giờ nằm trong từng item (search field
+	// chấp nhận mã vạch — runFullSearch tìm theo barcode trực tiếp).
 
 	function removeFullItem(index: number) {
 		fullItems = fullItems.filter((_, i) => i !== index);
+		// Giữ keys còn hợp lệ trong accordion
+		fullOpenKeys = fullOpenKeys.filter((k) => fullItems.some((it) => it.key === k));
 	}
 
-	// Derived tổng hợp cho bước review
-	const fullSubtotal = $derived(fullItems.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0), 0));
+	// C5: tự động nhận dạng chuỗi giá nhập '120000/40' → unitCost = 3000, quantity = 40
+	function parseCostExpression(it: FullItem, raw: string) {
+		if (lastCostParse && lastCostParse.key === it.key && lastCostParse.raw === raw) return;
+		const m = /^\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*$/.exec(raw ?? '');
+		if (!m) return;
+		const total = Number(m[1].replace(/,/g, ''));
+		const qty = Number(m[2].replace(/,/g, ''));
+		if (!Number.isFinite(total) || !Number.isFinite(qty) || qty <= 0) return;
+		lastCostParse = { key: it.key, raw };
+		it.unitCost = Math.round((total / qty) * 100) / 100;
+		it.quantity = qty;
+	}
+
+	// C5: đơn vị nhập — quantity UI là số đơn vị (thùng/lốc); số chai thật = qty × factor
+	function itemUnits(it: FullItem): number {
+		const factor = Number(it.unitFactor) > 0 ? Number(it.unitFactor) : 1;
+		return (Number(it.quantity) || 0) * factor;
+	}
+
+	// C5: lãi nhập dự kiến theo giá bán (số tiền + %) — âm/bằng 0 → cảnh báo
+	function itemProfit(it: FullItem): { amount: number; pct: number } | null {
+		if (!it.sellPrice || !it.unitCost) return null;
+		const amount = it.sellPrice - it.unitCost;
+		const pct = it.unitCost > 0 ? Math.round((amount / it.unitCost) * 1000) / 10 : 0;
+		return { amount, pct };
+	}
+
+	// C5: gợi ý đơn vị từ variant.units (schema {name,factor,price?}) + chai đơn lẻ
+	type UnitOpt = { name: string; factor: number };
+	function unitOptionsFor(it: FullItem): UnitOpt[] {
+		const meta = it.variantId ? variantMeta.get(it.variantId) : undefined;
+		const units = (meta?.units ?? []) as Array<{ name?: string; factor?: number }>;
+		return units
+			.filter((u) => typeof u.name === 'string' && u.name && Number(u.factor) > 1)
+			.map((u) => ({ name: String(u.name), factor: Number(u.factor) }));
+	}
+
+	// C5: tổng theo SỐ CHAI THẬT (quantity UI × factor) — unitCost luôn là giá/chai
+	// (server cộng tồn kho theo chai); ví dụ 2 thùng × 48 × 5.000 = 480.000.
+	const fullSubtotal = $derived(fullItems.reduce((s, it) => s + itemUnits(it) * (Number(it.unitCost) || 0), 0));
 	const fullDiscount = $derived(
 		fullItems.reduce((s, it) => s + (it.voucherType === 'money' ? Number(it.voucherValue) || 0 : 0), 0) +
 			fullPoVouchers.reduce((s, v) => s + (Number(v.value) || 0), 0)
@@ -1519,21 +1591,22 @@
 		fullItems.reduce((s, it) => s + (it.voucherType === 'gift' ? Number(it.giftQuantity) || 0 : 0), 0)
 	);
 	const fullPayable = $derived(Math.max(0, fullSubtotal - fullDiscount));
-	const fullTotalUnits = $derived(fullItems.reduce((s, it) => s + (Number(it.quantity) || 0), 0) + fullGiftUnits);
+	const fullTotalUnits = $derived(fullItems.reduce((s, it) => s + itemUnits(it), 0) + fullGiftUnits);
 	const fullPerUnitCost = $derived(fullTotalUnits > 0 ? Math.round((fullPayable / fullTotalUnits) * 10000) / 10000 : 0);
 
 	function validateFullForm(): string | undefined {
 		if (!fullBranchId) return pageContents.fullModal.requireBranch[lang];
 		if (fullItems.length === 0) return pageContents.fullModal.requireItems[lang];
 		for (const it of fullItems) {
+			// C5: validate required per-item — variant, số lượng, giá bán (tránh submit rỗng)
 			if (!it.variantId) return pageContents.fullModal.requireVariant[lang];
 			if (!Number.isFinite(Number(it.quantity)) || Number(it.quantity) <= 0) return pageContents.fullModal.requireItems[lang];
+			if (!Number.isFinite(Number(it.sellPrice)) || Number(it.sellPrice) <= 0) {
+				return pageContents.fullModal.requireSellPrice?.[lang] ?? pageContents.fullModal.requireItems[lang];
+			}
 			if (it.voucherType === 'gift' && (!it.giftVariantId || Number(it.giftQuantity) <= 0)) {
 				return pageContents.fullModal.requireVariant[lang];
 			}
-		}
-		if (fullExpiryMode === 'direct' && fullExpiresAt && fullManufacturedAt && fullExpiresAt < fullManufacturedAt) {
-			return pageContents.quickModal.requireItems[lang];
 		}
 		return undefined;
 	}
@@ -1662,10 +1735,16 @@
 		fullSubmitting = true;
 		try {
 			const items = fullItems.map((it) => {
+				// C5: quy đổi đơn vị — quantity UI là số đơn vị (thùng/lốc), server
+				// nhận số chai thật (qty × factor) + lưu unitName/unitFactor snapshot.
+				const factor = Number(it.unitFactor) > 0 ? Number(it.unitFactor) : 1;
 				const body: Record<string, unknown> = {
 					variantId: it.variantId,
-					quantity: Number(it.quantity),
+					quantity: Math.round((Number(it.quantity) || 0) * factor),
 					unitCost: Number(it.unitCost),
+					sellPrice: Number(it.sellPrice) > 0 ? Number(it.sellPrice) : undefined,
+					unitName: it.unitName.trim() || undefined,
+					unitFactor: factor > 1 ? factor : undefined,
 					lotNumber: it.lotNumber.trim() || undefined,
 					manufacturedAt: it.manufacturedAt ? new Date(it.manufacturedAt).toISOString() : undefined,
 					expiresAt: it.expiresAt ? new Date(it.expiresAt).toISOString() : undefined
@@ -1688,17 +1767,10 @@
 				totalCost: fullPayable,
 				vouchers: vouchers.length > 0 ? vouchers : undefined,
 				note: fullNote.trim() || undefined,
-				expiryMode: fullExpiryMode,
+				// C5: hết expire chung — mỗi dòng tự gửi manufacturedAt/expiresAt riêng
 				...(fullSupplierId ? { supplierId: fullSupplierId } : {}),
 				...(fullReceiptImages.length > 0 ? { receiptImages: fullReceiptImages.map((r) => r.dataUrl) } : {})
 			};
-			if (fullExpiryMode === 'direct') {
-				if (fullManufacturedAt) body.manufacturedAt = new Date(fullManufacturedAt).toISOString();
-				if (fullExpiresAt) body.expiresAt = new Date(fullExpiresAt).toISOString();
-			} else {
-				body.manufacturedDaysAgo = Number(fullManufacturedDaysAgo) || 0;
-				body.expiresInDays = Number(fullExpiresInDays) || 0;
-			}
 
 			const response = await encryption.fetchSecure(
 				'/api/admin/purchases/create',
@@ -1868,6 +1940,82 @@
 			showToast(pageContents.toasts.requestFailed[lang], 'error');
 		} finally {
 			entityEditorSubmitting = false;
+		}
+	}
+
+	// ── C5: Select không tìm thấy → tạo mới qua modal (allowCreate + onOptionCreate) ──
+	type CreateEntityKind = 'supplier' | 'category' | 'brand' | 'product';
+	let createEntityDisplay = $state(false);
+	let createEntityKind = $state<CreateEntityKind>('supplier');
+	let createEntityName = $state('');
+	let createEntityCategoryId = $state('');
+	let createEntityBrandId = $state('');
+	let createEntitySubmitting = $state(false);
+	// callback khi tạo xong — modal gọi lại để trang gán value vào Select vừa chọn
+	let createEntityDone: ((id: string) => void) | null = null;
+
+	// Yêu cầu: user gõ tên mới trong Select → chọn "Tạo {value}" → mở modal
+	// tạo nhanh (detail form) thay vì tự insert option ảo. Sau khi POST
+	// */create thành công → refresh danh sách + set value vào Select.
+	function openCreateEntity(kind: CreateEntityKind, rawName: string, onDone: (id: string) => void) {
+		createEntityKind = kind;
+		createEntityName = rawName;
+		createEntityCategoryId = '';
+		createEntityBrandId = '';
+		createEntityDone = onDone;
+		createEntityDisplay = true;
+	}
+
+	async function submitCreateEntity(): Promise<void> {
+		if (!createEntityName.trim() || createEntitySubmitting) return;
+		createEntitySubmitting = true;
+		try {
+			let id = '';
+			if (createEntityKind === 'supplier') {
+				const res = await encryption.fetchSecure('/api/admin/suppliers/create', { method: 'POST', body: { name: createEntityName, status: 'active' } }, encryptionKeys);
+				id = String(res.data?.documentKey ?? res.data?._id ?? '');
+			} else if (createEntityKind === 'category') {
+				// slug bắt buộc từ server — sinh từ tên (bỏ dấu, khoảng trắng → '-')
+				const slug = createEntityName
+					.normalize('NFD')
+					.replace(/[̀-ͯ]/g, '')
+					.replace(/đ/g, 'd')
+					.replace(/[^a-zA-Z0-9]+/g, '-')
+					.replace(/^-+|-+$/g, '')
+					.toLowerCase() || `cat-${Date.now()}`;
+				const res = await encryption.fetchSecure('/api/admin/categories/create', { method: 'POST', body: { name: createEntityName, slug } }, encryptionKeys);
+				id = String(res.data?.documentKey ?? res.data?._id ?? '');
+			} else if (createEntityKind === 'brand') {
+				const slug = createEntityName
+					.normalize('NFD')
+					.replace(/[̀-ͯ]/g, '')
+					.replace(/đ/g, 'd')
+					.replace(/[^a-zA-Z0-9]+/g, '-')
+					.replace(/^-+|-+$/g, '')
+					.toLowerCase() || `brand-${Date.now()}`;
+				const res = await encryption.fetchSecure('/api/admin/brands/create', { method: 'POST', body: { name: createEntityName, slug } }, encryptionKeys);
+				id = String(res.data?.documentKey ?? res.data?._id ?? '');
+			} else {
+				const res = await encryption.fetchSecure('/api/admin/products/create', {
+					method: 'POST',
+					body: { name: createEntityName, categoryId: createEntityCategoryId || undefined, brandId: createEntityBrandId || undefined, hasVariants: true }
+				}, encryptionKeys);
+				id = String(res.data?.documentKey ?? res.data?._id ?? '');
+			}
+			if (!id) throw new Error('no documentKey');
+			// refresh đúng danh sách options
+			if (createEntityKind === 'supplier') void loadSuppliers();
+			else if (createEntityKind === 'category') void loadCategories();
+			else if (createEntityKind === 'brand') void loadBrands();
+			// product mới chưa có variant — user thêm variant ở form đầy đủ
+			createEntityDisplay = false;
+			showToast(pageContents.entityEditor.saved[lang], 'success');
+			createEntityDone?.(id);
+			createEntityDone = null;
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			createEntitySubmitting = false;
 		}
 	}
 
@@ -2383,9 +2531,18 @@
 
 	<!-- ── Modal nhập nhanh ── -->
 	{#if quickModalDisplay}
-		<Modal bind:display={quickModalDisplay} size="lg" isDimissable>
+		<Modal bind:display={quickModalDisplay} size="lg" isDimissable onCloseAttempt={() => { requestCloseIfDirty(quickDirty, () => { quickModalDisplay = false; }); }}>
 			<Modal.Container>
-				<Modal.Container.Header>{pageContents.quickModal.title[lang]}</Modal.Container.Header>
+				<Modal.Container.Header>
+						<div class="modal-header-receipt">
+							{pageContents.quickModal.title[lang]}
+							{#if receiptImages.length > 0}
+								<button type="button" class="receipt-mini" title={receiptImages[0].name} data-test="quick-receipt-mini" onclick={() => openZoom(receiptImages[0].dataUrl)}>
+									<img src={receiptImages[0].dataUrl} alt={receiptImages[0].name} />
+								</button>
+							{/if}
+						</div>
+					</Modal.Container.Header>
 				<Modal.Container.Body>
 					{#if quickError}
 						<div class="form-error-banner" role="alert">{quickError}</div>
@@ -2416,6 +2573,8 @@
 									options={supplierSelectOptions}
 									searchable
 									clearable
+									allowCreate
+									onOptionCreate={(name) => openCreateEntity('supplier', name, (id) => (quickSupplierId = id))}
 								/>
 							</label>
 						{:else if quickMode === 'category'}
@@ -2427,6 +2586,8 @@
 									options={categorySelectOptions}
 									searchable
 									clearable
+									allowCreate
+									onOptionCreate={(name) => openCreateEntity('category', name, (id) => (quickCategoryId = id))}
 									onValueChange={() => switchQuickMode()}
 								/>
 							</label>
@@ -2539,7 +2700,7 @@
 					<Button color="success" onClick={submitQuick} loading={quickSubmitting} disabled={quickSubmitting}>
 						{pageContents.actions.submit[lang]}
 					</Button>
-					<Button color="default" variant="ghost" disabled={quickSubmitting} onclick={() => { quickModalDisplay = false; }}>
+					<Button color="default" variant="ghost" disabled={quickSubmitting} onclick={() => { requestCloseIfDirty(quickDirty, () => { quickModalDisplay = false; }); }}>
 						{pageContents.actions.cancel[lang]}
 					</Button>
 				</Modal.Container.Footer>
@@ -2549,9 +2710,18 @@
 
 	<!-- ── Modal nhập hàng đầy đủ (3 bước) ── -->
 	{#if fullModalDisplay}
-		<Modal bind:display={fullModalDisplay} size="xl" isDimissable>
+		<Modal bind:display={fullModalDisplay} size="xl" isDimissable onCloseAttempt={() => { requestCloseIfDirty(fullDirty, () => { fullModalDisplay = false; }); }}>
 			<Modal.Container>
-				<Modal.Container.Header>{pageContents.fullModal.title[lang]}</Modal.Container.Header>
+				<Modal.Container.Header>
+						<div class="modal-header-receipt">
+							{pageContents.fullModal.title[lang]}
+							{#if fullReceiptImages.length > 0}
+								<button type="button" class="receipt-mini" title={fullReceiptImages[0].name} data-test="full-receipt-mini" onclick={() => openZoom(fullReceiptImages[0].dataUrl)}>
+									<img src={fullReceiptImages[0].dataUrl} alt={fullReceiptImages[0].name} />
+								</button>
+							{/if}
+						</div>
+					</Modal.Container.Header>
 				<Modal.Container.Body>
 					{#if fullError}
 						<div class="form-error-banner" role="alert">{fullError}</div>
@@ -2570,7 +2740,7 @@
 						</button>
 					</div>
 
-					<!-- Bước 1: NCC + chi nhánh + ảnh hóa đơn + expiry chung -->
+					<!-- Bước 1: NCC + chi nhánh + ảnh hóa đơn -->
 					{#if fullStep === 1}
 						<div class="form-grid-2">
 							<label class="form-field">
@@ -2581,6 +2751,8 @@
 									options={supplierSelectOptions}
 									searchable
 									clearable
+									allowCreate
+									onOptionCreate={(name) => openCreateEntity('supplier', name, (id) => (fullSupplierId = id))}
 								/>
 							</label>
 							<label class="form-field">
@@ -2595,42 +2767,6 @@
 							</label>
 						</div>
 
-						<div class="items-block">
-							<span class="form-label">{pageContents.fullModal.expirySection[lang]}</span>
-							<div class="mode-radio-group">
-								<label class="mode-radio">
-									<input type="radio" name="fullExpiryMode" value="direct" bind:group={fullExpiryMode} />
-									{pageContents.fullModal.expiryModeDirect[lang]}
-								</label>
-								<label class="mode-radio">
-									<input type="radio" name="fullExpiryMode" value="days" bind:group={fullExpiryMode} />
-									{pageContents.fullModal.expiryModeDays[lang]}
-								</label>
-							</div>
-							{#if fullExpiryMode === 'direct'}
-								<div class="form-grid-2">
-									<label class="form-field">
-										<span class="form-label">{pageContents.fullModal.manufacturedAt[lang]}</span>
-										<input class="admin-input" type="date" bind:value={fullManufacturedAt} />
-									</label>
-									<label class="form-field">
-										<span class="form-label">{pageContents.fullModal.expiresAt[lang]}</span>
-										<input class="admin-input" type="date" bind:value={fullExpiresAt} />
-									</label>
-								</div>
-							{:else}
-								<div class="form-grid-2">
-									<label class="form-field">
-										<span class="form-label">{pageContents.fullModal.manufacturedDaysAgo[lang]}</span>
-										<input class="admin-input" type="number" min="0" bind:value={fullManufacturedDaysAgo} />
-									</label>
-									<label class="form-field">
-										<span class="form-label">{pageContents.fullModal.expiresInDays[lang]}</span>
-										<input class="admin-input" type="number" min="0" bind:value={fullExpiresInDays} />
-									</label>
-								</div>
-							{/if}
-						</div>
 
 						<div class="items-block">
 							<span class="form-label">{pageContents.fullModal.receiptImages[lang]}</span>
@@ -2692,13 +2828,7 @@
 							{/if}
 						</div>
 
-						<div class="full-scan-block">
-							<span class="form-label">{pageContents.fullModal.scanBarcode[lang]}</span>
-							<Input type="barcode" bind:codes={fullBarcodeCodes} cameraOn importOn beepOn data-test="full-barcode-input" />
-							{#if fullBarcodeMessage}
-								<span class="full-scan-message">{fullBarcodeMessage}</span>
-							{/if}
-						</div>
+						<!-- C5: BỎ full-scan-block (mỗi item có search/scan riêng trong full-item-form) -->
 
 						<!-- Tạo mới Lark-style -->
 						{#if createSectionOpen}
@@ -2718,6 +2848,8 @@
 											options={categorySelectOptions}
 											searchable
 											clearable
+											allowCreate
+											onOptionCreate={(name) => openCreateEntity('category', name, (id) => (newProductCategoryId = id))}
 										/>
 									</label>
 								</div>
@@ -2729,6 +2861,8 @@
 										options={brandSelectOptions}
 										searchable
 										clearable
+										allowCreate
+										onOptionCreate={(name) => openCreateEntity('brand', name, (id) => (newProductBrandId = id))}
 									/>
 								</label>
 								<Button color="success" loading={productCreating} disabled={productCreating || !newProductName.trim()} onclick={createProductOnTheFly} data-test="create-product-btn">
@@ -2764,17 +2898,18 @@
 							</div>
 						{/if}
 
-						<!-- Accordion danh sách items -->
+						<!-- Accordion danh sách items — bind:value fullOpenKeys (C5:
+						     thêm item mới → addFullItemFromVariant set [keyMới] tự collapse-other) -->
 						<div class="full-items-list" data-test="full-items-list">
 							{#each fullItems as it, i (it.key)}
-								<Accordion type="multiple">
+								<Accordion type="multiple" bind:value={() => fullOpenKeys, (v) => (fullOpenKeys = v ?? [])}>
 									<Accordion.Item value={it.key}>
 										<Accordion.Trigger>
 											<span class="accordion-summary-row" data-test={`full-item-row-${i}`}>
 												<span class="accordion-summary-row__no">{i + 1}</span>
 												<span class="accordion-summary-row__name">{it.displayName || pageContents.fullModal.requireVariant[lang]}</span>
-												<span class="accordion-summary-row__meta">×{it.quantity}</span>
-												<span class="accordion-summary-row__meta">{formatMoney(it.unitCost * it.quantity)}</span>
+												<span class="accordion-summary-row__meta">×{itemUnits(it)}</span>
+												<span class="accordion-summary-row__meta">{formatMoney(itemUnits(it) * it.unitCost)}</span>
 											</span>
 										</Accordion.Trigger>
 										<Accordion.Content>
@@ -2802,11 +2937,54 @@
 												<div class="form-grid-2">
 													<label class="form-field">
 														<span class="form-label form-label--required">{pageContents.fullModal.quantity[lang]}</span>
-														<input class="admin-input" type="number" min="1" bind:value={it.quantity} data-test={`full-item-qty-${i}`} />
+														<input class="admin-input" type="number" min="1" bind:value={it.quantity} data-test={`full-item-qty-${i}`} oninput={() => parseCostExpression(it, String(it.unitCost))} data-no-cost-parse />
 													</label>
 													<label class="form-field">
 														<span class="form-label form-label--required">{pageContents.fullModal.itemCost[lang]}</span>
-														<input class="admin-input" type="number" min="0" bind:value={it.unitCost} data-test={`full-item-cost-${i}`} />
+														<input
+															class="admin-input"
+															type="text"
+															inputmode="decimal"
+															bind:value={it.unitCost}
+															data-test={`full-item-cost-${i}`}
+															oninput={() => parseCostExpression(it, String(it.unitCost))}
+															placeholder="120000/40"
+														/>
+													</label>
+												</div>
+												<div class="form-grid-2">
+													<label class="form-field">
+														<span class="form-label form-label--required">{pageContents.fullModal.sellPrice?.[lang] ?? 'Giá bán'}</span>
+														<input class="admin-input" type="number" min="0" bind:value={it.sellPrice} data-test={`full-item-sellprice-${i}`} />
+														{#if itemProfit(it)}
+															{@const p = itemProfit(it)!}
+															<span class="full-item-profit" class:full-item-profit--neg={p.amount <= 0} data-test={`full-item-profit-${i}`}>
+																{p.amount > 0 ? '+' : ''}{formatMoney(p.amount)} ({p.pct > 0 ? '+' : ''}{p.pct}%)
+															</span>
+														{/if}
+													</label>
+													<label class="form-field">
+														<span class="form-label">{pageContents.fullModal.unit?.[lang] ?? 'Đơn vị nhập'}</span>
+														<div class="full-item-unit-row">
+															<input
+																class="admin-input"
+																type="text"
+																list={`unit-datalist-${i}`}
+																bind:value={it.unitName}
+																placeholder="thùng"
+																data-test={`full-item-unit-${i}`}
+															/>
+															<datalist id={`unit-datalist-${i}`}>
+																{#each unitOptionsFor(it) as u (u.name)}
+																	<option value={u.name}>×{u.factor}</option>
+																{/each}
+																<option value="">×1</option>
+															</datalist>
+															<input class="admin-input full-item-unit-factor" type="number" min="1" bind:value={it.unitFactor} data-test={`full-item-unit-factor-${i}`} aria-label="factor" />
+														</div>
+														{#if itemUnits(it) !== Number(it.quantity) || Number(it.unitFactor) > 1}
+															<span class="full-item-unit-hint">= {itemUnits(it)} chai</span>
+														{/if}
 													</label>
 												</div>
 												<div class="form-grid-2">
@@ -2869,7 +3047,7 @@
 									</Accordion.Item>
 								</Accordion>
 							{/each}
-							<Button color="success" variant="soft" onclick={() => { fullItems = [...fullItems, newFullItem()]; }} data-test="full-add-item">
+							<Button color="success" variant="soft" onclick={() => { const item = newFullItem(); fullItems = [...fullItems, item]; fullOpenKeys = [item.key]; }} data-test="full-add-item">
 								+ {pageContents.fullModal.stepItems[lang]}
 							</Button>
 						</div>
@@ -2912,7 +3090,7 @@
 							{pageContents.actions.back[lang]}
 						</Button>
 					{/if}
-					<Button color="default" variant="ghost" disabled={fullSubmitting} onclick={() => { fullModalDisplay = false; }}>
+					<Button color="default" variant="ghost" disabled={fullSubmitting} onclick={() => { requestCloseIfDirty(fullDirty, () => { fullModalDisplay = false; }); }}>
 						{pageContents.actions.cancel[lang]}
 					</Button>
 					{#if fullStep < 3}
@@ -2931,7 +3109,7 @@
 
 	<!-- ── Modal trả hàng NCC ── -->
 	{#if returnModalDisplay}
-		<Modal bind:display={returnModalDisplay} size="lg" isDimissable>
+		<Modal bind:display={returnModalDisplay} size="lg" isDimissable onCloseAttempt={() => { requestCloseIfDirty(returnDirty, () => { returnModalDisplay = false; }); }}>
 			<Modal.Container>
 				<Modal.Container.Header>{pageContents.returnModal.title[lang]}</Modal.Container.Header>
 				<Modal.Container.Body>
@@ -3014,7 +3192,7 @@
 					{/if}
 				</Modal.Container.Body>
 				<Modal.Container.Footer>
-					<Button color="default" variant="ghost" disabled={returnSubmitting} onclick={() => { returnModalDisplay = false; }}>
+					<Button color="default" variant="ghost" disabled={returnSubmitting} onclick={() => { requestCloseIfDirty(returnDirty, () => { returnModalDisplay = false; }); }}>
 						{pageContents.actions.cancel[lang]}
 					</Button>
 					<Button
@@ -3124,6 +3302,89 @@
 		</Modal>
 	{/if}
 
+	<!-- ── C5: AlertDialog 'Bỏ thay đổi?' — mở từ onCloseAttempt của quick/full/return ── -->
+	{#if dirtyCloseDisplay}
+		<AlertDialog
+			bind:open={dirtyCloseDisplay}
+			title={pageContents.detailModal.dirtyCloseTitle[lang]}
+			description={pageContents.detailModal.dirtyCloseDesc[lang]}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="info">
+					<AlertDialog.Title>{pageContents.detailModal.dirtyCloseTitle[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>{pageContents.detailModal.dirtyCloseDesc[lang]}</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.detailModal.continueEdit[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="primary"
+						onselect={() => {
+							dirtyCloseAction?.();
+							dirtyCloseAction = null;
+						}}
+					>
+						{pageContents.detailModal.discard[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
+	<!-- ── C5: Modal tạo nhanh NCC/phân loại/thương hiệu/sản phẩm (Select allowCreate) ── -->
+	{#if createEntityDisplay}
+		<Modal bind:display={createEntityDisplay} size="sm" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>
+					{createEntityKind === 'supplier'
+						? pageContents.quickModal.modeSupplier[lang]
+						: createEntityKind === 'category'
+							? pageContents.quickModal.modeCategory[lang]
+							: createEntityKind === 'brand'
+								? (pageContents.fullModal.brand?.[lang] ?? 'Thương hiệu')
+								: (pageContents.fullModal.createProduct?.[lang] ?? 'Sản phẩm')}
+				</Modal.Container.Header>
+				<Modal.Container.Body>
+					<label class="form-field">
+						<span class="form-label form-label--required">{pageContents.entityEditor.name[lang]}</span>
+						<input class="admin-input" type="text" bind:value={createEntityName} data-test="create-entity-name" />
+					</label>
+					{#if createEntityKind === 'product'}
+						<div class="form-grid-2">
+							<label class="form-field">
+								<span class="form-label">{pageContents.fullModal.category[lang]}</span>
+								<Select
+									class="admin-filter-select"
+									bind:value={createEntityCategoryId}
+									options={categorySelectOptions}
+									searchable
+									clearable
+								/>
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.fullModal.brand[lang]}</span>
+								<Select
+									class="admin-filter-select"
+									bind:value={createEntityBrandId}
+									options={brandSelectOptions}
+									searchable
+									clearable
+								/>
+							</label>
+						</div>
+					{/if}
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button color="success" loading={createEntitySubmitting} disabled={createEntitySubmitting || !createEntityName.trim()} onclick={submitCreateEntity} data-test="create-entity-submit">
+						{pageContents.actions.submit[lang]}
+					</Button>
+					<Button color="default" variant="ghost" disabled={createEntitySubmitting} onclick={() => { createEntityDisplay = false; }}>
+						{pageContents.actions.cancel[lang]}
+					</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
 	<!-- ── Modal chi tiết sản phẩm/phân loại (từ breadcrumb) — sửa/xóa được ── -->
 	{#if entityEditorDisplay}
 		<Modal bind:display={entityEditorDisplay} size="sm" isDimissable>
@@ -3205,7 +3466,7 @@
 					<div class="entity-footer">
 						<Button
 							variant="ghost"
-							color="danger"
+							color="error"
 							onclick={() => {
 								entityEditorDeleteOpen = true;
 							}}
@@ -3820,6 +4081,36 @@
 		flex-wrap: wrap;
 	}
 
+	/* C5: mini ảnh hóa đơn trong Modal.Header — click mở zoom */
+	.modal-header-receipt {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.receipt-mini {
+		flex: none;
+		width: 2rem;
+		height: 2rem;
+		padding: 0;
+		border: 1px solid var(--default-300);
+		border-radius: 0.375rem;
+		overflow: hidden;
+		cursor: zoom-in;
+		background: none;
+
+		img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+
+		&:hover {
+			border-color: var(--primary, hsl(239 84% 67%));
+		}
+	}
+
 	.receipt-thumb {
 		position: relative;
 		width: 5rem;
@@ -4049,21 +4340,7 @@
 		color: var(--foreground-500);
 	}
 
-	.full-scan-block {
-		margin-bottom: 1rem;
 
-		.form-label {
-			display: block;
-			margin-bottom: 0.35rem;
-		}
-	}
-
-	.full-scan-message {
-		display: block;
-		margin-top: 0.35rem;
-		font-size: 0.8rem;
-		color: var(--success-600, hsl(142 71% 45%));
-	}
 
 	.full-create-section {
 		margin-bottom: 1rem;
@@ -4135,6 +4412,36 @@
 		flex-direction: column;
 		gap: 0.75rem;
 		padding-top: 0.5rem;
+	}
+
+	/* ── C5: profit + đơn vị nhập trong full-item-form ── */
+	.full-item-profit {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		color: var(--success, #16a34a);
+
+		&--neg {
+			color: var(--danger, #dc2626);
+		}
+	}
+
+	.full-item-unit-row {
+		display: flex;
+		gap: 0.375rem;
+		align-items: center;
+	}
+
+	.full-item-unit-factor {
+		width: 4.5rem;
+		flex: none;
+	}
+
+	.full-item-unit-hint {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		color: var(--foreground-500);
 	}
 
 	.full-review {
