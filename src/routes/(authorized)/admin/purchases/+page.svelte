@@ -215,7 +215,9 @@
 			tooManyImages: { vi: 'Tối đa 5 ảnh', en: 'Max 5 images' },
 			imageTooLarge: { vi: 'Không nén được ảnh dưới 300KB', en: 'Unable to compress image below 300KB' },
 			total: { vi: 'Tổng tiền', en: 'Total' },
-			loadingVariants: { vi: 'Đang tải sản phẩm…', en: 'Loading products…' }
+			loadingVariants: { vi: 'Đang tải sản phẩm…', en: 'Loading products…' },
+			detailToggle: { vi: 'Mở rộng chi tiết dòng (NSX/HSD/khuyến mãi)', en: 'Toggle line detail (mfg/expiry/promo)' },
+			scanPlaceholder: { vi: 'Quét barcode / QR để điền sản phẩm', en: 'Scan barcode / QR to fill product' }
 		},
 		fullModal: {
 			title: { vi: 'Nhập hàng đầy đủ', en: 'Full purchase' },
@@ -241,7 +243,8 @@
 			createNew: { vi: 'Tạo mới', en: 'Create new' },
 			scanBarcode: { vi: 'Quét barcode / QR', en: 'Scan barcode / QR' },
 			barcodeFound: { vi: 'Đã tìm thấy sản phẩm theo barcode', en: 'Product found by barcode' },
-			barcodeNotFound: { vi: 'Không có sản phẩm nào với barcode này', en: 'No product with this barcode' },			itemNo: { vi: 'STT', en: 'No.' },
+			barcodeNotFound: { vi: 'Không có sản phẩm nào với barcode này', en: 'No product with this barcode' },
+			itemNo: { vi: 'STT', en: 'No.' },
 			itemName: { vi: 'Sản phẩm', en: 'Product' },
 			itemQty: { vi: 'SL', en: 'Qty' },
 			itemCost: { vi: 'Đơn giá', en: 'Unit cost' },
@@ -621,6 +624,9 @@
 	let suppliers = $state<SupplierOption[]>([]);
 	let categories = $state<CategoryOption[]>([]);
 	let brands = $state<SupplierOption[]>([]);
+	// 3a: map categoryId → "Product A, Product B, …" (tên sản phẩm thuộc phân loại,
+	// dùng làm description option Select phân loại — tối đa 3 tên + "…").
+	let categoryNameProducts = $state<Record<string, string>>({});
 	let variantOptions = $state<VariantOption[]>([]);
 	let variantsLoading = $state(false);
 
@@ -634,7 +640,13 @@
 		suppliers.map((s) => ({ value: s._id, label: s.displayName ?? s.name ?? s._id }))
 	);
 	const categorySelectOptions = $derived(
-		categories.map((c) => ({ value: c._id, label: c.displayName ?? c.name ?? c._id }))
+		categories.map((c) => ({
+			value: c._id,
+			label: c.displayName ?? c.name ?? c._id,
+			// 3a: description = tên sản phẩm thuộc phân loại — user phân biệt
+			// phân loại trùng tên/khó đoán qua tên sản phẩm thực tế.
+			description: categoryNameProducts[c._id] || undefined
+		}))
 	);
 	const brandSelectOptions = $derived(
 		brands.map((b) => ({ value: b._id, label: b.displayName ?? b.name ?? b._id }))
@@ -730,8 +742,47 @@
 	let quickCategoryId = $state('');
 	let quickBranchId = $state('');
 	let quickNote = $state('');
-	type QuickItem = { variantId: string; quantity: number; unitCost: number; lotNumber: string };
+	// 2.1: per-item chi tiết (accordion) — NSX/HSD riêng dòng + khuyến mãi NCC
+	// per dòng (server QuickPurchaseItem đã nhận expiresAt/manufacturedAt/voucher).
+	type QuickItem = {
+		key: string;
+		variantId: string;
+		quantity: number;
+		unitCost: number;
+		lotNumber: string;
+		manufacturedAt: string; // rỗng → dùng expiry chung cả phiếu
+		expiresAt: string; // rỗng → dùng expiry chung cả phiếu
+		voucherType: 'none' | 'money' | 'gift';
+		voucherValue: number;
+		giftVariantId: string;
+		giftQuantity: number;
+	};
 	let quickItems = $state<QuickItem[]>([]);
+	let quickItemSeq = 0;
+	// 2.2: barcode codes per-item (khai báo TRƯỚC newQuickItem — function này
+	// gán key lúc gọi, tránh TDZ khi openQuickModal chạy trong setup)
+	let quickBarcodeCodes = $state<Record<string, string[]>>({});
+	function newQuickItem(): QuickItem {
+		quickItemSeq += 1;
+		// 2.2: key barcode phải tồn tại TRƯỚC khi Input render (bind:codes crash undefined)
+		const key = `qi-${quickItemSeq}`;
+		if (!(key in quickBarcodeCodes)) quickBarcodeCodes[key] = [];
+		return {
+			key,
+			variantId: '',
+			quantity: 1,
+			unitCost: 0,
+			lotNumber: '',
+			manufacturedAt: '',
+			expiresAt: '',
+			voucherType: 'none',
+			voucherValue: 0,
+			giftVariantId: '',
+			giftQuantity: 1
+		};
+	}
+	// Accordion per-item (pattern full modal): mảng key đang mở — mở mới collapse-other
+	let quickOpenKeys = $state<string[]>([]);
 	let receiptImages = $state<ReceiptImage[]>([]);
 	let expiryMode = $state<'direct' | 'days'>('direct');
 	let quickManufacturedAt = $state('');
@@ -1138,6 +1189,33 @@
 		}
 	}
 
+	// 3a: nạp products (1 lần) → map categoryId → tên sản phẩm làm description
+	// option Select phân loại (user biết phân loại chứa sản phẩm nào).
+	async function loadCategoryProducts() {
+		if (!encryptionKeys) return;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/products/list',
+				{ method: 'POST', body: { page: 1, pageSize: 100 } },
+				encryptionKeys
+			);
+			if (!response.ok) return;
+			const items = (response.data as { items?: Array<{ _id: string; name?: string; categoryId?: string }> } | undefined)?.items ?? [];
+			const byCategory: Record<string, string[]> = {};
+			for (const p of items) {
+				if (!p.categoryId) continue;
+				(byCategory[p.categoryId] ??= []).push(p.name ?? p._id);
+			}
+			const next: Record<string, string> = {};
+			for (const [catId, names] of Object.entries(byCategory)) {
+				next[catId] = names.length > 3 ? `${names.slice(0, 3).join(', ')}…` : names.join(', ');
+			}
+			categoryNameProducts = next;
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[admin/purchases] load category products failed:', err);
+		}
+	}
+
 	async function loadVariantOptions() {
 		if (!encryptionKeys) return;
 		variantsLoading = true;
@@ -1354,7 +1432,7 @@
 
 	// Snapshot so sánh: modal nào đã sửa gì đó chưa (quick/full/return)
 	const quickDirty = $derived(
-		quickItems.some((it) => it.variantId || Number(it.quantity) !== 1 || Number(it.unitCost) > 0 || it.lotNumber.trim() !== '') ||
+		quickItems.some((it) => it.variantId || Number(it.quantity) !== 1 || Number(it.unitCost) > 0 || it.lotNumber.trim() !== '' || it.manufacturedAt !== '' || it.expiresAt !== '' || it.voucherType !== 'none') ||
 			!!quickSupplierId ||
 			!!quickCategoryId ||
 			!!quickBranchId ||
@@ -1491,7 +1569,8 @@
 		quickCategoryId = '';
 		quickBranchId = branchFilter || '';
 		quickNote = '';
-		quickItems = [{ variantId: '', quantity: 1, unitCost: 0, lotNumber: '' }];
+		quickItems = [newQuickItem()];
+		quickOpenKeys = [quickItems[0].key];
 		receiptImages = [];
 		expiryMode = 'direct';
 		quickManufacturedAt = '';
@@ -1509,14 +1588,105 @@
 	}
 
 	function addQuickItem() {
-		quickItems = [...quickItems, { variantId: '', quantity: 1, unitCost: 0, lotNumber: '' }];
+		const item = newQuickItem();
+		quickItems = [...quickItems, item];
+		quickOpenKeys = [item.key]; // collapse-other — mở đúng item mới thêm
 	}
 
 	function removeQuickItem(index: number) {
+		const key = quickItems[index]?.key;
 		quickItems = quickItems.filter((_, i) => i !== index);
+		if (key) quickOpenKeys = quickOpenKeys.filter((k) => k !== key);
+	}
+
+	// 2.3: chọn variant trùng → cộng dồn vào dòng cũ + xoá dòng mới +
+	// highlight (animate nhấp nháy) dòng cũ. Trả true nếu đã xử lý trùng.
+	function mergeQuickDuplicate(item: QuickItem, variantId: string): boolean {
+		const dup = quickItems.find((it) => it !== item && it.variantId === variantId);
+		if (!dup) return false;
+		dup.quantity += Math.max(1, Number(item.quantity) || 1);
+		// xoá dòng mới khỏi danh sách (đáp ứng "animate xoá row mới")
+		const key = item.key;
+		quickItems = quickItems.filter((it) => it !== item);
+		if (quickItems.length === 0) quickItems = [newQuickItem()];
+		// accordion theo dòng CŨ (dup) — dòng mới đã xoá, key cũ không còn
+		quickOpenKeys = quickOpenKeys.includes(dup.key)
+			? quickOpenKeys
+			: [...quickOpenKeys.filter((k) => k !== key), dup.key];
+		delete quickBarcodeCodes[key];
+		// highlight dòng cũ 1.6s
+		quickHighlightKey = dup.key;
+		setTimeout(() => {
+			if (quickHighlightKey === dup.key) quickHighlightKey = '';
+		}, 1600);
+		return true;
+	}
+	let quickHighlightKey = $state('');
+
+	// 2.2: scan barcode per-item (quick) — tìm variant theo mã → điền dòng;
+	// không thấy → toast + mở tạo mới (điền tên).
+	// Record<string, string[]> — key KHỞI TẠO [] ngay khi tạo item (bind:codes
+	// không chấp nhận undefined khi codes có fallback → props_invalid_value crash).
+	// Khai báo chính ở trên (trước newQuickItem) — đây chỉ $effect bảo đảm key.
+	function ensureBarcodeKey(key: string) {
+		if (!(key in quickBarcodeCodes)) quickBarcodeCodes[key] = [];
+	}
+	// mọi key có sẵn lúc mount (openQuickModal gán quickItems mới)
+	$effect.pre(() => {
+		for (const it of quickItems) ensureBarcodeKey(it.key);
+	});
+	let lastQuickBarcodeLen = $state<Record<string, number>>({});
+	$effect(() => {
+		for (const [key, codes] of Object.entries(quickBarcodeCodes)) {
+			const prev = lastQuickBarcodeLen[key] ?? 0;
+			if (codes.length > prev) {
+				lastQuickBarcodeLen[key] = codes.length;
+				const code = codes[codes.length - 1];
+				const it = quickItems.find((x) => x.key === key);
+				if (it && !it.variantId && code) void scanQuickBarcode(it, code);
+			} else if (codes.length < prev) {
+				lastQuickBarcodeLen[key] = codes.length;
+			}
+		}
+	});
+	async function scanQuickBarcode(it: QuickItem, code: string) {
+		if (!code || !encryptionKeys) return;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/variants/list',
+				{ method: 'POST', body: { page: 1, pageSize: 5, search: code } },
+				encryptionKeys
+			);
+			if (!response.ok) return;
+			const data = response.data as { items?: VariantOption[] } | undefined;
+			const results = data?.items ?? [];
+			const hit = results.find((v) => (v as VariantOption & { barcode?: string }).barcode === code) ?? results[0];
+			if (hit) {
+				// variant scan được có thể ngoài trang 1 variantOptions (load theo
+				// mode) — merge vào để Select render label đúng thay vì raw id.
+				if (!variantOptions.some((v) => v._id === hit._id)) {
+					variantOptions = [hit, ...variantOptions];
+				}
+				if (!mergeQuickDuplicate(it, hit._id)) {
+					it.variantId = hit._id;
+					it.unitCost = Number(hit.costPrice) || 0;
+					quickItems = [...quickItems];
+					quickOpenKeys = [it.key];
+				}
+			} else {
+				showToast(pageContents.fullModal.barcodeNotFound[lang], 'warning');
+				quickOpenKeys = [it.key];
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[admin/purchases] quick scan barcode failed:', err);
+		}
 	}
 
 	const quickTotal = $derived(quickItems.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0), 0));
+	// 2.1: thực trả = tổng đơn − khuyến mãi tiền mặt per dòng (nhất quán review full modal;
+	// server tự trừ voucher khi phân bổ giá vốn — client gửi totalCost GỐC).
+	const quickVoucherMoney = $derived(quickItems.reduce((s, it) => s + (it.voucherType === 'money' ? Number(it.voucherValue) || 0 : 0), 0));
+	const quickPayable = $derived(Math.max(0, quickTotal - quickVoucherMoney));
 
 	// P2: % lợi nhuận từng dòng nhập nhanh — cần giá bán của variant + unitCost nhập.
 	// Giá bán lấy từ variantOptions (đã nạp cho select) — không có → ẩn badge.
@@ -1536,6 +1706,14 @@
 		for (const it of quickItems) {
 			if (!it.variantId) return pageContents.quickModal.requireVariant[lang];
 			if (!Number.isFinite(Number(it.quantity)) || Number(it.quantity) <= 0) return pageContents.quickModal.requireItems[lang];
+			// 2.1: per-item — NSX/HSD riêng dòng: HSD phải sau NSX
+			if (it.manufacturedAt && it.expiresAt && it.expiresAt < it.manufacturedAt) {
+				return pageContents.quickModal.requireItems[lang];
+			}
+			// khuyến mãi quà tặng per dòng — bắt buộc chọn quà + số lượng
+			if (it.voucherType === 'gift' && (!it.giftVariantId || Number(it.giftQuantity) <= 0)) {
+				return pageContents.quickModal.requireVariant[lang];
+			}
 		}
 		if (expiryMode === 'direct' && quickExpiresAt && quickManufacturedAt && quickExpiresAt < quickManufacturedAt) {
 			return pageContents.quickModal.requireItems[lang];
@@ -1620,7 +1798,17 @@
 					variantId: it.variantId,
 					quantity: Number(it.quantity),
 					unitCost: Number(it.unitCost),
-					lotNumber: it.lotNumber.trim() || undefined
+					lotNumber: it.lotNumber.trim() || undefined,
+					// 2.1: per-item NSX/HSD (rỗng → server fallback expiry chung phiếu)
+					...(it.manufacturedAt ? { manufacturedAt: new Date(it.manufacturedAt).toISOString() } : {}),
+					...(it.expiresAt ? { expiresAt: new Date(it.expiresAt).toISOString() } : {}),
+					// khuyến mãi NCC per dòng
+					...(it.voucherType === 'money' && Number(it.voucherValue) > 0
+						? { voucher: { type: 'money' as const, value: Number(it.voucherValue) } }
+						: {}),
+					...(it.voucherType === 'gift' && it.giftVariantId && Number(it.giftQuantity) > 0
+						? { voucher: { type: 'gift' as const, giftVariantId: it.giftVariantId, giftQuantity: Number(it.giftQuantity) } }
+						: {})
 				})),
 				totalCost: quickTotal,
 				note: quickNote.trim() || undefined,
@@ -1815,6 +2003,14 @@
 	// 1.9: $effect per-item barcode — length tăng so mốc đã xử lý → scan.
 	// Mốc lưu riêng từng key (lastBarcodeLen) — nhiều item scan song song.
 	let lastBarcodeLen = $state<Record<string, number>>({});
+	// bind:codes KHÔNG chấp nhận undefined (props_invalid_value) — bảo đảm mọi
+	// key item có sẵn [] trước khi picker render (openFullModal/addFullItem
+	// đều có thể tạo key mới — $effect.pre phủ mọi đường).
+	$effect.pre(() => {
+		for (const it of fullItems) {
+			if (!(it.key in itemBarcodeCodes)) itemBarcodeCodes[it.key] = [];
+		}
+	});
 	$effect(() => {
 		for (const [key, codes] of Object.entries(itemBarcodeCodes)) {
 			const prev = lastBarcodeLen[key] ?? 0;
@@ -2373,6 +2569,7 @@
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadBranches(), loadSuppliers(), loadCategories(), loadPurchases()]);
+		void loadCategoryProducts();
 	});
 </script>
 
@@ -2946,39 +3143,120 @@
 						</div>
 					</div>
 
-					<!-- ── Dòng nhập ── -->
+					<!-- ── Dòng nhập (2.1: accordion per-item — NSX/HSD + voucher riêng dòng) ── -->
 					<div class="items-block">
 						{#if variantsLoading}
 							<p class="variants-loading">{pageContents.quickModal.loadingVariants[lang]}</p>
 						{/if}
-						{#each quickItems as item, index}
-							<div class="po-item">
-								<Select
-									options={variantSelectOptions}
-									bind:value={item.variantId}
-									searchable
-									clearable
-									placeholder="—"
-									data-test={`quick-item-variant-${index}`}
-								/>
-								<input class="admin-input po-item-num" type="number" min="1" bind:value={item.quantity} aria-label={pageContents.quickModal.quantity[lang]} />
-								<input class="admin-input po-item-num" type="number" min="0" step="1000" bind:value={item.unitCost} aria-label={pageContents.quickModal.unitCost[lang]} />
-								{#if quickItemProfit(item) !== null}
-									{@const profit = quickItemProfit(item) as number}
-									<span
-										class="po-item-profit"
-										class:po-item-profit--neg={profit < 0}
-										data-test="quick-item-profit-{index}"
-									>
-										{profit > 0 ? '+' : ''}{profit}%
-									</span>
+						{#each quickItems as item, index (item.key)}
+							<div class="po-item-wrap" class:po-item-wrap--highlight={quickHighlightKey === item.key}>
+								<div class="po-item">
+									<!-- 3b: STT dòng nhập — user kiểm soát số dòng + tham chiếu khi trao đổi -->
+									<span class="po-item-stt" aria-label={`STT ${index + 1}`}>{index + 1}</span>
+									<Select
+										options={variantSelectOptions}
+										bind:value={item.variantId}
+										searchable
+										clearable
+										placeholder="—"
+										data-test={`quick-item-variant-${index}`}
+										onValueChange={(value) => {
+											if (!value || typeof value !== 'string') return;
+											// auto-fill giá vốn từ variant + merge trùng + collapse-other
+											const v = variantOptions.find((x) => x._id === value);
+											if (v) item.unitCost = Number(v.costPrice) || 0;
+											if (mergeQuickDuplicate(item, value)) return;
+											quickItems = [...quickItems];
+											quickOpenKeys = [item.key];
+										}}
+									/>
+									<input class="admin-input po-item-num" type="number" min="1" bind:value={item.quantity} aria-label={pageContents.quickModal.quantity[lang]} />
+									<input class="admin-input po-item-num" type="number" min="0" step="1000" bind:value={item.unitCost} aria-label={pageContents.quickModal.unitCost[lang]} />
+									{#if quickItemProfit(item) !== null}
+										{@const profit = quickItemProfit(item) as number}
+										<span
+											class="po-item-profit"
+											class:po-item-profit--neg={profit < 0}
+											data-test="quick-item-profit-{index}"
+										>
+											{profit > 0 ? '+' : ''}{profit}%
+										</span>
+									{/if}
+									<input class="admin-input" type="text" bind:value={item.lotNumber} placeholder={pageContents.quickModal.lotNumber[lang]} aria-label={pageContents.quickModal.lotNumber[lang]} />
+									<Button color="default" variant="ghost" size="sm" onClick={() => { quickOpenKeys = quickOpenKeys.includes(item.key) ? quickOpenKeys.filter((k) => k !== item.key) : [item.key]; }} aria-label={pageContents.quickModal.detailToggle[lang]} data-test={`quick-item-expand-${index}`}>
+										<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:po-item-chevron--open={quickOpenKeys.includes(item.key)}>
+											<polyline points="6 9 12 15 18 9"></polyline>
+										</svg>
+									</Button>
+									<Button color="error" variant="ghost" size="sm" onClick={() => removeQuickItem(index)} aria-label={pageContents.actions.remove[lang]}>✕</Button>
+								</div>
+								{#if quickOpenKeys.includes(item.key)}
+									<div class="po-item-detail">
+										{#if !item.variantId}
+											<!-- 2.2: scan barcode khi dòng chưa chọn variant -->
+											<div class="po-item-scan">
+												<Input
+													type="barcode"
+													bind:codes={quickBarcodeCodes[item.key] as string[]}
+													beepOn
+													placeholder={pageContents.quickModal.scanPlaceholder[lang]}
+													data-test={`quick-item-barcode-${index}`}
+												/>
+											</div>
+										{/if}
+										<div class="form-grid form-grid-2">
+											<div class="form-field">
+												<span class="form-label">{pageContents.quickModal.manufacturedAt[lang]}</span>
+												<input class="admin-input" type="date" bind:value={item.manufacturedAt} data-test={`quick-item-mfg-${index}`} />
+											</div>
+											<div class="form-field">
+												<span class="form-label">{pageContents.quickModal.expiresAt[lang]}</span>
+												<input class="admin-input" type="date" bind:value={item.expiresAt} data-test={`quick-item-exp-${index}`} />
+											</div>
+										</div>
+										<div class="form-grid form-grid-2">
+											<div class="form-field">
+												<span class="form-label">{pageContents.fullModal.voucherType[lang]}</span>
+												<select class="admin-select" bind:value={item.voucherType} data-test={`quick-item-voucher-type-${index}`}>
+													<option value="none">{pageContents.fullModal.voucherNone[lang]}</option>
+													<option value="money">{pageContents.fullModal.voucherMoney[lang]}</option>
+													<option value="gift">{pageContents.fullModal.voucherGift[lang]}</option>
+												</select>
+											</div>
+											{#if item.voucherType === 'money'}
+												<div class="form-field">
+													<span class="form-label">{pageContents.fullModal.voucherValue[lang]}</span>
+													<input class="admin-input" type="number" min="0" bind:value={item.voucherValue} data-test={`quick-item-voucher-value-${index}`} />
+												</div>
+											{:else if item.voucherType === 'gift'}
+												<div class="form-field">
+													<span class="form-label form-label--required">{pageContents.fullModal.giftVariant[lang]}</span>
+													<select class="admin-select" bind:value={item.giftVariantId} data-test={`quick-item-gift-variant-${index}`}>
+														<option value="">—</option>
+														{#each quickItems.filter((x) => x.variantId && x.variantId !== item.variantId) as src (src.key)}
+															<option value={src.variantId}>{getVariantLabel(src.variantId)}</option>
+														{/each}
+													</select>
+												</div>
+											{/if}
+										</div>
+										{#if item.voucherType === 'gift'}
+											<div class="form-field">
+												<span class="form-label form-label--required">{pageContents.fullModal.giftQuantity[lang]}</span>
+												<input class="admin-input" type="number" min="1" bind:value={item.giftQuantity} data-test={`quick-item-gift-qty-${index}`} />
+											</div>
+										{/if}
+									</div>
 								{/if}
-								<input class="admin-input" type="text" bind:value={item.lotNumber} placeholder={pageContents.quickModal.lotNumber[lang]} aria-label={pageContents.quickModal.lotNumber[lang]} />
-								<Button color="error" variant="ghost" size="sm" onClick={() => removeQuickItem(index)} aria-label={pageContents.actions.remove[lang]}>✕</Button>
 							</div>
 						{/each}
 						<Button color="default" variant="outline" size="sm" onClick={addQuickItem}>{pageContents.actions.addItem[lang]}</Button>
-						<p class="po-total">{pageContents.quickModal.total[lang]}: <strong>{formatMoney(quickTotal)}</strong></p>
+						<p class="po-total">
+						{pageContents.quickModal.total[lang]}: <strong>{formatMoney(quickTotal)}</strong>
+						{#if quickVoucherMoney > 0}
+							<span class="po-total--payable"> · {pageContents.fullModal.totalPayable[lang]}: <strong>{formatMoney(quickPayable)}</strong></span>
+						{/if}
+					</p>
 					</div>
 
 					<!-- ── Hạn sử dụng ── -->
@@ -3903,6 +4181,8 @@
 									bind:value={entityCategoryId}
 									searchable
 									clearable
+									allowCreate
+									onOptionCreate={(name) => openCreateEntity('category', name, (id) => (entityCategoryId = id))}
 								/>
 							</div>
 							<div class="form-field">
@@ -3913,6 +4193,8 @@
 									bind:value={entityBrandId}
 									searchable
 									clearable
+									allowCreate
+									onOptionCreate={(name) => openCreateEntity('brand', name, (id) => (entityBrandId = id))}
 								/>
 							</div>
 							<div class="form-field">
@@ -4201,6 +4483,17 @@
 	.form-field :global(.admin-filter-select) {
 		width: 100%;
 		max-width: 100%;
+	}
+
+	/* Modal quick/full + detail edit dùng cả Input component (Select trigger viền
+	   rgba(default,0.85) nhạt) lẫn .admin-input native (viền --default-300 đậm hơn
+	   + nền trắng). Cạnh nhau ui-checker đọc Select như "không viền" → đồng nhất
+	   Select modal theo .admin-input của trang. Scoped không match element Select
+	   (hash khác) → :global bắt buộc (bẫy selector prune). */
+	.form-field :global(.select-trigger),
+	.po-item :global(.select-trigger) {
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
 	}
 
 	.admin-input {
@@ -4548,7 +4841,8 @@
 
 	.po-item {
 		display: grid;
-		grid-template-columns: minmax(10rem, 2fr) 5rem 6rem minmax(6rem, 1fr) auto;
+		/* 3b: thêm cột STT (auto width, nhỏ) trước cột variant */
+		grid-template-columns: 1.25rem minmax(10rem, 2fr) 5rem 6rem minmax(6rem, 1fr) auto;
 		gap: 0.5rem;
 		align-items: center;
 
@@ -4558,8 +4852,20 @@
 		}
 
 		@media (max-width: 860px) {
-			grid-template-columns: 1fr 1fr;
+			/* fix mobile: 1fr = minmax(auto,1fr) — min-content các ô cộng lại
+			   tràn viewport 390px (ô variant/giá vốn cắt mép phải, chevron mất).
+			   minmax(0,1fr) cho phép co về 0. */
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		}
+	}
+
+	/* 3b: STT dòng nhập — số nhỏ, màu phụ, căn giữa */
+	.po-item-stt {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--foreground-500, var(--foreground));
+		text-align: center;
+		user-select: none;
 	}
 
 	/* P2: % lợi nhuận từng dòng nhập (so giá bán variant) */
@@ -4576,12 +4882,64 @@
 
 	.po-item-num {
 		width: auto;
+		min-width: 0;
+	}
+
+	/* 2.1: wrapper per-item — bọc row + detail mở rộng (accordion) */
+	.po-item-wrap {
+		border: 1px solid transparent;
+		border-radius: 0.75rem;
+		transition: border-color 0.2s ease, background-color 0.2s ease;
+
+		/* 2.3: highlight nhấp nháy dòng trùng khi merge */
+		&--highlight {
+			border-color: var(--primary-500, var(--primary));
+			background: color-mix(in srgb, var(--primary) 8%, transparent);
+			animation: po-item-flash 0.45s ease 2;
+		}
+	}
+
+	@keyframes po-item-flash {
+		0%,
+		100% {
+			background: transparent;
+		}
+		50% {
+			background: color-mix(in srgb, var(--primary) 14%, transparent);
+		}
+	}
+
+	/* 2.1: khối chi tiết mở rộng per-item */
+	.po-item-detail {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		margin-top: 0.5rem;
+		border-top: 1px dashed var(--default-300);
+	}
+
+	.po-item-scan {
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* 2.1: chevron xoay theo trạng thái mở */
+	.po-item-chevron--open {
+		transform: rotate(180deg);
+		transition: transform 0.2s ease;
 	}
 
 	.po-total {
 		margin: 0.25rem 0 0;
 		font-size: 0.9rem;
 		color: var(--foreground);
+
+		/* 2.1: dòng thực trả sau voucher tiền mặt per dòng */
+		.po-total--payable {
+			color: var(--foreground-500);
+			font-size: 0.85rem;
+		}
 	}
 
 	.variants-loading {
