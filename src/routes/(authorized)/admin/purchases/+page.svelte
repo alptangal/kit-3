@@ -2413,7 +2413,7 @@
 								{/each}
 							</select>
 						</label>
-						<label class="form-field">
+						<div class="form-field">
 							<span class="form-label">{pageContents.filters.allBranches[lang]}</span>
 							<Select
 								class="admin-filter-select"
@@ -2424,8 +2424,8 @@
 								placeholder={pageContents.filters.allBranches[lang]}
 								onValueChange={() => onFilterChange()}
 							/>
-						</label>
-						<label class="form-field">
+						</div>
+						<div class="form-field">
 							<span class="form-label">{pageContents.filters.allSuppliers[lang]}</span>
 							<Select
 								class="admin-filter-select"
@@ -2436,8 +2436,8 @@
 								placeholder={pageContents.filters.allSuppliers[lang]}
 								onValueChange={() => onFilterChange()}
 							/>
-						</label>
-						<label class="form-field">
+						</div>
+						<div class="form-field">
 							<span class="form-label">{pageContents.filters.allCategories[lang]}</span>
 							<Select
 								class="admin-filter-select"
@@ -2448,7 +2448,7 @@
 								placeholder={pageContents.filters.allCategories[lang]}
 								onValueChange={() => onFilterChange()}
 							/>
-						</label>
+						</div>
 						<label class="form-field">
 							<span class="form-label">{pageContents.filters.from[lang]}</span>
 							<input class="admin-input" type="date" bind:value={dateFrom} onchange={onFilterChange} aria-label={pageContents.filters.from[lang]} />
@@ -2799,18 +2799,18 @@
 									{/each}
 								</select>
 							</label>
-							<label class="form-field">
+							<div class="form-field">
 								<span class="form-label">{pageContents.filters.allBranches[lang]}</span>
 								<Select class="admin-filter-select" bind:value={branchFilter} options={branchSelectOptions} searchable clearable placeholder={pageContents.filters.allBranches[lang]} onValueChange={() => onFilterChange()} />
-							</label>
-							<label class="form-field">
+							</div>
+							<div class="form-field">
 								<span class="form-label">{pageContents.filters.allSuppliers[lang]}</span>
 								<Select class="admin-filter-select" bind:value={supplierFilter} options={supplierSelectOptions} searchable clearable placeholder={pageContents.filters.allSuppliers[lang]} onValueChange={() => onFilterChange()} />
-							</label>
-							<label class="form-field">
+							</div>
+							<div class="form-field">
 								<span class="form-label">{pageContents.filters.allCategories[lang]}</span>
 								<Select class="admin-filter-select" bind:value={categoryFilter} options={categorySelectOptions} searchable clearable placeholder={pageContents.filters.allCategories[lang]} onValueChange={() => onFilterChange()} />
-							</label>
+							</div>
 							<label class="form-field">
 								<span class="form-label">{pageContents.filters.from[lang]}</span>
 								<input class="admin-input" type="date" bind:value={dateFrom} onchange={onFilterChange} aria-label={pageContents.filters.from[lang]} />
@@ -2907,7 +2907,7 @@
 
 					<div class="form-grid form-grid-2">
 						{#if quickMode === 'supplier'}
-							<label class="form-field">
+							<div class="form-field">
 								<span class="form-label">{pageContents.quickModal.supplier[lang]}</span>
 								<Select
 									class="admin-filter-select"
@@ -2918,9 +2918,9 @@
 									allowCreate
 									onOptionCreate={(name) => openCreateEntity('supplier', name, (id) => (quickSupplierId = id))}
 								/>
-							</label>
+							</div>
 						{:else if quickMode === 'category'}
-							<label class="form-field">
+							<div class="form-field">
 								<span class="form-label">{pageContents.quickModal.category[lang]}</span>
 								<Select
 									class="admin-filter-select"
@@ -2932,9 +2932,9 @@
 									onOptionCreate={(name) => openCreateEntity('category', name, (id) => (quickCategoryId = id))}
 									onValueChange={() => switchQuickMode()}
 								/>
-							</label>
+							</div>
 						{/if}
-						<label class="form-field">
+						<div class="form-field">
 							<span class="form-label">{pageContents.quickModal.branch[lang]}</span>
 							<Select
 								class="admin-filter-select"
@@ -2943,7 +2943,7 @@
 								searchable
 								clearable
 							/>
-						</label>
+						</div>
 					</div>
 
 					<!-- ── Dòng nhập ── -->
@@ -3087,7 +3087,7 @@
 					<!-- Bước 1: NCC + chi nhánh + ảnh hóa đơn -->
 					{#if fullStep === 1}
 						<div class="form-grid-2">
-							<label class="form-field">
+							<div class="form-field">
 								<span class="form-label">{pageContents.fullModal.supplier[lang]}</span>
 								<Select
 									class="admin-filter-select"
@@ -3098,8 +3098,8 @@
 									allowCreate
 									onOptionCreate={(name) => openCreateEntity('supplier', name, (id) => (fullSupplierId = id))}
 								/>
-							</label>
-							<label class="form-field">
+							</div>
+							<div class="form-field">
 								<span class="form-label form-label--required">{pageContents.fullModal.branch[lang]}</span>
 								<Select
 									class="admin-filter-select"
@@ -3108,7 +3108,7 @@
 									searchable
 									clearable
 								/>
-							</label>
+							</div>
 						</div>
 
 
@@ -3147,7 +3147,7 @@
 										<span class="form-label form-label--required">{pageContents.fullModal.productName[lang]}</span>
 										<input class="admin-input" type="text" bind:value={newProductName} data-test="new-product-name" />
 									</label>
-									<label class="form-field">
+									<div class="form-field">
 										<span class="form-label">{pageContents.fullModal.category[lang]}</span>
 										<Select
 											class="admin-filter-select"
@@ -3158,9 +3158,9 @@
 											allowCreate
 											onOptionCreate={(name) => openCreateEntity('category', name, (id) => (newProductCategoryId = id))}
 										/>
-									</label>
+									</div>
 								</div>
-								<label class="form-field">
+								<div class="form-field">
 									<span class="form-label">{pageContents.fullModal.brand[lang]}</span>
 									<Select
 										class="admin-filter-select"
@@ -3171,7 +3171,7 @@
 										allowCreate
 										onOptionCreate={(name) => openCreateEntity('brand', name, (id) => (newProductBrandId = id))}
 									/>
-								</label>
+								</div>
 								<Button color="success" loading={productCreating} disabled={productCreating || !newProductName.trim()} onclick={createProductOnTheFly} data-test="create-product-btn">
 									{productCreating ? pageContents.fullModal.creating[lang] : pageContents.fullModal.createProduct[lang]}
 								</Button>
@@ -3840,7 +3840,7 @@
 					</label>
 					{#if createEntityKind === 'product'}
 						<div class="form-grid-2">
-							<label class="form-field">
+							<div class="form-field">
 								<span class="form-label">{pageContents.fullModal.category[lang]}</span>
 								<Select
 									class="admin-filter-select"
@@ -3849,8 +3849,8 @@
 									searchable
 									clearable
 								/>
-							</label>
-							<label class="form-field">
+							</div>
+							<div class="form-field">
 								<span class="form-label">{pageContents.fullModal.brand[lang]}</span>
 								<Select
 									class="admin-filter-select"
@@ -3859,7 +3859,7 @@
 									searchable
 									clearable
 								/>
-							</label>
+							</div>
 						</div>
 					{/if}
 				</Modal.Container.Body>
