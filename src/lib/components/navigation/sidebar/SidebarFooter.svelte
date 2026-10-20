@@ -12,6 +12,7 @@
 <style lang="scss">
 	// User menu / settings — dính đáy, tách bằng border-top.
 	.sidebar-footer {
+		width: 100%; /* hover item phủ hết width sidebar (fit-content cha) */
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;

@@ -172,6 +172,23 @@
 		await goto('/login', { invalidateAll: true });
 	};
 
+	// ── Toggle theme từ sidebar footer: mirror ThemeToggle component (dùng
+	// MenuButton thay Button riêng). Icon theo giá trị HIỆN (resolved): light =
+	// moon (bấm sang dark), dark = sun (bấm sang light). animateThemeTransition
+	// fallback tâm viewport khi programmatically click không kèm coords.
+	import { profile } from '$store/basic.svelte';
+	import { animateThemeTransition } from '$modules/theme.svelte';
+	import type { AppTheme } from '$interfaces/basic';
+
+	const themeIcon = $derived(profile.theme === 'dark' ? 'lucide:sun' : 'lucide:moon');
+	const handleThemeToggle = (e?: Event | MouseEvent) => {
+		const me = e instanceof MouseEvent ? e : null;
+		const x = me?.clientX ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
+		const y = me?.clientY ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
+		const next: AppTheme = profile.theme === 'dark' ? 'light' : 'dark';
+		animateThemeTransition(next, x, y, 450);
+	};
+
 	// Breadcrumb derive từ route hiện tại (đơn giản: Home + tên trang).
 	const routeNames: Record<string, TranslateContent> = {
 		'/admin': tc('Người dùng', 'Users'),
@@ -586,11 +603,28 @@
 			<Sidebar.Menu>
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton
+						label={tc('Hồ sơ', 'Profile')}
+						href="/profile"
+						active={isActive('/profile')}
+						icon="lucide:user-round"
+						data-test="admin-nav-profile"
+					/>
+				</Sidebar.MenuItem>
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton
 						label={tc('Cấu hình hệ thống', 'System settings')}
 						href="/admin/settings"
 						active={isActive('/admin/settings')}
 						icon="lucide:settings"
 						data-test="admin-nav-settings"
+					/>
+				</Sidebar.MenuItem>
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton
+						label={tc('Giao diện', 'Appearance')}
+						onclick={handleThemeToggle}
+						icon={themeIcon}
+						data-test="admin-nav-theme"
 					/>
 				</Sidebar.MenuItem>
 				<Sidebar.MenuItem>

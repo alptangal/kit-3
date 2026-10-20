@@ -334,6 +334,16 @@
 		opacity: 1;
 	}
 
+	/* Active indicator kiểu Nuxt UI: vệt primary trên item lá (.active::before,
+	   SidebarMenuButton) dịch sang left:-0.5rem để đè ĐÚNG đường guide của
+	   submenu (padding-left 0.875rem − guide left 0.375rem = 0.5rem). Hash scoping
+	   bám vào .sidebar-menu-group__submenu (class của component này) — phần
+	   :global() chỉ bọc button + ::before (bẫy: :global() cuối selector → Svelte
+	   bỏ hash, rule lộ toàn app). */
+	.sidebar-menu-group__submenu :global(.sidebar-menu-button.active::before) {
+		left: -0.5rem;
+	}
+
 	.sidebar-menu-group__submenu.sb-hidden {
 		display: none;
 	}

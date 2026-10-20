@@ -11,6 +11,7 @@
 
 <style lang="scss">
 	.sidebar-menu {
+		width: 100%; /* hover item phủ hết width sidebar (fit-content cha) */
 		list-style: none;
 		margin: 0;
 		padding: 0;

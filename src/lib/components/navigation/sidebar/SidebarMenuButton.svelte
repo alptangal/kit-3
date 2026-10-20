@@ -185,6 +185,7 @@
 <style lang="scss">
 	// Nút menu — scoped (a hoặc button cùng hash của SidebarMenuButton).
 	.sidebar-menu-button {
+		position: relative; /* neo ::before vệt active (Nuxt UI style) */
 		display: inline-flex;
 		align-items: center;
 		gap: 0.625rem;
@@ -253,6 +254,21 @@
 			.leading,
 			.label {
 				color: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
+			}
+
+			// Active indicator kiểu Nuxt UI: vệt dọc màu primary ở mép trái item,
+			// đè lên đường guide mờ của submenu (1px var(--border) — SidebarMenuGroup).
+			// Trong submenu, group dịch vệt sang left:-0.5rem cho trùng guide
+			// (rule ở SidebarMenuGroup — ở đây left:0 đúng cho footer/top-level).
+			&::before {
+				content: '';
+				position: absolute;
+				left: 0;
+				top: 0.25rem;
+				bottom: 0.25rem;
+				width: 2px;
+				border-radius: 999px;
+				background: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
 			}
 		}
 
