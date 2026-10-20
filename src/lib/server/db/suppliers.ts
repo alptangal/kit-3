@@ -107,10 +107,22 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'name',
   'contactPerson',
   'address',
+  'ward',
+  'district',
+  'province',
+  'country',
+  'phones',
+  'emails',
+  'zalo',
+  'facebook',
+  'avatarUrl',
   'status',
   'createdAt',
   'updatedAt'
 ] as const;
+
+// Field dạng mảng (phones/emails) — validate phần tử string trước khi ghi
+const SUPPLIER_ARRAY_FIELDS = ['phones', 'emails'] as const;
 
 const PO_ADMIN_SAFE_FIELDS = [
   'poCode',
@@ -336,6 +348,15 @@ export class SupplierService {
       name: string;
       contactPerson?: string;
       address?: string;
+      ward?: string;
+      district?: string;
+      province?: string;
+      country?: string;
+      phones?: string[];
+      emails?: string[];
+      zalo?: string;
+      facebook?: string;
+      avatarUrl?: string;
       status: string;
     }
   ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { supplier: Record<string, unknown> })> {
@@ -349,6 +370,15 @@ export class SupplierService {
       name: supplierData.name,
       contactPerson: supplierData.contactPerson ?? null,
       address: supplierData.address ?? null,
+      ward: supplierData.ward ?? null,
+      district: supplierData.district ?? null,
+      province: supplierData.province ?? null,
+      country: supplierData.country ?? null,
+      phones: Array.isArray(supplierData.phones) ? supplierData.phones.filter((p): p is string => typeof p === 'string' && p.trim().length > 0).map((p) => p.trim()) : [],
+      emails: Array.isArray(supplierData.emails) ? supplierData.emails.filter((e): e is string => typeof e === 'string' && e.trim().length > 0).map((e) => e.trim()) : [],
+      zalo: supplierData.zalo ?? null,
+      facebook: supplierData.facebook ?? null,
+      avatarUrl: supplierData.avatarUrl ?? null,
       status: supplierData.status,
       createdAt: now,
       updatedAt: now
@@ -386,8 +416,18 @@ export class SupplierService {
     const now = new Date().toISOString();
     const updateData: Record<string, unknown> = { ...(getRes as any).data };
 
-    for (const field of ['name', 'contactPerson', 'address', 'status'] as const) {
-      if (field in patch) updateData[field] = patch[field];
+    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'zalo', 'facebook', 'avatarUrl', 'status'] as const) {
+      if (field in patch) {
+        // mảng phones/emails: lọc phần tử rỗng/không phải string
+        if ((SUPPLIER_ARRAY_FIELDS as readonly string[]).includes(field)) {
+          const arr = patch[field];
+          updateData[field] = Array.isArray(arr)
+            ? arr.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim())
+            : [];
+        } else {
+          updateData[field] = patch[field];
+        }
+      }
     }
     if (typeof updateData.name !== 'string' || !updateData.name.trim()) {
       return { success: false, messages: supplierAdminMessages.invalidInput };

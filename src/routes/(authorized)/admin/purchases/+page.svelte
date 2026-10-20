@@ -217,7 +217,13 @@
 			total: { vi: 'Tổng tiền', en: 'Total' },
 			loadingVariants: { vi: 'Đang tải sản phẩm…', en: 'Loading products…' },
 			detailToggle: { vi: 'Mở rộng chi tiết dòng (NSX/HSD/khuyến mãi)', en: 'Toggle line detail (mfg/expiry/promo)' },
-			scanPlaceholder: { vi: 'Quét barcode / QR để điền sản phẩm', en: 'Scan barcode / QR to fill product' }
+			scanPlaceholder: { vi: 'Quét barcode / QR để điền sản phẩm', en: 'Scan barcode / QR to fill product' },
+			// 2b: label option "tạo mới" trong Select variant khi không tìm thấy ({value} = từ khoá người dùng gõ)
+			createOption: { vi: 'Tạo mới "{value}"', en: 'Create "{value}"' },
+			createVariantTitle: { vi: 'Tạo sản phẩm + variant', en: 'Create product + variant' },
+			createVariantSku: { vi: 'Mã SKU (tuỳ chọn — để trống tự sinh)', en: 'SKU (optional — auto if empty)' },
+			createVariantBarcode: { vi: 'Barcode (tuỳ chọn)', en: 'Barcode (optional)' },
+			createVariantCategory: { vi: 'Phân loại (tuỳ chọn)', en: 'Category (optional)' }
 		},
 		fullModal: {
 			title: { vi: 'Nhập hàng đầy đủ', en: 'Full purchase' },
@@ -950,7 +956,7 @@
 				detailEditing = false;
 				detailDirty = false;
 				detailDraft = null;
-				showToast(pageContents.entityEditor.saved[lang], 'success');
+				showToast(pageContents.entityEditor.save[lang], 'success');
 				const po = response.data as (PurchaseRow & { receiptImages?: string[] }) | undefined;
 				if (po) detailPO = po;
 				void loadPurchases();
@@ -1043,7 +1049,7 @@
 				void loadCategories();
 			}
 			infoModalDisplay = false;
-			showToast(pageContents.entityEditor.saved[lang], 'success');
+			showToast(pageContents.entityEditor.save[lang], 'success');
 		} catch {
 			showToast(pageContents.toasts.requestFailed[lang], 'error');
 		} finally {
@@ -2404,7 +2410,7 @@
 				}, encryptionKeys);
 			}
 			entityEditorDisplay = false;
-			showToast(pageContents.entityEditor.saved[lang], 'success');
+			showToast(pageContents.entityEditor.save[lang], 'success');
 			// meta stale → refetch meta + reload danh sách PO.
 			variantMeta = new Map();
 			await ensureVariants(
@@ -2460,6 +2466,102 @@
 		createEntityDisplay = true;
 	}
 
+	// ── C5b: variant không tìm thấy → modal tạo product + variant cùng lúc ──
+	let createVariantDisplay = $state(false);
+	let createVariantName = $state('');
+	let createVariantSku = $state('');
+	let createVariantBarcode = $state('');
+	let createVariantCategoryId = $state('');
+	let createVariantSubmitting = $state(false);
+	// dòng quick đang chờ variant mới — tạo xong gán variantId + giá vốn
+	let createVariantTarget: QuickItem | null = null;
+
+	function openCreateVariantModal(rawLabel: string, target: QuickItem) {
+		// rawLabel có thể là "Tên (SKU)" từ option có sẵn — cắt phần SKU
+		const name = rawLabel.includes(' (') ? rawLabel.slice(0, rawLabel.indexOf(' (')) : rawLabel;
+		createVariantName = name;
+		// SKU đề xuất từ tên (bỏ dấu, không khoảng trắng)
+		createVariantSku = name
+			.normalize('NFD')
+			.replace(/[̀-ͯ]/g, '')
+			.replace(/đ/g, 'd')
+			.replace(/[^a-zA-Z0-9]+/g, '')
+			.toUpperCase()
+			.slice(0, 20) || `SKU-${Date.now() % 100000}`;
+		createVariantBarcode = '';
+		createVariantCategoryId = '';
+		createVariantTarget = target;
+		createVariantDisplay = true;
+	}
+
+	async function submitCreateVariantModal(): Promise<void> {
+		if (!createVariantName.trim() || createVariantSubmitting) return;
+		// SKU để trống → tự sinh từ tên (cùng thuật toán với openCreateVariantModal)
+		if (!createVariantSku.trim()) {
+			createVariantSku =
+				createVariantName
+					.normalize('NFD')
+					.replace(/[̀-ͯ]/g, '')
+					.replace(/đ/g, 'd')
+					.replace(/[^a-zA-Z0-9]+/g, '')
+					.toUpperCase()
+					.slice(0, 20) || `SKU-${Date.now() % 100000}`;
+		}
+		createVariantSubmitting = true;
+		try {
+			// 1) tạo product (hasVariants)
+			const pRes = await encryption.fetchSecure('/api/admin/products/create', {
+				method: 'POST',
+				body: { name: createVariantName.trim(), categoryId: createVariantCategoryId || undefined, hasVariants: true }
+			}, encryptionKeys);
+			const productId = String(pRes.data?.documentKey ?? pRes.data?._id ?? '');
+			if (!productId) throw new Error('no product documentKey');
+			// 2) tạo variant gắn product
+			const vRes = await encryption.fetchSecure('/api/admin/variants/create', {
+				method: 'POST',
+				body: {
+					productId,
+					sku: createVariantSku.trim(),
+					barcode: createVariantBarcode.trim() || undefined,
+					displayName: createVariantName.trim(),
+					price: 0,
+					attributes: {}
+				}
+			}, encryptionKeys);
+			const variantId = String(vRes.data?.documentKey ?? vRes.data?._id ?? '');
+			if (!variantId) throw new Error('no variant documentKey');
+			// KHÔNG loadVariantOptions() ở đây — fetch list trả về ghi đè prepend dưới
+			// (server có thể chưa thấy variant mới → option mất → trigger raw id).
+			// Prepend thủ công đủ hiển thị; list tự refresh ở lần mở modal sau.
+			if (createVariantTarget && !quickItems.includes(createVariantTarget)) {
+				createVariantTarget = null; // dòng đã bị xoá khi modal mở
+			}
+			if (createVariantTarget) {
+				createVariantTarget.variantId = variantId;
+				createVariantTarget.unitCost = 0;
+				// merge nếu trùng dòng khác + mở accordion dòng đó
+				if (mergeQuickDuplicate(createVariantTarget, variantId)) {
+					createVariantTarget = null;
+				} else {
+					quickItems = [...quickItems];
+					quickOpenKeys = [createVariantTarget.key];
+					// thêm option mới vào variantOptions để Select render label
+					if (!variantOptions.some((v) => v._id === variantId)) {
+						variantOptions = [{ _id: variantId, sku: createVariantSku.trim().toUpperCase(), displayName: createVariantName.trim(), price: 0, costPrice: 0 }, ...variantOptions];
+					}
+					createVariantTarget = null;
+				}
+			}
+			createVariantDisplay = false;
+			showToast(pageContents.entityEditor.save[lang], 'success');
+		} catch {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+		} finally {
+			createVariantSubmitting = false;
+			createVariantTarget = null;
+		}
+	}
+
 	async function submitCreateEntity(): Promise<void> {
 		if (!createEntityName.trim() || createEntitySubmitting) return;
 		createEntitySubmitting = true;
@@ -2503,7 +2605,7 @@
 			else if (createEntityKind === 'brand') void loadBrands();
 			// product mới chưa có variant — user thêm variant ở form đầy đủ
 			createEntityDisplay = false;
-			showToast(pageContents.entityEditor.saved[lang], 'success');
+			showToast(pageContents.entityEditor.save[lang], 'success');
 			createEntityDone?.(id);
 			createEntityDone = null;
 		} catch {
@@ -3143,6 +3245,22 @@
 						</div>
 					</div>
 
+					<!-- ── 2a: Ảnh hóa đơn — đẩy lên sát block supplier+branch ── -->
+					<div class="items-block">
+						<span class="form-label">{pageContents.quickModal.receiptImages[lang]}</span>
+						<input type="file" accept="image/*" multiple onchange={onReceiptFilesSelected} />
+						{#if receiptImages.length > 0}
+							<div class="receipt-strip">
+								{#each receiptImages as img, index}
+									<div class="receipt-thumb">
+										<img src={img.dataUrl} alt={img.name} onclick={() => openZoom(img.dataUrl)} />
+										<button type="button" class="receipt-remove" onclick={() => removeReceiptImage(index)} aria-label={pageContents.actions.remove[lang]}>✕</button>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+
 					<!-- ── Dòng nhập (2.1: accordion per-item — NSX/HSD + voucher riêng dòng) ── -->
 					<div class="items-block">
 						{#if variantsLoading}
@@ -3153,23 +3271,40 @@
 								<div class="po-item">
 									<!-- 3b: STT dòng nhập — user kiểm soát số dòng + tham chiếu khi trao đổi -->
 									<span class="po-item-stt" aria-label={`STT ${index + 1}`}>{index + 1}</span>
-									<Select
-										options={variantSelectOptions}
-										bind:value={item.variantId}
-										searchable
-										clearable
-										placeholder="—"
-										data-test={`quick-item-variant-${index}`}
-										onValueChange={(value) => {
-											if (!value || typeof value !== 'string') return;
-											// auto-fill giá vốn từ variant + merge trùng + collapse-other
-											const v = variantOptions.find((x) => x._id === value);
-											if (v) item.unitCost = Number(v.costPrice) || 0;
-											if (mergeQuickDuplicate(item, value)) return;
-											quickItems = [...quickItems];
-											quickOpenKeys = [item.key];
-										}}
-									/>
+									<div class="po-item-variant">
+										<Select
+											options={variantSelectOptions}
+											bind:value={item.variantId}
+											searchable
+											clearable
+											allowCreate
+											createOptionLabel={pageContents.quickModal.createOption[lang]}
+											placeholder="—"
+											data-test={`quick-item-variant-${index}`}
+											onOptionCreate={(rawLabel) => openCreateVariantModal(rawLabel, item)}
+											onValueChange={(value) => {
+												if (!value || typeof value !== 'string') return;
+												// auto-fill giá vốn từ variant + merge trùng + collapse-other
+												const v = variantOptions.find((x) => x._id === value);
+												if (v) item.unitCost = Number(v.costPrice) || 0;
+												if (mergeQuickDuplicate(item, value)) return;
+												quickItems = [...quickItems];
+												quickOpenKeys = [item.key];
+											}}
+										/>
+										<!-- 2c: nút scan camera nằm cạnh select variant — Input barcode
+										     chỉ hiện nút camera (ẩn input text bằng CSS), quét ra mã →
+										     codes đổi → $effect scanQuickBarcode tự fill variant -->
+										<div class="po-item-scan-btn">
+											<Input
+												type="barcode"
+												cameraOn
+												bind:codes={quickBarcodeCodes[item.key] as string[]}
+												beepOn
+												data-test={`quick-item-scanbtn-${index}`}
+											/>
+										</div>
+									</div>
 									<input class="admin-input po-item-num" type="number" min="1" bind:value={item.quantity} aria-label={pageContents.quickModal.quantity[lang]} />
 									<input class="admin-input po-item-num" type="number" min="0" step="1000" bind:value={item.unitCost} aria-label={pageContents.quickModal.unitCost[lang]} />
 									{#if quickItemProfit(item) !== null}
@@ -3292,22 +3427,6 @@
 									<span class="form-label">{pageContents.quickModal.expiresInDays[lang]}</span>
 									<input class="admin-input" type="number" min="1" bind:value={quickExpiresInDays} />
 								</label>
-							</div>
-						{/if}
-					</div>
-
-					<!-- ── Ảnh hóa đơn ── -->
-					<div class="items-block">
-						<span class="form-label">{pageContents.quickModal.receiptImages[lang]}</span>
-						<input type="file" accept="image/*" multiple onchange={onReceiptFilesSelected} />
-						{#if receiptImages.length > 0}
-							<div class="receipt-strip">
-								{#each receiptImages as img, index}
-									<div class="receipt-thumb">
-										<img src={img.dataUrl} alt={img.name} onclick={() => openZoom(img.dataUrl)} />
-										<button type="button" class="receipt-remove" onclick={() => removeReceiptImage(index)} aria-label={pageContents.actions.remove[lang]}>✕</button>
-									</div>
-								{/each}
 							</div>
 						{/if}
 					</div>
@@ -3533,6 +3652,17 @@
 															placeholder={pageContents.fullModal.searchPlaceholder?.[lang] ?? 'Scan'}
 															data-test={`full-item-barcode-${i}`}
 														/>
+														<!-- 2c: nút scan camera cạnh select — Input thu nhỏ chỉ còn
+														     nút camera, quét ra mã → codes đổi → $effect scanItemBarcode -->
+														<div class="full-item-scan-btn">
+															<Input
+																type="barcode"
+																cameraOn
+																bind:codes={itemBarcodeCodes[it.key]}
+																beepOn
+																data-test={`full-item-scanbtn-${i}`}
+															/>
+														</div>
 													</div>
 												{/if}
 												<div class="form-grid-2">
@@ -4146,6 +4276,47 @@
 						{pageContents.actions.submit[lang]}
 					</Button>
 					<Button color="default" variant="ghost" disabled={createEntitySubmitting} onclick={() => { createEntityDisplay = false; }}>
+						{pageContents.actions.cancel[lang]}
+					</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
+	<!-- ── Modal tạo product + variant (từ Select variant allowCreate) ── -->
+	{#if createVariantDisplay}
+		<Modal bind:display={createVariantDisplay} size="sm" isDimissable>
+			<Modal.Container>
+				<Modal.Container.Header>{pageContents.quickModal.createVariantTitle[lang]}</Modal.Container.Header>
+				<Modal.Container.Body>
+					<label class="form-field">
+						<span class="form-label form-label--required">{pageContents.entityEditor.name[lang]}</span>
+						<input class="admin-input" type="text" bind:value={createVariantName} data-test="create-variant-name" />
+					</label>
+					<label class="form-field">
+						<span class="form-label">{pageContents.quickModal.createVariantSku[lang]}</span>
+						<input class="admin-input" type="text" bind:value={createVariantSku} data-test="create-variant-sku" />
+					</label>
+					<label class="form-field">
+						<span class="form-label">{pageContents.quickModal.createVariantBarcode[lang]}</span>
+						<input class="admin-input" type="text" bind:value={createVariantBarcode} data-test="create-variant-barcode" />
+					</label>
+					<div class="form-field">
+						<span class="form-label">{pageContents.quickModal.createVariantCategory[lang]}</span>
+						<Select
+							class="admin-filter-select"
+							bind:value={createVariantCategoryId}
+							options={categorySelectOptions}
+							searchable
+							clearable
+						/>
+					</div>
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button color="success" loading={createVariantSubmitting} disabled={createVariantSubmitting || !createVariantName.trim()} onclick={submitCreateVariantModal} data-test="create-variant-submit">
+						{pageContents.actions.submit[lang]}
+					</Button>
+					<Button color="default" variant="ghost" disabled={createVariantSubmitting} onclick={() => { createVariantDisplay = false; }}>
 						{pageContents.actions.cancel[lang]}
 					</Button>
 				</Modal.Container.Footer>
@@ -4859,6 +5030,47 @@
 		}
 	}
 
+	/* 2c: select variant + nút scan camera cạnh nhau (cột variant của grid) */
+	.po-item-variant {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+
+		& :global(.select-trigger) {
+			width: 100%;
+			min-width: 0;
+		}
+	}
+
+	/* 2c: Input barcode thu nhỏ — ẩn input text + chips, chỉ còn nút camera */
+	.po-item-scan-btn {
+		flex-shrink: 0;
+
+		/* ẩn khung input text + danh sách chips (root Input giữ lại cho nút camera) */
+		& :global(.input-root) {
+			display: flex;
+			flex-direction: row;
+			background: none;
+			border: none;
+			min-height: 0;
+			height: auto;
+			padding: 0;
+		}
+
+		& :global(.input-barcode-row input) {
+			display: none;
+		}
+
+		& :global(.input-barcode-check-wrap) {
+			display: none;
+		}
+
+		& :global(.input-barcode-list) {
+			display: none;
+		}
+	}
+
 	/* 3b: STT dòng nhập — số nhỏ, màu phụ, căn giữa */
 	.po-item-stt {
 		font-size: 0.75rem;
@@ -5224,7 +5436,7 @@
 	   step-2 (đã bỏ). Select trigger + input barcode xếp dọc, gap nhỏ. */
 	.full-item-picker {
 		display: grid;
-		grid-template-columns: 1fr auto;
+		grid-template-columns: 1fr auto auto;
 		gap: 0.5rem;
 		align-items: center;
 		margin-bottom: 0.75rem;
@@ -5235,6 +5447,33 @@
 
 		@media (max-width: 640px) {
 			grid-template-columns: 1fr;
+		}
+	}
+
+	/* 2c: nút scan camera thu nhỏ cạnh full picker (mirror .po-item-scan-btn) */
+	.full-item-scan-btn {
+		flex-shrink: 0;
+
+		& :global(.input-root) {
+			display: flex;
+			flex-direction: row;
+			background: none;
+			border: none;
+			min-height: 0;
+			height: auto;
+			padding: 0;
+		}
+
+		& :global(.input-barcode-row input) {
+			display: none;
+		}
+
+		& :global(.input-barcode-check-wrap) {
+			display: none;
+		}
+
+		& :global(.input-barcode-list) {
+			display: none;
 		}
 	}
 

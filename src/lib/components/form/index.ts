@@ -41,3 +41,6 @@ export { default as ImageUpload } from './image-upload/Main.svelte';
 // ImageUploadProps khai trong <script module> của Main.svelte — TS thuần không truy cập
 // được qua wildcard '*.svelte'. Ở đây chỉ re-export value component; type dùng trực tiếp
 // qua import type từ file .svelte tại nơi cần (vite-plugin-svelte chỉ expose default).
+
+export { AddressInput } from './address-input';
+export type { AddressInputProps, AddressBreakdown } from './address-input';

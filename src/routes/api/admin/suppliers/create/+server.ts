@@ -17,6 +17,15 @@ export const POST: RequestHandler = async (event) => {
 			name: string;
 			contactPerson?: string;
 			address?: string;
+			ward?: string;
+			district?: string;
+			province?: string;
+			country?: string;
+			phones?: string[];
+			emails?: string[];
+			zalo?: string;
+			facebook?: string;
+			avatarUrl?: string;
 			status: string;
 		}>(event);
 		if (!read.ok) return read.response;
@@ -56,6 +65,15 @@ export const POST: RequestHandler = async (event) => {
 			name: read.data.name,
 			contactPerson: read.data.contactPerson,
 			address: read.data.address,
+			ward: read.data.ward,
+			district: read.data.district,
+			province: read.data.province,
+			country: read.data.country,
+			phones: read.data.phones,
+			emails: read.data.emails,
+			zalo: read.data.zalo,
+			facebook: read.data.facebook,
+			avatarUrl: read.data.avatarUrl,
 			status: read.data.status
 		});
 

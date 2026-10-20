@@ -3,6 +3,7 @@
 	import { Button, DataTable, Pagination } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
+	import { AddressInput, EmailInput, ImageUpload, Input, PhoneInput } from '$components/form';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
 	import { formatDate as formatDateShared } from '$modules/i18n';
@@ -127,6 +128,18 @@
 			name: { vi: 'Tên nhà cung cấp', en: 'Supplier name' },
 			contact: { vi: 'Người liên hệ (tuỳ chọn)', en: 'Contact person (optional)' },
 			address: { vi: 'Địa chỉ (tuỳ chọn)', en: 'Address (optional)' },
+			addressPlaceholder: { vi: 'Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành...', en: 'House number, street, ward, district, province...' },
+			avatar: { vi: 'Ảnh đại diện (tuỳ chọn)', en: 'Avatar (optional)' },
+			phonePlaceholder: { vi: 'Số điện thoại', en: 'Phone number' },
+			addPhone: { vi: 'Thêm số điện thoại', en: 'Add phone number' },
+			removePhone: { vi: 'Xoá số điện thoại', en: 'Remove phone number' },
+			emailPlaceholder: { vi: 'Email', en: 'Email' },
+			addEmail: { vi: 'Thêm email', en: 'Add email' },
+			removeEmail: { vi: 'Xoá email', en: 'Remove email' },
+			zalo: { vi: 'Zalo (tuỳ chọn)', en: 'Zalo (optional)' },
+			zaloPlaceholder: { vi: 'Số Zalo hoặc link', en: 'Zalo number or link' },
+			facebook: { vi: 'Facebook (tuỳ chọn)', en: 'Facebook (optional)' },
+			facebookPlaceholder: { vi: 'Link Facebook', en: 'Facebook link' },
 			status: { vi: 'Trạng thái', en: 'Status' },
 			submit: { vi: 'Tạo', en: 'Create' }
 		},
@@ -232,12 +245,31 @@
 	let supplierModalDisplay = $state(false);
 	let supplierSubmitting = $state(false);
 	let supplierError = $state<string | undefined>(undefined);
-	let supplierForm = $state<{ name: string; contactPerson: string; address: string; status: string }>({
+	// Form đầy đủ: phones/emails (multiple), địa chỉ breakdown (tỉnh/huyện auto detect),
+	// avatarUrl (ImageUpload), zalo, facebook — tái sử dụng component hệ thống
+	let supplierForm = $state<{
+		name: string;
+		contactPerson: string;
+		address: string;
+		phones: string[];
+		emails: string[];
+		zalo: string;
+		facebook: string;
+		avatarUrl: string;
+		status: string;
+	}>({
 		name: '',
 		contactPerson: '',
 		address: '',
+		phones: [],
+		emails: [],
+		zalo: '',
+		facebook: '',
+		avatarUrl: '',
 		status: 'active'
 	});
+	// breakdown địa chỉ (province/district) — tách khỏi address string để bind 2 chiều với AddressInput
+	let supplierAddressBreakdown = $state<{ province: string; district: string }>({ province: '', district: '' });
 
 	// ── Modal tạo PO ──
 	let poModalDisplay = $state(false);
@@ -562,7 +594,8 @@
 
 	// ── Modal tạo nhà cung cấp ──
 	function openSupplierModal() {
-		supplierForm = { name: '', contactPerson: '', address: '', status: 'active' };
+		supplierForm = { name: '', contactPerson: '', address: '', phones: [], emails: [], zalo: '', facebook: '', avatarUrl: '', status: 'active' };
+		supplierAddressBreakdown = { province: '', district: '' };
 		supplierError = undefined;
 		supplierModalDisplay = true;
 	}
@@ -592,6 +625,15 @@
 						name: supplierForm.name.trim(),
 						contactPerson: supplierForm.contactPerson.trim() || undefined,
 						address: supplierForm.address.trim() || undefined,
+						ward: undefined,
+						district: supplierAddressBreakdown.district || undefined,
+						province: supplierAddressBreakdown.province || undefined,
+						country: supplierAddressBreakdown.province ? 'Việt Nam' : undefined,
+						phones: supplierForm.phones.length > 0 ? supplierForm.phones : undefined,
+						emails: supplierForm.emails.length > 0 ? supplierForm.emails : undefined,
+						zalo: supplierForm.zalo.trim() || undefined,
+						facebook: supplierForm.facebook.trim() || undefined,
+						avatarUrl: supplierForm.avatarUrl.trim() || undefined,
 						status: supplierForm.status
 					}
 				},
@@ -931,7 +973,7 @@
 
 <!-- ── Modal tạo nhà cung cấp ── -->
 {#if supplierModalDisplay}
-	<Modal bind:display={supplierModalDisplay} size="sm" isDimissable>
+	<Modal bind:display={supplierModalDisplay} size="lg" isDimissable>
 		<Modal.Container>
 			<Modal.Container.Header>{pageContents.supplierModal.title[lang]}</Modal.Container.Header>
 			<Modal.Container.Body>
@@ -939,18 +981,88 @@
 					<div class="form-error-banner" role="alert">{supplierError}</div>
 				{/if}
 				<div class="form-grid">
-					<label class="form-field">
-						<span class="form-label">{pageContents.supplierModal.name[lang]}</span>
-						<input class="admin-input" type="text" bind:value={supplierForm.name} disabled={supplierSubmitting} />
-					</label>
-					<label class="form-field">
-						<span class="form-label">{pageContents.supplierModal.contact[lang]}</span>
-						<input class="admin-input" type="text" bind:value={supplierForm.contactPerson} disabled={supplierSubmitting} />
-					</label>
-					<label class="form-field">
-						<span class="form-label">{pageContents.supplierModal.address[lang]}</span>
-						<input class="admin-input" type="text" bind:value={supplierForm.address} disabled={supplierSubmitting} />
-					</label>
+					<div class="form-grid-2">
+						<label class="form-field">
+							<span class="form-label">{pageContents.supplierModal.name[lang]}</span>
+							<input class="admin-input" type="text" bind:value={supplierForm.name} disabled={supplierSubmitting} />
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.supplierModal.contact[lang]}</span>
+							<input class="admin-input" type="text" bind:value={supplierForm.contactPerson} disabled={supplierSubmitting} />
+						</label>
+					</div>
+					<div class="form-grid-2">
+						<div class="form-field">
+							<span class="form-label">{pageContents.supplierModal.avatar[lang]}</span>
+							<ImageUpload bind:value={supplierForm.avatarUrl} label="" disabled={supplierSubmitting} />
+						</div>
+						<div class="form-grid" style="gap: 0.5rem;">
+							<!-- phones multiple: PhoneInput per slot + nút thêm/xoá -->
+							{#each supplierForm.phones as _, phoneIndex (phoneIndex)}
+								<div class="field-row">
+									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
+									<button
+										type="button"
+										class="field-row-remove"
+										aria-label={pageContents.supplierModal.removePhone[lang]}
+										disabled={supplierSubmitting}
+										onclick={() => {
+											supplierForm.phones = supplierForm.phones.filter((_, i) => i !== phoneIndex);
+										}}
+									>✕</button>
+								</div>
+							{/each}
+							<button
+								type="button"
+								class="field-add"
+								disabled={supplierSubmitting}
+								onclick={() => {
+									supplierForm.phones = [...supplierForm.phones, ''];
+								}}
+							>+ {pageContents.supplierModal.addPhone[lang]}</button>
+							<!-- emails multiple -->
+							{#each supplierForm.emails as _, emailIndex (emailIndex)}
+								<div class="field-row">
+									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
+									<button
+										type="button"
+										class="field-row-remove"
+										aria-label={pageContents.supplierModal.removeEmail[lang]}
+										disabled={supplierSubmitting}
+										onclick={() => {
+											supplierForm.emails = supplierForm.emails.filter((_, i) => i !== emailIndex);
+										}}
+									>✕</button>
+								</div>
+							{/each}
+							<button
+								type="button"
+								class="field-add"
+								disabled={supplierSubmitting}
+								onclick={() => {
+									supplierForm.emails = [...supplierForm.emails, ''];
+								}}
+							>+ {pageContents.supplierModal.addEmail[lang]}</button>
+						</div>
+					</div>
+					<!-- Địa chỉ: auto complete nhận dạng chuỗi → chọn tỉnh/huyện qua select/option -->
+					<AddressInput
+						bind:value={supplierForm.address}
+						bind:breakdown={supplierAddressBreakdown}
+						label={pageContents.supplierModal.address[lang]}
+						placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
+						disabled={supplierSubmitting}
+					/>
+					<div class="form-grid-2">
+						<label class="form-field">
+							<span class="form-label">{pageContents.supplierModal.zalo[lang]}</span>
+							<input class="admin-input" type="text" bind:value={supplierForm.zalo} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.zaloPlaceholder[lang]} />
+						</label>
+						<label class="form-field">
+							<span class="form-label">{pageContents.supplierModal.facebook[lang]}</span>
+							<input class="admin-input" type="text" bind:value={supplierForm.facebook} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.facebookPlaceholder[lang]} />
+						</label>
+					</div>
 					<label class="form-field">
 						<span class="form-label">{pageContents.supplierModal.status[lang]}</span>
 						<select class="admin-select" bind:value={supplierForm.status} disabled={supplierSubmitting}>
@@ -1326,6 +1438,65 @@
 	.form-grid {
 		display: grid;
 		gap: 0.75rem;
+	}
+
+	/* hàng phone/email + nút xoá */
+	.field-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+
+		& > :global(.input-root) {
+			flex: 1;
+			min-width: 0;
+		}
+	}
+
+	.field-row-remove {
+		flex: none;
+		width: 1.75rem;
+		height: 1.75rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid var(--border, #e5e7eb);
+		border-radius: 0.375rem;
+		background: transparent;
+		color: var(--foreground-500, inherit);
+		cursor: pointer;
+		font-size: 0.8125rem;
+		transition: background 0.15s ease, color 0.15s ease;
+
+		&:hover:not(:disabled) {
+			background: color-mix(in oklab, var(--error) 10%, transparent);
+			color: var(--error);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	.field-add {
+		align-self: flex-start;
+		padding: 0.25rem 0.5rem;
+		border: 1px dashed var(--border, #d1d5db);
+		border-radius: 0.375rem;
+		background: transparent;
+		color: var(--primary-600, var(--primary));
+		font-size: 0.8125rem;
+		cursor: pointer;
+		transition: background 0.15s ease;
+
+		&:hover:not(:disabled) {
+			background: color-mix(in oklab, var(--primary) 8%, transparent);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
 	}
 
 	.form-grid-2 {
