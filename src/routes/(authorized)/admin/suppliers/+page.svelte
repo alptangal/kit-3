@@ -1,23 +1,39 @@
 <!-- src/routes/(authorized)/admin/suppliers/+page.svelte -->
 <script lang="ts">
-	import { Button, DataTable, Pagination } from '$components/element';
+	import { Button, DataTable, Pagination, AlertDialog } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
 	import { AddressInput, EmailInput, ImageUpload, Input, PhoneInput } from '$components/form';
+	import { Icon } from '$components/element/icon';
+	import { iconify } from '$assets/icons/iconify';
+	import type { Size } from '$components/interface';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
 	import { formatDate as formatDateShared } from '$modules/i18n';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolveServerMessage } from '../_interface';
+	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs } from '$store/user-prefs.svelte';
+	import { createCloseGuard } from '$modules/close-guard.svelte';
 
 	interface SupplierRow {
 		_id?: string;
 		name?: string;
 		contactPerson?: string | null;
 		address?: string | null;
+		phones?: string[] | null;
+		emails?: string[] | null;
+		addresses?: SupplierAddressEntry[] | null;
 		status?: string;
 		createdAt?: string | null;
+	}
+
+	interface SupplierAddressEntry {
+		label?: string;
+		address: string;
+		province?: string;
+		district?: string;
+		country?: string;
 	}
 
 	interface PurchaseOrderRow {
@@ -85,7 +101,9 @@
 			contact: { vi: 'Người liên hệ', en: 'Contact' },
 			address: { vi: 'Địa chỉ', en: 'Address' },
 			status: { vi: 'Trạng thái', en: 'Status' },
-			createdAt: { vi: 'Tạo lúc', en: 'Created' }
+			createdAt: { vi: 'Tạo lúc', en: 'Created' },
+			updatedAt: { vi: 'Cập nhật', en: 'Updated' },
+			actions: { vi: 'Thao tác', en: 'Actions' }
 		},
 		poTable: {
 			code: { vi: 'Mã PO', en: 'PO code' },
@@ -106,7 +124,8 @@
 		actions: {
 			createSupplier: { vi: 'Tạo nhà cung cấp', en: 'Create supplier' },
 			createPO: { vi: 'Tạo đơn mua', en: 'Create PO' },
-			updateStatus: { vi: 'Cập nhật trạng thái', en: 'Update status' }
+			updateStatus: { vi: 'Cập nhật trạng thái', en: 'Update status' },
+			edit: { vi: 'Sửa', en: 'Edit' }
 		},
 		states: {
 			loading: { vi: 'Đang tải dữ liệu…', en: 'Loading data…' },
@@ -125,10 +144,15 @@
 		},
 		supplierModal: {
 			title: { vi: 'Tạo nhà cung cấp', en: 'Create supplier' },
+			titleEdit: { vi: 'Sửa nhà cung cấp', en: 'Edit supplier' },
 			name: { vi: 'Tên nhà cung cấp', en: 'Supplier name' },
 			contact: { vi: 'Người liên hệ (tuỳ chọn)', en: 'Contact person (optional)' },
 			address: { vi: 'Địa chỉ (tuỳ chọn)', en: 'Address (optional)' },
 			addressPlaceholder: { vi: 'Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành...', en: 'House number, street, ward, district, province...' },
+			addresses: { vi: 'Danh sách địa chỉ', en: 'Addresses' },
+			addAddress: { vi: 'Thêm địa chỉ', en: 'Add address' },
+			removeAddress: { vi: 'Xoá địa chỉ', en: 'Remove address' },
+			addressLabelPlaceholder: { vi: 'Nhãn (vd: Kho, Văn phòng...)', en: 'Label (e.g. Warehouse, Office...)' },
 			avatar: { vi: 'Ảnh đại diện (tuỳ chọn)', en: 'Avatar (optional)' },
 			phonePlaceholder: { vi: 'Số điện thoại', en: 'Phone number' },
 			addPhone: { vi: 'Thêm số điện thoại', en: 'Add phone number' },
@@ -136,12 +160,23 @@
 			emailPlaceholder: { vi: 'Email', en: 'Email' },
 			addEmail: { vi: 'Thêm email', en: 'Add email' },
 			removeEmail: { vi: 'Xoá email', en: 'Remove email' },
-			zalo: { vi: 'Zalo (tuỳ chọn)', en: 'Zalo (optional)' },
-			zaloPlaceholder: { vi: 'Số Zalo hoặc link', en: 'Zalo number or link' },
-			facebook: { vi: 'Facebook (tuỳ chọn)', en: 'Facebook (optional)' },
-			facebookPlaceholder: { vi: 'Link Facebook', en: 'Facebook link' },
+			social: { vi: 'Mạng xã hội', en: 'Social networks' },
+			zalo: { vi: 'Zalo', en: 'Zalo' },
+			zaloPlaceholder: { vi: 'Số Zalo hoặc link zalo.me/...', en: 'Zalo number or zalo.me/... link' },
+			zaloInvalid: { vi: 'Zalo phải là số điện thoại hoặc link zalo.me', en: 'Zalo must be a phone number or zalo.me link' },
+			telegram: { vi: 'Telegram', en: 'Telegram' },
+			telegramPlaceholder: { vi: '@username hoặc link t.me/...', en: '@username or t.me/... link' },
+			telegramInvalid: { vi: 'Telegram phải là @username hoặc link t.me', en: 'Telegram must be @username or t.me link' },
+			discord: { vi: 'Discord', en: 'Discord' },
+			discordPlaceholder: { vi: 'Tên người dùng Discord', en: 'Discord username' },
+			discordInvalid: { vi: 'Discord chỉ nhận tên người dùng (2-32 ký tự)', en: 'Discord accepts username only (2-32 chars)' },
+			facebook: { vi: 'Facebook', en: 'Facebook' },
+			facebookPlaceholder: { vi: 'Link facebook.com/...', en: 'facebook.com/... link' },
+			facebookInvalid: { vi: 'Facebook phải là link facebook.com hoặc fb.com', en: 'Facebook must be a facebook.com or fb.com link' },
 			status: { vi: 'Trạng thái', en: 'Status' },
-			submit: { vi: 'Tạo', en: 'Create' }
+			submit: { vi: 'Tạo', en: 'Create' },
+			save: { vi: 'Lưu thay đổi', en: 'Save changes' },
+			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' }
 		},
 		poModal: {
 			title: { vi: 'Tạo đơn mua hàng', en: 'Create purchase order' },
@@ -171,14 +206,35 @@
 		toasts: {
 			supplierCreated: { vi: 'Đã tạo nhà cung cấp', en: 'Supplier created' },
 			supplierFailed: { vi: 'Tạo nhà cung cấp không thành công', en: 'Failed to create supplier' },
+			supplierUpdated: { vi: 'Đã cập nhật nhà cung cấp', en: 'Supplier updated' },
+			supplierUpdateFailed: { vi: 'Cập nhật nhà cung cấp không thành công', en: 'Failed to update supplier' },
+			urlCopied: { vi: 'Đã copy URL ảnh', en: 'Image URL copied' },
 			poCreated: { vi: 'Đã tạo đơn mua hàng', en: 'Purchase order created' },
 			poFailed: { vi: 'Tạo đơn mua không thành công', en: 'Failed to create purchase order' },
 			statusUpdated: { vi: 'Đã cập nhật trạng thái', en: 'Status updated' },
 			statusFailed: { vi: 'Cập nhật trạng thái không thành công', en: 'Failed to update status' },
 			requestFailed: { vi: 'Đã xảy ra lỗi không xác định', en: 'Unexpected error occurred' }
 		},
+		dirty: {
+			title: { vi: 'Bỏ thay đổi?', en: 'Discard changes?' },
+			desc: {
+				vi: 'Form của bạn có thay đổi chưa lưu. Nếu bỏ bây giờ, các thay đổi này sẽ mất.',
+				en: 'Your form has unsaved changes. If you discard now, these changes will be lost.'
+			},
+			continueEdit: { vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' },
+			discard: { vi: 'Bỏ thay đổi', en: 'Discard' }
+		},
+		suggest: {
+			title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' }
+		},
 		form: {
 			requireName: { vi: 'Vui lòng nhập tên nhà cung cấp', en: 'Please enter a supplier name' },
+			invalidPhone: { vi: 'Số điện thoại không hợp lệ', en: 'Invalid phone number' },
+			invalidEmail: { vi: 'Email không hợp lệ', en: 'Invalid email' },
+			invalidZalo: { vi: 'Zalo phải là số điện thoại hoặc link zalo.me', en: 'Zalo must be a phone number or zalo.me link' },
+			invalidTelegram: { vi: 'Telegram phải là @username hoặc link t.me', en: 'Telegram must be @username or t.me link' },
+			invalidDiscord: { vi: 'Discord chỉ nhận tên người dùng (2-32 ký tự)', en: 'Discord accepts username only (2-32 chars)' },
+			invalidFacebook: { vi: 'Facebook phải là link facebook.com hoặc fb.com', en: 'Facebook must be a facebook.com or fb.com link' },
 			requireCode: { vi: 'Vui lòng nhập mã PO', en: 'Please enter a PO code' },
 			requireSupplier: { vi: 'Vui lòng chọn nhà cung cấp', en: 'Please select a supplier' },
 			requireBranch: { vi: 'Vui lòng chọn chi nhánh', en: 'Please select a branch' },
@@ -238,22 +294,40 @@
 	let poBranchFilter = $state('');
 	let poSupplierFilter = $state('');
 
+	// ── Search server + sort server (pattern purchases) ──
+	const PREFS_KEY = '/admin/suppliers';
+	let searchQuery = $state<string | undefined>('');
+	let searching = $state(false);
+	let searchDebounce: ReturnType<typeof setTimeout>;
+	let searchArmed = false;
+	let suggestOpen = $state(false);
+	let searchFocused = $state(false);
+	let mobileFabOpen = $state(false);
+	let sortField = $state('');
+	let sortDirection = $state<'asc' | 'desc'>('desc');
+
 	let branches = $state<BranchOption[]>([]);
 	let variantOptions = $state<VariantOption[]>([]);
 
-	// ── Modal tạo nhà cung cấp ──
+	// ── Modal tạo/sửa nhà cung cấp ──
 	let supplierModalDisplay = $state(false);
 	let supplierSubmitting = $state(false);
 	let supplierError = $state<string | undefined>(undefined);
-	// Form đầy đủ: phones/emails (multiple), địa chỉ breakdown (tỉnh/huyện auto detect),
-	// avatarUrl (ImageUpload), zalo, facebook — tái sử dụng component hệ thống
+	// 'create' | 'edit' — cùng 1 form; edit prefill từ row + Lưu qua /suppliers/update
+	let supplierEditMode = $state<'create' | 'edit'>('create');
+	let supplierEditId = $state<string | null>(null);
+	// Form đầy đủ: phones/emails (multiple), addresses (multiple block), social
+	// (zalo/telegram/discord/facebook), avatarUrl (ImageUpload)
 	let supplierForm = $state<{
 		name: string;
 		contactPerson: string;
 		address: string;
 		phones: string[];
 		emails: string[];
+		addresses: SupplierAddressEntry[];
 		zalo: string;
+		telegram: string;
+		discord: string;
 		facebook: string;
 		avatarUrl: string;
 		status: string;
@@ -263,13 +337,29 @@
 		address: '',
 		phones: [],
 		emails: [],
+		addresses: [],
 		zalo: '',
+		telegram: '',
+		discord: '',
 		facebook: '',
 		avatarUrl: '',
 		status: 'active'
 	});
 	// breakdown địa chỉ (province/district) — tách khỏi address string để bind 2 chiều với AddressInput
 	let supplierAddressBreakdown = $state<{ province: string; district: string }>({ province: '', district: '' });
+	// breakdown cho từng entry addresses (AddressInput bind 2 chiều từng phần tử)
+	let supplierAddressBreakdowns = $state<{ province: string; district: string }[]>([]);
+
+	// ── Dirty-guard (pattern brands: createCloseGuard + AlertDialog) ──
+	let dirtyCloseDisplay = $state(false);
+	const closeGuard = createCloseGuard({
+		form: () => supplierForm,
+		openConfirm: () => (dirtyCloseDisplay = true),
+		close: () => {
+			supplierModalDisplay = false;
+			dirtyCloseDisplay = false;
+		}
+	});
 
 	// ── Modal tạo PO ──
 	let poModalDisplay = $state(false);
@@ -335,6 +425,71 @@
 			? pageContents.pagination.totalCountSuppliers[lang].replace('{total}', String(suppliersTotal))
 			: pageContents.pagination.totalCountPOs[lang].replace('{total}', String(posTotal))
 	);
+
+	// ── Search debounce 300ms (pattern purchases): effect + armed-guard —
+	// lần chạy đầu (init) không fetch; các lần sau searching=true → skeleton,
+	// reset page=1 rồi load. Chỉ áp dụng cho tab suppliers.
+	let cardFieldIds = $state<string[]>(['name', 'status', 'contact', 'address']);
+
+	$effect(() => {
+		void searchQuery;
+		if (activeTab !== 'suppliers') return;
+		if (!searchArmed) {
+			searchArmed = true;
+			return;
+		}
+		clearTimeout(searchDebounce);
+		searching = true;
+		searchDebounce = setTimeout(() => {
+			suppliersPage = 1;
+			currentPagingPage = 1;
+			void loadSuppliers();
+		}, 300);
+	});
+
+	// BẪY: card mode mobile unmount Input trong caption → emit undefined qua
+	// bind:value. Guard mọi chỗ đọc searchQuery bằng (searchQuery ?? '').
+	function saveSearchKeyword() {
+		const kw = (searchQuery ?? '').trim();
+		if (kw) recordSearchKeyword(PREFS_KEY, kw);
+	}
+
+	function mergeIconClasses(
+		styles: ReadonlyArray<string | undefined> | undefined,
+		extra: string
+	): string[] {
+		return [...(styles ?? []).filter((c): c is string => typeof c === 'string'), extra];
+	}
+
+	// ── Sort server handler (DataTable onSortChange) — persist prefs + reload ──
+	function onSupplierSortChange(columnId: string, order: 'asc' | 'desc' | null) {
+		if (!order || !columnId) {
+			sortField = '';
+			sortDirection = 'desc';
+		} else {
+			sortField = columnId;
+			sortDirection = order;
+		}
+		saveDataTablePrefs(PREFS_KEY, {
+			sort: sortField ? { field: sortField, direction: sortDirection } : undefined,
+			cardFields: cardFieldIds
+		});
+		searching = true; // skeleton cả khi sort lại
+		suppliersPage = 1;
+		currentPagingPage = 1;
+		void loadSuppliers();
+	}
+
+	// ── Filter tab suppliers: persist filters + searching skeleton ──
+	async function onSupplierFilterChange() {
+		saveDataTablePrefs(PREFS_KEY, {
+			filters: { status: supplierStatusFilter || null },
+			cardFields: cardFieldIds
+		});
+		suppliersPage = 1;
+		currentPagingPage = 1;
+		await loadSuppliers();
+	}
 
 	function getBranchLabel(branchId?: string | null): string {
 		if (!branchId) return '—';
@@ -413,12 +568,16 @@
 					body: {
 						page: suppliersPage,
 						pageSize,
-						status: supplierStatusFilter || undefined
+						status: supplierStatusFilter || undefined,
+						search: (searchQuery ?? '').trim() || undefined,
+						sortField: sortField || undefined,
+						sortDirection: sortField ? sortDirection : undefined
 					}
 				},
 				encryptionKeys
 			);
 			suppliersLoading = false;
+			searching = false;
 			if (response.ok) {
 				const data = response.data as
 					| { items?: SupplierRow[]; total?: number; page?: number }
@@ -432,6 +591,7 @@
 			}
 		} catch (err) {
 			suppliersLoading = false;
+			searching = false;
 			suppliersError = resolveServerMessage(undefined, lang, pageContents.states.errorTitleSuppliers);
 			if (import.meta.env.DEV) console.error('[admin/suppliers] load suppliers failed:', err);
 		}
@@ -502,7 +662,10 @@
 	}
 
 	async function onFilterChange() {
-		suppliersPage = 1;
+		if (activeTab === 'suppliers') {
+			await onSupplierFilterChange();
+			return;
+		}
 		posPage = 1;
 		await refresh();
 	}
@@ -514,18 +677,25 @@
 			id: 'name',
 			label: pageContents.supplierTable.name[lang],
 			sortable: true,
+			width: '220px',
 			accessor: (row) => (row as unknown as SupplierRow).name ?? '—'
 		},
 		{
 			id: 'contact',
 			label: pageContents.supplierTable.contact[lang],
 			sortable: true,
-			accessor: (row) => (row as unknown as SupplierRow).contactPerson ?? '—'
+			accessor: (row) => {
+				const r = row as unknown as SupplierRow;
+				return r.contactPerson || r.phones?.[0] || '—';
+			}
 		},
 		{
 			id: 'address',
 			label: pageContents.supplierTable.address[lang],
-			accessor: (row) => (row as unknown as SupplierRow).address ?? '—',
+			accessor: (row) => {
+				const r = row as unknown as SupplierRow;
+				return r.address || r.addresses?.[0]?.address || '—';
+			},
 			noHighlight: true
 		},
 		{
@@ -544,6 +714,13 @@
 			label: pageContents.supplierTable.createdAt[lang],
 			sortable: true,
 			accessor: (row) => formatDate((row as unknown as SupplierRow).createdAt),
+			noHighlight: true
+		},
+		{
+			id: 'updatedAt',
+			label: pageContents.supplierTable.updatedAt[lang],
+			sortable: true,
+			accessor: (row) => formatDate((row as unknown as SupplierRow & { updatedAt?: string | null }).updatedAt),
 			noHighlight: true
 		}
 	]);
@@ -592,19 +769,140 @@
 		}
 	]);
 
-	// ── Modal tạo nhà cung cấp ──
+	// ── Modal tạo/sửa nhà cung cấp ──
+	function emptySupplierForm() {
+		return {
+			name: '',
+			contactPerson: '',
+			address: '',
+			phones: [] as string[],
+			emails: [] as string[],
+			addresses: [] as SupplierAddressEntry[],
+			zalo: '',
+			telegram: '',
+			discord: '',
+			facebook: '',
+			avatarUrl: '',
+			status: 'active'
+		};
+	}
+
 	function openSupplierModal() {
-		supplierForm = { name: '', contactPerson: '', address: '', phones: [], emails: [], zalo: '', facebook: '', avatarUrl: '', status: 'active' };
+		supplierEditMode = 'create';
+		supplierEditId = null;
+		supplierForm = emptySupplierForm();
 		supplierAddressBreakdown = { province: '', district: '' };
+		supplierAddressBreakdowns = [];
 		supplierError = undefined;
 		supplierModalDisplay = true;
+		closeGuard.markClean();
 	}
+
+	// ── Edit: prefill form từ row của bảng (dùng chung form với create) ──
+	function openSupplierEditModal(row: Record<string, unknown>) {
+		const r = row as unknown as SupplierRow;
+		supplierEditMode = 'edit';
+		supplierEditId = r._id ?? null;
+		supplierForm = {
+			name: r.name ?? '',
+			contactPerson: r.contactPerson ?? '',
+			address: r.address ?? '',
+			phones: [...(r.phones ?? [])],
+			emails: [...(r.emails ?? [])],
+			addresses: (r.addresses ?? []).map((a) => ({ ...a })),
+			zalo: (r as Record<string, unknown>).zalo as string | undefined ?? '',
+			telegram: (r as Record<string, unknown>).telegram as string | undefined ?? '',
+			discord: (r as Record<string, unknown>).discord as string | undefined ?? '',
+			facebook: (r as Record<string, unknown>).facebook as string | undefined ?? '',
+			avatarUrl: (r as Record<string, unknown>).avatarUrl as string | undefined ?? '',
+			status: r.status ?? 'active'
+		};
+		// breakdown = address chính (entry đầu của addresses nếu có, ngược lại rỗng)
+		const firstAddr = supplierForm.addresses[0];
+		supplierAddressBreakdown = {
+			province: firstAddr?.province ?? '',
+			district: firstAddr?.district ?? ''
+		};
+		supplierAddressBreakdowns = supplierForm.addresses.map((a) => ({
+			province: a.province ?? '',
+			district: a.district ?? ''
+		}));
+		supplierError = undefined;
+		supplierModalDisplay = true;
+		closeGuard.markClean();
+	}
+
+	// ── Validate social theo từng mạng + phone/email (regex thuần trang tự giữ) ──
+	const PHONE_RE = /^(\+?84|0)(\d{8,10})$/;
+	const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	const ZALO_RE = /^(\+?84|0)\d{8,10}$|^https?:\/\/(zalo\.me\/\S+)$/i;
+	const TELEGRAM_RE = /^@[A-Za-z0-9_]{4,32}$|^https?:\/\/(t\.me\/\S+)$/i;
+	const DISCORD_RE = /^[A-Za-z0-9._]{2,32}$/;
+	const FACEBOOK_RE = /^https?:\/\/(www\.)?(facebook\.com|fb\.com)\/\S+$/i;
 
 	function validateSupplierForm(): string | undefined {
 		if (!supplierForm.name.trim()) {
 			return pageContents.form.requireName[lang];
 		}
+		const t = supplierForm;
+		if (t.phones.some((p) => p.trim() && !PHONE_RE.test(p.trim()))) return pageContents.form.invalidPhone[lang];
+		if (t.emails.some((e) => e.trim() && !EMAIL_RE.test(e.trim()))) return pageContents.form.invalidEmail[lang];
+		if (t.zalo.trim() && !ZALO_RE.test(t.zalo.trim())) return pageContents.form.invalidZalo[lang];
+		if (t.telegram.trim() && !TELEGRAM_RE.test(t.telegram.trim())) return pageContents.form.invalidTelegram[lang];
+		if (t.discord.trim() && !DISCORD_RE.test(t.discord.trim())) return pageContents.form.invalidDiscord[lang];
+		if (t.facebook.trim() && !FACEBOOK_RE.test(t.facebook.trim())) return pageContents.form.invalidFacebook[lang];
 		return undefined;
+	}
+
+	// ── STT tag + cảnh báo trùng: trả map value→số lần xuất hiện (>=2 = dup) ──
+	function countDuplicates(values: string[]): Map<string, number> {
+		const counts = new Map<string, number>();
+		for (const v of values) {
+			const key = v.trim().toLowerCase();
+			if (!key) continue;
+			counts.set(key, (counts.get(key) ?? 0) + 1);
+		}
+		return counts;
+	}
+
+	const phoneDupCounts = $derived(countDuplicates(supplierForm.phones));
+	const emailDupCounts = $derived(countDuplicates(supplierForm.emails));
+	const addressDupCounts = $derived(countDuplicates(supplierForm.addresses.map((a) => a.address ?? '')));
+	const hasDuplicates = $derived(
+		[...phoneDupCounts.values(), ...emailDupCounts.values(), ...addressDupCounts.values()].some((n) => n >= 2)
+	);
+
+	function buildSupplierPayload() {
+		const t = supplierForm;
+		// breakdown từng entry (bind 2 chiều với AddressInput) merge lại vào addresses
+		const entries = t.addresses.map((a, i) => {
+			const bd = supplierAddressBreakdowns[i];
+			return {
+				label: (a.label ?? '').trim() || undefined,
+				address: (a.address ?? '').trim(),
+				province: (bd?.province || a.province || '').trim() || undefined,
+				district: (bd?.district || a.district || '').trim() || undefined,
+				country: (bd?.province || a.province || '').trim() ? 'Việt Nam' : undefined
+			};
+		});
+		return {
+			name: t.name.trim(),
+			contactPerson: t.contactPerson.trim() || undefined,
+			address: t.address.trim() || undefined,
+			ward: undefined,
+			district: supplierAddressBreakdown.district || undefined,
+			province: supplierAddressBreakdown.province || undefined,
+			country: supplierAddressBreakdown.province ? 'Việt Nam' : undefined,
+			phones: t.phones.map((p) => p.trim()).filter(Boolean),
+			emails: t.emails.map((e) => e.trim()).filter(Boolean),
+			addresses: entries.filter((a) => a.address),
+			zalo: t.zalo.trim() || undefined,
+			telegram: t.telegram.trim() || undefined,
+			discord: t.discord.trim() || undefined,
+			facebook: t.facebook.trim() || undefined,
+			avatarUrl: t.avatarUrl.trim() || undefined,
+			status: t.status
+		};
 	}
 
 	async function submitSupplier() {
@@ -617,25 +915,14 @@
 		supplierError = undefined;
 		supplierSubmitting = true;
 		try {
+			const isEdit = supplierEditMode === 'edit' && !!supplierEditId;
 			const response = await encryption.fetchSecure(
-				'/api/admin/suppliers/create',
+				isEdit ? '/api/admin/suppliers/update' : '/api/admin/suppliers/create',
 				{
 					method: 'POST',
-					body: {
-						name: supplierForm.name.trim(),
-						contactPerson: supplierForm.contactPerson.trim() || undefined,
-						address: supplierForm.address.trim() || undefined,
-						ward: undefined,
-						district: supplierAddressBreakdown.district || undefined,
-						province: supplierAddressBreakdown.province || undefined,
-						country: supplierAddressBreakdown.province ? 'Việt Nam' : undefined,
-						phones: supplierForm.phones.length > 0 ? supplierForm.phones : undefined,
-						emails: supplierForm.emails.length > 0 ? supplierForm.emails : undefined,
-						zalo: supplierForm.zalo.trim() || undefined,
-						facebook: supplierForm.facebook.trim() || undefined,
-						avatarUrl: supplierForm.avatarUrl.trim() || undefined,
-						status: supplierForm.status
-					}
+					body: isEdit
+						? { supplierId: supplierEditId, patch: buildSupplierPayload() }
+						: buildSupplierPayload()
 				},
 				encryptionKeys
 			);
@@ -643,19 +930,20 @@
 			if (response.ok) {
 				showToast(
 					response.message
-						? resolveServerMessage(response.message, lang, pageContents.toasts.supplierCreated)
-						: pageContents.toasts.supplierCreated[lang],
+						? resolveServerMessage(response.message, lang, isEdit ? pageContents.toasts.supplierUpdated : pageContents.toasts.supplierCreated)
+						: isEdit ? pageContents.toasts.supplierUpdated[lang] : pageContents.toasts.supplierCreated[lang],
 					'success'
 				);
+				closeGuard.markClean(); // đóng programmatic không qua onCloseAttempt
 				supplierModalDisplay = false;
 				await loadSuppliers();
 			} else {
-				supplierError = resolveServerMessage(response.message, lang, pageContents.toasts.supplierFailed);
+				supplierError = resolveServerMessage(response.message, lang, isEdit ? pageContents.toasts.supplierUpdateFailed : pageContents.toasts.supplierFailed);
 			}
 		} catch (err) {
 			supplierSubmitting = false;
 			supplierError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
-			if (import.meta.env.DEV) console.error('[admin/suppliers] create supplier failed:', err);
+			if (import.meta.env.DEV) console.error('[admin/suppliers] submit supplier failed:', err);
 		}
 	}
 
@@ -785,6 +1073,13 @@
 
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
+		// Restore prefs TRƯỚC load (pattern purchases): sort + cardFields
+		const prefs = userPrefs.datatable?.[PREFS_KEY];
+		if (prefs?.sort?.field) {
+			sortField = prefs.sort.field;
+			sortDirection = prefs.sort.direction === 'asc' ? 'asc' : 'desc';
+		}
+		cardFieldIds = prefs?.cardFields?.length ? [...prefs.cardFields] : ['name', 'status', 'contact', 'address'];
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadBranches(), loadSuppliers()]);
@@ -879,7 +1174,10 @@
 				<Button color="primary" variant="outline" onClick={loadSuppliers}>{pageContents.states.retry[lang]}</Button>
 			</div>
 		{:else}
-			<!-- DataTable — server-side paging: paging trong DataTable TẮT -->
+			<!-- DataTable — server-side paging + server sort + server search:
+					paging trong DataTable TẮT (Pagination footer), sort/search qua
+					onSortChange/captionTools (pattern purchases). Card mode mobile qua
+					cardFields + mobileTapMode="callback". -->
 			<div class="admin-table-wrap">
 				<DataTable
 					data={suppliersAny}
@@ -887,17 +1185,106 @@
 					pageSize={pageSize}
 					showPagination={false}
 					sortable
-					searchable
-					searchPlaceholder={{ vi: 'Tìm nhà cung cấp…', en: 'Search suppliers…' }}
+					sortMode="server"
+					bind:sortColumn={sortField}
+					bind:sortDirection={sortDirection}
+					onSortChange={onSupplierSortChange}
 					resizable={{ enabled: true, fit: true }}
-					loading={suppliersLoading && !suppliersLoadedOnce}
+					loading={suppliersLoading && !suppliersLoadedOnce || searching}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptySuppliers[lang]}
 					loadingLabel={pageContents.states.loading[lang]}
 					caption={{ vi: 'Danh sách nhà cung cấp', en: 'Suppliers list' }}
+					captionDescription={{ vi: 'Tìm kiếm, sắp xếp và quản lý nhà cung cấp', en: 'Search, sort and manage suppliers' }}
+					cardFields={cardFieldIds}
+					mobileTapMode="callback"
+					onRowClick={(row) => openSupplierEditModal(row)}
+					actionsLabel={{ vi: pageContents.supplierTable.actions[lang], en: pageContents.supplierTable.actions[lang] }}
 					stickyHead
 					data-test="suppliers-datatable"
-				/>
+				>
+					{#snippet captionTools()}
+						<!-- BẪY: searchQuery có thể undefined (card mode unmount Input) → ?? '' -->
+						<div class="admin-search" data-suggest>
+							<Input
+								type="text"
+								size="sm"
+								placeholder={{ vi: 'Tìm NCC, SĐT, email…', en: 'Search name, phone, email…' }}
+								bind:value={searchQuery}
+								events={[
+									{
+										events: {
+											focus: {
+												handler() {
+													searchFocused = true;
+													suggestOpen = true;
+												}
+											},
+											blur: {
+												handler() {
+													searchFocused = false;
+													saveSearchKeyword();
+												}
+											}
+										}
+									}
+								]}
+							>
+								{#snippet leading(data)}
+									<Icon
+										icon={iconify['search-rounded']}
+										size={(data?.size ?? 'sm') as Size}
+										class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+									/>
+								{/snippet}
+							</Input>
+							{#if (searchQuery ?? '').length > 0}
+								<button
+									type="button"
+									class="admin-search-clear"
+									aria-label={lang === 'vi' ? 'Xoá từ khoá tìm kiếm' : 'Clear search keyword'}
+									data-test="suppliers-search-clear"
+									onclick={() => {
+										if (searchQuery) searchQuery = '';
+									}}
+								>
+									<Icon icon={iconify['close-rounded']} size="xs" />
+								</button>
+							{/if}
+							{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
+								<div class="suggest-popover" role="listbox">
+									<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
+									{#each getSearchKeywords(PREFS_KEY) as kw (kw)}
+										<button
+											type="button"
+											class="suggest-item"
+											role="option"
+											aria-selected="false"
+											onmousedown={(e) => e.preventDefault()}
+											onclick={() => {
+												searchQuery = kw;
+												suggestOpen = false;
+												suppliersPage = 1;
+												currentPagingPage = 1;
+												void loadSuppliers();
+											}}
+										>
+											{kw}
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/snippet}
+					{#snippet actionsContent(row)}
+						{@const supplier = row as unknown as SupplierRow}
+						<div class="row-actions">
+							<!-- update/edit = primary -->
+							<Button color="primary" variant="ghost" size="sm" onClick={() => openSupplierEditModal(row)}>
+								{pageContents.actions.edit[lang]}
+							</Button>
+						</div>
+					{/snippet}				</DataTable>
 			</div>
 		{/if}
 	{:else}
@@ -969,16 +1356,79 @@
 			</label>
 		</div>
 	</footer>
+
+	<!-- ── FAB mobile (pattern purchases): nút chính toggle menu, mục menu = create theo tab ── -->
+	{#if mobileFabOpen}
+		<div class="fab-menu-backdrop" onclick={() => (mobileFabOpen = false)} aria-hidden="true"></div>
+	{/if}
+	<div class="fab-group" data-suggest>
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.states.retry[lang]}
+			onclick={refresh}
+		>
+			<Icon icon={iconify['tune-rounded']} />
+		</button>
+		<button
+			type="button"
+			class="fab fab--primary"
+			aria-label={pageContents.actions.createSupplier[lang]}
+			data-test="suppliers-fab"
+			onclick={() => (mobileFabOpen = !mobileFabOpen)}
+		>
+			<Icon icon={mobileFabOpen ? iconify['close-rounded'] : iconify['add-rounded']} />
+		</button>
+		{#if mobileFabOpen}
+			<div class="fab-menu" role="menu">
+				<button
+					type="button"
+					class="fab-menu-item"
+					role="menuitem"
+					onclick={() => {
+						mobileFabOpen = false;
+						if (activeTab === 'suppliers') openSupplierModal();
+						else openPOModal();
+					}}
+				>
+					{activeTab === 'suppliers' ? pageContents.actions.createSupplier[lang] : pageContents.actions.createPO[lang]}
+				</button>
+				<button
+					type="button"
+					class="fab-menu-item"
+					role="menuitem"
+					onclick={() => {
+						mobileFabOpen = false;
+						void refresh();
+					}}
+				>
+					{pageContents.states.retry[lang]}
+				</button>
+			</div>
+		{/if}
+	</div>
 </section>
 
-<!-- ── Modal tạo nhà cung cấp ── -->
+<!-- ── Modal tạo/sửa nhà cung cấp (dùng chung form; dirty-guard qua onCloseAttempt) ── -->
 {#if supplierModalDisplay}
-	<Modal bind:display={supplierModalDisplay} size="lg" isDimissable>
+	<Modal
+		bind:display={supplierModalDisplay}
+		size="lg"
+		isDimissable
+		onCloseAttempt={() => closeGuard.attemptClose()}
+	>
 		<Modal.Container>
-			<Modal.Container.Header>{pageContents.supplierModal.title[lang]}</Modal.Container.Header>
+			<Modal.Container.Header>
+				{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
+			</Modal.Container.Header>
 			<Modal.Container.Body>
 				{#if supplierError}
 					<div class="form-error-banner" role="alert">{supplierError}</div>
+				{/if}
+				{#if hasDuplicates}
+					<div class="form-error-banner form-dup-banner" role="alert">
+						{pageContents.supplierModal.duplicateWarn[lang]}
+					</div>
 				{/if}
 				<div class="form-grid">
 					<div class="form-grid-2">
@@ -997,9 +1447,10 @@
 							<ImageUpload bind:value={supplierForm.avatarUrl} label="" disabled={supplierSubmitting} />
 						</div>
 						<div class="form-grid" style="gap: 0.5rem;">
-							<!-- phones multiple: PhoneInput per slot + nút thêm/xoá -->
-							{#each supplierForm.phones as _, phoneIndex (phoneIndex)}
-								<div class="field-row">
+							<!-- phones multiple: STT tag + PhoneInput per slot + nút xoá; warn trùng -->
+							{#each supplierForm.phones as phone, phoneIndex (phoneIndex)}
+								<div class="field-row" class:field-row--dup={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2}>
+									<span class="field-stt" aria-hidden="true">{phoneIndex + 1}</span>
 									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
 									<button
 										type="button"
@@ -1020,9 +1471,10 @@
 									supplierForm.phones = [...supplierForm.phones, ''];
 								}}
 							>+ {pageContents.supplierModal.addPhone[lang]}</button>
-							<!-- emails multiple -->
-							{#each supplierForm.emails as _, emailIndex (emailIndex)}
-								<div class="field-row">
+							<!-- emails multiple: STT tag + warn trùng -->
+							{#each supplierForm.emails as email, emailIndex (emailIndex)}
+								<div class="field-row" class:field-row--dup={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2}>
+									<span class="field-stt" aria-hidden="true">{emailIndex + 1}</span>
 									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
 									<button
 										type="button"
@@ -1045,7 +1497,7 @@
 							>+ {pageContents.supplierModal.addEmail[lang]}</button>
 						</div>
 					</div>
-					<!-- Địa chỉ: auto complete nhận dạng chuỗi → chọn tỉnh/huyện qua select/option -->
+					<!-- Địa chỉ chính: auto complete nhận dạng chuỗi → chọn tỉnh/huyện qua select/option -->
 					<AddressInput
 						bind:value={supplierForm.address}
 						bind:breakdown={supplierAddressBreakdown}
@@ -1053,15 +1505,70 @@
 						placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
 						disabled={supplierSubmitting}
 					/>
-					<div class="form-grid-2">
-						<label class="form-field">
-							<span class="form-label">{pageContents.supplierModal.zalo[lang]}</span>
-							<input class="admin-input" type="text" bind:value={supplierForm.zalo} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.zaloPlaceholder[lang]} />
-						</label>
-						<label class="form-field">
-							<span class="form-label">{pageContents.supplierModal.facebook[lang]}</span>
-							<input class="admin-input" type="text" bind:value={supplierForm.facebook} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.facebookPlaceholder[lang]} />
-						</label>
+					<!-- ── Multiple addresses: mỗi entry 1 block label + AddressInput riêng ── -->
+					<div class="items-block">
+						<span class="form-label">{pageContents.supplierModal.addresses[lang]}</span>
+						{#each supplierForm.addresses as entry, addrIndex (addrIndex)}
+							<div class="address-entry" class:field-row--dup={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2}>
+								<div class="address-entry__head">
+									<span class="field-stt" aria-hidden="true">{addrIndex + 1}</span>
+									<input
+										class="admin-input address-entry__label"
+										type="text"
+										bind:value={entry.label}
+										placeholder={pageContents.supplierModal.addressLabelPlaceholder[lang]}
+										disabled={supplierSubmitting}
+									/>
+									<button
+										type="button"
+										class="field-row-remove"
+										aria-label={pageContents.supplierModal.removeAddress[lang]}
+										disabled={supplierSubmitting}
+										onclick={() => {
+											supplierForm.addresses = supplierForm.addresses.filter((_, i) => i !== addrIndex);
+											supplierAddressBreakdowns = supplierAddressBreakdowns.filter((_, i) => i !== addrIndex);
+										}}
+									>✕</button>
+								</div>
+								<AddressInput
+									bind:value={entry.address}
+									bind:breakdown={supplierAddressBreakdowns[addrIndex]}
+									placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
+									disabled={supplierSubmitting}
+								/>
+							</div>
+						{/each}
+						<button
+							type="button"
+							class="field-add"
+							disabled={supplierSubmitting}
+							onclick={() => {
+								supplierForm.addresses = [...supplierForm.addresses, { label: '', address: '', province: '', district: '' }];
+								supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '' }];
+							}}
+						>+ {pageContents.supplierModal.addAddress[lang]}</button>
+					</div>
+					<!-- ── Social block: zalo / telegram / discord / facebook ── -->
+					<div class="items-block social-block">
+						<span class="form-label">{pageContents.supplierModal.social[lang]}</span>
+						<div class="form-grid-2">
+							<label class="form-field">
+								<span class="form-label">{pageContents.supplierModal.zalo[lang]}</span>
+								<input class="admin-input" type="text" bind:value={supplierForm.zalo} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.zaloPlaceholder[lang]} />
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.supplierModal.telegram[lang]}</span>
+								<input class="admin-input" type="text" bind:value={supplierForm.telegram} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.telegramPlaceholder[lang]} />
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.supplierModal.discord[lang]}</span>
+								<input class="admin-input" type="text" bind:value={supplierForm.discord} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.discordPlaceholder[lang]} />
+							</label>
+							<label class="form-field">
+								<span class="form-label">{pageContents.supplierModal.facebook[lang]}</span>
+								<input class="admin-input" type="text" bind:value={supplierForm.facebook} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.facebookPlaceholder[lang]} />
+							</label>
+						</div>
 					</div>
 					<label class="form-field">
 						<span class="form-label">{pageContents.supplierModal.status[lang]}</span>
@@ -1076,14 +1583,14 @@
 			<Modal.Container.Footer>
 				<!-- create/save = success -->
 				<Button color="success" onClick={submitSupplier} loading={supplierSubmitting} disabled={supplierSubmitting}>
-					{pageContents.supplierModal.submit[lang]}
+					{supplierEditMode === 'edit' ? pageContents.supplierModal.save[lang] : pageContents.supplierModal.submit[lang]}
 				</Button>
 				<Button
 					color="default"
 					variant="ghost"
 					disabled={supplierSubmitting}
 					onClick={() => {
-						supplierModalDisplay = false;
+						closeGuard.attemptClose();
 					}}
 				>
 					{pageContents.modals.cancel[lang]}
@@ -1091,6 +1598,30 @@
 			</Modal.Container.Footer>
 		</Modal.Container>
 	</Modal>
+{/if}
+
+<!-- ── AlertDialog dirty-close (pattern purchases/brands) ── -->
+{#if dirtyCloseDisplay}
+	<AlertDialog bind:open={dirtyCloseDisplay} title={pageContents.dirty.title[lang]} description={pageContents.dirty.desc[lang]}>
+		<AlertDialog.Content>
+			<AlertDialog.Header variant="info">
+				<AlertDialog.Title>{pageContents.dirty.title[lang]}</AlertDialog.Title>
+				<AlertDialog.Description>{pageContents.dirty.desc[lang]}</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{pageContents.dirty.continueEdit[lang]}</AlertDialog.Cancel>
+				<AlertDialog.Action
+					color="primary"
+					onselect={() => {
+						// confirmDiscard → close() → supplierModalDisplay=false; AlertDialog tự đóng qua bind:open
+						closeGuard.confirmDiscard();
+					}}
+				>
+					{pageContents.dirty.discard[lang]}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
 {/if}
 
 <!-- ── Modal tạo đơn mua hàng ── -->
@@ -1503,6 +2034,9 @@
 		display: grid;
 		gap: 0.75rem;
 		grid-template-columns: 1fr 1fr;
+		// Cột phải (phones/emails multiple) tự dồn lên đầu — không stretch
+		// theo cột trái (avatar cao) → hết khoảng trống dọc bất đối xứng.
+		align-items: start;
 
 		@media (max-width: 680px) {
 			grid-template-columns: 1fr;
@@ -1549,5 +2083,242 @@
 		margin: 0.25rem 0 0;
 		font-size: 0.9rem;
 		color: var(--foreground);
+	}
+
+	/* ── Search trong captionTools (pattern purchases) ── */
+	.admin-search {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.admin-search-icon {
+		opacity: 0.6;
+	}
+
+	/* Nút clear search — YÊU CẦU USER: màu error thay vì muted */
+	.admin-search-clear {
+		position: absolute;
+		right: 0.4rem;
+		width: 1.5rem;
+		height: 1.5rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		border-radius: 9999px;
+		background: transparent;
+		color: var(--error);
+		cursor: pointer;
+		transition: background 0.15s ease;
+
+		&:hover {
+			background: color-mix(in oklab, var(--error) 12%, transparent);
+		}
+	}
+
+	/* Suggest popover từ khoá đã tìm */
+	.suggest-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		min-width: 14rem;
+		max-height: 16rem;
+		overflow-y: auto;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+		padding: 0.35rem;
+		z-index: 50;
+	}
+
+	.suggest-title {
+		margin: 0.25rem 0.5rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--foreground-500);
+	}
+
+	.suggest-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		padding: 0.45rem 0.6rem;
+		border: none;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground);
+		font-size: 0.85rem;
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	/* ── STT tag + cảnh báo trùng (phone/email/address) ── */
+	.field-stt {
+		flex: none;
+		min-width: 1.4rem;
+		height: 1.4rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.3rem;
+		border-radius: 9999px;
+		background: color-mix(in oklab, var(--primary) 12%, transparent);
+		color: var(--primary-600, var(--primary));
+		font-size: 0.72rem;
+		font-weight: 700;
+	}
+
+	.field-row--dup {
+		.field-stt {
+			background: color-mix(in oklab, var(--error) 14%, transparent);
+			color: var(--error);
+		}
+
+		& > :global(.input-root),
+		& > :global(.address-input),
+		& > .admin-input {
+			border-color: var(--error);
+		}
+	}
+
+	.form-dup-banner {
+		background: color-mix(in oklab, var(--error) 8%, transparent);
+		border-left-color: var(--error);
+	}
+
+	/* ── Multiple addresses: entry block ── */
+	.address-entry {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding: 0.6rem;
+		border: 1px solid var(--default-200);
+		border-radius: 0.6rem;
+
+		&.field-row--dup {
+			border-color: var(--error);
+		}
+	}
+
+	.address-entry__head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.address-entry__label {
+		flex: 1;
+		height: 2.25rem;
+	}
+
+	.social-block {
+		border-style: solid;
+	}
+
+	/* ── FAB mobile (pattern purchases) ── */
+	.fab-group {
+		position: fixed;
+		right: 1rem;
+		bottom: 7.25rem;
+		display: flex;
+		flex-direction: column-reverse;
+		align-items: center;
+		gap: 0.6rem;
+		z-index: 400;
+
+		@media (min-width: 768px) {
+			display: none;
+		}
+	}
+
+	.fab {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 9999px;
+		border: 1px solid var(--default-300);
+		box-shadow: var(--shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
+		cursor: pointer;
+		transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+		&:active {
+			transform: scale(0.96);
+		}
+	}
+
+	.fab--primary {
+		width: 3.25rem;
+		height: 3.25rem;
+		background: var(--primary);
+		color: var(--primary-contrast, #fff);
+		border-color: transparent;
+	}
+
+	.fab--secondary {
+		width: 2.75rem;
+		height: 2.75rem;
+		background: var(--background);
+		color: var(--foreground);
+	}
+
+	.fab-menu {
+		position: absolute;
+		right: 0;
+		bottom: calc(100% + 0.5rem);
+		min-width: 11rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		background: var(--background);
+		border: 1px solid var(--default-200);
+		border-radius: 0.75rem;
+		box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+		padding: 0.35rem;
+	}
+
+	.fab-menu-item {
+		text-align: left;
+		padding: 0.55rem 0.75rem;
+		border: none;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground);
+		font-size: 0.875rem;
+		cursor: pointer;
+		white-space: nowrap;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	.fab-menu-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 390;
+
+		@media (min-width: 768px) {
+			display: none;
+		}
+	}
+
+	/* Fullheight padding bottom cho FAB (pattern purchases) — FAB group 2 nút
+	   chồng dọc cao ~7rem + pagination ~3rem → đệm 12rem để card cuối và
+	   pagination không bị FAB fixed che khi cuộn hết danh sách */
+	@media (max-width: 767px) {
+		.admin-page {
+			padding-bottom: 12rem;
+		}
+		/* FAB fixed góc phải đè "Rows: 20" (page-size) khi cuộn — chừa chỗ phải */
+		.admin-pagination {
+			padding-right: 4.75rem;
+		}
 	}
 </style>

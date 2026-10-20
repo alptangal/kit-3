@@ -133,7 +133,7 @@
 				onValueChange={onProvinceChange}
 				searchable
 				clearable
-				placeholder="—"
+				placeholder="Chọn tỉnh/thành phố"
 				disabled={disabled}
 			/>
 		</div>
@@ -144,7 +144,7 @@
 				bind:value={breakdown.district}
 				searchable
 				clearable
-				placeholder="—"
+				placeholder="Chọn quận/huyện"
 				disabled={disabled}
 			/>
 		</div>

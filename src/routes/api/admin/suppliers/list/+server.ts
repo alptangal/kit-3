@@ -15,6 +15,9 @@ export const POST: RequestHandler = async (event) => {
 	try {
 		const read = await readAdminRequest<{
 			status?: string;
+			search?: string;
+			sortField?: string;
+			sortDirection?: string;
 			page?: number;
 			pageSize?: number;
 		}>(event);
@@ -40,6 +43,9 @@ export const POST: RequestHandler = async (event) => {
 
 		const result = await SupplierService.listSuppliers(actor, {
 			status: read.data.status,
+			search: read.data.search,
+			sortField: read.data.sortField,
+			sortDirection: read.data.sortDirection,
 			page: read.data.page,
 			pageSize: read.data.pageSize
 		});

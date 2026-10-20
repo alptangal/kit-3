@@ -18,5 +18,8 @@ export const iconify = {
 	'info-i-rounded': 'material-symbols-light:info-i-rounded',
 	'more-horiz-rounded': 'material-symbols-light:more-horiz-rounded',
 	'tune-rounded': 'material-symbols-light:tune-rounded',
-	'add-rounded': 'material-symbols-light:add-rounded'
+	'add-rounded': 'material-symbols-light:add-rounded',
+	'visibility-outline-rounded': 'material-symbols-light:visibility-outline-rounded',
+	'image-outline-rounded': 'material-symbols-light:image-outline-rounded',
+	'delete-outline-rounded': 'material-symbols-light:delete-outline-rounded'
 };

@@ -113,6 +113,7 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'country',
   'phones',
   'emails',
+  'addresses',
   'zalo',
   'facebook',
   'avatarUrl',
@@ -123,6 +124,25 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
 
 // Field dạng mảng (phones/emails) — validate phần tử string trước khi ghi
 const SUPPLIER_ARRAY_FIELDS = ['phones', 'emails'] as const;
+
+// Mảng addresses: phần tử là object {label?, address, province?, district?, country?}
+const SUPPLIER_ADDRESS_ENTRY_FIELDS = ['label', 'address', 'province', 'district', 'country'] as const;
+
+function sanitizeAddressEntries(value: unknown): Array<Record<string, string>> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+    .map((entry) => {
+      const out: Record<string, string> = {};
+      for (const field of SUPPLIER_ADDRESS_ENTRY_FIELDS) {
+        const v = (entry as Record<string, unknown>)[field];
+        if (typeof v === 'string' && v.trim()) out[field] = v.trim();
+      }
+      return out;
+    })
+    // Bỏ entry rỗng hoàn toàn (trường hợp user xoá text nhưng để block trống)
+    .filter((entry) => Object.keys(entry).length > 0);
+}
 
 const PO_ADMIN_SAFE_FIELDS = [
   'poCode',
@@ -274,6 +294,9 @@ export class SupplierService {
     actor: ActorContext,
     options: {
       status?: string;
+      search?: string;
+      sortField?: string;
+      sortDirection?: string;
       page?: number;
       pageSize?: number;
     } = {}
@@ -285,12 +308,41 @@ export class SupplierService {
     const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 20));
     const offset = (page - 1) * pageSize;
 
+    // Sort server-side — whitelist field (ORDER BY không nhận $n trong N1QL
+    // layer này), fallback createdAt DESC. Field lạ → fallback âm thầm.
+    const SUPPLIER_SORT_FIELDS: Record<string, string> = {
+      name: 'name',
+      status: 'status',
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt'
+    };
+    const sortField = (options.sortField && SUPPLIER_SORT_FIELDS[options.sortField]) || 'createdAt';
+    const sortDirection = options.sortDirection === 'asc' ? 'ASC' : 'DESC';
+
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 
     if (options.status) {
       conditions.push('status = $' + (args.length + 1));
       args.push(options.status);
+    }
+
+    if (options.search?.trim()) {
+      // Tìm theo tên / người liên hệ / phone / email. LƯU Ý: LOWER()/UPPER()
+      // trong N1QL layer này không có hiệu lực (thực nghiệm: '%po%' ≠ 'QN-…',
+      // không match) → cung cấp cả 2 biến thể upper/lower của term, match
+      // case-sensitive (pattern listPurchases).
+      const term = options.search.trim();
+      const upper = `%${term.toUpperCase()}%`;
+      const lower = `%${term.toLowerCase()}%`;
+      const u = args.push(upper, upper, upper, upper) - 3;
+      const l = args.push(lower, lower, lower, lower) - 3;
+      // phones/emails là mảng — N1QL ANY…IN match từng phần tử
+      conditions.push(
+        `(name LIKE $${u} OR name LIKE $${l} OR contactPerson LIKE $${u + 1} OR contactPerson LIKE $${l + 1}` +
+          ` OR ANY ph IN phones SATISFIES ph LIKE $${u + 2} OR ph LIKE $${l + 2} END` +
+          ` OR ANY em IN emails SATISFIES em LIKE $${u + 3} OR em LIKE $${l + 3} END)`
+      );
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -303,7 +355,7 @@ export class SupplierService {
         readonly: true
       }),
       cbSuppliers.document.query({
-        statement: `SELECT ${selectClause} FROM ${suppliersKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
+        statement: `SELECT ${selectClause} FROM ${suppliersKeyspace} ${whereClause} ORDER BY ${sortField} ${sortDirection} LIMIT ${pageSize} OFFSET ${offset}`,
         args,
         readonly: true
       })
@@ -354,6 +406,7 @@ export class SupplierService {
       country?: string;
       phones?: string[];
       emails?: string[];
+      addresses?: unknown;
       zalo?: string;
       facebook?: string;
       avatarUrl?: string;
@@ -376,6 +429,7 @@ export class SupplierService {
       country: supplierData.country ?? null,
       phones: Array.isArray(supplierData.phones) ? supplierData.phones.filter((p): p is string => typeof p === 'string' && p.trim().length > 0).map((p) => p.trim()) : [],
       emails: Array.isArray(supplierData.emails) ? supplierData.emails.filter((e): e is string => typeof e === 'string' && e.trim().length > 0).map((e) => e.trim()) : [],
+      addresses: sanitizeAddressEntries(supplierData.addresses),
       zalo: supplierData.zalo ?? null,
       facebook: supplierData.facebook ?? null,
       avatarUrl: supplierData.avatarUrl ?? null,
@@ -416,7 +470,7 @@ export class SupplierService {
     const now = new Date().toISOString();
     const updateData: Record<string, unknown> = { ...(getRes as any).data };
 
-    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'zalo', 'facebook', 'avatarUrl', 'status'] as const) {
+    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'avatarUrl', 'status'] as const) {
       if (field in patch) {
         // mảng phones/emails: lọc phần tử rỗng/không phải string
         if ((SUPPLIER_ARRAY_FIELDS as readonly string[]).includes(field)) {
@@ -424,6 +478,9 @@ export class SupplierService {
           updateData[field] = Array.isArray(arr)
             ? arr.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim())
             : [];
+        } else if (field === 'addresses') {
+          // mảng object {label?, address, province?, district?, country?}
+          updateData[field] = sanitizeAddressEntries(patch[field]);
         } else {
           updateData[field] = patch[field];
         }

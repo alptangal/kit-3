@@ -1,7 +1,9 @@
 <!-- src/lib/components/form/image-upload/Main.svelte -->
 <!-- ImageUpload — chọn file ảnh + upload thẳng lên hosting ngoài qua
      POST /api/admin/upload (multipart, fetch thường KHÔNG mã hoá) + preview + xoá.
-     bind:value = URL ảnh (lưu vào field DB hiện có — products.imageUrl, posts.coverImageUrl). -->
+     bind:value = URL ảnh (lưu vào field DB hiện có — products.imageUrl, posts.coverImageUrl).
+     Mặc định ẨN URL (showUrl=false): hover/tap thumb hiện overlay actions —
+     copy URL / xem ảnh (tab mới) / đổi ảnh; remove giữ nút riêng dưới thumb. -->
 <script lang="ts" module>
 	export interface ImageUploadProps {
 		/** URL ảnh hiện tại (2 chiều — parent bind:value) */
@@ -10,6 +12,8 @@
 		label?: string;
 		/** Vô hiệu hoá (vd đang submitting form cha) */
 		disabled?: boolean;
+		/** Hiện URL đầy đủ dưới thumb (mặc định ẩn — hành vi cũ) */
+		showUrl?: boolean;
 		/** Callback lỗi đã xử lý xong (đã toast nội bộ — hook để cha tự xử lý thêm) */
 		onerror?: (message: string) => void;
 	}
@@ -17,9 +21,16 @@
 
 <script lang="ts">
 	import { Button, Icon, Image as ImageEl, Spinner } from '$components/element';
+	import { iconify } from '$lib/assets/icons/iconify';
 	import { client } from '$store/basic.svelte';
 
-	let { value = $bindable(''), label = '', disabled = false, onerror }: ImageUploadProps = $props();
+	let {
+		value = $bindable(''),
+		label = '',
+		disabled = false,
+		showUrl = false,
+		onerror
+	}: ImageUploadProps = $props();
 
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : 'en');
 
@@ -27,6 +38,7 @@
 	const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 	let uploading = $state(false);
+	let copied = $state(false);
 	let inputEl: HTMLInputElement | undefined = $state();
 
 	const t = {
@@ -37,9 +49,13 @@
 		uploading: { vi: 'Đang tải lên...', en: 'Uploading...' },
 		empty: { vi: 'Chưa có ảnh', en: 'No image yet' },
 		hint: { vi: 'JPEG/PNG/WebP/GIF, tối đa 5MB', en: 'JPEG/PNG/WebP/GIF, max 5MB' },
+		copy: { vi: 'Copy URL', en: 'Copy URL' },
+		copied: { vi: 'Đã copy', en: 'Copied' },
+		view: { vi: 'Xem ảnh', en: 'View image' },
 		errType: { vi: 'Chỉ chấp nhận ảnh JPEG/PNG/WebP/GIF', en: 'Only JPEG/PNG/WebP/GIF images are allowed' },
 		errSize: { vi: 'Ảnh vượt quá 5MB', en: 'Image exceeds 5MB' },
 		errUpload: { vi: 'Tải ảnh lên thất bại', en: 'Image upload failed' },
+		errCopy: { vi: 'Không copy được URL', en: 'Failed to copy URL' },
 		notConfigured: {
 			vi: 'Chưa cấu hình token dịch vụ lưu ảnh (IMAGE_HOST_TOKEN trong .env)',
 			en: 'Image hosting token not configured (IMAGE_HOST_TOKEN in .env)'
@@ -58,6 +74,22 @@
 	function pick() {
 		if (disabled || uploading) return;
 		inputEl?.click();
+	}
+
+	async function copyUrl() {
+		if (!value) return;
+		try {
+			await navigator.clipboard.writeText(value);
+			copied = true;
+			setTimeout(() => (copied = false), 1500);
+		} catch {
+			client.browser?.toasts?.create({ title: tr('errCopy'), color: 'error' });
+		}
+	}
+
+	function viewImage() {
+		if (!value) return;
+		window.open(value, '_blank', 'noopener');
 	}
 
 	async function handleFile(e: Event) {
@@ -112,8 +144,8 @@
 </script>
 
 <div class="image-upload" class:image-upload--disabled={disabled}>
-	{#if label || tr('label')}
-		<span class="image-upload__label">{label || tr('label')}</span>
+	{#if label}
+		<span class="image-upload__label">{label}</span>
 	{/if}
 
 	<div class="image-upload__body">
@@ -124,6 +156,42 @@
 		{:else if value}
 			<div class="image-upload__preview">
 				<ImageEl src={value} alt={label || 'image'} width="9.5rem" height="7rem" objectFit="cover" rounded="md" />
+				<!-- overlay actions: hiện khi hover (PC) hoặc luôn mờ nhẹ (touch) -->
+				<div class="image-upload__overlay" data-no-tap>
+					<button
+						type="button"
+						class="image-upload__ovbtn"
+						onclick={copyUrl}
+						disabled={disabled}
+						title={tr('copy')}
+						aria-label={tr('copy')}
+					>
+						<Icon icon={iconify['content-copy-outline-rounded']} size="sm" />
+					</button>
+					<button
+						type="button"
+						class="image-upload__ovbtn"
+						onclick={viewImage}
+						disabled={disabled}
+						title={tr('view')}
+						aria-label={tr('view')}
+					>
+						<Icon icon={iconify['visibility-outline-rounded']} size="sm" />
+					</button>
+					<button
+						type="button"
+						class="image-upload__ovbtn"
+						onclick={pick}
+						disabled={disabled}
+						title={tr('change')}
+						aria-label={tr('change')}
+					>
+						<Icon icon={iconify['image-outline-rounded']} size="sm" />
+					</button>
+				</div>
+				{#if copied}
+					<span class="image-upload__copied">{tr('copied')}</span>
+				{/if}
 			</div>
 		{:else}
 			<button
@@ -157,7 +225,9 @@
 	</div>
 
 	<span class="image-upload__hint">{tr('hint')}</span>
-	<span class="image-upload__url" title={value}>{value}</span>
+	{#if showUrl}
+		<span class="image-upload__url" title={value}>{value}</span>
+	{/if}
 
 	<input
 		bind:this={inputEl}
@@ -200,6 +270,7 @@
 		border: 1px solid var(--default-200);
 		border-radius: 0.5rem;
 		overflow: hidden;
+		position: relative;
 
 		&--loading {
 			width: 9.5rem;
@@ -209,6 +280,67 @@
 			justify-content: center;
 			background: var(--background-100, var(--background));
 		}
+
+		&:hover .image-upload__overlay {
+			opacity: 1;
+		}
+	}
+
+	.image-upload__overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		background: rgb(0 0 0 / 0.45);
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+
+	/* Touch không có hover: overlay mờ nhẹ luôn hiện để vẫn bấm được */
+	@media (hover: none) {
+		.image-upload__overlay {
+			opacity: 1;
+			background: linear-gradient(to top, rgb(0 0 0 / 0.35), transparent);
+		}
+	}
+
+	.image-upload__ovbtn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.9rem;
+		height: 1.9rem;
+		border: none;
+		border-radius: 0.4rem;
+		background: rgb(255 255 255 / 0.92);
+		color: var(--foreground-700, #27272a);
+		cursor: pointer;
+		transition: background 0.12s ease, transform 0.12s ease;
+
+		&:hover:not(:disabled) {
+			background: #fff;
+			transform: scale(1.08);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	.image-upload__copied {
+		position: absolute;
+		left: 50%;
+		bottom: 0.35rem;
+		transform: translateX(-50%);
+		font-size: 0.68rem;
+		padding: 0.1rem 0.45rem;
+		border-radius: 0.3rem;
+		background: var(--primary-600, #16a34a);
+		color: #fff;
+		pointer-events: none;
 	}
 
 	.image-upload__empty {

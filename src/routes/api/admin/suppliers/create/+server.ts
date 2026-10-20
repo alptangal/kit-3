@@ -23,6 +23,7 @@ export const POST: RequestHandler = async (event) => {
 			country?: string;
 			phones?: string[];
 			emails?: string[];
+			addresses?: unknown;
 			zalo?: string;
 			facebook?: string;
 			avatarUrl?: string;
@@ -71,6 +72,7 @@ export const POST: RequestHandler = async (event) => {
 			country: read.data.country,
 			phones: read.data.phones,
 			emails: read.data.emails,
+			addresses: read.data.addresses,
 			zalo: read.data.zalo,
 			facebook: read.data.facebook,
 			avatarUrl: read.data.avatarUrl,
