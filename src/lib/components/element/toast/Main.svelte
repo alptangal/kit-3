@@ -203,6 +203,13 @@
 		/* Căn dọc: icon (Indicator) + Content + action button cùng trục giữa — mặc định
 		   stretch làm Indicator div stretch full mà svg nằm đỉnh (lệch title). */
 		align-items: center;
+		/* Nút đóng (toast-close) chỉ render khi hover, absolute lệch 30% ngoài góc —
+		   nửa trong nút lồi vào ~20px đè chữ cuối nếu không chừa chỗ (ui-checker bắt).
+		   :global bắt buộc — .toast-close do Button (Close/Main.svelte) render, nếu scoped
+		   thì Svelte prune rule khỏi bundle ("unused selector"). */
+		&:has(:global(.toast-close)) {
+			padding-right: calc(var(--padding) + 1.25rem);
+		}
 		cursor: var(--cursor);
 		backdrop-filter: blur(10px);
 		border-radius: var(--border-radius);

@@ -12,7 +12,10 @@
 		// Icon-only button: ratio vuông (width == height) để cân đối ở góc toast.
 		'aspect-square': true,
 		get size() {
-			return props.size ?? toastContext?.size ?? client.browser?.size ?? 'md';
+			// Chuẩn design framework lớn (sonner/MUI/Chakra): nút đóng toast nhỏ,
+			// vừa với chiều cao toast (toast-md ≈ 32px — button-md 40px tràn viền).
+			// Bỏ qua size cha (toastContext.size), luôn xs; caller ghi đè bằng props.size.
+			return props.size ?? 'xs';
 		},
 		get color() {
 			return props.color ?? 'error';
@@ -69,6 +72,8 @@
 		top: 0;
 		right: 0;
 		z-index: 1;
-		transform: translateX(50%) translateY(-50%) !important;
+		/* Nút nhỏ hơn nửa nút (xs ≈ 24px) nên dịch 30% thay vì 50% — icon vẫn nằm
+		   trong góc toast, không tràn ra ngoài (chuẩn sonner/shadcn). */
+		transform: translateX(30%) translateY(-30%) !important;
 	}
 </style>

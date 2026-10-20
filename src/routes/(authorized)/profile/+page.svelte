@@ -96,6 +96,12 @@
 			vi: 'Thiết bị hoặc trình duyệt không hỗ trợ Passkey.',
 			en: 'This device or browser does not support Passkeys.'
 		},
+		// 2: hint khi trình duyệt OK nhưng thiết bị chưa bật platform authenticator —
+		// hướng dẫn bật Windows Hello / Touch ID rồi quay lại đăng ký.
+		passkeyAuthenticatorHint: {
+			vi: 'Thiết bị này chưa bật khoá sinh trắc học (Windows Hello / Touch ID). Hãy bật trong phần cài đặt hệ điều hành rồi quay lại đăng ký thiết bị.',
+			en: 'This device has no platform authenticator enabled (Windows Hello / Touch ID). Enable it in your OS settings, then come back to register this device.'
+		},
 		passkeyRegister: {
 			vi: 'Đăng ký thiết bị mới',
 			en: 'Register new device'
@@ -332,6 +338,11 @@
 	}
 
 	let passkeySupported = $state(false);
+	// 2: tách 2 mức check — passkeyAuthenticator = thiết bị CÓ platform
+	// authenticator (Touch ID / Face ID / Windows Hello). FALSE → nút đăng ký
+	// disabled + hint hướng dẫn (pattern login page d205bb38 — KHÔNG ẩn hoàn toàn:
+	// user không biết chức năng tồn tại, không thể đăng ký kể cả khi cắm security key).
+	let passkeyAuthenticator = $state(false);
 	let passkeyLoading = $state(false);
 	let passkeyRegistering = $state(false);
 	let credentials = $state<CredentialRow[]>([]);
@@ -510,17 +521,19 @@
 	}
 
 	onMount(() => {
-		// Đồng bộ login: chỉ hiện passkey khi thiết bị CÓ platform authenticator
-		// (Touch ID / Face ID / vân tay / Windows Hello) — desktop trần không có → ẩn.
+		// Đồng bộ login page: 2 mức check — passkeySupported = WebAuthn API sẵn sàng
+		// (hiện section + nút đăng ký), passkeyAuthenticator = thiết bị CÓ platform
+		// authenticator (false → nút disabled + hint hướng dẫn bật, KHÔNG ẩn).
 		void (async () => {
 			try {
 				passkeySupported =
 					typeof window !== 'undefined' &&
 					typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
-					browserSupportsWebAuthn() &&
-					(await platformAuthenticatorIsAvailable());
+					browserSupportsWebAuthn();
+				passkeyAuthenticator = passkeySupported && (await platformAuthenticatorIsAvailable());
 			} catch {
 				passkeySupported = false;
+				passkeyAuthenticator = false;
 			}
 			if (passkeySupported) void loadCredentials();
 		})();
@@ -720,7 +733,7 @@
 					color="primary"
 					variant="ghost"
 					loading={passkeyRegistering}
-					disabled={passkeyRegistering}
+					disabled={passkeyRegistering || !passkeyAuthenticator}
 					onclick={handleRegister}
 				>
 					{passkeyRegistering ? msg('passkeyRegistering') : msg('passkeyRegister')}
@@ -730,6 +743,8 @@
 
 		{#if !passkeySupported}
 			<p class="passkey-unavailable">{msg('passkeyUnavailable')}</p>
+		{:else if !passkeyAuthenticator}
+			<p class="passkey-unavailable">{msg('passkeyAuthenticatorHint')}</p>
 		{:else if passkeyLoading && credentials.length === 0}
 			<div class="passkey-loading"><span class="passkey-spinner"></span></div>
 		{:else if credentials.length === 0}
