@@ -20,8 +20,12 @@
 
 	let configs: LabelConfigs = $state({
 		get style() {
+			// has-value: field cha (TextField) đang có dữ liệu — CSS phân biệt label
+			// của field có data vs field trống (yêu cầu batch 3 #input).
+			const hasValue = (textFieldContext?.value ?? '') !== '';
 			const defaultStyles: (string | undefined)[] = [
 				'label-root',
+				hasValue ? 'has-value' : undefined,
 				`size-${this.size}`,
 				`color-${this.color}`
 			];
@@ -107,5 +111,12 @@
 	.label-root {
 		font-size: var(--font-size);
 		color: var(--color);
+
+		/* has-value: field cha có dữ liệu → label đậm hơn 1 nấc để phân biệt
+		   (yêu cầu batch 3 #input — áp dụng cả label). */
+		&.has-value {
+			font-weight: 600;
+			color: var(--foreground, hsl(0 0% 9%));
+		}
 	}
 </style>

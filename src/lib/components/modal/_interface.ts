@@ -41,7 +41,10 @@ export interface ModalHeaderConfigs extends BasicConfigs {
 		};
 	};
 }
-export interface ModalBodyProps extends BasicProps {}
+export interface ModalBodyProps extends BasicProps {
+	/** bind:ref — element DOM của body (dùng scrollIntoView từ ngoài, vd scroll-to-invalid) */
+	ref?: HTMLElement;
+}
 export interface ModalBodyConfigs extends BasicConfigs {}
 export interface ModalFooterProps extends BasicProps {
 	/**

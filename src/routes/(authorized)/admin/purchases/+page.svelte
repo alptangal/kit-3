@@ -487,7 +487,11 @@
 			if (!el) return;
 			tableScrolled = el.scrollTop > 8;
 			// C6: chạm đáy (ngưỡng 4px) → pop pagination 1 lần; rời đáy → reset.
-			const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+			// BẪY: nội dung vừa màn (scrollHeight ≈ clientHeight) → atBottom luôn
+			// true → kẹt trạng thái thu padding vĩnh viễn. Chỉ coi là "đáy" khi
+			// wrap thực sự scrollable.
+			const scrollable = el.scrollHeight > el.clientHeight + 4;
+			const atBottom = scrollable && el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
 			wrapAtBottom = atBottom;
 			if (atBottom && !paginationPopped) {
 				paginationPopped = true;

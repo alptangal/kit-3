@@ -27,8 +27,12 @@
 
 	let configs: DescriptionConfigs = $state({
 		get style() {
+			// has-value: field cha (TextField) đang có dữ liệu — CSS phân biệt
+			// description của field có data vs field trống (mirror label/input).
+			const hasValue = (textFieldContext?.value ?? '') !== '';
 			const defaultStyles: (string | undefined)[] = [
 				'description-root',
+				hasValue ? 'has-value' : undefined,
 				`size-${this.size}`,
 				`color-description-${this.color}`
 			];
@@ -95,6 +99,13 @@
 		}
 		&.color-description-default {
 			--color: var(--foreground-400, #71717a);
+		}
+
+		/* has-value: field cha có dữ liệu → description rõ hơn 1 nấc (mirror
+		   label has-value — yêu cầu batch 3 #input). Không đè color-error/success
+		   (validation màu trạng thái thắng thông báo). */
+		&.has-value.color-description-default {
+			color: var(--foreground-500, hsl(0 0% 45%));
 		}
 	}
 </style>

@@ -30,8 +30,12 @@
 			return props.size ?? formContext?.size ?? client.browser?.size ?? 'md';
 		},
 		get style() {
+			// has-value: mirror Input — field đang có dữ liệu (khác rỗng) để CSS
+			// phân biệt field có data (label/description cùng context đọc theo).
+			const hasValue = (configs.value ?? '') !== '';
 			const defaultStyles: (string | undefined)[] = [
 				'textField-root',
+				hasValue ? 'has-value' : undefined,
 				configs.status.hover ? 'hover' : undefined,
 				this.disabled ? 'disabled' : undefined
 			];

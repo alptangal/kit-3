@@ -91,10 +91,18 @@
 	const roundedDerived = $derived(props.rounded ?? sizeDerived);
 
 	const styleDerived = $derived.by(() => {
+		// has-value: field đang CÓ dữ liệu (khác rỗng) — page/component CSS phân biệt
+		// thị giác field có data vs field trống (label/description đọc cùng context).
+		// Mảng (multiple files/codes) có phần tử → has-value; '' / [] / undefined → không.
+		const val = value;
+		const hasValue = Array.isArray(val)
+			? val.length > 0
+			: val !== undefined && val !== null && String(val) !== '';
 		const defaultStyles: (string | undefined)[] = [
 			'input-root',
 			`size-${sizeDerived}`,
 			configs.status.focus ? 'focus' : undefined,
+			hasValue ? 'has-value' : undefined,
 			`variant-${variantDerived}`,
 			disabledDerived ? 'disabled' : undefined,
 			`rounded-${roundedDerived}`,

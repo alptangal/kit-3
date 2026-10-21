@@ -7,7 +7,11 @@
      MODE MULTIPLE (suppliers): truyền `images` ($bindable string[]) → grid
      thumbs + overlay per-thumb (copy / xem / đổi / set avatar / xoá) +
      nút "+ Thêm ảnh" row riêng; `avatarUrl` = con trỏ URL đang làm đại diện
-     (trỏ vào 1 URL trong images). Không truyền `images` → hành vi đơn cũ. -->
+     (trỏ vào 1 URL trong images). Không truyền `images` → hành vi đơn cũ.
+     MODE DEFER (batch 3 — suppliers create): truyền `defer` → KHÔNG upload
+     ngay khi chọn file; giữ File local + preview objectURL; cha gọi
+     uploadPending() qua bind:this khi submit (trả URLs theo index đã gán vào
+     images/avatarUrl). Hủy form = không tốn băng thông hosting. -->
 <script lang="ts" module>
 	export interface ImageUploadProps {
 		/** URL ảnh hiện tại (2 chiều — parent bind:value) */
@@ -22,6 +26,8 @@
 		images?: string[];
 		/** MODE MULTIPLE — URL đang làm đại diện (con trỏ vào images). */
 		avatarUrl?: string;
+		/** MODE DEFER — giữ file local, chỉ upload khi cha gọi uploadPending(). */
+		defer?: boolean;
 		/** Callback lỗi đã xử lý xong (đã toast nội bộ — hook để cha tự xử lý thêm) */
 		onerror?: (message: string) => void;
 	}
@@ -39,6 +45,7 @@
 		showUrl = false,
 		images = $bindable(undefined as string[] | undefined),
 		avatarUrl = $bindable(''),
+		defer = false,
 		onerror
 	}: ImageUploadProps = $props();
 
@@ -55,6 +62,24 @@
 	let uploadTarget: number | undefined = $state();
 	let copied = $state(false);
 	let inputEl: HTMLInputElement | undefined = $state();
+
+	// ── DEFER mode ──
+	// Bản ghi hiển thị thống nhất (URL đã upload | File chờ upload). Multiple
+	// defer: mảng preview riêng KHÔNG trộn vào images (URL); uploadPending()
+	// upload từng File rồi gán URL vào images/avatarUrl. Entry URL cũ (edit
+	// mode) đồng bộ 2 chiều với images qua $effect. Hủy form = không tốn băng
+	// thông hosting (yêu cầu batch 3: chỉ upload khi submit).
+	interface DeferEntry {
+		preview: string; // objectURL (file mới) hoặc URL (ảnh cũ)
+		file?: File; // có = chờ upload
+		existing?: string; // URL cũ (edit mode) — remove khỏi images khi bỏ
+		/** File pending được đánh dấu "đặt làm đại diện" — áp khi upload xong */
+		wantAvatar?: boolean;
+		/** Key ổn định cho each (objectURL không hash được) */
+		key: number;
+	}
+	let deferEntries = $state<DeferEntry[]>([]);
+	let deferKey = 0; // key tăng dần cho each
 
 	const t = {
 		label: { vi: 'Ảnh', en: 'Image' },
@@ -143,6 +168,127 @@
 		avatarUrl = url;
 	}
 
+	// ── DEFER helpers ──
+	/** Có file chờ upload nào không (badge "chưa tải lên" / guard submit). */
+	const hasPending = $derived(deferEntries.some((en) => !!en.file));
+
+	/** Seed entries từ images (edit mode — open modal). Cha gọi qua bind:this. */
+	function seedFromImages(urls: string[]) {
+		// Revoke blob cũ + dựng entry URL từ images hiện có
+		for (const en of deferEntries) {
+			if (en.preview.startsWith('blob:')) URL.revokeObjectURL(en.preview);
+		}
+		deferEntries = urls.map((url) => ({ preview: url, existing: url, key: deferKey++ }));
+	}
+
+	/** Entry đang là avatar (defer): wantAvatar, hoặc preview khớp avatarUrl. */
+	function isDeferAvatar(entry: DeferEntry): boolean {
+		if (entry.file) return !!entry.wantAvatar;
+		return avatarUrl === (entry.existing ?? entry.preview);
+	}
+
+	/** Xoá entry defer — revoke objectURL nếu là blob. */
+	function removeDeferEntry(entry: DeferEntry) {
+		if (entry.preview.startsWith('blob:')) URL.revokeObjectURL(entry.preview);
+		deferEntries = deferEntries.filter((en) => en !== entry);
+	}
+
+	/** Chọn file (defer) — preview ngay, upload sau. target = index entry đổi thay. */
+	function handleDeferFile(file: File, target?: number) {
+		const preview = URL.createObjectURL(file);
+		if (target !== undefined) {
+			// Đổi entry có sẵn: revoke blob cũ nếu có, giữ existing + key
+			const old = deferEntries[target];
+			if (old) {
+				if (old.preview.startsWith('blob:')) URL.revokeObjectURL(old.preview);
+				deferEntries[target] = { ...old, preview, file };
+			} else {
+				deferEntries = [...deferEntries, { preview, file, key: deferKey++ }];
+			}
+		} else {
+			// File đầu (chưa có avatar URL) tự đánh dấu avatar
+			const wantAvatar = !deferEntries.some((en) => isDeferAvatar(en));
+			deferEntries = [...deferEntries, { preview, file, wantAvatar, key: deferKey++ }];
+		}
+	}
+
+	/**
+	 * Upload tất cả file pending (defer mode) — gọi khi cha SUBMIT.
+	 * Không có file → resolve ngay (trả trạng thái hiện có). Lỗi 1 file →
+	 * abort + toast, trả undefined (cha giữ modal mở). Thành công: gán URL
+	 * vào images (theo existing cũ nếu là thay thế) / avatarUrl, sync value
+	 * (single). Trả mảng URLs đầy đủ (multiple) hoặc string (single).
+	 */
+	async function uploadPending(): Promise<string[] | string | undefined> {
+		const pending = deferEntries.filter((en) => en.file);
+		if (!pending.length) {
+			if (multiple) return images ?? [];
+			return value;
+		}
+		uploading = true;
+		try {
+			for (const entry of pending) {
+				const file = entry.file!;
+				const fd = new FormData();
+				fd.append('name', file.name);
+				fd.append('file', file, file.name);
+				const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+				let url: string | undefined;
+				let message: string | undefined;
+				try {
+					const body = (await res.json()) as { ok?: boolean; data?: { url?: string }; message?: { vi?: string; en?: string } };
+					url = body.data?.url;
+					const m = body.message;
+					message = typeof m === 'string' ? m : m?.[lang] ?? m?.en;
+				} catch {
+					message = `HTTP ${res.status}`;
+				}
+				if (!res.ok || !url) {
+					toastErr(message || `HTTP ${res.status}`);
+					return undefined;
+				}
+				// Thay thế: URL mới chiếm chỗ existing cũ trong images (giữ vị trí);
+				// Thêm mới: push cuối.
+				const replacing = entry.existing;
+				URL.revokeObjectURL(entry.preview);
+				entry.preview = url;
+				entry.file = undefined;
+				entry.existing = url;
+				if (multiple && images !== undefined) {
+					const next = [...images];
+					if (replacing && next.includes(replacing)) {
+						next[next.indexOf(replacing)] = url;
+					} else {
+						next.push(url);
+					}
+					images = next;
+				} else {
+					value = url;
+				}
+				// Avatar: entry muốn avatar → set; hoặc file đầu tiên chưa có avatar
+				if (entry.wantAvatar || (!avatarUrl && !replacing)) avatarUrl = url;
+				entry.wantAvatar = false;
+			}
+			if (multiple) return images ?? [];
+			return value;
+		} catch (err) {
+			toastErr(err instanceof Error ? err.message : String(err));
+			return undefined;
+		} finally {
+			uploading = false;
+			uploadTarget = undefined;
+		}
+	}
+
+	// Dọn objectURL khi unmount (tránh leak blob)
+	$effect(() => {
+		return () => {
+			for (const en of deferEntries) {
+				if (en.preview.startsWith('blob:')) URL.revokeObjectURL(en.preview);
+			}
+		};
+	});
+
 	async function handleFile(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
@@ -155,6 +301,13 @@
 		}
 		if (file.size > MAX_SIZE) {
 			toastErr(tr('errSize'));
+			return;
+		}
+
+		// DEFER: preview local, upload khi submit (uploadPending từ cha)
+		if (defer) {
+			handleDeferFile(file, uploadTarget);
+			uploadTarget = undefined;
 			return;
 		}
 
@@ -205,6 +358,20 @@
 
 	function clearValue() {
 		if (disabled || uploading) return;
+		if (defer) {
+			// defer: xoá toàn bộ entries + đồng bộ images/avatarUrl về rỗng
+			for (const en of deferEntries) {
+				if (en.preview.startsWith('blob:')) URL.revokeObjectURL(en.preview);
+			}
+			deferEntries = [];
+			if (multiple) {
+				images = [];
+				avatarUrl = '';
+			} else {
+				value = '';
+			}
+			return;
+		}
 		if (multiple && images !== undefined) {
 			const idx = images.indexOf(avatarUrl);
 			images = images.filter((u) => u !== avatarUrl);
@@ -221,6 +388,42 @@
 		images = next;
 		if (avatarUrl === url) avatarUrl = next[0] ?? '';
 	}
+
+	// Xoá entry defer theo key (grid defer)
+	function removeDeferAt(key: number) {
+		if (disabled || uploading) return;
+		const entry = deferEntries.find((en) => en.key === key);
+		if (!entry) return;
+		// Entry URL cũ → remove khỏi images (edit mode)
+		if (entry.existing && images !== undefined) {
+			const next = images.filter((u) => u !== entry.existing);
+			images = next;
+			if (avatarUrl === entry.existing) avatarUrl = next[0] ?? '';
+		}
+		removeDeferEntry(entry);
+	}
+
+	// Set avatar entry defer — file pending: đánh dấu wantAvatar (áp khi upload
+	// xong trong uploadPending); entry URL: set avatarUrl ngay.
+	function setDeferAvatar(key: number) {
+		if (disabled) return;
+		const entry = deferEntries.find((en) => en.key === key);
+		if (!entry) return;
+		if (entry.file) {
+			// Chỉ 1 entry wantAvatar tại 1 thời điểm
+			for (const en of deferEntries) en.wantAvatar = en === entry;
+		} else if (entry.existing) {
+			avatarUrl = entry.existing;
+		}
+	}
+
+	// Expose cho cha (bind:this): seed entries khi mở modal + upload khi submit
+	export {
+		uploadPending,
+		seedFromImages,
+		/** Có file chờ upload (cảnh báo "chưa tải lên") */
+		hasPending as hasDeferPending
+	};
 </script>
 
 <div class="image-upload" class:image-upload--disabled={disabled}>
@@ -228,8 +431,92 @@
 		<span class="image-upload__label">{label}</span>
 	{/if}
 
-	<!-- MODE MULTIPLE: grid thumbs + overlay per-thumb + add row riêng -->
-	{#if multiple}
+	<!-- MODE DEFER (grid preview — file local chờ upload + URL cũ edit mode) -->
+	{#if defer}
+		<div class="image-upload__grid">
+			{#each deferEntries as entry (entry.key)}
+				<div class="image-upload__preview" class:image-upload__preview--pending={!!entry.file}>
+					<ImageEl src={entry.preview} alt={label || 'image'} width="9.5rem" height="7rem" objectFit="cover" rounded="md" />
+					<div class="image-upload__overlay" data-no-tap>
+						{#if !entry.file}
+							<!-- URL cũ: đủ actions copy/view/đổi -->
+							<button
+								type="button"
+								class="image-upload__ovbtn"
+								onclick={async () => {
+									const idx = images?.indexOf(entry.preview) ?? -1;
+									if (idx >= 0) await copyUrlAt(idx);
+								}}
+								disabled={disabled}
+								title={tr('copy')}
+								aria-label={tr('copy')}
+							>
+								<Icon icon={iconify['content-copy-outline-rounded']} size="sm" />
+							</button>
+							<button
+								type="button"
+								class="image-upload__ovbtn"
+								onclick={() => window.open(entry.preview, '_blank', 'noopener')}
+								disabled={disabled}
+								title={tr('view')}
+								aria-label={tr('view')}
+							>
+								<Icon icon={iconify['visibility-outline-rounded']} size="sm" />
+							</button>
+						{/if}
+						<button
+							type="button"
+							class="image-upload__ovbtn"
+							onclick={() => {
+								uploadTarget = deferEntries.indexOf(entry);
+								inputEl?.click();
+							}}
+							disabled={disabled}
+							title={tr('change')}
+							aria-label={tr('change')}
+						>
+							<Icon icon={iconify['image-outline-rounded']} size="sm" />
+						</button>
+						<button
+							type="button"
+							class="image-upload__ovbtn image-upload__ovbtn--avatar"
+							class:image-upload__ovbtn--active={isDeferAvatar(entry)}
+							onclick={() => setDeferAvatar(entry.key)}
+							disabled={disabled}
+							title={tr('setAvatar')}
+							aria-label={tr('setAvatar')}
+						>
+							<Icon icon={iconify['person-outline-rounded']} size="sm" />
+						</button>
+						<button
+							type="button"
+							class="image-upload__ovbtn image-upload__ovbtn--remove"
+							onclick={() => removeDeferAt(entry.key)}
+							disabled={disabled}
+							title={tr('remove')}
+							aria-label={tr('remove')}
+						>
+							<Icon icon={iconify['close-rounded']} size="sm" />
+						</button>
+					</div>
+					{#if isDeferAvatar(entry)}
+						<span class="image-upload__avatar-badge">{tr('avatar')}</span>
+					{/if}
+					{#if entry.file}
+						<span class="image-upload__pending-badge">{lang === 'vi' ? 'Chưa tải lên' : 'Pending'}</span>
+					{/if}
+				</div>
+			{/each}
+		</div>
+		<div class="image-upload__actions">
+			<Button type="button" variant="ghost" color="primary" size="sm" disabled={disabled} onclick={() => pickAt(undefined)}>
+				+ {tr('add')}
+			</Button>
+		</div>
+		{#if copied}
+			<span class="image-upload__copied image-upload__copied--float">{tr('copied')}</span>
+		{/if}
+	{:else if multiple}
 		<div class="image-upload__grid">
 			{#each images ?? [] as url, index (url + index)}
 				<div class="image-upload__preview">
@@ -590,6 +877,25 @@
 		background: var(--primary);
 		color: #fff;
 		pointer-events: none;
+	}
+
+	/* DEFER: badge file chờ upload — góc phải dưới, nền warning nổi trên ảnh */
+	.image-upload__pending-badge {
+		position: absolute;
+		right: 0.35rem;
+		bottom: 0.35rem;
+		font-size: 0.65rem;
+		padding: 0.08rem 0.4rem;
+		border-radius: 9999px;
+		background: var(--warning, #f59e0b);
+		color: #fff;
+		pointer-events: none;
+	}
+
+	/* DEFER: viền amber nét đứt cho thumb chưa upload — phân biệt với ảnh cũ */
+	.image-upload__preview--pending {
+		outline: 1.5px dashed var(--warning, #f59e0b);
+		outline-offset: -1.5px;
 	}
 
 	.image-upload__overlay--busy {

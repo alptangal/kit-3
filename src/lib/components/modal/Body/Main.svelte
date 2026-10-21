@@ -4,10 +4,16 @@
 	import { getModalContainerContext } from '../Container';
 	import { getModalContext } from '../useModalContext.svelte';
 
-	let { children, ...props }: ModalBodyProps = $props();
+	let { children, ref = $bindable(), ...props }: ModalBodyProps = $props();
 	const modalContainerContext = getModalContainerContext();
 	const modalContext = getModalContext();
 	let configs: ModalBodyConfigs = $state({
+		get ref() {
+			return ref;
+		},
+		set ref(v) {
+			ref = v;
+		},
 		get style() {
 			const defaultStyles: (string | undefined)[] = ['modal-body-root'];
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);

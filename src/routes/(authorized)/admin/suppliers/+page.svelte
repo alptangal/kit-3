@@ -3,14 +3,14 @@
 	import { Button, DataTable, Pagination, AlertDialog, Badge, Spinner } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
-	import { EmailInput, ImageUpload, Input, Label, PhoneInput, Switch, TextField, Textarea, AddressInput } from '$components/form';
+	import { EmailInput, ImageUpload, Input, Label, PhoneInput, Select, Switch, TextField, Textarea, AddressInput } from '$components/form';
 	import { Icon } from '$components/element/icon';
 	import { iconify } from '$assets/icons/iconify';
 	import type { Size } from '$components/interface';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
 	import { formatDate as formatDateShared } from '$modules/i18n';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
 	import { resolveServerMessage } from '../_interface';
 	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs, saveDraftPref, clearDraftPref, readDraftPref } from '$store/user-prefs.svelte';
@@ -276,6 +276,16 @@
 	const SUPPLIER_STATUSES = ['active', 'inactive'] as const;
 	const PO_STATUSES = ['draft', 'ordered', 'partially_received', 'received', 'cancelled'] as const;
 
+	// ── Options cho Select component filter (yêu cầu batch 3: tái sử dụng Select
+	// thay select native cho cả 4 filter). Value '' = tất cả (giữ parity select cũ).
+	const supplierStatusOptions = $derived(
+		SUPPLIER_STATUSES.map((s) => ({
+			value: s,
+			label: s === 'active' ? pageContents.supplierModal.statusActive[lang] : pageContents.supplierModal.statusInactive[lang]
+		}))
+	);
+	const poStatusOptions = $derived(PO_STATUSES.map((s) => ({ value: s, label: poStatusLabel(s) })));
+
 	function poStatusLabel(status?: string): string {
 		const key = (status ?? '') as keyof typeof pageContents.poStatuses;
 		const label = pageContents.poStatuses[key];
@@ -334,10 +344,49 @@
 	let branches = $state<BranchOption[]>([]);
 	let variantOptions = $state<VariantOption[]>([]);
 
+	// Options Select filter PO (bắt buộc value string — lọc row thiếu _id)
+	const poBranchOptions = $derived(branches.map((b) => ({ value: b._id, label: b.name ?? b._id })));
+	const poSupplierOptions = $derived(
+		suppliers
+			.filter((s): s is SupplierRow & { _id: string } => typeof s._id === 'string')
+			.map((s) => ({ value: s._id, label: s.name ?? s._id }))
+	);
+	// ── Sticky at-bottom (pattern purchases: cuộn tới đáy bảng → bỏ padding
+	// caption/pagination + inset để tối đa không gian row; rời đáy → trả lại) ──
+	let wrapEl = $state<HTMLElement | undefined>(undefined);
+	let tableScrolled = $state(false);
+	let wrapAtBottom = $state(false);
+	let paginationPopped = $state(false);
+	let scrollRaf = 0;
+	function onTableScroll() {
+		const el = wrapEl;
+		if (!el) return;
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			const scrollTop = el.scrollTop;
+			// BẪY: nếu nội dung vừa màn (scrollHeight ≈ clientHeight) thì atBottom
+			// luôn true → kẹt trạng thái thu padding vĩnh viễn. Chỉ coi là "đáy"
+			// khi wrap thực sự scrollable.
+			const scrollable = el.scrollHeight > el.clientHeight + 4;
+			const atBottom = scrollable && scrollTop + el.clientHeight >= el.scrollHeight - 4;
+			tableScrolled = scrollTop > 8;
+			wrapAtBottom = atBottom;
+			if (atBottom && !paginationPopped) {
+				paginationPopped = true;
+				setTimeout(() => (paginationPopped = false), 450);
+			} else if (!atBottom) {
+				paginationPopped = false;
+			}
+		});
+	}
+
 	// ── Modal tạo/sửa nhà cung cấp ──
 	let supplierModalDisplay = $state(false);
 	let supplierSubmitting = $state(false);
 	let supplierError = $state<string | undefined>(undefined);
+	// Ref Modal.Container.Body (element DOM) — dùng cho scroll-to-invalid khi submit
+	let supplierModalBodyEl = $state<HTMLElement | undefined>(undefined);
 	// 'create' | 'edit' — cùng 1 form; edit prefill từ row + Lưu qua /suppliers/update
 	let supplierEditMode = $state<'create' | 'edit'>('create');
 	let supplierEditId = $state<string | null>(null);
@@ -378,6 +427,12 @@
 	});
 	// breakdown cho từng entry addresses (AddressInput bind 2 chiều từng phần tử)
 	let supplierAddressBreakdowns = $state<{ province: string; district: string; ward?: string }[]>([]);
+	// ImageUpload defer ref — gọi uploadPending() khi submit, seedFromImages() khi mở modal
+	let supplierImageUpload = $state<{
+		uploadPending: () => Promise<string[] | string | undefined>;
+		seedFromImages: (urls: string[]) => void;
+		hasDeferPending: boolean;
+	} | undefined>(undefined);
 
 	// ── Draft DB (yêu cầu 1k: reload page → resume) — field `drafts` trong
 	// user-prefs (server cap 5 form × 20KB). Tách khỏi datatable.filters vì
@@ -889,8 +944,23 @@
 		}));
 		supplierError = undefined;
 		supplierModalDisplay = true;
+		void seedImagesAfterMount();
 		if (resumed) showToast(pageContents.toasts.draftRestored[lang], 'success');
 		closeGuard.markClean();
+	}
+
+	// Defer seed: khi modal mở, component ImageUpload MỚI mount (nằm trong
+	// {#if supplierModalDisplay}) — ref còn undefined ngay sau set display=true.
+	// KHÔNG dùng $effect (track supplierForm.images sâu + mutate deferEntries
+	// trong child → effect_update_depth_exceeded). Gọi qua awaitTick sau khi
+	// set display: component đã mount, ref sẵn sàng, chạy 1 lần duy nhất.
+	// Entries từ images đã lưu (resume draft / edit row): chỉ seed URL thật —
+	// file local draft KHÔNG sống sót qua reload (blob URL chết).
+	async function seedImagesAfterMount() {
+		await tick();
+		if (supplierModalDisplay && supplierImageUpload) {
+			supplierImageUpload.seedFromImages(supplierForm.images);
+		}
 	}
 
 	// ── Edit: prefill form từ row của bảng (dùng chung form với create) ──
@@ -923,6 +993,7 @@
 		}));
 		supplierError = undefined;
 		supplierModalDisplay = true;
+		void seedImagesAfterMount();
 		closeGuard.markClean();
 	}
 
@@ -946,6 +1017,31 @@
 		if (t.discord.trim() && !DISCORD_RE.test(t.discord.trim())) return pageContents.form.invalidDiscord[lang];
 		if (t.facebook.trim() && !FACEBOOK_RE.test(t.facebook.trim())) return pageContents.form.invalidFacebook[lang];
 		return undefined;
+	}
+
+	// Map lỗi validate → CSS selector field tương ứng trong modal (scroll-to-invalid
+	// yêu cầu 4f: submit khi invalid → cuộn tới field đầu tiên từ trên xuống).
+	// Thứ tự khớp thứ tự check trong validateSupplierForm (name → phone → email → social).
+	const FIELD_SELECTORS = {
+		requireName: '[data-field="supplier-name"]',
+		invalidPhone: '[data-field="supplier-phones"]',
+		invalidEmail: '[data-field="supplier-emails"]',
+		invalidZalo: '[data-field="supplier-zalo"]',
+		invalidTelegram: '[data-field="supplier-telegram"]',
+		invalidDiscord: '[data-field="supplier-discord"]',
+		invalidFacebook: '[data-field="supplier-facebook"]'
+	} as const;
+
+	// Scroll tới field invalid đầu tiên (trong .modal-body-root overflow container)
+	function scrollToInvalidField(selector: string) {
+		const root = supplierModalBodyEl;
+		if (!root) return;
+		const el = root.querySelector<HTMLElement>(selector);
+		if (!el) return;
+		el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		// Flash viền để user dễ định vị
+		el.classList.add('field-flash');
+		setTimeout(() => el.classList.remove('field-flash'), 1600);
 	}
 
 	// ── STT tag + cảnh báo trùng: trả map value→số lần xuất hiện (>=2 = dup) ──
@@ -1013,11 +1109,27 @@
 		const validationError = validateSupplierForm();
 		if (validationError) {
 			supplierError = validationError;
+			// Scroll tới field invalid đầu tiên để user can thiệp (yêu cầu 4f)
+			const key = (Object.keys(FIELD_SELECTORS) as (keyof typeof FIELD_SELECTORS)[]).find((k) =>
+				validationError === pageContents.form[k]?.[lang]
+			);
+			if (key) scrollToInvalidField(FIELD_SELECTORS[key]);
 			return;
 		}
 		supplierError = undefined;
 		supplierSubmitting = true;
 		try {
+			// DEFER images: upload các file local chờ tải lên TRƯỚC khi build payload
+			// (yêu cầu 4c — không upload rác khi hủy form). Fail upload → dừng, giữ modal.
+			if (supplierImageUpload) {
+				const uploaded = await supplierImageUpload.uploadPending();
+				if (uploaded === undefined) {
+					supplierSubmitting = false;
+					return;
+				}
+				if (Array.isArray(uploaded)) supplierForm.images = uploaded;
+				else supplierForm.images = [uploaded];
+			}
 			const isEdit = supplierEditMode === 'edit' && !!supplierEditId;
 			const response = await encryption.fetchSecure(
 				isEdit ? '/api/admin/suppliers/update' : '/api/admin/suppliers/create',
@@ -1261,7 +1373,11 @@
 	<title>{pageContents.title[lang]}</title>
 </svelte:head>
 
-<section class="admin-page">
+<section
+	class="admin-page admin-page--fullheight"
+	class:at-bottom={wrapAtBottom}
+	data-active-tab={activeTab}
+>
 
 	<!-- ── Tab ── -->
 	<div class="tab-strip" role="tablist">
@@ -1303,7 +1419,7 @@
 					onSortChange/captionTools (pattern purchases). Card mode mobile qua
 					cardFields + mobileTapMode="callback". Yêu cầu 2: selectable + STT
 					hover → checkbox + bulk copy/delete qua bulk-bar trong caption. -->
-			<div class="admin-table-wrap">
+			<div class="admin-table-wrap" bind:this={wrapEl} onscroll={onTableScroll}>
 				<DataTable
 					data={suppliersAny}
 					columns={supplierColumns}
@@ -1421,18 +1537,19 @@
 									</div>
 								{/if}
 							</div>
-							<!-- yêu cầu 7: filter VÀO caption (bỏ admin-filters row) -->
-							<select
-								class="admin-select"
+							<!-- yêu cầu 7: filter VÀO caption (bỏ admin-filters row).
+							     Batch 3: Select component thay select native (tái sử dụng). -->
+							<Select
+								class="admin-filter-select"
+								size="sm"
 								bind:value={supplierStatusFilter}
-								onchange={onFilterChange}
+								options={supplierStatusOptions}
+								searchable
+								clearable
+								placeholder={pageContents.filters.allStatuses[lang]}
+								onValueChange={() => onFilterChange()}
 								data-test="suppliers-filter-status"
-							>
-								<option value="">{pageContents.filters.allStatuses[lang]}</option>
-								{#each SUPPLIER_STATUSES as status (status)}
-									<option value={status}>{status === 'active' ? pageContents.supplierModal.statusActive[lang] : pageContents.supplierModal.statusInactive[lang]}</option>
-								{/each}
-							</select>
+							/>
 							<!-- nút create vào caption (yêu cầu 3: bỏ admin-header) -->
 							<div class="admin-actions-group">
 								<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
@@ -1465,7 +1582,7 @@
 				<Button color="primary" variant="outline" onClick={loadPOs}>{pageContents.states.retry[lang]}</Button>
 			</div>
 		{:else}
-			<div class="admin-table-wrap">
+			<div class="admin-table-wrap" bind:this={wrapEl} onscroll={onTableScroll}>
 				<DataTable
 					data={posAny}
 					columns={poColumns}
@@ -1485,25 +1602,38 @@
 					data-test="purchase-orders-datatable"
 				>
 					{#snippet captionTools()}
-						<!-- yêu cầu 7: filter PO vào caption -->
-						<select class="admin-select" bind:value={poStatusFilter} onchange={onFilterChange}>
-							<option value="">{pageContents.filters.allStatuses[lang]}</option>
-							{#each PO_STATUSES as status (status)}
-								<option value={status}>{poStatusLabel(status)}</option>
-							{/each}
-						</select>
-						<select class="admin-select" bind:value={poBranchFilter} onchange={onFilterChange}>
-							<option value="">{pageContents.filters.allBranches[lang]}</option>
-							{#each branches as branch (branch._id)}
-								<option value={branch._id}>{branch.name ?? branch._id}</option>
-							{/each}
-						</select>
-						<select class="admin-select" bind:value={poSupplierFilter} onchange={onFilterChange}>
-							<option value="">{pageContents.filters.allSuppliers[lang]}</option>
-							{#each suppliers as supplier (supplier._id)}
-								<option value={supplier._id}>{supplier.name ?? supplier._id}</option>
-							{/each}
-						</select>
+						<!-- yêu cầu 7: filter PO vào caption. Batch 3: Select component thay
+						     select native (tái sử dụng, user chốt thay cả 4 filter). -->
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poStatusFilter}
+							options={poStatusOptions}
+							searchable
+							clearable
+							placeholder={pageContents.filters.allStatuses[lang]}
+							onValueChange={() => onFilterChange()}
+						/>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poBranchFilter}
+							options={poBranchOptions}
+							searchable
+							clearable
+							placeholder={pageContents.filters.allBranches[lang]}
+							onValueChange={() => onFilterChange()}
+						/>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poSupplierFilter}
+							options={poSupplierOptions}
+							searchable
+							clearable
+							placeholder={pageContents.filters.allSuppliers[lang]}
+							onValueChange={() => onFilterChange()}
+						/>
 						<div class="admin-actions-group">
 							<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
 								<Icon icon={iconify['tune-rounded']} size="sm" />
@@ -1528,7 +1658,11 @@
 	{/if}
 
 	<!-- ── Phân trang (server-side, dùng chung 2 tab) ── -->
-	<footer class="admin-pagination">
+	<footer
+		class="admin-pagination"
+		class:pagination-collapsed={tableScrolled}
+		class:pagination-pop={paginationPopped}
+	>
 		<span class="total-count">{totalCountText}</span>
 		<div class="page-controls">
 			<Pagination
@@ -1619,7 +1753,7 @@
 			<Modal.Container.Header>
 				{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
 			</Modal.Container.Header>
-			<Modal.Container.Body>
+			<Modal.Container.Body bind:ref={supplierModalBodyEl}>
 				{#if supplierError}
 					<div class="form-error-banner" role="alert">{supplierError}</div>
 				{/if}
@@ -1630,16 +1764,18 @@
 				{/if}
 				<div class="form-grid">
 					<div class="form-grid-2">
+							<div data-field="supplier-name">
 						<!-- yêu cầu 1e: dùng Input component (không native input) -->
-						<TextField name="supplier-name" required>
-							<Label>{pageContents.supplierModal.name[lang]}</Label>
-							<Input
-								type="text"
-								bind:value={supplierForm.name}
-								disabled={supplierSubmitting}
-								data-test="supplier-form-name"
-							/>
-						</TextField>
+							<TextField name="supplier-name" required>
+								<Label>{pageContents.supplierModal.name[lang]}</Label>
+								<Input
+									type="text"
+									bind:value={supplierForm.name}
+									disabled={supplierSubmitting}
+									data-test="supplier-form-name"
+								/>
+							</TextField>
+							</div>
 						<TextField name="supplier-contact">
 							<Label>{pageContents.supplierModal.contact[lang]}</Label>
 							<Input
@@ -1649,18 +1785,23 @@
 							/>
 						</TextField>
 					</div>
-					<!-- ── Hình ảnh multiple (yêu cầu 1b: add button row riêng, 1c hover action, 1d bỏ change/remove riêng) ── -->
+					<!-- ── Hình ảnh multiple (defer batch 3: preview local — chỉ upload
+						     KHI SUBMIT qua uploadPending, tránh rác khi hủy form) ── -->
 					<ImageUpload
+						bind:this={supplierImageUpload}
 						images={supplierForm.images}
 						bind:avatarUrl={supplierForm.avatarUrl}
 						label={pageContents.supplierModal.images[lang]}
 						disabled={supplierSubmitting}
+						defer
 					/>
-					<!-- ── Phones + emails multiple: Badge STT + Input component ── -->
-					<div class="form-grid" style="gap: 0.5rem;">
+					<!-- ── Phones + emails multiple: Badge STT + Input component.
+						     Batch 3: Badge góc trái-trên + remove góc phải-trên ĐÈ LÊN VIỀN
+						     TRÊN của field (absolute, không tốn chiều cao; kích thước nhỏ). ── -->
+					<div class="form-grid" style="gap: 0.5rem;" data-field="supplier-phones">
 						{#each supplierForm.phones as phone, phoneIndex (phoneIndex)}
 							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2}>
-								<Badge label={String(phoneIndex + 1)} size="xs" variant="soft" color={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
+								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="soft" color={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
 								<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
 								<button
 									type="button"
@@ -1676,14 +1817,14 @@
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting}
+							disabled={supplierSubmitting || supplierForm.phones.some((p) => (p ?? '').trim() === '')}
 							onclick={() => {
 								supplierForm.phones = [...supplierForm.phones, ''];
 							}}
 						>+ {pageContents.supplierModal.addPhone[lang]}</button>
 						{#each supplierForm.emails as email, emailIndex (emailIndex)}
-							<div class="field-row" class:field-row--dup={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2}>
-								<Badge label={String(emailIndex + 1)} size="xs" variant="soft" color={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
+							<div class="field-row" class:field-row--dup={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2} data-field="supplier-emails">
+								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="soft" color={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
 								<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
 								<button
 									type="button"
@@ -1699,7 +1840,7 @@
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting}
+							disabled={supplierSubmitting || supplierForm.emails.some((e) => (e ?? '').trim() === '')}
 							onclick={() => {
 								supplierForm.emails = [...supplierForm.emails, ''];
 							}}
@@ -1712,7 +1853,7 @@
 						{#each supplierForm.addresses as entry, addrIndex (addrIndex)}
 							<div class="address-entry" class:field-row--dup={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2}>
 								<div class="address-entry__head">
-									<Badge label={String(addrIndex + 1)} size="xs" variant="soft" color={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
+									<Badge class="field-row-stt" label={String(addrIndex + 1)} size="xs" variant="soft" color={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
 									<Input
 										type="text"
 										bind:value={entry.label}
@@ -1742,7 +1883,7 @@
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting}
+							disabled={supplierSubmitting || supplierForm.addresses.some((a) => (a.address ?? '').trim() === '')}
 							onclick={() => {
 								supplierForm.addresses = [...supplierForm.addresses, { label: '', address: '', province: '', district: '' }];
 								supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '', ward: '' }];
@@ -1753,6 +1894,7 @@
 					<div class="items-block social-block">
 						<span class="form-label">{pageContents.supplierModal.social[lang]}</span>
 						<div class="form-grid-2">
+							<div data-field="supplier-zalo">
 							<TextField name="supplier-zalo">
 								<Label>{pageContents.supplierModal.zalo[lang]}</Label>
 								<Input
@@ -1762,6 +1904,8 @@
 									disabled={supplierSubmitting}
 								/>
 							</TextField>
+							</div>
+							<div data-field="supplier-telegram">
 							<TextField name="supplier-telegram">
 								<Label>{pageContents.supplierModal.telegram[lang]}</Label>
 								<Input
@@ -1771,6 +1915,8 @@
 									disabled={supplierSubmitting}
 								/>
 							</TextField>
+							</div>
+							<div data-field="supplier-discord">
 							<TextField name="supplier-discord">
 								<Label>{pageContents.supplierModal.discord[lang]}</Label>
 								<Input
@@ -1780,6 +1926,8 @@
 									disabled={supplierSubmitting}
 								/>
 							</TextField>
+							</div>
+							<div data-field="supplier-facebook">
 							<TextField name="supplier-facebook">
 								<Label>{pageContents.supplierModal.facebook[lang]}</Label>
 								<Input
@@ -1789,6 +1937,7 @@
 									disabled={supplierSubmitting}
 								/>
 							</TextField>
+							</div>
 						</div>
 					</div>
 					<!-- ── Note long text (yêu cầu 1i) ── -->
@@ -2034,6 +2183,43 @@
 		}
 	}
 
+	/* ── Fullheight (pattern purchases): ZERO 3 var sticky của layout — wrap tự
+	   scroll trong page (caption/th sticky bám wrap, không bám layout) ── */
+	.admin-page--fullheight {
+		height: 100%;
+		max-width: none;
+		gap: 0.75rem;
+		padding: 1rem 1.25rem;
+		/* caption/th sticky của DataTable đọc 3 var này từ ancestor — zero để
+		   sticky top = 0 (bám đỉnh wrap, không bị "hở" dưới header layout) */
+		--admin-header-h: 0px;
+		--admin-filters-h: 0px;
+		--admin-page-header-h: 0px;
+
+		@media (max-width: 767px) {
+			padding: 0.75rem;
+		}
+	}
+
+	/* Cuộn tới đáy: bỏ hết padding page + pagination để tối đa không gian row.
+	   Rời đáy (scroll to top) → media 767 trả lại padding như ban đầu. */
+	.admin-page--fullheight.at-bottom {
+		@media (max-width: 767px) {
+			padding: 0;
+		}
+	}
+
+	.admin-table-area {
+		flex: 1;
+		min-height: 0;
+	}
+
+	.admin-table-wrap {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+	}
+
 	/* ── Tab-strip: sticky khi cuộn (yêu cầu 4 — scroll to bottom giữ tab-strip) ── */
 	.tab-strip {
 		display: flex;
@@ -2084,6 +2270,31 @@
 		option {
 			background: var(--default-200);
 			color: var(--foreground);
+		}
+	}
+
+	/* Select component filter trong captionTools (batch 3: thay select native).
+	   BẪY: scoped selector không match element Select (mang hash Select component)
+	   → :global() bắt buộc (pattern purchases +page.svelte:4640). */
+	:global(.datatable-caption-tools .admin-filter-select) {
+		width: 10rem;
+		max-width: 10rem;
+		flex-shrink: 0;
+
+		:global(.select-trigger) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--default-50, transparent);
+			font-size: 0.85rem;
+		}
+	}
+
+	@media (max-width: 767px) {
+		:global(.datatable-caption-tools .admin-filter-select) {
+			width: 100%;
+			max-width: 100%;
 		}
 	}
 
@@ -2142,6 +2353,11 @@
 		}
 	}
 
+	/* Fullheight: wrap tự cuộn dọc (scroll container của page) — đọc cả 2 chiều */
+	.admin-page--fullheight .admin-table-wrap {
+		overflow: auto;
+	}
+
 	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
 	.row-actions {
 		display: flex;
@@ -2156,6 +2372,38 @@
 		align-items: center;
 		gap: 1rem;
 		flex-wrap: wrap;
+	}
+
+	/* ── Pagination collapsed/pop (pattern purchases): cuộn → gọn lại; chạm đáy
+	   → "pop" animation 450ms 1 lần. ≤767 mới áp — desktop giữ nguyên. ── */
+	@media (max-width: 767px) {
+		.pagination-collapsed.admin-pagination {
+			padding-block: 0.15rem;
+			font-size: 0.75rem;
+		}
+		.at-bottom .admin-pagination {
+			padding-block: 0;
+			font-size: 0.7rem;
+		}
+		.pagination-pop.admin-pagination {
+			animation: pagination-pop-anim 450ms ease-out;
+		}
+		@keyframes pagination-pop-anim {
+			0% {
+				transform: scale(0.94);
+			}
+			60% {
+				transform: scale(1.04);
+			}
+			100% {
+				transform: scale(1);
+			}
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.pagination-pop.admin-pagination {
+				animation: none;
+			}
+		}
 	}
 
 	.total-count {
@@ -2198,16 +2446,43 @@
 		margin-bottom: 0.75rem;
 	}
 
+	/* Scroll-to-invalid: flash viền field lỗi 1.6s để user định vị nhanh */
+	.field-flash {
+		animation: field-flash-pulse 1.6s ease-out;
+		border-radius: 0.5rem;
+	}
+	@keyframes field-flash-pulse {
+		0%, 60% {
+			box-shadow: 0 0 0 2px var(--color-sky-500, #0ea5e9);
+		}
+		100% {
+			box-shadow: 0 0 0 2px transparent;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.field-flash {
+			animation: none;
+			box-shadow: 0 0 0 2px var(--color-sky-500, #0ea5e9);
+		}
+	}
+
 	.form-grid {
 		display: grid;
 		gap: 0.75rem;
 	}
 
-	/* hàng phone/email + nút xoá */
+	/* hàng phone/email + nút xoá.
+	   Batch 3: Badge STT (trái) + remove (phải) ĐÈ LÊN VIỀN TRÊN của field
+	   (absolute, translateY(-50%)) → không tốn chiều cao hàng; kích thước nhỏ
+	   (1.15rem) tiết kiệm không gian. Z-index trên viền input; field-row cần
+	   margin-top để badge không bị cắt bởi field phía trên (modal-body có
+	   overflow-y auto → không clip nếu đủ khoảng cách gap 0.5rem + 0.6rem). */
 	.field-row {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		margin-top: 0.55rem;
 
 		& > :global(.input-root) {
 			flex: 1;
@@ -2215,24 +2490,50 @@
 		}
 	}
 
+	/* Badge STT đè viền trên góc trái — dịch trái ra ngoài 1 nửa width để
+	   "treo" trên mép (x=-50% so với góc), y giữa viền. Badge thu nhỏ:
+	   padding-inline 0.35rem + min-height 1.15rem (size-xs token lớn hơn nhu cầu). */
+	.field-row > :global(.field-row-stt),
+	.field-row > .field-row-stt {
+		position: absolute;
+		top: 0;
+		left: 0.6rem;
+		transform: translate(-50%, -50%);
+		z-index: 2;
+		min-height: 1.15rem;
+		padding-inline: 0.35rem;
+		font-size: 0.65rem;
+		line-height: 1;
+		border-radius: 9999px;
+		box-shadow: 0 0 0 2px var(--background, #fff);
+	}
+
 	.field-row-remove {
+		position: absolute;
+		top: 0;
+		right: 0.6rem;
+		transform: translate(50%, -50%);
+		z-index: 2;
 		flex: none;
-		width: 1.75rem;
-		height: 1.75rem;
+		width: 1.15rem;
+		height: 1.15rem;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		padding: 0;
 		border: 1px solid var(--border, #e5e7eb);
-		border-radius: 0.375rem;
-		background: transparent;
+		border-radius: 9999px;
+		background: var(--background, #fff);
 		color: var(--foreground-500, inherit);
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: 0.625rem;
+		line-height: 1;
 		transition: background 0.15s ease, color 0.15s ease;
 
 		&:hover:not(:disabled) {
 			background: color-mix(in oklab, var(--error) 10%, transparent);
 			color: var(--error);
+			border-color: var(--error);
 		}
 
 		&:disabled {
@@ -2412,11 +2713,13 @@
 		border-left-color: var(--error);
 	}
 
-	/* ── Multiple addresses: entry block ── */
+	/* ── Multiple addresses: entry block (badge/remove đè viền trên — mirror .field-row) ── */
 	.address-entry {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;
+		margin-top: 0.55rem;
 		padding: 0.6rem;
 		border: 1px solid var(--default-200);
 		border-radius: 0.6rem;
@@ -2424,6 +2727,27 @@
 		&.field-row--dup {
 			border-color: var(--error);
 		}
+	}
+
+	.address-entry > :global(.field-row-stt),
+	.address-entry > .field-row-stt {
+		position: absolute;
+		top: 0;
+		left: 0.6rem;
+		transform: translate(-50%, -50%);
+		z-index: 2;
+		min-height: 1.15rem;
+		padding-inline: 0.35rem;
+		font-size: 0.65rem;
+		line-height: 1;
+		border-radius: 9999px;
+		box-shadow: 0 0 0 2px var(--background, #fff);
+	}
+
+	.address-entry .field-row-remove {
+		top: 0;
+		right: 0.6rem;
+		transform: translate(50%, -50%);
 	}
 
 	.address-entry__head {
@@ -2532,12 +2856,34 @@
 	   chồng dọc cao ~7rem + pagination ~3rem → đệm 12rem để card cuối và
 	   pagination không bị FAB fixed che khi cuộn hết danh sách */
 	@media (max-width: 767px) {
-		.admin-page {
+		.admin-page--fullheight {
 			padding-bottom: 12rem;
 		}
 		/* FAB fixed góc phải đè "Rows: 20" (page-size) khi cuộn — chừa chỗ phải */
 		.admin-pagination {
 			padding-right: 4.75rem;
+		}
+	}
+
+	/* ── Bridge inset (pattern purchases): layout .admin-inset đọc :has() từ page
+	   để co padding-bottom + header khi page chạm đáy (at-bottom) ── */
+	:global(.admin-inset:has(.admin-page--fullheight)) .admin-page--fullheight {
+		@media (max-width: 767px) {
+			padding-bottom: 4.5rem;
+		}
+	}
+
+	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) .admin-page--fullheight {
+		@media (max-width: 767px) {
+			padding-bottom: 0;
+		}
+	}
+
+	/* Mobile chạm đáy: inset-header (breadcrumb) zero padding (yêu cầu 2 —
+	   breadcrumb co hết cỡ khi cuộn đáy, trả lại khi rời đáy) */
+	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) :global(.admin-inset-header) {
+		@media (max-width: 767px) {
+			padding: 0;
 		}
 	}
 </style>

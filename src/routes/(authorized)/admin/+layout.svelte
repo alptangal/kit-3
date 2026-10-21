@@ -12,7 +12,8 @@
 	import { Separator } from '$components/element';
 	import type { LayoutData } from '$store/user-prefs.svelte';
 	import type { TranslateContent } from '$interfaces/basic';
-	import { client } from '$store/basic.svelte';
+	import { client, profile } from '$store/basic.svelte';
+	import { Icon } from '$components/element';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
@@ -172,18 +173,30 @@
 		await goto('/login', { invalidateAll: true });
 	};
 
-	// ── Toggle theme từ sidebar footer: mirror ThemeToggle component (dùng
-	// MenuButton thay Button riêng). Cycle 3 trạng thái system → dark → light →
-	// system (user chốt 2026-10-21). Icon theo giá trị HIỆN (resolved): light =
-	// moon (bấm sang dark), dark = sun (bấm sang light), system = monitor.
+	// ── Theme switch 3 nút (yêu cầu batch 3 #sidebar): 3 icon system/dark/light
+	// hiển thị cạnh nhau trong 1 node. Nhấn icon nào → chọn theme đó; nhấn vùng
+	// khác (node cha) → next icon BÊN CẠNH (tuần hoàn: light → system).
 	// animateThemeTransition fallback tâm viewport khi click không kèm coords.
-	import { profile } from '$store/basic.svelte';
 	import { animateThemeTransition } from '$modules/theme.svelte';
 	import type { AppTheme } from '$interfaces/basic';
 
-	const themeIcon = $derived(
-		profile.theme === 'dark' ? 'lucide:sun' : profile.theme === 'light' ? 'lucide:moon' : 'lucide:monitor-cog'
-	);
+	// Thứ tự hiển thị + vòng tuần hoàn khi nhấn node cha.
+	const THEMES: AppTheme[] = ['system', 'dark', 'light'];
+	const themeIcons: Record<AppTheme, string> = {
+		system: 'lucide:monitor-cog',
+		dark: 'lucide:sun',
+		light: 'lucide:moon'
+	};
+	const themeLabels: Record<AppTheme, TranslateContent> = {
+		system: tc('Hệ thống', 'System'),
+		dark: tc('Tối', 'Dark'),
+		light: tc('Sáng', 'Light')
+	};
+	const themeAria: Record<AppTheme, string> = {
+		system: lang === 'vi' ? 'Giao diện hệ thống' : 'System appearance',
+		dark: lang === 'vi' ? 'Giao diện tối' : 'Dark appearance',
+		light: lang === 'vi' ? 'Giao diện sáng' : 'Light appearance'
+	};
 	const themeLabel = $derived(
 		profile.theme === 'dark'
 			? tc('Giao diện (tối)', 'Appearance (dark)')
@@ -191,12 +204,27 @@
 				? tc('Giao diện (sáng)', 'Appearance (light)')
 				: tc('Giao diện (hệ thống)', 'Appearance (system)')
 	);
-	const handleThemeToggle = (e?: Event | MouseEvent) => {
-		const me = e instanceof MouseEvent ? e : null;
-		const x = me?.clientX ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
-		const y = me?.clientY ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
-		const next: AppTheme = profile.theme === 'system' ? 'dark' : profile.theme === 'dark' ? 'light' : 'system';
+	const setTheme = (next: AppTheme, x: number, y: number) => {
+		if (profile.theme === next) return;
 		animateThemeTransition(next, x, y, 450);
+	};
+	// Nhấn icon cụ thể → chọn theme đó (coords = tâm icon để animation tỏa từ icon).
+	// stopPropagation chặn bubble lên node cha (handleThemeCycle) → không double-fire.
+	const handleThemePick = (theme: AppTheme) => (e: MouseEvent) => {
+		e.stopPropagation();
+		const target = e.currentTarget as HTMLElement | null;
+		const rect = target?.getBoundingClientRect();
+		setTheme(theme, rect ? rect.left + rect.width / 2 : e.clientX, rect ? rect.top + rect.height / 2 : e.clientY);
+	};
+	// Nhấn vùng khác trong node cha (không trúng icon) → next icon BÊN CẠNH của
+	// theme hiện tại theo mảng hiển thị, tuần hoàn (light → system).
+	const handleThemeCycle = (e: MouseEvent) => {
+		// click bubble từ icon đã xử lý ở handleThemePick (stopPropagation) → bỏ qua.
+		const idx = THEMES.indexOf(profile.theme);
+		const next = THEMES[(idx + 1) % THEMES.length];
+		const node = e.currentTarget as HTMLElement;
+		const rect = node.getBoundingClientRect();
+		setTheme(next, rect.left + rect.width / 2, rect.top + rect.height / 2);
 	};
 
 	// Breadcrumb derive từ route hiện tại (đơn giản: Home + tên trang).
@@ -630,12 +658,30 @@
 					/>
 				</Sidebar.MenuItem>
 				<Sidebar.MenuItem>
-					<Sidebar.MenuButton
-						label={themeLabel}
-						onclick={handleThemeToggle}
-						icon={themeIcon}
+					<!-- Theme switch 3 nút (batch 3 #sidebar): node cha 3 icon cạnh nhau.
+					     Nhấn icon → theme đó (stopPropagation chặn bubble → không double-fire
+					     cycle); nhấn vùng khác trong node → next icon bên cạnh, tuần hoàn. -->
+					<div
+						class="admin-theme-switch"
+						role="group"
+						aria-label={themeLabel}
+						onclick={handleThemeCycle}
 						data-test="admin-nav-theme"
-					/>
+					>
+						{#each THEMES as t (t)}
+							<button
+								type="button"
+								class="admin-theme-switch__btn"
+								class:active={profile.theme === t}
+								aria-label={themeAria[t]}
+								aria-pressed={profile.theme === t}
+								title={themeLabels[t]}
+								onclick={handleThemePick(t)}
+							>
+								<Icon icon={themeIcons[t]} />
+							</button>
+						{/each}
+					</div>
 				</Sidebar.MenuItem>
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton
@@ -704,13 +750,67 @@
 		padding: 0.5rem 0.75rem 0.25rem;
 	}
 
+	/* ── Theme switch 3 nút (batch 3 #sidebar) ──
+	   Node cha chứa 3 icon cạnh nhau trong Sidebar.Footer. Nhấn icon → theme đó;
+	   nhấn vùng còn lại (node cha) → next icon bên cạnh (tuần hoàn). Icon active
+	   nổi bật (color primary + nền soft); icon thường mờ → gợi ý vị trí hiện tại. */
+	.admin-theme-switch {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		width: 100%;
+		min-height: 2.25rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.5rem;
+		cursor: pointer;
+		transition: background 150ms ease;
+
+		&:hover {
+			background: var(--accent, hsl(0 0% 96%));
+		}
+
+		.admin-theme-switch__btn {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 1.75rem;
+			height: 1.75rem;
+			padding: 0;
+			border: none;
+			border-radius: 0.375rem;
+			background: transparent;
+			color: var(--foreground-400, hsl(0 0% 62%));
+			cursor: pointer;
+			transition: color 150ms ease, background 150ms ease;
+
+			&:hover {
+				color: var(--foreground, hsl(0 0% 9%));
+			}
+
+			/* Icon active = theme đang áp dụng — nổi bật để user biết vị trí. */
+			&.active {
+				background: var(--primary-soft, hsl(212 92% 95%));
+				color: var(--primary, hsl(212 92% 45%));
+
+				@media (prefers-color-scheme: dark) {
+					background: hsl(212 92% 20%);
+					color: hsl(212 92% 70%);
+				}
+			}
+
+			svg {
+				width: 1.125rem;
+				height: 1.125rem;
+			}
+		}
+	}
+
 	.admin-inset-header {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.75rem 1.5rem;
 		background: var(--background, #fff);
-
 		/* Desktop: sticky breadcrumb bar — user luôn thấy vị trí đang đứng.
 		   1 scroll container duy nhất (.admin-inset body cuộn trong Container
 		   root) → sticky hoạt động mà không tạo scroll lồng. z-500 dưới

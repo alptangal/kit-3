@@ -402,6 +402,17 @@
 				height: 100%;
 				max-height: 100%;
 			}
+			/* Nút icon vuông (clear/copy có aspect-square): min-width 2.75rem phía
+			   trên PHÁ ratio (width 2.75rem > height input) → không còn hình vuông
+			   trên mobile. Trả ratio 1/1: width auto theo height, hit-area mở bằng
+			   padding-inline + margin âm bù (không đổi layout). */
+			:global(.button-root.aspect-square) {
+				min-width: 0;
+				width: auto;
+				aspect-ratio: 1 / 1;
+				padding-inline: 0.35rem;
+				margin-inline: -0.35rem;
+			}
 		}
 	}
 
@@ -440,6 +451,36 @@
 			opacity: 0.6;
 			pointer-events: none;
 			z-index: 10;
+		}
+	}
+
+	/* ══ has-value — field đang CÓ dữ liệu (yêu cầu batch 3 #input) ══
+	   Phân biệt thị giác field có data vs field trống: nền nhấn nhẹ hơn +
+	   viền defined mảnh. Không đổi màu chữ (variant color-* vẫn thắng khi
+	   validation set — cascade: has-value đứng trước variant- và color-). */
+	&.has-value {
+		--border-color: var(--border, hsl(0 0% 88%));
+
+		@include theme-dark {
+			--border-color: hsl(0 0% 24%);
+		}
+		&:not(.focus):not(.disabled) {
+			@include theme-dark {
+				--background: rgba(39, 39, 42, 0.6);
+			}
+			@include theme-light {
+				--background: rgba(248, 250, 252, 0.9);
+			}
+		}
+		/* variant-secondary nền sẵn nhấn → has-value chỉ thêm viền, nền giữ variant */
+		&.variant-secondary:not(.focus):not(.disabled) {
+			--border-color: var(--border, hsl(0 0% 88%));
+			@include theme-dark {
+				--background: rgba(63, 63, 70, 0.4);
+			}
+			@include theme-light {
+				--background: rgba(226, 232, 240, 0.5);
+			}
 		}
 	}
 
