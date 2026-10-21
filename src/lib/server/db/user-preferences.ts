@@ -37,6 +37,9 @@ export interface UserPreferences {
 	datatable?: Record<string, DataTablePagePrefs>;
 	/** C7: từ khóa tìm kiếm đã dùng — key = route path, mới nhất đầu, cross-device */
 	searchKeywords?: Record<string, string[]>;
+	/** Draft form đang dở (resume khi reload) — key = formKey, value JSON string.
+	 * Tách khỏi datatable.filters vì filters cap 100 chars/form-key; draft form dài hơn. */
+	drafts?: Record<string, string>;
 	updatedAt?: string;
 }
 
@@ -169,6 +172,22 @@ function sanitizePatch(patch: UserPreferencesPatch | undefined): UserPreferences
 		}
 		clean.searchKeywords = keywords;
 	}
+	// Drafts — tối đa 5 form, mỗi draft JSON string ≤20KB. key ≤64 chars.
+	// null/xóa: patch {drafts: {key: ''}} → draft rỗng coi như xóa form.
+	if (patch.drafts && typeof patch.drafts === 'object') {
+		const dEntries = Object.entries(patch.drafts as Record<string, unknown>).slice(0, 5);
+		const drafts: Record<string, string> = {};
+		for (const [dKey, dVal] of dEntries) {
+			if (typeof dKey !== 'string' || dKey.length === 0 || dKey.length > 64) continue;
+			if (typeof dVal !== 'string') continue;
+			if (dVal.length === 0) {
+				drafts[dKey] = '';
+				continue;
+			}
+			if (dVal.length <= 20480) drafts[dKey] = dVal;
+		}
+		clean.drafts = drafts;
+	}
 	return clean;
 }
 
@@ -181,6 +200,7 @@ function mergePrefs(
 		language: current?.language,
 		datatable: { ...(current?.datatable ?? {}) },
 		searchKeywords: { ...(current?.searchKeywords ?? {}) },
+		drafts: { ...(current?.drafts ?? {}) },
 		updatedAt: new Date().toISOString()
 	};
 	if (patch.theme) merged.theme = patch.theme;
@@ -214,6 +234,16 @@ function mergePrefs(
 			merged.searchKeywords[key] = mergedList;
 		}
 	}
+	if (patch.drafts && merged.drafts) {
+		// merge per-form — draft rỗng ('') trong patch = XÓA draft form đó.
+		for (const [key, value] of Object.entries(patch.drafts)) {
+			if (value === '') {
+				delete merged.drafts[key];
+				continue;
+			}
+			merged.drafts[key] = value;
+		}
+	}
 	return merged;
 }
 
@@ -229,6 +259,7 @@ export class UserPreferencesService {
 				language: raw.language,
 				datatable: raw.datatable,
 				searchKeywords: raw.searchKeywords,
+				drafts: raw.drafts,
 				updatedAt: raw.updatedAt
 			};
 		} catch {

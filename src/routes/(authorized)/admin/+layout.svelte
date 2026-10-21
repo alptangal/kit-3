@@ -173,19 +173,29 @@
 	};
 
 	// ── Toggle theme từ sidebar footer: mirror ThemeToggle component (dùng
-	// MenuButton thay Button riêng). Icon theo giá trị HIỆN (resolved): light =
-	// moon (bấm sang dark), dark = sun (bấm sang light). animateThemeTransition
-	// fallback tâm viewport khi programmatically click không kèm coords.
+	// MenuButton thay Button riêng). Cycle 3 trạng thái system → dark → light →
+	// system (user chốt 2026-10-21). Icon theo giá trị HIỆN (resolved): light =
+	// moon (bấm sang dark), dark = sun (bấm sang light), system = monitor.
+	// animateThemeTransition fallback tâm viewport khi click không kèm coords.
 	import { profile } from '$store/basic.svelte';
 	import { animateThemeTransition } from '$modules/theme.svelte';
 	import type { AppTheme } from '$interfaces/basic';
 
-	const themeIcon = $derived(profile.theme === 'dark' ? 'lucide:sun' : 'lucide:moon');
+	const themeIcon = $derived(
+		profile.theme === 'dark' ? 'lucide:sun' : profile.theme === 'light' ? 'lucide:moon' : 'lucide:monitor-cog'
+	);
+	const themeLabel = $derived(
+		profile.theme === 'dark'
+			? tc('Giao diện (tối)', 'Appearance (dark)')
+			: profile.theme === 'light'
+				? tc('Giao diện (sáng)', 'Appearance (light)')
+				: tc('Giao diện (hệ thống)', 'Appearance (system)')
+	);
 	const handleThemeToggle = (e?: Event | MouseEvent) => {
 		const me = e instanceof MouseEvent ? e : null;
 		const x = me?.clientX ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
 		const y = me?.clientY ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
-		const next: AppTheme = profile.theme === 'dark' ? 'light' : 'dark';
+		const next: AppTheme = profile.theme === 'system' ? 'dark' : profile.theme === 'dark' ? 'light' : 'system';
 		animateThemeTransition(next, x, y, 450);
 	};
 
@@ -621,7 +631,7 @@
 				</Sidebar.MenuItem>
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton
-						label={tc('Giao diện', 'Appearance')}
+						label={themeLabel}
 						onclick={handleThemeToggle}
 						icon={themeIcon}
 						data-test="admin-nav-theme"

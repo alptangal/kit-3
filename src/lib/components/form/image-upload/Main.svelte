@@ -3,7 +3,11 @@
      POST /api/admin/upload (multipart, fetch thường KHÔNG mã hoá) + preview + xoá.
      bind:value = URL ảnh (lưu vào field DB hiện có — products.imageUrl, posts.coverImageUrl).
      Mặc định ẨN URL (showUrl=false): hover/tap thumb hiện overlay actions —
-     copy URL / xem ảnh (tab mới) / đổi ảnh; remove giữ nút riêng dưới thumb. -->
+     copy URL / xem ảnh (tab mới) / đổi ảnh; remove giữ nút riêng dưới thumb.
+     MODE MULTIPLE (suppliers): truyền `images` ($bindable string[]) → grid
+     thumbs + overlay per-thumb (copy / xem / đổi / set avatar / xoá) +
+     nút "+ Thêm ảnh" row riêng; `avatarUrl` = con trỏ URL đang làm đại diện
+     (trỏ vào 1 URL trong images). Không truyền `images` → hành vi đơn cũ. -->
 <script lang="ts" module>
 	export interface ImageUploadProps {
 		/** URL ảnh hiện tại (2 chiều — parent bind:value) */
@@ -14,6 +18,10 @@
 		disabled?: boolean;
 		/** Hiện URL đầy đủ dưới thumb (mặc định ẩn — hành vi cũ) */
 		showUrl?: boolean;
+		/** MODE MULTIPLE — mảng URL (2 chiều). Truyền prop này → grid thumbs. */
+		images?: string[];
+		/** MODE MULTIPLE — URL đang làm đại diện (con trỏ vào images). */
+		avatarUrl?: string;
 		/** Callback lỗi đã xử lý xong (đã toast nội bộ — hook để cha tự xử lý thêm) */
 		onerror?: (message: string) => void;
 	}
@@ -29,23 +37,33 @@
 		label = '',
 		disabled = false,
 		showUrl = false,
+		images = $bindable(undefined as string[] | undefined),
+		avatarUrl = $bindable(''),
 		onerror
 	}: ImageUploadProps = $props();
 
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : 'en');
 
+	// Mode multiple chỉ khi cha TRUYỀN images (undefined = mode đơn cũ)
+	const multiple = $derived(images !== undefined);
+
 	const MAX_SIZE = 5 * 1024 * 1024; // 5MB — khớp route /api/admin/upload
 	const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 	let uploading = $state(false);
+	// upload đang gán vào thumb nào (mode multiple) — undefined = thumb add mới
+	let uploadTarget: number | undefined = $state();
 	let copied = $state(false);
 	let inputEl: HTMLInputElement | undefined = $state();
 
 	const t = {
 		label: { vi: 'Ảnh', en: 'Image' },
 		choose: { vi: 'Chọn ảnh', en: 'Choose image' },
+		add: { vi: 'Thêm ảnh', en: 'Add image' },
 		change: { vi: 'Đổi ảnh', en: 'Change' },
 		remove: { vi: 'Xoá ảnh', en: 'Remove image' },
+		setAvatar: { vi: 'Đặt làm đại diện', en: 'Set as avatar' },
+		avatar: { vi: 'Đại diện', en: 'Avatar' },
 		uploading: { vi: 'Đang tải lên...', en: 'Uploading...' },
 		empty: { vi: 'Chưa có ảnh', en: 'No image yet' },
 		hint: { vi: 'JPEG/PNG/WebP/GIF, tối đa 5MB', en: 'JPEG/PNG/WebP/GIF, max 5MB' },
@@ -76,10 +94,30 @@
 		inputEl?.click();
 	}
 
+	// Mode multiple: mở picker — gán vào thumb có sẵn (đổi) hoặc thêm mới
+	function pickAt(index: number | undefined) {
+		if (disabled || uploading) return;
+		uploadTarget = index;
+		inputEl?.click();
+	}
+
 	async function copyUrl() {
-		if (!value) return;
+		const url = multiple ? (avatarUrl || images?.[0]) : value;
+		if (!url) return;
 		try {
-			await navigator.clipboard.writeText(value);
+			await navigator.clipboard.writeText(url);
+			copied = true;
+			setTimeout(() => (copied = false), 1500);
+		} catch {
+			client.browser?.toasts?.create({ title: tr('errCopy'), color: 'error' });
+		}
+	}
+
+	async function copyUrlAt(index: number) {
+		const url = images?.[index];
+		if (!url) return;
+		try {
+			await navigator.clipboard.writeText(url);
 			copied = true;
 			setTimeout(() => (copied = false), 1500);
 		} catch {
@@ -88,8 +126,21 @@
 	}
 
 	function viewImage() {
-		if (!value) return;
-		window.open(value, '_blank', 'noopener');
+		const url = multiple ? (avatarUrl || images?.[0]) : value;
+		if (!url) return;
+		window.open(url, '_blank', 'noopener');
+	}
+
+	function viewImageAt(index: number) {
+		const url = images?.[index];
+		if (!url) return;
+		window.open(url, '_blank', 'noopener');
+	}
+
+	function setAvatarAt(index: number) {
+		const url = images?.[index];
+		if (!url) return;
+		avatarUrl = url;
 	}
 
 	async function handleFile(e: Event) {
@@ -124,7 +175,21 @@
 				message = `HTTP ${res.status}`;
 			}
 			if (res.ok && url) {
-				value = url;
+				if (multiple && images !== undefined) {
+					const next = [...images];
+					if (uploadTarget === undefined) {
+						// thumb mới — avatar đầu tiên tự làm đại diện
+						next.push(url);
+						if (!avatarUrl) avatarUrl = url;
+					} else {
+						// đổi ảnh thumb có sẵn — giữ avatar nếu URL cũ là avatar
+						if (avatarUrl === next[uploadTarget]) avatarUrl = url;
+						next[uploadTarget] = url;
+					}
+					images = next;
+				} else {
+					value = url;
+				}
 			} else if (res.status === 503) {
 				toastErr(message || tr('notConfigured'));
 			} else {
@@ -134,12 +199,27 @@
 			toastErr(err instanceof Error ? err.message : String(err));
 		} finally {
 			uploading = false;
+			uploadTarget = undefined;
 		}
 	}
 
 	function clearValue() {
 		if (disabled || uploading) return;
-		value = '';
+		if (multiple && images !== undefined) {
+			const idx = images.indexOf(avatarUrl);
+			images = images.filter((u) => u !== avatarUrl);
+			if (idx >= 0) avatarUrl = images[Math.max(0, idx - 1)] ?? '';
+		} else {
+			value = '';
+		}
+	}
+
+	function removeAt(index: number) {
+		if (disabled || uploading || images === undefined) return;
+		const url = images[index];
+		const next = images.filter((_, i) => i !== index);
+		images = next;
+		if (avatarUrl === url) avatarUrl = next[0] ?? '';
 	}
 </script>
 
@@ -148,6 +228,85 @@
 		<span class="image-upload__label">{label}</span>
 	{/if}
 
+	<!-- MODE MULTIPLE: grid thumbs + overlay per-thumb + add row riêng -->
+	{#if multiple}
+		<div class="image-upload__grid">
+			{#each images ?? [] as url, index (url + index)}
+				<div class="image-upload__preview">
+					<ImageEl src={url} alt={label || 'image'} width="9.5rem" height="7rem" objectFit="cover" rounded="md" />
+					<!-- overlay actions: hiện khi hover (PC) hoặc luôn mờ nhẹ (touch) -->
+					<div class="image-upload__overlay" data-no-tap>
+						<button
+							type="button"
+							class="image-upload__ovbtn"
+							onclick={() => copyUrlAt(index)}
+							disabled={disabled}
+							title={tr('copy')}
+							aria-label={tr('copy')}
+						>
+							<Icon icon={iconify['content-copy-outline-rounded']} size="sm" />
+						</button>
+						<button
+							type="button"
+							class="image-upload__ovbtn"
+							onclick={() => viewImageAt(index)}
+							disabled={disabled}
+							title={tr('view')}
+							aria-label={tr('view')}
+						>
+							<Icon icon={iconify['visibility-outline-rounded']} size="sm" />
+						</button>
+						<button
+							type="button"
+							class="image-upload__ovbtn"
+							onclick={() => pickAt(index)}
+							disabled={disabled}
+							title={tr('change')}
+							aria-label={tr('change')}
+						>
+							<Icon icon={iconify['image-outline-rounded']} size="sm" />
+						</button>
+						<button
+							type="button"
+							class="image-upload__ovbtn image-upload__ovbtn--avatar"
+							class:image-upload__ovbtn--active={avatarUrl === url}
+							onclick={() => setAvatarAt(index)}
+							disabled={disabled}
+							title={tr('setAvatar')}
+							aria-label={tr('setAvatar')}
+						>
+							<Icon icon={iconify['person-outline-rounded']} size="sm" />
+						</button>
+						<button
+							type="button"
+							class="image-upload__ovbtn image-upload__ovbtn--remove"
+							onclick={() => removeAt(index)}
+							disabled={disabled}
+							title={tr('remove')}
+							aria-label={tr('remove')}
+						>
+							<Icon icon={iconify['close-rounded']} size="sm" />
+						</button>
+					</div>
+					{#if avatarUrl === url}
+						<span class="image-upload__avatar-badge">{tr('avatar')}</span>
+					{/if}
+					{#if uploading && uploadTarget === index}
+						<div class="image-upload__overlay image-upload__overlay--busy"><Spinner size="md" /></div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+		<!-- Nút thêm ảnh ở ROW RIÊNG (yêu cầu user) -->
+		<div class="image-upload__actions">
+			<Button type="button" variant="ghost" color="primary" size="sm" disabled={disabled || uploading} onclick={() => pickAt(undefined)}>
+				{uploading && uploadTarget === undefined ? tr('uploading') : `+ ${tr('add')}`}
+			</Button>
+		</div>
+		{#if copied}
+			<span class="image-upload__copied image-upload__copied--float">{tr('copied')}</span>
+		{/if}
+	{:else}
 	<div class="image-upload__body">
 		{#if uploading}
 			<div class="image-upload__preview image-upload__preview--loading">
@@ -223,6 +382,7 @@
 			{/if}
 		</div>
 	</div>
+	{/if}
 
 	<span class="image-upload__hint">{tr('hint')}</span>
 	{#if showUrl}
@@ -392,5 +552,54 @@
 		height: 1px;
 		opacity: 0;
 		pointer-events: none;
+	}
+
+	/* ── MODE MULTIPLE ── */
+	.image-upload__grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+	}
+
+	.image-upload__ovbtn--remove {
+		&:hover:not(:disabled) {
+			background: var(--error);
+			color: #fff;
+		}
+	}
+
+	.image-upload__ovbtn--avatar {
+		&:hover:not(:disabled) {
+			background: var(--primary);
+			color: #fff;
+		}
+	}
+
+	.image-upload__ovbtn--active {
+		background: var(--primary);
+		color: #fff;
+	}
+
+	.image-upload__avatar-badge {
+		position: absolute;
+		left: 0.35rem;
+		top: 0.35rem;
+		font-size: 0.65rem;
+		padding: 0.08rem 0.4rem;
+		border-radius: 9999px;
+		background: var(--primary);
+		color: #fff;
+		pointer-events: none;
+	}
+
+	.image-upload__overlay--busy {
+		opacity: 1;
+		background: rgb(0 0 0 / 0.35);
+	}
+
+	.image-upload__copied--float {
+		position: static;
+		transform: none;
+		align-self: flex-start;
 	}
 </style>

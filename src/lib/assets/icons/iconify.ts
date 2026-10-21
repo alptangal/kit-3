@@ -21,5 +21,6 @@ export const iconify = {
 	'add-rounded': 'material-symbols-light:add-rounded',
 	'visibility-outline-rounded': 'material-symbols-light:visibility-outline-rounded',
 	'image-outline-rounded': 'material-symbols-light:image-outline-rounded',
+	'person-outline-rounded': 'material-symbols-light:person-outline-rounded',
 	'delete-outline-rounded': 'material-symbols-light:delete-outline-rounded'
 };

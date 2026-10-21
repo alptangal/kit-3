@@ -32,7 +32,9 @@ export const userPrefs = $state({
 	language: undefined as 'vi' | 'en' | undefined,
 	datatable: {} as Record<string, DataTablePagePrefs>,
 	/** C7: từ khóa tìm kiếm per-route (mới nhất đầu) — hydrate từ layout server */
-	searchKeywords: {} as Record<string, string[]>
+	searchKeywords: {} as Record<string, string[]>,
+	/** Draft form đang dở (key = formKey, value JSON string) — hydrate từ layout server */
+	drafts: {} as Record<string, string>
 });
 
 /** Flag chống vòng lặp: apply bootstrap → setter → persist (không mong muốn). */
@@ -60,6 +62,12 @@ export function applyUserPrefsFromLayout(data: LayoutData | undefined): void {
 	userPrefs.searchKeywords = {
 		...userPrefs.searchKeywords,
 		...(prefs.searchKeywords ?? {})
+	};
+
+	// ── DRAFTS ── hydrate từ DB (resume form khi reload — cross-device)
+	userPrefs.drafts = {
+		...userPrefs.drafts,
+		...(prefs.drafts ?? {})
 	};
 
 	// ── THEME ──
@@ -164,4 +172,21 @@ export function clearSearchKeywords(routeKey?: string): void {
 		patch[r] = [];
 	}
 	saveUserPrefs({ searchKeywords: patch });
+}
+
+/** Ghi draft 1 form (key = formKey, value = JSON string) — server merge per-form. */
+export function saveDraftPref(formKey: string, json: string): void {
+	userPrefs.drafts[formKey] = json;
+	saveUserPrefs({ drafts: { [formKey]: json } });
+}
+
+/** Xóa draft 1 form — patch value rỗng = xóa (mergePrefs delete). */
+export function clearDraftPref(formKey: string): void {
+	delete userPrefs.drafts[formKey];
+	saveUserPrefs({ drafts: { [formKey]: '' } });
+}
+
+/** Đọc draft 1 form (JSON string hoặc undefined). */
+export function readDraftPref(formKey: string): string | undefined {
+	return userPrefs.drafts[formKey];
 }

@@ -1,9 +1,9 @@
 <!-- src/routes/(authorized)/admin/suppliers/+page.svelte -->
 <script lang="ts">
-	import { Button, DataTable, Pagination, AlertDialog } from '$components/element';
+	import { Button, DataTable, Pagination, AlertDialog, Badge, Spinner } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
-	import { AddressInput, EmailInput, ImageUpload, Input, PhoneInput } from '$components/form';
+	import { EmailInput, ImageUpload, Input, Label, PhoneInput, Switch, TextField, Textarea, AddressInput } from '$components/form';
 	import { Icon } from '$components/element/icon';
 	import { iconify } from '$assets/icons/iconify';
 	import type { Size } from '$components/interface';
@@ -13,7 +13,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolveServerMessage } from '../_interface';
-	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs } from '$store/user-prefs.svelte';
+	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs, saveDraftPref, clearDraftPref, readDraftPref } from '$store/user-prefs.svelte';
 	import { createCloseGuard } from '$modules/close-guard.svelte';
 
 	interface SupplierRow {
@@ -24,6 +24,8 @@
 		phones?: string[] | null;
 		emails?: string[] | null;
 		addresses?: SupplierAddressEntry[] | null;
+		images?: string[] | null;
+		note?: string | null;
 		status?: string;
 		createdAt?: string | null;
 	}
@@ -31,6 +33,7 @@
 	interface SupplierAddressEntry {
 		label?: string;
 		address: string;
+		ward?: string;
 		province?: string;
 		district?: string;
 		country?: string;
@@ -153,7 +156,10 @@
 			addAddress: { vi: 'Thêm địa chỉ', en: 'Add address' },
 			removeAddress: { vi: 'Xoá địa chỉ', en: 'Remove address' },
 			addressLabelPlaceholder: { vi: 'Nhãn (vd: Kho, Văn phòng...)', en: 'Label (e.g. Warehouse, Office...)' },
-			avatar: { vi: 'Ảnh đại diện (tuỳ chọn)', en: 'Avatar (optional)' },
+			wardPlaceholder: { vi: 'Chọn phường/xã', en: 'Select ward' },
+			images: { vi: 'Hình ảnh', en: 'Images' },
+			note: { vi: 'Ghi chú', en: 'Note' },
+			notePlaceholder: { vi: 'Ghi chú về nhà cung cấp...', en: 'Notes about this supplier...' },
 			phonePlaceholder: { vi: 'Số điện thoại', en: 'Phone number' },
 			addPhone: { vi: 'Thêm số điện thoại', en: 'Add phone number' },
 			removePhone: { vi: 'Xoá số điện thoại', en: 'Remove phone number' },
@@ -174,6 +180,8 @@
 			facebookPlaceholder: { vi: 'Link facebook.com/...', en: 'facebook.com/... link' },
 			facebookInvalid: { vi: 'Facebook phải là link facebook.com hoặc fb.com', en: 'Facebook must be a facebook.com or fb.com link' },
 			status: { vi: 'Trạng thái', en: 'Status' },
+			statusActive: { vi: 'Đang hoạt động', en: 'Active' },
+			statusInactive: { vi: 'Ngừng hoạt động', en: 'Inactive' },
 			submit: { vi: 'Tạo', en: 'Create' },
 			save: { vi: 'Lưu thay đổi', en: 'Save changes' },
 			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' }
@@ -209,6 +217,11 @@
 			supplierUpdated: { vi: 'Đã cập nhật nhà cung cấp', en: 'Supplier updated' },
 			supplierUpdateFailed: { vi: 'Cập nhật nhà cung cấp không thành công', en: 'Failed to update supplier' },
 			urlCopied: { vi: 'Đã copy URL ảnh', en: 'Image URL copied' },
+			draftRestored: { vi: 'Đã phục hồi bản nháp chưa lưu', en: 'Draft restored' },
+			draftSaved: { vi: 'Bản nháp đã lưu tự động', en: 'Draft saved' },
+			bulkDeleted: { vi: 'Đã xoá {count} nhà cung cấp', en: 'Deleted {count} suppliers' },
+			bulkDeleteFailed: { vi: 'Xoá hàng loạt không thành công', en: 'Bulk delete failed' },
+			bulkCopied: { vi: 'Đã copy {count} dòng', en: 'Copied {count} rows' },
 			poCreated: { vi: 'Đã tạo đơn mua hàng', en: 'Purchase order created' },
 			poFailed: { vi: 'Tạo đơn mua không thành công', en: 'Failed to create purchase order' },
 			statusUpdated: { vi: 'Đã cập nhật trạng thái', en: 'Status updated' },
@@ -223,6 +236,18 @@
 			},
 			continueEdit: { vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' },
 			discard: { vi: 'Bỏ thay đổi', en: 'Discard' }
+		},
+		bulk: {
+			title: { vi: 'Xoá nhà cung cấp đã chọn?', en: 'Delete selected suppliers?' },
+			desc: {
+				vi: 'Các nhà cung cấp đã chọn sẽ bị xoá vĩnh viễn khỏi hệ thống.',
+				en: 'The selected suppliers will be permanently removed.'
+			},
+			confirm: { vi: 'Xoá', en: 'Delete' },
+			cancel: { vi: 'Huỷ', en: 'Cancel' },
+			copy: { vi: 'Copy', en: 'Copy' },
+			delete: { vi: 'Xoá', en: 'Delete' },
+			selected: { vi: 'Đã chọn {count}', en: '{count} selected' }
 		},
 		suggest: {
 			title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' }
@@ -317,7 +342,9 @@
 	let supplierEditMode = $state<'create' | 'edit'>('create');
 	let supplierEditId = $state<string | null>(null);
 	// Form đầy đủ: phones/emails (multiple), addresses (multiple block), social
-	// (zalo/telegram/discord/facebook), avatarUrl (ImageUpload)
+	// (zalo/telegram/discord/facebook), images (multiple + avatarUrl con trỏ), note.
+	// NOTE: address/province/district CẤP 1 lấy từ entry đầu của addresses
+	// (bỏ field address đơn — yêu cầu user 1g) — giữ key trong form để payload ổn định.
 	let supplierForm = $state<{
 		name: string;
 		contactPerson: string;
@@ -329,7 +356,9 @@
 		telegram: string;
 		discord: string;
 		facebook: string;
+		images: string[];
 		avatarUrl: string;
+		note: string;
 		status: string;
 	}>({
 		name: '',
@@ -342,13 +371,41 @@
 		telegram: '',
 		discord: '',
 		facebook: '',
+		images: [],
 		avatarUrl: '',
+		note: '',
 		status: 'active'
 	});
-	// breakdown địa chỉ (province/district) — tách khỏi address string để bind 2 chiều với AddressInput
-	let supplierAddressBreakdown = $state<{ province: string; district: string }>({ province: '', district: '' });
 	// breakdown cho từng entry addresses (AddressInput bind 2 chiều từng phần tử)
-	let supplierAddressBreakdowns = $state<{ province: string; district: string }[]>([]);
+	let supplierAddressBreakdowns = $state<{ province: string; district: string; ward?: string }[]>([]);
+
+	// ── Draft DB (yêu cầu 1k: reload page → resume) — field `drafts` trong
+	// user-prefs (server cap 5 form × 20KB). Tách khỏi datatable.filters vì
+	// filters cap value 100 chars — draft form JSON dài hơn nhiều.
+	const DRAFT_FORM_KEY = 'suppliers:create';
+	let draftTimer: ReturnType<typeof setTimeout> | undefined;
+	let draftHydrated = $state(false); // $state BẮT BUỘC — không track thì $effect draft không re-run
+
+	function saveDraftDebounced() {
+		if (supplierEditMode !== 'create' || !draftHydrated) return;
+		clearTimeout(draftTimer);
+		draftTimer = setTimeout(() => {
+			// Lọc null/undefined trong mảng (Input unmount emit undefined qua bind —
+			// JSON.stringify biến thành null, resume sau đó sẽ nổ .trim())
+			const f = supplierForm;
+			const clean = {
+				...f,
+				phones: f.phones.filter((p): p is string => typeof p === 'string'),
+				emails: f.emails.filter((e): e is string => typeof e === 'string'),
+				images: f.images.filter((i): i is string => typeof i === 'string')
+			};
+			saveDraftPref(DRAFT_FORM_KEY, JSON.stringify(clean));
+		}, 500);
+	}
+
+	function clearDraft() {
+		clearDraftPref(DRAFT_FORM_KEY);
+	}
 
 	// ── Dirty-guard (pattern brands: createCloseGuard + AlertDialog) ──
 	let dirtyCloseDisplay = $state(false);
@@ -360,6 +417,11 @@
 			dirtyCloseDisplay = false;
 		}
 	});
+
+	// ── Bulk selection (yêu cầu 2: STT hover → checkbox, copy/delete hàng loạt) ──
+	let selectedIds = $state<string[]>([]);
+	let bulkDeleteDisplay = $state(false);
+	let bulkDeleting = $state(false);
 
 	// ── Modal tạo PO ──
 	let poModalDisplay = $state(false);
@@ -782,7 +844,9 @@
 			telegram: '',
 			discord: '',
 			facebook: '',
+			images: [] as string[],
 			avatarUrl: '',
+			note: '',
 			status: 'active'
 		};
 	}
@@ -790,11 +854,42 @@
 	function openSupplierModal() {
 		supplierEditMode = 'create';
 		supplierEditId = null;
-		supplierForm = emptySupplierForm();
-		supplierAddressBreakdown = { province: '', district: '' };
-		supplierAddressBreakdowns = [];
+		// Draft create có dữ liệu → resume; rỗng → form sạch
+		const raw = readDraftPref(DRAFT_FORM_KEY);
+		let resumed = false;
+		if (typeof raw === 'string' && raw) {
+			try {
+				const saved = JSON.parse(raw) as Partial<typeof supplierForm>;
+				if (saved && typeof saved === 'object' && saved.name) {
+					// BẪY: mảng từ draft JSON có thể chứa null (Input unmount emit
+					// undefined qua bind → JSON.stringify biến thành null) → x.trim() nổ
+					const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+					supplierForm = {
+						...emptySupplierForm(),
+						...saved,
+						phones: arr(saved.phones),
+						emails: arr(saved.emails),
+						addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
+						images: arr(saved.images),
+						avatarUrl: saved.avatarUrl ?? '',
+						note: saved.note ?? '',
+						status: saved.status ?? 'active'
+					};
+					resumed = true;
+				}
+			} catch {
+				clearDraftPref(DRAFT_FORM_KEY);
+			}
+		}
+		if (!resumed) supplierForm = emptySupplierForm();
+		supplierAddressBreakdowns = supplierForm.addresses.map((a) => ({
+			province: a.province ?? '',
+			district: a.district ?? '',
+			ward: a.ward
+		}));
 		supplierError = undefined;
 		supplierModalDisplay = true;
+		if (resumed) showToast(pageContents.toasts.draftRestored[lang], 'success');
 		closeGuard.markClean();
 	}
 
@@ -803,10 +898,12 @@
 		const r = row as unknown as SupplierRow;
 		supplierEditMode = 'edit';
 		supplierEditId = r._id ?? null;
+		const addr0 = r.addresses?.[0];
 		supplierForm = {
 			name: r.name ?? '',
 			contactPerson: r.contactPerson ?? '',
-			address: r.address ?? '',
+			// cấp 1 = entry đầu của addresses (bỏ field đơn)
+			address: addr0?.address ?? r.address ?? '',
 			phones: [...(r.phones ?? [])],
 			emails: [...(r.emails ?? [])],
 			addresses: (r.addresses ?? []).map((a) => ({ ...a })),
@@ -814,18 +911,15 @@
 			telegram: (r as Record<string, unknown>).telegram as string | undefined ?? '',
 			discord: (r as Record<string, unknown>).discord as string | undefined ?? '',
 			facebook: (r as Record<string, unknown>).facebook as string | undefined ?? '',
-			avatarUrl: (r as Record<string, unknown>).avatarUrl as string | undefined ?? '',
+			images: [...(r.images ?? [])],
+			avatarUrl: (r as Record<string, unknown>).avatarUrl as string | undefined ?? r.images?.[0] ?? '',
+			note: (r as Record<string, unknown>).note as string | undefined ?? '',
 			status: r.status ?? 'active'
-		};
-		// breakdown = address chính (entry đầu của addresses nếu có, ngược lại rỗng)
-		const firstAddr = supplierForm.addresses[0];
-		supplierAddressBreakdown = {
-			province: firstAddr?.province ?? '',
-			district: firstAddr?.district ?? ''
 		};
 		supplierAddressBreakdowns = supplierForm.addresses.map((a) => ({
 			province: a.province ?? '',
-			district: a.district ?? ''
+			district: a.district ?? '',
+			ward: a.ward
 		}));
 		supplierError = undefined;
 		supplierModalDisplay = true;
@@ -880,19 +974,26 @@
 			return {
 				label: (a.label ?? '').trim() || undefined,
 				address: (a.address ?? '').trim(),
+				ward: (bd?.ward || a.ward || '').trim() || undefined,
 				province: (bd?.province || a.province || '').trim() || undefined,
 				district: (bd?.district || a.district || '').trim() || undefined,
 				country: (bd?.province || a.province || '').trim() ? 'Việt Nam' : undefined
 			};
 		});
+		// Cấp 1 = entry đầu (địa chỉ chính) — đồng bộ field legacy address/district/province
+		const main = entries[0];
+		// avatarUrl là CON TRỎ vào 1 URL trong images (nếu images có mà avatar không
+		// khớp URL nào → dùng ảnh đầu)
+		const images = t.images.map((u) => u.trim()).filter(Boolean);
+		const avatar = images.includes(t.avatarUrl) ? t.avatarUrl : (images[0] ?? '');
 		return {
 			name: t.name.trim(),
 			contactPerson: t.contactPerson.trim() || undefined,
-			address: t.address.trim() || undefined,
-			ward: undefined,
-			district: supplierAddressBreakdown.district || undefined,
-			province: supplierAddressBreakdown.province || undefined,
-			country: supplierAddressBreakdown.province ? 'Việt Nam' : undefined,
+			address: main?.address || undefined,
+			ward: main?.ward || undefined,
+			district: main?.district || undefined,
+			province: main?.province || undefined,
+			country: main?.country || undefined,
 			phones: t.phones.map((p) => p.trim()).filter(Boolean),
 			emails: t.emails.map((e) => e.trim()).filter(Boolean),
 			addresses: entries.filter((a) => a.address),
@@ -900,7 +1001,9 @@
 			telegram: t.telegram.trim() || undefined,
 			discord: t.discord.trim() || undefined,
 			facebook: t.facebook.trim() || undefined,
-			avatarUrl: t.avatarUrl.trim() || undefined,
+			images: images.length > 0 ? images : undefined,
+			avatarUrl: avatar || undefined,
+			note: t.note.trim() || undefined,
 			status: t.status
 		};
 	}
@@ -934,6 +1037,7 @@
 						: isEdit ? pageContents.toasts.supplierUpdated[lang] : pageContents.toasts.supplierCreated[lang],
 					'success'
 				);
+				if (!isEdit) clearDraft(); // create thành công → xoá draft
 				closeGuard.markClean(); // đóng programmatic không qua onCloseAttempt
 				supplierModalDisplay = false;
 				await loadSuppliers();
@@ -944,6 +1048,46 @@
 			supplierSubmitting = false;
 			supplierError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
 			if (import.meta.env.DEV) console.error('[admin/suppliers] submit supplier failed:', err);
+		}
+	}
+
+	// ── Bulk copy (TSV: header + các cột đang hiển thị) + bulk delete ──
+	function bulkCopySelected() {
+		const cols = supplierColumns.filter((c) => c.id !== 'actions' && typeof c.accessor === 'function');
+		const header = cols.map((c) => String(c.label)).join('\t');
+		const rows = suppliers
+			.filter((s) => s._id && selectedIds.includes(s._id))
+			.map((s) => cols.map((c) => String((c.accessor as (row: unknown) => unknown)(s) ?? '')).join('\t'));
+		const tsv = [header, ...rows].join('\n');
+		navigator.clipboard
+			.writeText(tsv)
+			.then(() => showToast(pageContents.toasts.bulkCopied[lang].replace('{count}', String(selectedIds.length)), 'success'))
+			.catch(() => showToast(pageContents.toasts.requestFailed[lang], 'error'));
+	}
+
+	async function bulkDeleteSelected() {
+		if (!encryptionKeys || bulkDeleting || selectedIds.length === 0) return;
+		bulkDeleting = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/suppliers/bulk-delete',
+				{ method: 'POST', body: { ids: selectedIds } },
+				encryptionKeys
+			);
+			bulkDeleting = false;
+			if (response.ok) {
+				const data = response.data as { deleted?: number } | undefined;
+				showToast(pageContents.toasts.bulkDeleted[lang].replace('{count}', String(data?.deleted ?? selectedIds.length)), 'success');
+				bulkDeleteDisplay = false;
+				selectedIds = [];
+				await loadSuppliers();
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.bulkDeleteFailed), 'error');
+			}
+		} catch (err) {
+			bulkDeleting = false;
+			showToast(pageContents.toasts.bulkDeleteFailed, 'error');
+			if (import.meta.env.DEV) console.error('[admin/suppliers] bulk delete failed:', err);
 		}
 	}
 
@@ -1083,6 +1227,33 @@
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadBranches(), loadSuppliers()]);
+		draftHydrated = true; // mở khoá draft auto-save sau khi store đã hydrate từ layout
+	});
+
+	// ── Draft auto-save (yêu cầu 1k): form create có dữ liệu → debounce 500ms
+	// ghi DB qua user-prefs (draft = filters key 'draft'). Edit mode KHÔNG draft
+	// (đang sửa row thật — reload mất là hợp lý, draft chỉ cho create).
+	$effect(() => {
+		if (!draftHydrated || supplierEditMode !== 'create') return;
+		// Track SÂU từng field — `void supplierForm` chỉ track reference, mutate
+		// property (bind:value gõ chữ) KHÔNG re-run effect → draft không bao giờ save.
+		void supplierForm.name;
+		void supplierForm.contactPerson;
+		void supplierForm.address;
+		void supplierForm.phones;
+		void supplierForm.emails;
+		void supplierForm.addresses;
+		void supplierForm.zalo;
+		void supplierForm.telegram;
+		void supplierForm.discord;
+		void supplierForm.facebook;
+		void supplierForm.images;
+		void supplierForm.avatarUrl;
+		void supplierForm.note;
+		void supplierForm.status;
+		if (supplierForm.name.trim() || supplierForm.phones.length > 0 || supplierForm.emails.length > 0) {
+			saveDraftDebounced();
+		}
 	});
 </script>
 
@@ -1091,21 +1262,6 @@
 </svelte:head>
 
 <section class="admin-page">
-
-	<header class="admin-header">
-		<div class="admin-header-text">
-			<h1 class="admin-title">{pageContents.title[lang]}</h1>
-			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
-		</div>
-		<div class="admin-header-actions">
-			<!-- Quy ước màu nút: create = success -->
-			{#if activeTab === 'suppliers'}
-				<Button color="success" onClick={openSupplierModal}>{pageContents.actions.createSupplier[lang]}</Button>
-			{:else}
-				<Button color="success" onClick={openPOModal}>{pageContents.actions.createPO[lang]}</Button>
-			{/if}
-		</div>
-	</header>
 
 	<!-- ── Tab ── -->
 	<div class="tab-strip" role="tablist">
@@ -1131,39 +1287,7 @@
 		</button>
 	</div>
 
-	<!-- ── Bộ lọc ── -->
-	<div class="admin-filters">
-		{#if activeTab === 'suppliers'}
-			<select class="admin-select" bind:value={supplierStatusFilter} onchange={onFilterChange}>
-				<option value="">{pageContents.filters.allStatuses[lang]}</option>
-				{#each SUPPLIER_STATUSES as status (status)}
-					<option value={status}>{status === 'active' ? (lang === 'vi' ? 'Đang hoạt động' : 'Active') : (lang === 'vi' ? 'Ngừng hoạt động' : 'Inactive')}</option>
-				{/each}
-			</select>
-		{:else}
-			<select class="admin-select" bind:value={poStatusFilter} onchange={onFilterChange}>
-				<option value="">{pageContents.filters.allStatuses[lang]}</option>
-				{#each PO_STATUSES as status (status)}
-					<option value={status}>{poStatusLabel(status)}</option>
-				{/each}
-			</select>
-			<select class="admin-select" bind:value={poBranchFilter} onchange={onFilterChange}>
-				<option value="">{pageContents.filters.allBranches[lang]}</option>
-				{#each branches as branch (branch._id)}
-					<option value={branch._id}>{branch.name ?? branch._id}</option>
-				{/each}
-			</select>
-			<select class="admin-select" bind:value={poSupplierFilter} onchange={onFilterChange}>
-				<option value="">{pageContents.filters.allSuppliers[lang]}</option>
-				{#each suppliers as supplier (supplier._id)}
-					<option value={supplier._id}>{supplier.name ?? supplier._id}</option>
-				{/each}
-			</select>
-		{/if}
-		<Button color="default" variant="outline" size="sm" onClick={refresh}>
-			{pageContents.states.retry[lang]}
-		</Button>
-	</div>
+	<!-- (admin-filters ĐÃ BỎ — filter chuyển vào DataTable captionTools, yêu cầu 7) -->
 
 	<!-- ── Tab SUPPLIERS ── -->
 	{#if activeTab === 'suppliers'}
@@ -1177,7 +1301,8 @@
 			<!-- DataTable — server-side paging + server sort + server search:
 					paging trong DataTable TẮT (Pagination footer), sort/search qua
 					onSortChange/captionTools (pattern purchases). Card mode mobile qua
-					cardFields + mobileTapMode="callback". -->
+					cardFields + mobileTapMode="callback". Yêu cầu 2: selectable + STT
+					hover → checkbox + bulk copy/delete qua bulk-bar trong caption. -->
 			<div class="admin-table-wrap">
 				<DataTable
 					data={suppliersAny}
@@ -1201,80 +1326,123 @@
 					onRowClick={(row) => openSupplierEditModal(row)}
 					actionsLabel={{ vi: pageContents.supplierTable.actions[lang], en: pageContents.supplierTable.actions[lang] }}
 					stickyHead
+					selectable
+					showIndex
+					indexOffset={(suppliersPage - 1) * pageSize}
+					indexCheckboxes
+					checkOnRowClick
+					selectionTools={false}
+					onSelectionChange={(ids) => (selectedIds = ids)}
 					data-test="suppliers-datatable"
 				>
 					{#snippet captionTools()}
-						<!-- BẪY: searchQuery có thể undefined (card mode unmount Input) → ?? '' -->
-						<div class="admin-search" data-suggest>
-							<Input
-								type="text"
-								size="sm"
-								placeholder={{ vi: 'Tìm NCC, SĐT, email…', en: 'Search name, phone, email…' }}
-								bind:value={searchQuery}
-								events={[
-									{
-										events: {
-											focus: {
-												handler() {
-													searchFocused = true;
-													suggestOpen = true;
-												}
-											},
-											blur: {
-												handler() {
-													searchFocused = false;
-													saveSearchKeyword();
+						<!-- BẪY: searchQuery có thể undefined (card mode unmount Input) → ?? ''.
+							Bulk-bar KHÔNG swap thay search (Input unmount → onDestroy emit value=undefined
+							→ $effect search → searching=true → skeleton → mất selection hiển thị).
+							Chỉ THÊM bulk-bar cạnh search — pattern purchases (bulk-bar cuối captionTools). -->
+						{#if selectedIds.length > 0}
+							<!-- bulk-bar khi chọn ≥1 row -->
+							<div class="bulk-bar" data-test="suppliers-bulk-bar">
+								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(selectedIds.length))}</span>
+								<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected}>
+									{pageContents.bulk.copy[lang]}
+								</Button>
+								<Button color="error" variant="soft" size="sm" onClick={() => { bulkDeleteDisplay = true; }} data-test="suppliers-bulk-delete">
+									{pageContents.bulk.delete[lang]}
+								</Button>
+								<Button color="default" variant="ghost" size="sm" onClick={() => { selectedIds = []; }}>
+									<Icon icon={iconify['close-rounded']} size="sm" />
+								</Button>
+							</div>
+						{/if}
+							<div class="admin-search" data-suggest>
+								<Input
+									type="text"
+									size="sm"
+									placeholder={{ vi: 'Tìm NCC, SĐT, email…', en: 'Search name, phone, email…' }}
+									bind:value={searchQuery}
+									events={[
+										{
+											events: {
+												focus: {
+													handler() {
+														searchFocused = true;
+														suggestOpen = true;
+													}
+												},
+												blur: {
+													handler() {
+														searchFocused = false;
+														suggestOpen = false; // yêu cầu 5: blur → ẩn popover đúng flow
+														saveSearchKeyword();
+													}
 												}
 											}
 										}
-									}
-								]}
-							>
-								{#snippet leading(data)}
-									<Icon
-										icon={iconify['search-rounded']}
-										size={(data?.size ?? 'sm') as Size}
-										class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-									/>
-								{/snippet}
-							</Input>
-							{#if (searchQuery ?? '').length > 0}
-								<button
-									type="button"
-									class="admin-search-clear"
-									aria-label={lang === 'vi' ? 'Xoá từ khoá tìm kiếm' : 'Clear search keyword'}
-									data-test="suppliers-search-clear"
-									onclick={() => {
-										if (searchQuery) searchQuery = '';
-									}}
+									]}
 								>
-									<Icon icon={iconify['close-rounded']} size="xs" />
-								</button>
-							{/if}
-							{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
-								<div class="suggest-popover" role="listbox">
-									<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
-									{#each getSearchKeywords(PREFS_KEY) as kw (kw)}
-										<button
-											type="button"
-											class="suggest-item"
-											role="option"
-											aria-selected="false"
-											onmousedown={(e) => e.preventDefault()}
-											onclick={() => {
-												searchQuery = kw;
-												suggestOpen = false;
-												suppliersPage = 1;
-												currentPagingPage = 1;
-												void loadSuppliers();
-											}}
-										>
-											{kw}
-										</button>
-									{/each}
-								</div>
-							{/if}
-						</div>
+									{#snippet leading(data)}
+										{#if searching}
+											<!-- yêu cầu 9: đang chờ kết quả → icon thành spinner loading -->
+											<span class="admin-search-loading">
+												<Spinner size="xs" pattern="circle" />
+											</span>
+										{:else}
+											<Icon
+												icon={iconify['search-rounded']}
+												size={(data?.size ?? 'sm') as Size}
+												class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+											/>
+										{/if}
+									{/snippet}
+								</Input>
+								<!-- yêu cầu 6: ĐÃ BỎ nút clear riêng — Input component có sẵn clear button -->
+								{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
+									<div class="suggest-popover" role="listbox">
+										<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
+										{#each getSearchKeywords(PREFS_KEY) as kw (kw)}
+											<button
+												type="button"
+												class="suggest-item"
+												role="option"
+												aria-selected="false"
+												onmousedown={(e) => e.preventDefault()}
+												onclick={() => {
+													searchQuery = kw;
+													suggestOpen = false;
+													suppliersPage = 1;
+													currentPagingPage = 1;
+													void loadSuppliers();
+												}}
+											>
+												{kw}
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+							<!-- yêu cầu 7: filter VÀO caption (bỏ admin-filters row) -->
+							<select
+								class="admin-select"
+								bind:value={supplierStatusFilter}
+								onchange={onFilterChange}
+								data-test="suppliers-filter-status"
+							>
+								<option value="">{pageContents.filters.allStatuses[lang]}</option>
+								{#each SUPPLIER_STATUSES as status (status)}
+									<option value={status}>{status === 'active' ? pageContents.supplierModal.statusActive[lang] : pageContents.supplierModal.statusInactive[lang]}</option>
+								{/each}
+							</select>
+							<!-- nút create vào caption (yêu cầu 3: bỏ admin-header) -->
+							<div class="admin-actions-group">
+								<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
+									<Icon icon={iconify['tune-rounded']} size="sm" />
+								</Button>
+								<!-- Quy ước màu nút: create = success -->
+								<Button color="success" size="sm" onClick={openSupplierModal} data-test="suppliers-create-btn">
+									{pageContents.actions.createSupplier[lang]}
+								</Button>
+							</div>
 					{/snippet}
 					{#snippet actionsContent(row)}
 						{@const supplier = row as unknown as SupplierRow}
@@ -1284,7 +1452,8 @@
 								{pageContents.actions.edit[lang]}
 							</Button>
 						</div>
-					{/snippet}				</DataTable>
+					{/snippet}
+				</DataTable>
 			</div>
 		{/if}
 	{:else}
@@ -1315,6 +1484,35 @@
 					stickyHead
 					data-test="purchase-orders-datatable"
 				>
+					{#snippet captionTools()}
+						<!-- yêu cầu 7: filter PO vào caption -->
+						<select class="admin-select" bind:value={poStatusFilter} onchange={onFilterChange}>
+							<option value="">{pageContents.filters.allStatuses[lang]}</option>
+							{#each PO_STATUSES as status (status)}
+								<option value={status}>{poStatusLabel(status)}</option>
+							{/each}
+						</select>
+						<select class="admin-select" bind:value={poBranchFilter} onchange={onFilterChange}>
+							<option value="">{pageContents.filters.allBranches[lang]}</option>
+							{#each branches as branch (branch._id)}
+								<option value={branch._id}>{branch.name ?? branch._id}</option>
+							{/each}
+						</select>
+						<select class="admin-select" bind:value={poSupplierFilter} onchange={onFilterChange}>
+							<option value="">{pageContents.filters.allSuppliers[lang]}</option>
+							{#each suppliers as supplier (supplier._id)}
+								<option value={supplier._id}>{supplier.name ?? supplier._id}</option>
+							{/each}
+						</select>
+						<div class="admin-actions-group">
+							<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
+								<Icon icon={iconify['tune-rounded']} size="sm" />
+							</Button>
+							<Button color="success" size="sm" onClick={openPOModal} data-test="po-create-btn">
+								{pageContents.actions.createPO[lang]}
+							</Button>
+						</div>
+					{/snippet}
 					{#snippet actionsContent(row)}
 						{@const po = row as unknown as PurchaseOrderRow}
 						<div class="row-actions">
@@ -1432,92 +1630,95 @@
 				{/if}
 				<div class="form-grid">
 					<div class="form-grid-2">
-						<label class="form-field">
-							<span class="form-label">{pageContents.supplierModal.name[lang]}</span>
-							<input class="admin-input" type="text" bind:value={supplierForm.name} disabled={supplierSubmitting} />
-						</label>
-						<label class="form-field">
-							<span class="form-label">{pageContents.supplierModal.contact[lang]}</span>
-							<input class="admin-input" type="text" bind:value={supplierForm.contactPerson} disabled={supplierSubmitting} />
-						</label>
-					</div>
-					<div class="form-grid-2">
-						<div class="form-field">
-							<span class="form-label">{pageContents.supplierModal.avatar[lang]}</span>
-							<ImageUpload bind:value={supplierForm.avatarUrl} label="" disabled={supplierSubmitting} />
-						</div>
-						<div class="form-grid" style="gap: 0.5rem;">
-							<!-- phones multiple: STT tag + PhoneInput per slot + nút xoá; warn trùng -->
-							{#each supplierForm.phones as phone, phoneIndex (phoneIndex)}
-								<div class="field-row" class:field-row--dup={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2}>
-									<span class="field-stt" aria-hidden="true">{phoneIndex + 1}</span>
-									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
-									<button
-										type="button"
-										class="field-row-remove"
-										aria-label={pageContents.supplierModal.removePhone[lang]}
-										disabled={supplierSubmitting}
-										onclick={() => {
-											supplierForm.phones = supplierForm.phones.filter((_, i) => i !== phoneIndex);
-										}}
-									>✕</button>
-								</div>
-							{/each}
-							<button
-								type="button"
-								class="field-add"
+						<!-- yêu cầu 1e: dùng Input component (không native input) -->
+						<TextField name="supplier-name" required>
+							<Label>{pageContents.supplierModal.name[lang]}</Label>
+							<Input
+								type="text"
+								bind:value={supplierForm.name}
 								disabled={supplierSubmitting}
-								onclick={() => {
-									supplierForm.phones = [...supplierForm.phones, ''];
-								}}
-							>+ {pageContents.supplierModal.addPhone[lang]}</button>
-							<!-- emails multiple: STT tag + warn trùng -->
-							{#each supplierForm.emails as email, emailIndex (emailIndex)}
-								<div class="field-row" class:field-row--dup={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2}>
-									<span class="field-stt" aria-hidden="true">{emailIndex + 1}</span>
-									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
-									<button
-										type="button"
-										class="field-row-remove"
-										aria-label={pageContents.supplierModal.removeEmail[lang]}
-										disabled={supplierSubmitting}
-										onclick={() => {
-											supplierForm.emails = supplierForm.emails.filter((_, i) => i !== emailIndex);
-										}}
-									>✕</button>
-								</div>
-							{/each}
-							<button
-								type="button"
-								class="field-add"
+								data-test="supplier-form-name"
+							/>
+						</TextField>
+						<TextField name="supplier-contact">
+							<Label>{pageContents.supplierModal.contact[lang]}</Label>
+							<Input
+								type="text"
+								bind:value={supplierForm.contactPerson}
 								disabled={supplierSubmitting}
-								onclick={() => {
-									supplierForm.emails = [...supplierForm.emails, ''];
-								}}
-							>+ {pageContents.supplierModal.addEmail[lang]}</button>
-						</div>
+							/>
+						</TextField>
 					</div>
-					<!-- Địa chỉ chính: auto complete nhận dạng chuỗi → chọn tỉnh/huyện qua select/option -->
-					<AddressInput
-						bind:value={supplierForm.address}
-						bind:breakdown={supplierAddressBreakdown}
-						label={pageContents.supplierModal.address[lang]}
-						placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
+					<!-- ── Hình ảnh multiple (yêu cầu 1b: add button row riêng, 1c hover action, 1d bỏ change/remove riêng) ── -->
+					<ImageUpload
+						images={supplierForm.images}
+						bind:avatarUrl={supplierForm.avatarUrl}
+						label={pageContents.supplierModal.images[lang]}
 						disabled={supplierSubmitting}
 					/>
-					<!-- ── Multiple addresses: mỗi entry 1 block label + AddressInput riêng ── -->
+					<!-- ── Phones + emails multiple: Badge STT + Input component ── -->
+					<div class="form-grid" style="gap: 0.5rem;">
+						{#each supplierForm.phones as phone, phoneIndex (phoneIndex)}
+							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2}>
+								<Badge label={String(phoneIndex + 1)} size="xs" variant="soft" color={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
+								<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
+								<button
+									type="button"
+									class="field-row-remove"
+									aria-label={pageContents.supplierModal.removePhone[lang]}
+									disabled={supplierSubmitting}
+									onclick={() => {
+										supplierForm.phones = supplierForm.phones.filter((_, i) => i !== phoneIndex);
+									}}
+								>✕</button>
+							</div>
+						{/each}
+						<button
+							type="button"
+							class="field-add"
+							disabled={supplierSubmitting}
+							onclick={() => {
+								supplierForm.phones = [...supplierForm.phones, ''];
+							}}
+						>+ {pageContents.supplierModal.addPhone[lang]}</button>
+						{#each supplierForm.emails as email, emailIndex (emailIndex)}
+							<div class="field-row" class:field-row--dup={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2}>
+								<Badge label={String(emailIndex + 1)} size="xs" variant="soft" color={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
+								<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
+								<button
+									type="button"
+									class="field-row-remove"
+									aria-label={pageContents.supplierModal.removeEmail[lang]}
+									disabled={supplierSubmitting}
+									onclick={() => {
+										supplierForm.emails = supplierForm.emails.filter((_, i) => i !== emailIndex);
+									}}
+								>✕</button>
+							</div>
+						{/each}
+						<button
+							type="button"
+							class="field-add"
+							disabled={supplierSubmitting}
+							onclick={() => {
+								supplierForm.emails = [...supplierForm.emails, ''];
+							}}
+						>+ {pageContents.supplierModal.addEmail[lang]}</button>
+					</div>
+					<!-- ── Multiple addresses (yêu cầu 1g: BỎ address đơn — block này là duy nhất;
+					     entry đầu = địa chỉ chính cho payload cấp 1) ── -->
 					<div class="items-block">
 						<span class="form-label">{pageContents.supplierModal.addresses[lang]}</span>
 						{#each supplierForm.addresses as entry, addrIndex (addrIndex)}
 							<div class="address-entry" class:field-row--dup={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2}>
 								<div class="address-entry__head">
-									<span class="field-stt" aria-hidden="true">{addrIndex + 1}</span>
-									<input
-										class="admin-input address-entry__label"
+									<Badge label={String(addrIndex + 1)} size="xs" variant="soft" color={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
+									<Input
 										type="text"
 										bind:value={entry.label}
 										placeholder={pageContents.supplierModal.addressLabelPlaceholder[lang]}
 										disabled={supplierSubmitting}
+										size="sm"
 									/>
 									<button
 										type="button"
@@ -1544,40 +1745,77 @@
 							disabled={supplierSubmitting}
 							onclick={() => {
 								supplierForm.addresses = [...supplierForm.addresses, { label: '', address: '', province: '', district: '' }];
-								supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '' }];
+								supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '', ward: '' }];
 							}}
 						>+ {pageContents.supplierModal.addAddress[lang]}</button>
 					</div>
-					<!-- ── Social block: zalo / telegram / discord / facebook ── -->
+					<!-- ── Social block: Input component (yêu cầu 1e) ── -->
 					<div class="items-block social-block">
 						<span class="form-label">{pageContents.supplierModal.social[lang]}</span>
 						<div class="form-grid-2">
-							<label class="form-field">
-								<span class="form-label">{pageContents.supplierModal.zalo[lang]}</span>
-								<input class="admin-input" type="text" bind:value={supplierForm.zalo} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.zaloPlaceholder[lang]} />
-							</label>
-							<label class="form-field">
-								<span class="form-label">{pageContents.supplierModal.telegram[lang]}</span>
-								<input class="admin-input" type="text" bind:value={supplierForm.telegram} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.telegramPlaceholder[lang]} />
-							</label>
-							<label class="form-field">
-								<span class="form-label">{pageContents.supplierModal.discord[lang]}</span>
-								<input class="admin-input" type="text" bind:value={supplierForm.discord} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.discordPlaceholder[lang]} />
-							</label>
-							<label class="form-field">
-								<span class="form-label">{pageContents.supplierModal.facebook[lang]}</span>
-								<input class="admin-input" type="text" bind:value={supplierForm.facebook} disabled={supplierSubmitting} placeholder={pageContents.supplierModal.facebookPlaceholder[lang]} />
-							</label>
+							<TextField name="supplier-zalo">
+								<Label>{pageContents.supplierModal.zalo[lang]}</Label>
+								<Input
+									type="text"
+									bind:value={supplierForm.zalo}
+									placeholder={pageContents.supplierModal.zaloPlaceholder[lang]}
+									disabled={supplierSubmitting}
+								/>
+							</TextField>
+							<TextField name="supplier-telegram">
+								<Label>{pageContents.supplierModal.telegram[lang]}</Label>
+								<Input
+									type="text"
+									bind:value={supplierForm.telegram}
+									placeholder={pageContents.supplierModal.telegramPlaceholder[lang]}
+									disabled={supplierSubmitting}
+								/>
+							</TextField>
+							<TextField name="supplier-discord">
+								<Label>{pageContents.supplierModal.discord[lang]}</Label>
+								<Input
+									type="text"
+									bind:value={supplierForm.discord}
+									placeholder={pageContents.supplierModal.discordPlaceholder[lang]}
+									disabled={supplierSubmitting}
+								/>
+							</TextField>
+							<TextField name="supplier-facebook">
+								<Label>{pageContents.supplierModal.facebook[lang]}</Label>
+								<Input
+									type="text"
+									bind:value={supplierForm.facebook}
+									placeholder={pageContents.supplierModal.facebookPlaceholder[lang]}
+									disabled={supplierSubmitting}
+								/>
+							</TextField>
 						</div>
 					</div>
-					<label class="form-field">
+					<!-- ── Note long text (yêu cầu 1i) ── -->
+					<TextField name="supplier-note">
+						<Label>{pageContents.supplierModal.note[lang]}</Label>
+						<Textarea
+							bind:value={supplierForm.note}
+							placeholder={pageContents.supplierModal.notePlaceholder[lang]}
+							rows={3}
+							autoResize
+							maxLength={2000}
+							disabled={supplierSubmitting}
+							data-test="supplier-form-note"
+						/>
+					</TextField>
+					<!-- ── Status: Switch (yêu cầu 1f: giảm thao tác) ── -->
+					<div class="form-field">
 						<span class="form-label">{pageContents.supplierModal.status[lang]}</span>
-						<select class="admin-select" bind:value={supplierForm.status} disabled={supplierSubmitting}>
-							{#each SUPPLIER_STATUSES as status (status)}
-								<option value={status}>{status === 'active' ? (lang === 'vi' ? 'Đang hoạt động' : 'Active') : (lang === 'vi' ? 'Ngừng hoạt động' : 'Inactive')}</option>
-							{/each}
-						</select>
-					</label>
+						<Switch
+							checked={supplierForm.status === 'active'}
+							label={supplierForm.status === 'active' ? pageContents.supplierModal.statusActive[lang] : pageContents.supplierModal.statusInactive[lang]}
+							disabled={supplierSubmitting}
+							color="success"
+							onchange={(checked) => (supplierForm.status = checked ? 'active' : 'inactive')}
+							data-test="supplier-form-status"
+						/>
+					</div>
 				</div>
 			</Modal.Container.Body>
 			<Modal.Container.Footer>
@@ -1618,6 +1856,30 @@
 					}}
 				>
 					{pageContents.dirty.discard[lang]}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
+{/if}
+
+<!-- ── AlertDialog bulk-delete (yêu cầu 2: xóa hàng loạt qua confirm) ── -->
+{#if bulkDeleteDisplay}
+	<AlertDialog bind:open={bulkDeleteDisplay} title={pageContents.bulk.title[lang]} description={pageContents.bulk.desc[lang]}>
+		<AlertDialog.Content>
+			<AlertDialog.Header variant="danger">
+				<AlertDialog.Title>{pageContents.bulk.title[lang]}</AlertDialog.Title>
+				<AlertDialog.Description>{pageContents.bulk.desc[lang].replace('{count}', String(selectedIds.length))}</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+				<AlertDialog.Action
+					color="danger"
+					disabled={bulkDeleting}
+					onselect={() => {
+						void bulkDeleteSelected();
+					}}
+				>
+					{pageContents.bulk.confirm[lang]}
 				</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
@@ -1772,38 +2034,15 @@
 		}
 	}
 
-	.admin-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-end;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.admin-header-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-	}
-
-	.admin-title {
-		font-size: 1.75rem;
-		font-weight: 700;
-		color: var(--foreground);
-		margin: 0;
-	}
-
-	.admin-subtitle {
-		font-size: 0.9rem;
-		color: var(--foreground-500);
-		margin: 0.25rem 0 0;
-	}
-
+	/* ── Tab-strip: sticky khi cuộn (yêu cầu 4 — scroll to bottom giữ tab-strip) ── */
 	.tab-strip {
 		display: flex;
 		gap: 0.25rem;
 		border-bottom: 1px solid var(--default-200);
+		background: var(--background);
+		position: sticky;
+		top: 0;
+		z-index: 20;
 	}
 
 	.tab-item {
@@ -1825,13 +2064,6 @@
 		&:hover {
 			color: var(--foreground);
 		}
-	}
-
-	.admin-filters {
-		display: flex;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-		align-items: center;
 	}
 
 	.admin-select {
@@ -2096,25 +2328,12 @@
 		opacity: 0.6;
 	}
 
-	/* Nút clear search — YÊU CẦU USER: màu error thay vì muted */
-	.admin-search-clear {
-		position: absolute;
-		right: 0.4rem;
-		width: 1.5rem;
-		height: 1.5rem;
+	.admin-search-loading {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		border: none;
-		border-radius: 9999px;
-		background: transparent;
-		color: var(--error);
-		cursor: pointer;
-		transition: background 0.15s ease;
-
-		&:hover {
-			background: color-mix(in oklab, var(--error) 12%, transparent);
-		}
+		width: 1.25rem;
+		height: 1.25rem;
 	}
 
 	/* Suggest popover từ khoá đã tìm */
@@ -2159,28 +2378,28 @@
 		}
 	}
 
-	/* ── STT tag + cảnh báo trùng (phone/email/address) ── */
-	.field-stt {
-		flex: none;
-		min-width: 1.4rem;
-		height: 1.4rem;
-		display: inline-flex;
+	/* ── Caption tools: actions-group (create/refresh) + bulk-bar (yêu cầu 2/3/7) ── */
+	.admin-actions-group {
+		display: flex;
 		align-items: center;
-		justify-content: center;
-		padding: 0 0.3rem;
-		border-radius: 9999px;
-		background: color-mix(in oklab, var(--primary) 12%, transparent);
-		color: var(--primary-600, var(--primary));
-		font-size: 0.72rem;
-		font-weight: 700;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.bulk-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.bulk-count {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--foreground);
 	}
 
 	.field-row--dup {
-		.field-stt {
-			background: color-mix(in oklab, var(--error) 14%, transparent);
-			color: var(--error);
-		}
-
 		& > :global(.input-root),
 		& > :global(.address-input),
 		& > .admin-input {

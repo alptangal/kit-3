@@ -3,9 +3,10 @@
 	// AddressInput — nhập địa chỉ VN với auto complete nhận dạng chuỗi:
 	// 1) ô text nhập địa chỉ chi tiết (số nhà, tên đường...)
 	// 2) gõ chuỗi địa chỉ đầy đủ → gợi ý nhận dạng Tỉnh/Thành + Quận/Huyện
-	//    từ data tĩnh VN (static/data/vn-geo.json) → chọn qua select/option
-	// 3) 2 Select cascading: chọn Tỉnh → lọc danh sách Quận/Huyện
-	// Tái sử dụng: Input (text), Select (tỉnh/huyện) — import trực tiếp (tránh circular barrel)
+	//    (+ Phường/Xã) từ data tĩnh VN (vn-geo.json + vn-geo-wards.json)
+	//    → chọn qua select/option
+	// 3) 3 Select cascading: chọn Tỉnh → lọc Quận/Huyện → lọc Phường/Xã
+	// Tái sử dụng: Input (text), Select (tỉnh/huyện/ward) — import trực tiếp (tránh circular barrel)
 	import Input from '../input/Main.svelte';
 	import Select from '../select/Main.svelte';
 	import type { AddressInputProps, AddressBreakdown } from './_interface';
@@ -13,17 +14,23 @@
 	let { value = $bindable(''), breakdown = $bindable({ province: '', district: '' }), label = '', placeholder, disabled = false }: AddressInputProps = $props();
 
 	interface GeoProvince { n: string; c: number; d: { n: string; c: number }[] }
+	/** wards: key 'Tên tỉnh|code' → { 'Tên huyện': ['Phường A', 'Xã B'...] } */
+	type WardMap = Record<string, Record<string, string[]>>;
 	let provinces = $state<GeoProvince[]>([]);
+	let wardMap = $state<WardMap>({});
 	let geoLoaded = $state(false);
 
-	// Load data địa chỉ 1 lần (lazy — fetch static file, 27KB)
+	// Load data địa chỉ 1 lần (lazy — fetch static file; geo 27KB + wards 208KB)
 	$effect(() => {
 		if (geoLoaded) return;
 		geoLoaded = true;
-		fetch('/data/vn-geo.json')
-			.then((r) => r.json() as Promise<GeoProvince[]>)
-			.then((d) => {
-				provinces = d;
+		Promise.all([
+			fetch('/data/vn-geo.json').then((r) => r.json() as Promise<GeoProvince[]>),
+			fetch('/data/vn-geo-wards.json').then((r) => r.json() as Promise<WardMap>)
+		])
+			.then(([g, w]) => {
+				provinces = g;
+				wardMap = w;
 			})
 			.catch(() => {
 				// data tĩnh — lỗi chỉ mất gợi ý, không chặn nhập tay
@@ -33,6 +40,11 @@
 	const provinceOptions = $derived(provinces.map((p) => ({ value: p.n, label: p.n })));
 	const selectedProvince = $derived(provinces.find((p) => p.n === breakdown.province));
 	const districtOptions = $derived((selectedProvince?.d ?? []).map((d) => ({ value: d.n, label: d.n })));
+	/** wards của tỉnh đang chọn (khớp qua key 'tên|code') */
+	const provinceWards = $derived(
+		breakdown.province ? wardMap[`${breakdown.province}|${selectedProvince?.c ?? ''}`] ?? {} : {}
+	);
+	const wardOptions = $derived((provinceWards[breakdown.district] ?? []).map((w) => ({ value: w, label: w })));
 
 	// Auto nhận dạng: quét chuỗi value tìm tên tỉnh/huyện khớp (word-boundary)
 	function detectFromText(raw: string): AddressBreakdown | null {
@@ -41,6 +53,16 @@
 		if (text.trim().length < 4) return null;
 		// match name ở ranh giới từ (tránh "hue" ăn trong "nguyen hue")
 		const hasWord = (name: string, hay: string) => hay.includes(` ${name} `) || hay.includes(`, ${name} `) || hay.includes(`. ${name} `);
+		// quét ward trước (cụ thể nhất) — chỉ trong tỉnh/huyện đã breakdown (tránh quét 10k ward)
+		if (breakdown.province && breakdown.district) {
+			const ws = provinceWards[breakdown.district] ?? [];
+			for (const w of ws) {
+				const wn = norm(w);
+				const wnBare = wn.replace(/^(phuong|xa|thi tran)\s+/, '');
+				if (wnBare.length >= 3 && hasWord(wnBare, text)) return { province: breakdown.province, district: breakdown.district, ward: w };
+				if (wnBare.length < 3 && hasWord(wn, text)) return { province: breakdown.province, district: breakdown.district, ward: w };
+			}
+		}
 		// quét huyện trước (cụ thể hơn), mỗi huyện có province_code để suy ra tỉnh
 		for (const p of provinces) {
 			for (const d of p.d) {
@@ -77,8 +99,12 @@
 			if (value === lastSuggestedText) return;
 			const hit = detectFromText(value);
 			if (hit) {
-				// tỉnh/huyện đã khớp sẵn thì áp luôn, không cần gợi ý
-				if (breakdown.province === hit.province && (hit.district === '' || breakdown.district === hit.district)) {
+				// tỉnh/huyện/ward đã khớp sẵn thì áp luôn, không cần gợi ý
+				if (
+					breakdown.province === hit.province &&
+					(hit.district === '' || breakdown.district === hit.district) &&
+					(!hit.ward || breakdown.ward === hit.ward)
+				) {
 					suggestion = null;
 					return;
 				}
@@ -96,10 +122,16 @@
 		suggestion = null;
 	}
 
-	// Chọn tỉnh → xoá huyện nếu không còn thuộc tỉnh mới
+	// Chọn tỉnh → xoá huyện/ward nếu không còn thuộc tỉnh mới
 	function onProvinceChange(v: string | string[]) {
 		if (typeof v !== 'string') return;
-		if (v !== breakdown.province) breakdown = { province: v, district: '' };
+		if (v !== breakdown.province) breakdown = { province: v, district: '', ward: '' };
+	}
+
+	// Chọn huyện → xoá ward nếu không còn thuộc huyện mới
+	function onDistrictChange(v: string | string[]) {
+		if (typeof v !== 'string') return;
+		breakdown = { ...breakdown, district: v, ward: '' };
 	}
 </script>
 
@@ -121,7 +153,7 @@
 			<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<path d="M20 6L9 17l-5-5"></path>
 			</svg>
-			<span>Phát hiện: <strong>{suggestion.district ? `${suggestion.district}, ` : ''}{suggestion.province}</strong> — bấm để áp dụng</span>
+			<span>Phát hiện: <strong>{suggestion.ward ? `${suggestion.ward}, ` : ''}{suggestion.district ? `${suggestion.district}, ` : ''}{suggestion.province}</strong> — bấm để áp dụng</span>
 		</button>
 	{/if}
 	<div class="address-input__selects">
@@ -142,10 +174,22 @@
 			<Select
 				options={districtOptions}
 				bind:value={breakdown.district}
+				onValueChange={onDistrictChange}
 				searchable
 				clearable
 				placeholder="Chọn quận/huyện"
 				disabled={disabled}
+			/>
+		</div>
+		<div class="address-input__field">
+			<span class="address-input__sub">Phường/Xã</span>
+			<Select
+				options={wardOptions}
+				bind:value={breakdown.ward}
+				searchable
+				clearable
+				placeholder="Chọn phường/xã"
+				disabled={disabled || !breakdown.district}
 			/>
 		</div>
 	</div>
@@ -201,7 +245,7 @@
 
 	.address-input__selects {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: repeat(3, 1fr);
 		gap: 0.5rem;
 
 		@media (max-width: 640px) {

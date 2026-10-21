@@ -27,6 +27,8 @@ export const POST: RequestHandler = async (event) => {
 			zalo?: string;
 			facebook?: string;
 			avatarUrl?: string;
+			images?: string[];
+			note?: string;
 			status: string;
 		}>(event);
 		if (!read.ok) return read.response;
@@ -76,6 +78,8 @@ export const POST: RequestHandler = async (event) => {
 			zalo: read.data.zalo,
 			facebook: read.data.facebook,
 			avatarUrl: read.data.avatarUrl,
+			images: read.data.images,
+			note: read.data.note,
 			status: read.data.status
 		});
 

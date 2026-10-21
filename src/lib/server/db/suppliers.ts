@@ -117,16 +117,18 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'zalo',
   'facebook',
   'avatarUrl',
+  'images',
+  'note',
   'status',
   'createdAt',
   'updatedAt'
 ] as const;
 
-// Field dạng mảng (phones/emails) — validate phần tử string trước khi ghi
-const SUPPLIER_ARRAY_FIELDS = ['phones', 'emails'] as const;
+// Field dạng mảng (phones/emails/images) — validate phần tử string trước khi ghi
+const SUPPLIER_ARRAY_FIELDS = ['phones', 'emails', 'images'] as const;
 
-// Mảng addresses: phần tử là object {label?, address, province?, district?, country?}
-const SUPPLIER_ADDRESS_ENTRY_FIELDS = ['label', 'address', 'province', 'district', 'country'] as const;
+// Mảng addresses: phần tử là object {label?, address, ward?, district?, province?, country?}
+const SUPPLIER_ADDRESS_ENTRY_FIELDS = ['label', 'address', 'ward', 'district', 'province', 'country'] as const;
 
 function sanitizeAddressEntries(value: unknown): Array<Record<string, string>> {
   if (!Array.isArray(value)) return [];
@@ -410,6 +412,8 @@ export class SupplierService {
       zalo?: string;
       facebook?: string;
       avatarUrl?: string;
+      images?: string[];
+      note?: string;
       status: string;
     }
   ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { supplier: Record<string, unknown> })> {
@@ -433,6 +437,8 @@ export class SupplierService {
       zalo: supplierData.zalo ?? null,
       facebook: supplierData.facebook ?? null,
       avatarUrl: supplierData.avatarUrl ?? null,
+      images: Array.isArray(supplierData.images) ? supplierData.images.filter((i): i is string => typeof i === 'string' && i.trim().length > 0).map((i) => i.trim()) : [],
+      note: supplierData.note ?? null,
       status: supplierData.status,
       createdAt: now,
       updatedAt: now
@@ -470,7 +476,7 @@ export class SupplierService {
     const now = new Date().toISOString();
     const updateData: Record<string, unknown> = { ...(getRes as any).data };
 
-    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'avatarUrl', 'status'] as const) {
+    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'avatarUrl', 'images', 'note', 'status'] as const) {
       if (field in patch) {
         // mảng phones/emails: lọc phần tử rỗng/không phải string
         if ((SUPPLIER_ARRAY_FIELDS as readonly string[]).includes(field)) {
@@ -502,6 +508,40 @@ export class SupplierService {
 
     const updatedSupplier = (updateRes as any).data;
     return { success: true, supplier: sanitizeSupplierForAdmin({...updatedSupplier, _id: supplierId}) };
+  }
+
+  /**
+   * Xóa hàng loạt supplier (bulk action từ checkbox trong DataTable).
+   * Suppliers không gắn branch → không cần scope check, chỉ permission.
+   */
+  static async bulkDeleteSuppliers(
+    actor: ActorContext,
+    ids: string[]
+  ): Promise<{
+    success: boolean;
+    messages?: TranslateContent;
+    deleted?: string[];
+    failed?: Array<{ id: string; reason: string }>;
+  }> {
+    const permError = await this.requirePermission(actor, 'suppliers:manage');
+    if (permError) return permError;
+
+    const cleanIds = (ids ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, 100);
+    if (cleanIds.length === 0) return { success: false, messages: supplierAdminMessages.invalidInput };
+
+    // Xóa trực tiếp theo ids — doc không tồn tại coi như failed (not_found)
+    const delRes = await cbSuppliers.document.query({
+      statement: `DELETE FROM ${suppliersKeyspace} WHERE META().id IN $1 RETURNING META().id AS _id`,
+      args: [cleanIds],
+      readonly: false
+    });
+    if (!delRes.ok) return { success: false, messages: supplierAdminMessages.queryFailed };
+
+    const deleted = ((delRes.data?.results ?? []) as Array<{ _id: string }>).map((r) => r._id);
+    const foundSet = new Set(deleted);
+    const failed = cleanIds.filter((id) => !foundSet.has(id)).map((id) => ({ id, reason: 'not_found' }));
+
+    return { success: true, deleted, failed };
   }
 
   // ========== PURCHASE ORDERS ==========

@@ -85,6 +85,8 @@
 		padding: var(--padding, 1.25rem);
 		width: var(--width, 32rem);
 		max-width: calc(100vw - 2rem);
+		/* Safari iOS 15.3- (không có dvh): fallback 100vh trước, dvh sau */
+		max-height: calc(100vh - 2.5rem);
 		max-height: calc(100dvh - 2.5rem);
 		// Layout: flex column → Header/Body/Footer là flex siblings đứng yên.
 		// Scroll-container là `.modal-body-root` (Body overflow-y: auto) →
@@ -195,6 +197,7 @@
 			right: 0;
 			width: 100%;
 			max-width: none;
+			max-height: 85vh;
 			max-height: 85dvh;
 			margin: 0;
 			border-radius: var(--border-radius, 1rem) var(--border-radius, 1rem) 0 0;

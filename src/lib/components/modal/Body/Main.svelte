@@ -39,6 +39,17 @@
 		flex: 1 1 0%;
 		min-height: 0;
 		overflow-y: auto;
+		/* Safari iOS ≤15.4: scroll bên trong flex container chết nếu không có
+		   momentum scroll (-webkit-overflow-scrolling) và pan chạm bị container
+		   cha nuốt (overscroll-behavior contain chặn bounce chain). */
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior-y: contain;
+		/* Safari cũ không tính min-height:0 trong flex — ép height cụ thể qua
+		   display -webkit-box fallback giúp vùng cuộn nhận touch đúng vùng. */
+		@supports (-webkit-touch-callout: none) and (not (translate: none)) {
+			/* iOS ≤15.3 (không hỗ trợ translate) — đảm bảo height flow chuẩn */
+			height: 100%;
+		}
 	}
 
 	// ── Form fields trong modal (P2 modal-style-field) ──

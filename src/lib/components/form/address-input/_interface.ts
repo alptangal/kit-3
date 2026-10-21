@@ -4,6 +4,8 @@ import type { InputProps } from '../input/_interface';
 export interface AddressBreakdown {
 	province: string;
 	district: string;
+	/** Phường/Xã — từ static/data/vn-geo-wards.json (2026-10-21) */
+	ward?: string;
 }
 
 export interface AddressInputProps {

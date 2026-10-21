@@ -391,10 +391,16 @@
 			font-size: 1rem;
 		}
 		.input-group-actions {
-			/* Nút action trong group — rộng/chão tối thiểu để chạm */
+			/* Nút action trong group — chạm thoải mái nhưng KHÔNG tràn height input:
+			   Safari iOS (15.4) render nút 44px cao hơn input 30-40px → đè viền/tràn
+			   node root. Giữ min-width 2.75rem (touch ngang), hạ min-height về đúng
+			   chiều cao input (aspect-square width = var(--min-height) → thu icon,
+			   hit-area mở rộng bằng padding âm thay vì kích thước). */
 			:global(.button-root) {
 				min-width: 2.75rem;
-				min-height: 2.75rem;
+				min-height: unset;
+				height: 100%;
+				max-height: 100%;
 			}
 		}
 	}
