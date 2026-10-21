@@ -375,9 +375,11 @@ $effect(() => {
 		// WebAuthn support check (SSR-safe — chỉ chạy client).
 		// passkeySupported: WebAuthn API sẵn sàng (hiện nút, có thể disabled).
 		// passkeyAuthenticator: thiết bị CÓ platform authenticator (Touch ID /
-		// Face ID / Windows Hello / vân tay Android) — FALSE → nút disabled + hint
-		// hướng dẫn bật (thay vì ẩn hoàn toàn — user không biết chức năng tồn tại).
-		// Check trong try vì một số browser ném lỗi khi gọi trong iframe không cấp quyền.
+		// Face ID / Windows Hello / vân tay Android).
+		// BẪY Safari iOS 15.1: platformAuthenticatorIsAvailable() (IUPAA) có thể
+		// REJECT (NotSupportedError/AbortError WebKit cũ) → catch cũ tắt CẢ nút
+		// vĩnh viễn không log. Optimistic: lỗi/false gate → vẫn hiển thị nút
+		// (user bấm sẽ thấy lỗi thật từ startRegistration nếu không có).
 		passkeySupported = false;
 		passkeyAuthenticator = false;
 		try {
@@ -387,7 +389,12 @@ $effect(() => {
 				browserSupportsWebAuthn()
 			) {
 				passkeySupported = true;
-				passkeyAuthenticator = await platformAuthenticatorIsAvailable();
+				try {
+					passkeyAuthenticator = await platformAuthenticatorIsAvailable();
+				} catch {
+					passkeyAuthenticator = true;
+				}
+				if (!passkeyAuthenticator) passkeyAuthenticator = true;
 			}
 		} catch {
 			passkeySupported = false;
@@ -540,7 +547,6 @@ $effect(() => {
 					variant="ghost"
 					icon="lucide:fingerprint"
 					loading={passkeyLoading}
-					disabled={passkeyLoading || !passkeyAuthenticator}
 					onclick={handlePasskeyLogin}
 				>
 					{pageContents.passkeyLogin[lang] ?? (lang === 'vi' ? 'Đăng nhập bằng sinh trắc học' : 'Sign in with biometrics')}
@@ -548,15 +554,9 @@ $effect(() => {
 				<div class="passkey-divider">
 					<span>{pageContents.passkeyOr[lang] ?? (lang === 'vi' ? 'hoặc' : 'or')}</span>
 				</div>
-				{#if !passkeyAuthenticator}
-					<p class="passkey-hint" data-test="passkey-authenticator-hint">
-						{pageContents.passkeyUnavailableHint[lang]}
-					</p>
-				{:else}
-					<a class="passkey-guide-link" href="/docs/biometric-login.html" target="_blank" rel="noopener" data-test="passkey-guide-link">
-						{pageContents.passkeyGuide[lang]}
-					</a>
-				{/if}
+				<a class="passkey-guide-link" href="/docs/biometric-login.html" target="_blank" rel="noopener" data-test="passkey-guide-link">
+					{pageContents.passkeyGuide[lang]}
+				</a>
 			</div>
 		{/if}
 

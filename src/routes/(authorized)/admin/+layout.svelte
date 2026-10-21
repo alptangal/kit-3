@@ -187,10 +187,10 @@
 		dark: 'lucide:sun',
 		light: 'lucide:moon'
 	};
-	const themeLabels: Record<AppTheme, TranslateContent> = {
-		system: tc('Hệ thống', 'System'),
-		dark: tc('Tối', 'Dark'),
-		light: tc('Sáng', 'Light')
+	const themeLabels: Record<AppTheme, string> = {
+		system: tc('Hệ thống', 'System') as string,
+		dark: tc('Tối', 'Dark') as string,
+		light: tc('Sáng', 'Light') as string
 	};
 	const themeAria: Record<AppTheme, string> = {
 		system: lang === 'vi' ? 'Giao diện hệ thống' : 'System appearance',
@@ -198,11 +198,11 @@
 		light: lang === 'vi' ? 'Giao diện sáng' : 'Light appearance'
 	};
 	const themeLabel = $derived(
-		profile.theme === 'dark'
+		(profile.theme === 'dark'
 			? tc('Giao diện (tối)', 'Appearance (dark)')
 			: profile.theme === 'light'
 				? tc('Giao diện (sáng)', 'Appearance (light)')
-				: tc('Giao diện (hệ thống)', 'Appearance (system)')
+				: tc('Giao diện (hệ thống)', 'Appearance (system)')) as string
 	);
 	const setTheme = (next: AppTheme, x: number, y: number) => {
 		if (profile.theme === next) return;

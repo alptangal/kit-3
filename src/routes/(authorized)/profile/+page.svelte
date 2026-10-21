@@ -525,17 +525,26 @@
 		// (hiện section + nút đăng ký), passkeyAuthenticator = thiết bị CÓ platform
 		// authenticator (false → nút disabled + hint hướng dẫn bật, KHÔNG ẩn).
 		void (async () => {
-			try {
-				passkeySupported =
-					typeof window !== 'undefined' &&
-					typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
-					browserSupportsWebAuthn();
-				passkeyAuthenticator = passkeySupported && (await platformAuthenticatorIsAvailable());
-			} catch {
-				passkeySupported = false;
-				passkeyAuthenticator = false;
+			passkeySupported =
+				typeof window !== 'undefined' &&
+				typeof (window as { PublicKeyCredential?: unknown }).PublicKeyCredential !== 'undefined' &&
+				browserSupportsWebAuthn();
+			// BẪY Safari iOS 15.1: platformAuthenticatorIsAvailable() (IUPAA) có thể
+			// REJECT (NotSupportedError/AbortError WebKit cũ) hoặc treo — gate false
+			// ở đây làm nút đăng ký disabled VĨNH VIỄN không log. Optimistic: lỗi
+			// gate → giả định CÓ authenticator (user bấm sẽ thấy lỗi thật từ
+			// startRegistration nếu thật sự không có).
+			if (passkeySupported) {
+				try {
+					passkeyAuthenticator = await platformAuthenticatorIsAvailable();
+				} catch {
+					passkeyAuthenticator = true;
+				}
+				// WebKit cũ đôi khi resolve false SAI (không có platform nhưng
+				// security key vẫn dùng được) — vẫn optimistic để không khoá nút.
+				if (!passkeyAuthenticator) passkeyAuthenticator = true;
+				void loadCredentials();
 			}
-			if (passkeySupported) void loadCredentials();
 		})();
 	});
 
@@ -733,7 +742,7 @@
 					color="primary"
 					variant="ghost"
 					loading={passkeyRegistering}
-					disabled={passkeyRegistering || !passkeyAuthenticator}
+					disabled={passkeyRegistering}
 					onclick={handleRegister}
 				>
 					{passkeyRegistering ? msg('passkeyRegistering') : msg('passkeyRegister')}
@@ -743,8 +752,6 @@
 
 		{#if !passkeySupported}
 			<p class="passkey-unavailable">{msg('passkeyUnavailable')}</p>
-		{:else if !passkeyAuthenticator}
-			<p class="passkey-unavailable">{msg('passkeyAuthenticatorHint')}</p>
 		{:else if passkeyLoading && credentials.length === 0}
 			<div class="passkey-loading"><span class="passkey-spinner"></span></div>
 		{:else if credentials.length === 0}

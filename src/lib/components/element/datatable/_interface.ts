@@ -205,6 +205,14 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	nextLabel?: TranslateContent | string;
 	/** Định danh row (default: index). */
 	getRowId?: (row: T, index: number) => string;
+	/** selection 2-way — page giữ mảng id (persists qua đổi trang/refetch). */
+	selection?: string[];
+	/** select-all header: 'page' (default) = chỉ trang hiện tại; 'filtered' = gọi onSelectAllFiltered. */
+	selectAllMode?: 'page' | 'filtered';
+	/** 'filtered': all page-selected hiển thị theo flag này (page ghi khi đã fetch chọn hết). */
+	allFilteredSelected?: boolean;
+	/** 'filtered': header select-all được gọi khi user chọn select-all. */
+	onSelectAllFiltered?: () => void;
 	/** Cho phép update/delete row (PC: hover row → action buttons; mobile: tap row → expand actions). */
 	rowActions?: boolean;
 	/** B6.2: nhãn th cột actions (i18n — default 'Actions'/'Thao tác'). */

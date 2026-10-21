@@ -72,6 +72,10 @@
 		previousLabel,
 		nextLabel,
 		getRowId,
+		selection: selectionProp = $bindable(undefined),
+		selectAllMode,
+		allFilteredSelected: allFilteredSelectedProp = $bindable(false),
+		onSelectAllFiltered,
 		rowActions,
 		actionsLabel,
 		actionsContent,
@@ -255,6 +259,24 @@
 	const pageSize: number = $derived(pageSizeState ?? pageSizeProp ?? 10);
 	const pageSizeOptions: number[] = $derived(pageSizeOptionsProp ?? [5, 10, 20]);
 	const selected = new SvelteSet<string>();
+	// selection 2-way: page truyền selection → seed vào set (batch 4 — chọn
+	// giữ nguyên qua đổi trang/refetch, id thật theo getRowId).
+	// BẪY: guard so key join('\u0000') — $effect re-run khi set tự emit
+	// onSelectionChange → ghi ngược prop → effect re-run → loop.
+	let selectionSeed = '';
+	$effect(() => {
+		if (selectionProp === undefined) return;
+		const key = [...selectionProp].join('\u0000');
+		if (key === selectionSeed) return;
+		selectionSeed = key;
+		selected.clear();
+		for (const id of selectionProp) selected.add(id);
+	});
+	const emitSelection = (): void => {
+		selectionSeed = [...selected].sort().join('\u0000');
+		selectionProp = [...selected];
+		onSelectionChange?.([...selected]);
+	};
 
 	// ── Sort bindable + mode (purchases redesign) ──
 	// sortMode 'server': pipeline BỎ stage sort client (server đã sort — client
@@ -429,10 +451,23 @@
 	const toggleRow = (id: string): void => {
 		if (selected.has(id)) selected.delete(id);
 		else selected.add(id);
-		onSelectionChange?.([...selected]);
+		emitSelection();
 	};
 
+	// select-all header: mode 'filtered' → page tự fetch ids toàn bộ qua
+	// onSelectAllFiltered (đã chọn hết → clear); mode 'page' (default) = trang hiện tại.
 	const togglePageSelection = (): void => {
+		if (selectAllMode === 'filtered') {
+			const ids = pageRows.map(({ row, index }) => idOf(row, index));
+			if (ids.length > 0 && ids.every((id) => selected.has(id))) {
+				selected.clear();
+				allFilteredSelectedProp = false;
+				emitSelection();
+			} else {
+				onSelectAllFiltered?.();
+			}
+			return;
+		}
 		const ids = pageRows.map(({ row, index }) => idOf(row, index));
 		if (ids.length === 0) return;
 		const allSelected = ids.every((id) => selected.has(id));
@@ -440,7 +475,7 @@
 			if (allSelected) selected.delete(id);
 			else selected.add(id);
 		}
-		onSelectionChange?.([...selected]);
+		emitSelection();
 	};
 
 	const handleRowClick = (row: Record<string, unknown>, index: number): void => {
@@ -863,13 +898,15 @@
 			}
 		}
 		selected.clear();
-		onSelectionChange?.([]);
+		allFilteredSelectedProp = false;
+		emitSelection();
 	};
 
 	const clearSelection = (): void => {
 		if (selected.size === 0) return;
 		selected.clear();
-		onSelectionChange?.([]);
+		allFilteredSelectedProp = false;
+		emitSelection();
 	};
 
 	const selectedCount: number = $derived(selected.size);
@@ -1420,7 +1457,8 @@
 				`size-${this.size}`,
 				`density-${this.density}`,
 				this.loading ? 'is-loading' : undefined,
-				this.selectable ? 'has-selection' : undefined,
+				this.selectable ? 'has-selection-ui' : undefined,
+				selected.size > 0 ? 'has-selection-rows' : undefined,
 				this.striped ? 'striped' : undefined,
 				this.hoverable ? 'hoverable' : undefined,
 				this.bordered ? 'bordered-columns' : undefined,
@@ -1473,6 +1511,7 @@
 			return effSortOrder;
 		},
 		get allPageSelected() {
+			if (selectAllMode === 'filtered') return allFilteredSelectedProp;
 			const ids = pageRows.map(({ row, index }) => idOf(row, index));
 			return ids.length > 0 && ids.every((id) => selected.has(id));
 		},

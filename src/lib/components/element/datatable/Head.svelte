@@ -249,14 +249,16 @@
 		}
 	}
 
-	// Có row trang nào được chọn → select-all luôn hiện (mirror indeterminate).
-	:global(.datatable-root.datatable-index-check.has-selection)
+	// Có row được chọn → select-all luôn hiện (mirror indeterminate).
+	// BẪY: has-selection cũ = selectable luôn-on → th '#' bị ẩn SẴN dù chưa
+	// chọn gì; dùng has-selection-rows (selected.size > 0, Main style getter).
+	:global(.datatable-root.datatable-index-check.has-selection-rows)
 		.datatable-th--index
 		.datatable-index-num {
 		opacity: 0;
 	}
 
-	:global(.datatable-root.datatable-index-check.has-selection)
+	:global(.datatable-root.datatable-index-check.has-selection-rows)
 		.datatable-th--index
 		.datatable-index-check {
 		opacity: 1;

@@ -1,5 +1,6 @@
 <!-- src/routes/(authorized)/admin/suppliers/+page.svelte -->
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { Button, DataTable, Pagination, AlertDialog, Badge, Spinner } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
@@ -10,8 +11,7 @@
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
 	import { formatDate as formatDateShared } from '$modules/i18n';
-	import { onMount, tick } from 'svelte';
-	import { page } from '$app/state';
+	import { onMount } from 'svelte';	import { page } from '$app/state';
 	import { resolveServerMessage } from '../_interface';
 	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs, saveDraftPref, clearDraftPref, readDraftPref } from '$store/user-prefs.svelte';
 	import { createCloseGuard } from '$modules/close-guard.svelte';
@@ -273,6 +273,12 @@
 
 	// pathname ép về string (route phase 4 chưa có trong RouteId)
 
+	// BẪY: form state/draft có thể chứa null/undefined (Input unmount emit
+	// undefined qua bind; JSON.stringify draft biến thành null) → .trim() trực
+	// tiếp nổ "can't access property trim ... is undefined" (console prod).
+	// Mọi site .trim() trên form state đi qua helper này.
+	const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
 	const SUPPLIER_STATUSES = ['active', 'inactive'] as const;
 	const PO_STATUSES = ['draft', 'ordered', 'partially_received', 'received', 'cancelled'] as const;
 
@@ -475,8 +481,49 @@
 
 	// ── Bulk selection (yêu cầu 2: STT hover → checkbox, copy/delete hàng loạt) ──
 	let selectedIds = $state<string[]>([]);
+	// select-all 'filtered': DataTable đọc flag này (allPageSelected) — true khi
+	// user đã chọn select-all toàn bộ kết quả filter (qua fetch ids).
+	let allFilteredSelected = $state(false);
 	let bulkDeleteDisplay = $state(false);
 	let bulkDeleting = $state(false);
+
+	// Select-all đa trang: fetch TẤT CẢ suppliers khớp filter hiện tại (page 1,
+	// pageSize = total) rồi gán ids — mirror body loadSuppliers.
+	async function selectAllFilteredSuppliers() {
+		if (!encryptionKeys) return;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/suppliers/list',
+				{
+					method: 'POST',
+					body: {
+						page: 1,
+						pageSize: Math.max(suppliersTotal, 1),
+						status: supplierStatusFilter || undefined,
+						search: searchQuery?.trim() || undefined,
+						sortField: sortField || undefined,
+						sortDirection
+					}
+				},
+				encryptionKeys
+			);
+			if (!response.ok) return;
+			const data = response.data as { items?: Array<{ _id?: unknown }> } | undefined;
+			selectedIds = (data?.items ?? [])
+				.map((s) => s._id)
+				.filter((id): id is string => typeof id === 'string');
+			allFilteredSelected = selectedIds.length > 0;
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[admin/suppliers] select-all filtered failed:', err);
+		}
+	}
+
+	// clearSelection theo 2 chiều (bulk-bar close / bulk delete): DataTable
+	// selected set + page selectedIds + flag all-filtered.
+	function clearSuppliersSelection() {
+		selectedIds = [];
+		allFilteredSelected = false;
+	}
 
 	// ── Modal tạo PO ──
 	let poModalDisplay = $state(false);
@@ -497,6 +544,30 @@
 	});
 	const poTotalCost = $derived(
 		poForm.items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitCost) || 0), 0)
+	);
+	// Dirty-guard PO (chuẩn chung — mirror closeGuard NCC + quickDirty purchases):
+	// snapshot JSON so với baseline → attemptClose hỏi discard khi dirty.
+	let dirtyPOCloseDisplay = $state(false);
+	const poDirty = $derived(poForm.poCode !== '' || poForm.supplierId !== '' || poForm.branchId !== '' || poForm.expectedAt !== '' || poForm.items.some((it) => it.variantId !== '' || it.lotNumber));
+	const poCloseGuard = createCloseGuard({
+		form: () => poForm,
+		openConfirm: () => (dirtyPOCloseDisplay = true),
+		close: () => {
+			poModalDisplay = false;
+			dirtyPOCloseDisplay = false;
+		}
+	});
+	// Select component (chuẩn chung): option objects thay select native.
+	const poSupplierModalOptions = $derived(
+		poSupplierOptions.length > 0
+			? poSupplierOptions
+			: suppliers
+				.filter((s): s is SupplierRow & { _id: string } => typeof s._id === 'string')
+				.map((s) => ({ value: s._id, label: s.name ?? s._id }))
+	);
+	const poBranchModalOptions = $derived(branches.map((b) => ({ value: b._id, label: b.name ?? b._id })));
+	const poVariantModalOptions = $derived(
+		variantOptions.map((v) => ({ value: v._id, label: v.sku ? `${v.sku} — ${v.displayName ?? ''}` : (v.displayName ?? v._id) }))
 	);
 
 	// ── Modal cập nhật trạng thái PO ──
@@ -701,6 +772,12 @@
 					| undefined;
 				suppliers = data?.items ?? [];
 				if (typeof data?.total === 'number') suppliersTotal = data.total;
+				// Selection là id THẬT (getRowId _id) — giữ qua refetch; nhưng nếu
+				// select-all filtered và total thay đổi (row mới/xóa) → drop flag để
+				// user chọn lại (tránh bulk delete nhầm id ngoài tập filter mới).
+				if (allFilteredSelected && selectedIds.length !== suppliersTotal) {
+					allFilteredSelected = false;
+				}
 				if (typeof data?.page === 'number') suppliersPage = data.page;
 				suppliersLoadedOnce = true;
 			} else {
@@ -1006,16 +1083,16 @@
 	const FACEBOOK_RE = /^https?:\/\/(www\.)?(facebook\.com|fb\.com)\/\S+$/i;
 
 	function validateSupplierForm(): string | undefined {
-		if (!supplierForm.name.trim()) {
+		if (!str(supplierForm.name).trim()) {
 			return pageContents.form.requireName[lang];
 		}
 		const t = supplierForm;
-		if (t.phones.some((p) => p.trim() && !PHONE_RE.test(p.trim()))) return pageContents.form.invalidPhone[lang];
-		if (t.emails.some((e) => e.trim() && !EMAIL_RE.test(e.trim()))) return pageContents.form.invalidEmail[lang];
-		if (t.zalo.trim() && !ZALO_RE.test(t.zalo.trim())) return pageContents.form.invalidZalo[lang];
-		if (t.telegram.trim() && !TELEGRAM_RE.test(t.telegram.trim())) return pageContents.form.invalidTelegram[lang];
-		if (t.discord.trim() && !DISCORD_RE.test(t.discord.trim())) return pageContents.form.invalidDiscord[lang];
-		if (t.facebook.trim() && !FACEBOOK_RE.test(t.facebook.trim())) return pageContents.form.invalidFacebook[lang];
+		if (t.phones.some((p) => str(p).trim() && !PHONE_RE.test(str(p).trim()))) return pageContents.form.invalidPhone[lang];
+		if (t.emails.some((e) => str(e).trim() && !EMAIL_RE.test(str(e).trim()))) return pageContents.form.invalidEmail[lang];
+		if (str(t.zalo).trim() && !ZALO_RE.test(str(t.zalo).trim())) return pageContents.form.invalidZalo[lang];
+		if (str(t.telegram).trim() && !TELEGRAM_RE.test(str(t.telegram).trim())) return pageContents.form.invalidTelegram[lang];
+		if (str(t.discord).trim() && !DISCORD_RE.test(str(t.discord).trim())) return pageContents.form.invalidDiscord[lang];
+		if (str(t.facebook).trim() && !FACEBOOK_RE.test(str(t.facebook).trim())) return pageContents.form.invalidFacebook[lang];
 		return undefined;
 	}
 
@@ -1033,8 +1110,9 @@
 	} as const;
 
 	// Scroll tới field invalid đầu tiên (trong .modal-body-root overflow container)
-	function scrollToInvalidField(selector: string) {
-		const root = supplierModalBodyEl;
+	// root hoá tham số — dùng chung cho modal NCC + PO.
+	function scrollToInvalidField(selector: string, rootEl?: HTMLElement | null) {
+		const root = rootEl ?? supplierModalBodyEl;
 		if (!root) return;
 		const el = root.querySelector<HTMLElement>(selector);
 		if (!el) return;
@@ -1044,11 +1122,22 @@
 		setTimeout(() => el.classList.remove('field-flash'), 1600);
 	}
 
+	// Map lỗi validate PO → selector (thứ tự khớp validatePOForm:
+	// code → supplier → branch → items).
+	const FIELD_SELECTORS_PO = {
+		requireCode: '[data-field="po-code"]',
+		requireSupplier: '[data-field="po-supplier"]',
+		requireBranch: '[data-field="po-branch"]',
+		requireItems: '[data-field="po-items"]',
+		requireItem: '[data-field="po-items"]'
+	} as const;
+	let poModalBodyEl = $state<HTMLElement | undefined>(undefined);
+
 	// ── STT tag + cảnh báo trùng: trả map value→số lần xuất hiện (>=2 = dup) ──
 	function countDuplicates(values: string[]): Map<string, number> {
 		const counts = new Map<string, number>();
 		for (const v of values) {
-			const key = v.trim().toLowerCase();
+			const key = str(v).trim().toLowerCase();
 			if (!key) continue;
 			counts.set(key, (counts.get(key) ?? 0) + 1);
 		}
@@ -1068,38 +1157,38 @@
 		const entries = t.addresses.map((a, i) => {
 			const bd = supplierAddressBreakdowns[i];
 			return {
-				label: (a.label ?? '').trim() || undefined,
-				address: (a.address ?? '').trim(),
-				ward: (bd?.ward || a.ward || '').trim() || undefined,
-				province: (bd?.province || a.province || '').trim() || undefined,
-				district: (bd?.district || a.district || '').trim() || undefined,
-				country: (bd?.province || a.province || '').trim() ? 'Việt Nam' : undefined
+				label: str(a.label).trim() || undefined,
+				address: str(a.address).trim(),
+				ward: (str(bd?.ward) || str(a.ward)).trim() || undefined,
+				province: (str(bd?.province) || str(a.province)).trim() || undefined,
+				district: (str(bd?.district) || str(a.district)).trim() || undefined,
+				country: (str(bd?.province) || str(a.province)).trim() ? 'Việt Nam' : undefined
 			};
 		});
 		// Cấp 1 = entry đầu (địa chỉ chính) — đồng bộ field legacy address/district/province
 		const main = entries[0];
 		// avatarUrl là CON TRỎ vào 1 URL trong images (nếu images có mà avatar không
 		// khớp URL nào → dùng ảnh đầu)
-		const images = t.images.map((u) => u.trim()).filter(Boolean);
-		const avatar = images.includes(t.avatarUrl) ? t.avatarUrl : (images[0] ?? '');
+		const images = t.images.map((u) => str(u).trim()).filter(Boolean);
+		const avatar = images.includes(str(t.avatarUrl)) ? str(t.avatarUrl) : (images[0] ?? '');
 		return {
-			name: t.name.trim(),
-			contactPerson: t.contactPerson.trim() || undefined,
+			name: str(t.name).trim(),
+			contactPerson: str(t.contactPerson).trim() || undefined,
 			address: main?.address || undefined,
 			ward: main?.ward || undefined,
 			district: main?.district || undefined,
 			province: main?.province || undefined,
 			country: main?.country || undefined,
-			phones: t.phones.map((p) => p.trim()).filter(Boolean),
-			emails: t.emails.map((e) => e.trim()).filter(Boolean),
+			phones: t.phones.map((p) => str(p).trim()).filter(Boolean),
+			emails: t.emails.map((e) => str(e).trim()).filter(Boolean),
 			addresses: entries.filter((a) => a.address),
-			zalo: t.zalo.trim() || undefined,
-			telegram: t.telegram.trim() || undefined,
-			discord: t.discord.trim() || undefined,
-			facebook: t.facebook.trim() || undefined,
+			zalo: str(t.zalo).trim() || undefined,
+			telegram: str(t.telegram).trim() || undefined,
+			discord: str(t.discord).trim() || undefined,
+			facebook: str(t.facebook).trim() || undefined,
 			images: images.length > 0 ? images : undefined,
 			avatarUrl: avatar || undefined,
-			note: t.note.trim() || undefined,
+			note: str(t.note).trim() || undefined,
 			status: t.status
 		};
 	}
@@ -1191,7 +1280,7 @@
 				const data = response.data as { deleted?: number } | undefined;
 				showToast(pageContents.toasts.bulkDeleted[lang].replace('{count}', String(data?.deleted ?? selectedIds.length)), 'success');
 				bulkDeleteDisplay = false;
-				selectedIds = [];
+				clearSuppliersSelection();
 				await loadSuppliers();
 			} else {
 				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.bulkDeleteFailed), 'error');
@@ -1208,6 +1297,11 @@
 		poForm = { poCode: '', supplierId: '', branchId: '', expectedAt: '', items: [] };
 		poError = undefined;
 		poModalDisplay = true;
+		// markClean SAU khi modal render 1 frame — baseline snapshot poForm hiện tại.
+		void (async () => {
+			await tick();
+			poCloseGuard.markClean();
+		})();
 		void loadVariantOptions();
 	}
 
@@ -1220,7 +1314,7 @@
 	}
 
 	function validatePOForm(): string | undefined {
-		if (!poForm.poCode.trim()) return pageContents.form.requireCode[lang];
+		if (!str(poForm.poCode).trim()) return pageContents.form.requireCode[lang];
 		if (!poForm.supplierId) return pageContents.form.requireSupplier[lang];
 		if (!poForm.branchId) return pageContents.form.requireBranch[lang];
 		if (poForm.items.length === 0) return pageContents.form.requireItems[lang];
@@ -1237,6 +1331,11 @@
 		const validationError = validatePOForm();
 		if (validationError) {
 			poError = validationError;
+			// Scroll tới field invalid đầu tiên (chuẩn chung với modal NCC).
+			const key = (Object.keys(FIELD_SELECTORS_PO) as (keyof typeof FIELD_SELECTORS_PO)[]).find((k) =>
+				validationError === pageContents.form[k]?.[lang]
+			);
+			if (key) scrollToInvalidField(FIELD_SELECTORS_PO[key], poModalBodyEl);
 			return;
 		}
 		poError = undefined;
@@ -1247,7 +1346,7 @@
 				{
 					method: 'POST',
 					body: {
-						poCode: poForm.poCode.trim(),
+						poCode: str(poForm.poCode).trim(),
 						supplierId: poForm.supplierId,
 						branchId: poForm.branchId,
 						expectedAt: poForm.expectedAt || undefined,
@@ -1255,7 +1354,7 @@
 							variantId: item.variantId,
 							quantity: Number(item.quantity),
 							unitCost: Number(item.unitCost),
-							lotNumber: item.lotNumber?.trim() || undefined,
+							lotNumber: str(item.lotNumber).trim() || undefined,
 							expiresAt: item.expiresAt || undefined
 						})),
 						totalCost: poTotalCost
@@ -1272,6 +1371,7 @@
 					'success'
 				);
 				poModalDisplay = false;
+				poCloseGuard.markClean();
 				await loadPOs();
 			} else {
 				poError = resolveServerMessage(response.message, lang, pageContents.toasts.poFailed);
@@ -1363,7 +1463,7 @@
 		void supplierForm.avatarUrl;
 		void supplierForm.note;
 		void supplierForm.status;
-		if (supplierForm.name.trim() || supplierForm.phones.length > 0 || supplierForm.emails.length > 0) {
+		if (str(supplierForm.name).trim() || supplierForm.phones.length > 0 || supplierForm.emails.length > 0) {
 			saveDraftDebounced();
 		}
 	});
@@ -1380,7 +1480,7 @@
 >
 
 	<!-- ── Tab ── -->
-	<div class="tab-strip" role="tablist">
+	<div class="tab-strip" role="tablist" class:is-scrolled={tableScrolled}>
 		<button
 			type="button"
 			class="tab-item"
@@ -1448,6 +1548,13 @@
 					indexCheckboxes
 					checkOnRowClick
 					selectionTools={false}
+					// id THẬT (_id DB) — root cause select-all 20/28 + bulk ids sai:
+					// default idOf = String(index trang) → stale giữa trang.
+					getRowId={(row) => String((row as unknown as SupplierRow)._id ?? '')}
+					selection={selectedIds}
+					selectAllMode="filtered"
+					bind:allFilteredSelected={allFilteredSelected}
+					onSelectAllFiltered={selectAllFilteredSuppliers}
 					onSelectionChange={(ids) => (selectedIds = ids)}
 					data-test="suppliers-datatable"
 				>
@@ -1466,7 +1573,7 @@
 								<Button color="error" variant="soft" size="sm" onClick={() => { bulkDeleteDisplay = true; }} data-test="suppliers-bulk-delete">
 									{pageContents.bulk.delete[lang]}
 								</Button>
-								<Button color="default" variant="ghost" size="sm" onClick={() => { selectedIds = []; }}>
+								<Button color="default" variant="ghost" size="sm" onClick={clearSuppliersSelection}>
 									<Icon icon={iconify['close-rounded']} size="sm" />
 								</Button>
 							</div>
@@ -1800,8 +1907,8 @@
 						     TRÊN của field (absolute, không tốn chiều cao; kích thước nhỏ). ── -->
 					<div class="form-grid" style="gap: 0.5rem;" data-field="supplier-phones">
 						{#each supplierForm.phones as phone, phoneIndex (phoneIndex)}
-							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2}>
-								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="soft" color={(phoneDupCounts.get(phone.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
+							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2}>
+								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="soft" color={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
 								<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
 								<button
 									type="button"
@@ -1823,8 +1930,8 @@
 							}}
 						>+ {pageContents.supplierModal.addPhone[lang]}</button>
 						{#each supplierForm.emails as email, emailIndex (emailIndex)}
-							<div class="field-row" class:field-row--dup={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2} data-field="supplier-emails">
-								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="soft" color={(emailDupCounts.get(email.trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
+							<div class="field-row" class:field-row--dup={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2} data-field="supplier-emails">
+								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="soft" color={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
 								<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
 								<button
 									type="button"
@@ -1851,9 +1958,9 @@
 					<div class="items-block">
 						<span class="form-label">{pageContents.supplierModal.addresses[lang]}</span>
 						{#each supplierForm.addresses as entry, addrIndex (addrIndex)}
-							<div class="address-entry" class:field-row--dup={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2}>
+							<div class="address-entry" class:field-row--dup={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2}>
 								<div class="address-entry__head">
-									<Badge class="field-row-stt" label={String(addrIndex + 1)} size="xs" variant="soft" color={(addressDupCounts.get((entry.address ?? '').trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
+									<Badge class="field-row-stt" label={String(addrIndex + 1)} size="xs" variant="soft" color={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
 									<Input
 										type="text"
 										bind:value={entry.label}
@@ -2035,59 +2142,76 @@
 	</AlertDialog>
 {/if}
 
-<!-- ── Modal tạo đơn mua hàng ── -->
+<!-- ── Modal tạo đơn mua hàng (chuẩn chung: TextField/Input + Select + dirty-guard) ── -->
 {#if poModalDisplay}
-	<Modal bind:display={poModalDisplay} size="lg" isDimissable>
+	<Modal bind:display={poModalDisplay} size="lg" isDimissable onCloseAttempt={() => poCloseGuard.attemptClose()}>
 		<Modal.Container>
 			<Modal.Container.Header>{pageContents.poModal.title[lang]}</Modal.Container.Header>
-			<Modal.Container.Body>
+			<Modal.Container.Body bind:ref={poModalBodyEl}>
 				{#if poError}
 					<div class="form-error-banner" role="alert">{poError}</div>
 				{/if}
 				<div class="form-grid">
 					<div class="form-grid-2">
-						<label class="form-field">
-							<span class="form-label">{pageContents.poModal.code[lang]}</span>
-							<input class="admin-input" type="text" bind:value={poForm.poCode} disabled={poSubmitting} />
-						</label>
-						<label class="form-field">
+						<div data-field="po-code">
+							<TextField name="po-code" required>
+								<Label>{pageContents.poModal.code[lang]}</Label>
+								<Input
+									type="text"
+									bind:value={poForm.poCode}
+									disabled={poSubmitting}
+									data-test="po-form-code"
+								/>
+							</TextField>
+						</div>
+						<div class="form-field" data-field="po-expected">
 							<span class="form-label">{pageContents.poModal.expectedAt[lang]}</span>
 							<input class="admin-input" type="date" bind:value={poForm.expectedAt} disabled={poSubmitting} />
-						</label>
+						</div>
 					</div>
 					<div class="form-grid-2">
-						<label class="form-field">
+						<div class="form-field" data-field="po-supplier">
 							<span class="form-label">{pageContents.poModal.supplier[lang]}</span>
-							<select class="admin-select" bind:value={poForm.supplierId} disabled={poSubmitting}>
-								<option value="" disabled>{pageContents.poModal.supplierPlaceholder[lang]}</option>
-								{#each suppliers as supplier (supplier._id)}
-									<option value={supplier._id}>{supplier.name ?? supplier._id}</option>
-								{/each}
-							</select>
-						</label>
-						<label class="form-field">
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={poForm.supplierId}
+								options={poSupplierModalOptions}
+								searchable
+								clearable
+								placeholder={pageContents.poModal.supplierPlaceholder[lang]}
+								disabled={poSubmitting}
+							/>
+						</div>
+						<div class="form-field" data-field="po-branch">
 							<span class="form-label">{pageContents.poModal.branch[lang]}</span>
-							<select class="admin-select" bind:value={poForm.branchId} disabled={poSubmitting}>
-								<option value="" disabled>{pageContents.poModal.branchPlaceholder[lang]}</option>
-								{#each branches as branch (branch._id)}
-									<option value={branch._id}>{branch.name ?? branch._id}</option>
-								{/each}
-							</select>
-						</label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={poForm.branchId}
+								options={poBranchModalOptions}
+								searchable
+								clearable
+								placeholder={pageContents.poModal.branchPlaceholder[lang]}
+								disabled={poSubmitting}
+							/>
+						</div>
 					</div>
 
-					<div class="items-block">
+					<div class="items-block" data-field="po-items">
 						<p class="form-label">{pageContents.poModal.items[lang]}</p>
 						{#each poForm.items as item, index (index)}
 							<div class="po-item">
-								<select class="admin-select po-item-variant" bind:value={item.variantId} disabled={poSubmitting}>
-									<option value="" disabled>{pageContents.poModal.itemVariantPlaceholder[lang]}</option>
-									{#each variantOptions as variant (variant._id)}
-										<option value={variant._id}>
-											{variant.sku ? `${variant.sku} — ${variant.displayName ?? ''}` : (variant.displayName ?? variant._id)}
-										</option>
-									{/each}
-								</select>
+								<Select
+									class="admin-filter-select po-item-variant"
+									size="sm"
+									bind:value={item.variantId}
+									options={poVariantModalOptions}
+									searchable
+									clearable
+									placeholder={pageContents.poModal.itemVariantPlaceholder[lang]}
+									disabled={poSubmitting}
+								/>
 								<input class="admin-input po-item-num" type="number" min="1" step="1" bind:value={item.quantity} disabled={poSubmitting} placeholder={pageContents.poModal.itemQuantity[lang]} />
 								<input class="admin-input po-item-num" type="number" min="0" step="any" bind:value={item.unitCost} disabled={poSubmitting} placeholder={pageContents.poModal.itemUnitCost[lang]} />
 								<input class="admin-input po-item-lot" type="text" bind:value={item.lotNumber} disabled={poSubmitting} placeholder={pageContents.poModal.itemLot[lang]} />
@@ -2117,7 +2241,7 @@
 					variant="ghost"
 					disabled={poSubmitting}
 					onClick={() => {
-						poModalDisplay = false;
+						poCloseGuard.attemptClose();
 					}}
 				>
 					{pageContents.modals.cancel[lang]}
@@ -2125,6 +2249,29 @@
 			</Modal.Container.Footer>
 		</Modal.Container>
 	</Modal>
+
+	<!-- Dirty-guard confirm (chuẩn chung với modal NCC) -->
+	{#if dirtyPOCloseDisplay}
+		<AlertDialog bind:open={dirtyPOCloseDisplay} title={pageContents.dirty.title[lang]} description={pageContents.dirty.desc[lang]}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="info">
+					<AlertDialog.Title>{pageContents.dirty.title[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>{pageContents.dirty.desc[lang]}</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.dirty.continueEdit[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="primary"
+						onselect={() => {
+							poCloseGuard.confirmDiscard();
+						}}
+					>
+						{pageContents.dirty.discard[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
 {/if}
 
 <!-- ── Modal cập nhật trạng thái PO ── -->
@@ -2229,6 +2376,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 20;
+		transition: box-shadow 200ms ease;
 	}
 
 	.tab-item {
@@ -2240,6 +2388,7 @@
 		cursor: pointer;
 		border-bottom: 2px solid transparent;
 		margin-bottom: -1px;
+		transition: padding 200ms ease, font-size 200ms ease;
 
 		&.active {
 			color: var(--foreground);
@@ -2249,6 +2398,24 @@
 
 		&:hover {
 			color: var(--foreground);
+		}
+	}
+
+	// Scroll sang dưới → tab-strip thu nhỏ (pattern admin-inset-header.is-scrolled);
+	// scroll về top → trả lại padding ban đầu (transition tự đảo).
+	.tab-strip.is-scrolled {
+		box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+
+		.tab-item {
+			padding: 0.3rem 0.75rem;
+			font-size: 0.8rem;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.tab-strip,
+		.tab-item {
+			transition: none;
 		}
 	}
 
@@ -2289,6 +2456,26 @@
 			background: var(--default-50, transparent);
 			font-size: 0.85rem;
 		}
+	}
+
+	/* Select component trong modal PO (batch 4: đồng bộ chuẩn chung) —
+	   full-width trong form-field, trigger cùng style admin-select. */
+	:global(.modal-body-root .admin-filter-select) {
+		width: 100%;
+
+		:global(.select-trigger) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--default-50, transparent);
+			font-size: 0.85rem;
+		}
+	}
+
+	.po-item :global(.admin-filter-select.po-item-variant) {
+		flex: 1 1 12rem;
+		min-width: 10rem;
 	}
 
 	@media (max-width: 767px) {
