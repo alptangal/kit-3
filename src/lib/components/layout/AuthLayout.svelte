@@ -51,6 +51,17 @@
 	}: Props = $props();
 </script>
 
+<!-- Inter load DUY NHẤT tại layout cho cả họ auth (5 trang unauthorized dùng chung);
+     từng trang trước đây tự khai báo → trùng lặp + lệch bộ weight (verify-email thiếu 300). -->
+<svelte:head>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+		rel="stylesheet"
+	/>
+</svelte:head>
+
 <div class="auth-page {className}">
 	<!-- ════ Left Panel: Decorative ════ -->
 	<AuthPanelLeft
@@ -155,7 +166,7 @@
 		align-items: center;
 		justify-content: flex-start;
 		padding: 2.5rem 1.5rem;
-		background: var(--background, #09090b);
+		background: var(--background);
 		position: relative;
 		overflow-y: auto;
 		overflow-x: hidden;
@@ -251,7 +262,7 @@
 		font-size: 1.75rem;
 		font-weight: 700;
 		letter-spacing: -0.025em;
-		color: var(--foreground, #0f172a);
+		color: var(--foreground);
 		margin: 0;
 
 		@media (max-width: 480px) {
@@ -261,20 +272,11 @@
 
 	.auth-subtitle {
 		font-size: 0.875rem;
-		color: var(--foreground-400, #64748b);
+		color: var(--foreground-400);
 		margin: 0;
 
 		@media (max-width: 480px) {
 			font-size: 0.8125rem;
-		}
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.auth-title {
-			color: #f8fafc;
-		}
-		.auth-subtitle {
-			color: #94a3b8;
 		}
 	}
 
@@ -299,14 +301,14 @@
 		}
 
 		&--success {
-			background: rgb(34 197 94 / 0.1);
-			color: #16a34a;
-			border: 1px solid rgb(34 197 94 / 0.25);
+			background: var(--success-50);
+			color: var(--success-600);
+			border: 1px solid var(--success-200);
 		}
 		&--error {
-			background: rgb(239 68 68 / 0.08);
-			color: #dc2626;
-			border: 1px solid rgb(239 68 68 / 0.25);
+			background: var(--danger-50);
+			color: var(--danger-600);
+			border: 1px solid var(--danger-200);
 			animation: shake 0.4s ease-in-out;
 		}
 
@@ -322,6 +324,12 @@
 		0%, 100% { transform: translateX(0); }
 		20%, 60% { transform: translateX(-5px); }
 		40%, 80% { transform: translateX(5px); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.auth-alert--error {
+			animation: none;
+		}
 	}
 
 	/* ══ Layout Structure ══ */
@@ -350,7 +358,7 @@
 			transform: translateY(-50%);
 			width: 1.125rem;
 			height: 1.125rem;
-			color: #94a3b8;
+			color: var(--foreground-400);
 			pointer-events: none;
 			z-index: 2;
 			transition: color 0.2s;
@@ -364,11 +372,11 @@
 		   (kể cả Safari 15, target es2020) → đồng bộ màu icon theo
 		   validation state mà không cần `:has()` (Safari 15 chưa support). */
 		:global(.input-root.color-error) ~ :global(.auth-input-icon) {
-			color: #dc2626 !important;
+			color: var(--danger) !important;
 		}
 
 		:global(.input-root.color-success) ~ :global(.auth-input-icon) {
-			color: #16a34a !important;
+			color: var(--success) !important;
 		}
 	}
 
@@ -384,15 +392,18 @@
 		margin-top: 0.5rem;
 		align-items: center !important;
 
+		/* 44px touch target (iOS HIG) — nút hành động chính của họ auth */
 		:global(.auth-btn-submit) {
 			flex: 1 !important;
-			height: 2.5rem !important;
-			min-height: 2.5rem !important;
+			--min-height: 2.75rem !important;
+			height: 2.75rem !important;
+			min-height: 2.75rem !important;
 		}
 
 		:global(.auth-btn-reset) {
-			height: 2.5rem !important;
-			min-height: 2.5rem !important;
+			--min-height: 2.75rem !important;
+			height: 2.75rem !important;
+			min-height: 2.75rem !important;
 			padding: 0.5rem 1rem !important;
 			line-height: 1 !important;
 			display: flex !important;
@@ -411,7 +422,7 @@
 			content: '';
 			flex: 1;
 			height: 1px;
-			background: var(--border, rgba(148, 163, 184, 0.2));
+			background: var(--default-300);
 		}
 	}
 
@@ -425,9 +436,11 @@
 			align-items: center !important;
 			justify-content: center !important;
 			gap: 0.35rem !important;
-			height: 2.5rem !important;
-			min-height: 2.5rem !important;
-			max-height: 2.5rem !important;
+			/* Ghi đè cả --min-height (size-sm/md giờ là 2.75rem nhưng giữ !important cho chắc) */
+			--min-height: 2.75rem !important;
+			height: 2.75rem !important;
+			min-height: 2.75rem !important;
+			max-height: 2.75rem !important;
 			line-height: 1 !important;
 			padding-inline: 1rem !important;
 			width: 100% !important;

@@ -108,12 +108,7 @@
 <svelte:head>
 	<title>{pageContents.title[lang] ?? 'Reset password'}</title>
 	<meta name="description" content={pageContents.subtitle[lang] ?? 'Create a new password for your account'} />
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-		rel="stylesheet"
-	/>
+	<!-- Inter do AuthLayout load chung cho cả họ auth -->
 </svelte:head>
 
 {#if tokenInvalid}
@@ -242,7 +237,7 @@
 
 				<Button
 					class="auth-btn-reset"
-					color="error"
+					color="default"
 					type="reset"
 					variant="ghost"
 					disabled={loading}

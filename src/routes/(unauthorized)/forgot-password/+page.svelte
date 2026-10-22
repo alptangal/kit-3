@@ -156,12 +156,7 @@
 <svelte:head>
 	<title>{pageContents.title[lang] ?? 'Forgot password'}</title>
 	<meta name="description" content={pageContents.subtitle[lang] ?? 'Enter your email to receive a password reset link'} />
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-		rel="stylesheet"
-	/>
+	<!-- Inter do AuthLayout load chung cho cả họ auth -->
 </svelte:head>
 
 <AuthLayout
@@ -220,7 +215,7 @@
 
 				<Button
 					class="auth-btn-reset"
-					color="error"
+					color="default"
 					type="reset"
 					variant="ghost"
 					disabled={loading}

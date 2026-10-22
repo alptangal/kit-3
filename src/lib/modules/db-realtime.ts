@@ -70,18 +70,20 @@ function ensureSocket(): void {
 		const host = PUBLIC_PARTYKIT_HOST;
 		if (!host) return; // không cấu hình PartyKit — realtime tắt âm thầm
 
-		// Dev: page chạy https nhưng partykit dev KHÔNG có TLS (ws://localhost:1999).
-		// localhost được Chrome exempt mixed-content (secure context) nên ws vẫn nối
-		// được. Khi deploy có proxy TLS trước partykit, set PUBLIC_PARTYKIT_PROTOCOL=wss
-		// trong .env để override (đọc qua import.meta.env vì $env/static/public chỉ
-		// export biến đã khai báo).
+		// Dev: partykit dev KHÔNG có TLS (ws://localhost:1999) — chỉ dùng ws khi
+		// page cũng chạy http://localhost (Chrome exempt). Page https (preview
+		// 4173 / prod) BẮT BUỘC wss — ws:// trên origin https bị chặn mixed
+		// content (Chrome không exempt https://localhost). Khi deploy có proxy
+		// TLS trước partykit, set PUBLIC_PARTYKIT_PROTOCOL=wss trong .env để
+		// override (đọc qua import.meta.env vì $env/static/public chỉ export
+		// biến đã khai báo).
 		const protocol =
 			(import.meta.env.PUBLIC_PARTYKIT_PROTOCOL as string | undefined) ??
-			(typeof location !== 'undefined' && location.hostname === 'localhost'
-				? 'ws'
-				: location.protocol === 'https:'
+			(typeof location !== 'undefined'
+				? location.protocol === 'https:'
 					? 'wss'
-					: 'ws');
+					: 'ws'
+				: 'ws');
 
 		wsSocket = new PartySocket({
 			host,

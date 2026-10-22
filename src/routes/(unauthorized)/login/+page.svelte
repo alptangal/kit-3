@@ -210,16 +210,10 @@ $effect(() => {
 
 	// ===== Hàm đăng nhập =====
 	async function handleLogin() {
-		console.log('[handleLogin] Called, username:', configs.username.value, 'password:', configs.password.value);
-		// Remove early return guard - let validateForm handle all validation including empty fields
-		// if (!configs.username.value?.trim() || !configs.password.value || !encryptionKeys || loading) return;
-
 		const validationError = validateForm();
-		console.log('[handleLogin] validationError:', validationError);
 		if (validationError) {
 			formError = validationError;
 			formSubmitted = true; // Mark that we attempted submission so error persists until user types
-			console.log('[handleLogin] formError set to:', formError);
 			return;
 		}
 
@@ -435,12 +429,7 @@ $effect(() => {
 <svelte:head>
 	<title>{pageContents.title[lang] ?? 'Sign In'}</title>
 	<meta name="description" content={pageContents.subtitle[lang] ?? 'Sign in to your account'} />
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-		rel="stylesheet"
-	/>
+	<!-- Inter do AuthLayout load chung cho cả họ auth -->
 </svelte:head>
 
 <AuthLayout
@@ -579,7 +568,7 @@ $effect(() => {
 
 			<Button
 				class="auth-btn-reset"
-				color="error"
+				color="default"
 				type="reset"
 				variant="ghost"
 				size="md"
@@ -619,15 +608,17 @@ $effect(() => {
 		display: contents;
 	}
 
+	/* Token tự đảo theo data-theme (variables.scss): warning-500 gần
+	   #b45309 light / #fbbf24 dark; warning-50 nền nhạt; warning-200 viền. */
 	.caps-hint {
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
 		font-size: 0.7875rem;
 		line-height: 1.4;
-		color: #b45309;
-		background: rgb(245 158 11 / 0.1);
-		border: 1px solid rgb(245 158 11 / 0.28);
+		color: var(--warning-500);
+		background: var(--warning-50);
+		border: 1px solid var(--warning-200);
 		border-radius: 0.5rem;
 		padding: 0.375rem 0.625rem;
 		margin-top: 0.125rem;
@@ -636,12 +627,6 @@ $effect(() => {
 			flex-shrink: 0;
 			width: 0.9rem;
 			height: 0.9rem;
-		}
-
-		@media (prefers-color-scheme: dark) {
-			color: #fbbf24;
-			background: rgb(245 158 11 / 0.12);
-			border-color: rgb(245 158 11 / 0.3);
 		}
 	}
 
@@ -668,13 +653,14 @@ $effect(() => {
 	}
 
 
-	/* Loading spinner animation */
+	/* Loading spinner animation — nền nút success (đậm cả 2 theme) →
+	   vạch sáng dùng --solid (gần trắng), rãnh dùng cùng màu alpha. */
 	.spinner {
 		display: inline-block;
 		width: 1rem;
 		height: 1rem;
-		border: 2px solid rgba(255, 255, 255, 0.3);
-		border-top-color: #ffffff;
+		border: 2px solid rgb(255 255 255 / 0.3);
+		border-top-color: var(--solid);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 		margin-right: 0.5rem;
@@ -718,7 +704,7 @@ $effect(() => {
 		align-items: center;
 		gap: 0.75rem;
 		width: 100%;
-		color: var(--foreground-500, #9ca3af);
+		color: var(--foreground-500);
 		font-size: 0.8rem;
 
 		&::before,
@@ -726,7 +712,7 @@ $effect(() => {
 			content: '';
 			flex: 1;
 			height: 1px;
-			background: var(--default-300, #e5e7eb);
+			background: var(--default-300);
 		}
 	}
 
@@ -736,20 +722,19 @@ $effect(() => {
 		justify-content: center !important;
 		gap: 0.5rem !important;
 		width: 100%;
+		/* Ghi đè --min-height của size-sm/md (2.5rem). KHÔNG khoá height:
+		   nhãn vi 'Đăng nhập bằng sinh trắc học' (~276px @ 14px) ở viewport
+		   320px cần được wrap xuống dòng thứ 2 thay vì tràn/ép co chữ. */
+		--min-height: 2.75rem !important;
+		min-height: 2.75rem !important;
 	}
 
-	/* Nhóm 3: hint khi thiếu authenticator + link hướng dẫn */
-	.passkey-hint {
-		margin: 0.25rem 0 0;
-		font-size: 0.78rem;
-		color: var(--foreground-500, #9ca3af);
-		text-align: center;
-	}
-
+	/* Nhóm 3: link hướng dẫn khi thiếu authenticator */
 	.passkey-guide-link {
 		margin-top: 0.15rem;
-		font-size: 0.78rem;
-		color: var(--primary-600, hsl(221 83% 53%));
+		/* ≥ 0.8125rem (13px): tap target chữ trên mobile — 0.78rem quá nhỏ */
+		font-size: 0.8125rem;
+		color: var(--primary-600);
 		text-decoration: none;
 
 		&:hover {

@@ -756,12 +756,7 @@
 		name="description"
 		content={pageContents.subtitle[lang] ?? 'Sign up quickly with advanced end-to-end encryption'}
 	/>
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-		rel="stylesheet"
-	/>
+	<!-- Inter do AuthLayout load chung cho cả họ auth -->
 </svelte:head>
 
 <AuthLayout
@@ -1136,7 +1131,7 @@
 
 			<Button
 				class="auth-btn-reset"
-				color="error"
+				color="default"
 				type="reset"
 				variant="ghost"
 				disabled={loading}
@@ -1527,8 +1522,8 @@
 			padding: 0.85rem 1rem;
 			background: rgba(255, 255, 255, 0.04);
 			border-radius: 0.75rem;
-			/* primary giữ var (indigo-500 đủ tương phản cả 2 nền modal) */
-			border-left: 3px solid var(--primary, #6366f1);
+			/* Viền full 1px thay vì side-tab 3px trái (pattern AI-tell) — nền + radius đã phân nhóm */
+			border: 1px solid var(--default-300);
 			transition:
 				background 0.2s ease,
 				border-color 0.2s ease;

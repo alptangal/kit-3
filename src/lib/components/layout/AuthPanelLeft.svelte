@@ -104,7 +104,10 @@
 		overflow: hidden;
 		background: linear-gradient(135deg, #0f0c29 0%, #1a1040 40%, #24243e 100%);
 
-		@media (min-width: 900px) {
+		/* 768px (không phải 900): tablet portrait (iPad 768/810/820/834) là viewport
+		   POS/quầy phổ biến — ẩn panel ở đây = mất toàn bộ brand identity, chỉ còn
+		   form trơ. 45% của 768 = 345px, content co theo media tablet bên dưới. */
+		@media (min-width: 768px) {
 			display: flex;
 			flex-direction: column;
 			justify-content: center;
@@ -118,7 +121,6 @@
 		inset: 0;
 		z-index: 0;
 		/* No view-transition-name = browser treats as same element across routes */
-		will-change: transform; /* Optimize orb animations */
 	}
 
 	/* Animated gradient orbs */
@@ -162,6 +164,12 @@
 		66% { transform: translate(-15px, 20px) scale(0.96); }
 	}
 
+	@media (prefers-reduced-motion: reduce) {
+		.orb {
+			animation: none;
+		}
+	}
+
 	/* Dot grid overlay */
 	.grid-overlay {
 		position: absolute;
@@ -181,6 +189,14 @@
 		padding: 3rem;
 		max-width: 420px;
 
+		/* Tablet 768-900px: panel chỉ ~345px rộng — co padding + max-width
+		   để headline không bị cắt, features không tràn */
+		@media (max-width: 900px) {
+			gap: 1.5rem;
+			padding: 2rem 1.5rem;
+			max-width: 320px;
+		}
+
 		@media (max-height: 800px) {
 			gap: 1.5rem;
 			padding: 2rem;
@@ -192,9 +208,9 @@
 		height: 56px;
 		filter: drop-shadow(0 8px 24px rgba(99, 102, 241, 0.45));
 
-		@media (max-height: 800px) {
-			width: 48px;
-			height: 48px;
+		@media (max-width: 900px), (max-height: 800px) {
+			width: 44px;
+			height: 44px;
 		}
 	}
 
@@ -211,6 +227,10 @@
 		letter-spacing: -0.02em;
 		margin: 0;
 
+		/* clamp() fluid: co mượt theo panel hẹp (tablet) thay vì nhảy breakpoint,
+		   không vượt 2.25rem desktop */
+		font-size: clamp(1.5rem, 1rem + 2.5vw, 2.25rem);
+
 		@media (max-height: 800px) {
 			font-size: 1.875rem;
 		}
@@ -222,7 +242,7 @@
 		line-height: 1.6;
 		margin: 0.5rem 0 0;
 
-		@media (max-height: 800px) {
+		@media (max-width: 900px), (max-height: 800px) {
 			font-size: 0.875rem;
 		}
 	}
@@ -242,7 +262,7 @@
 			color: rgba(255, 255, 255, 0.85);
 			font-size: 0.9rem;
 
-			@media (max-height: 800px) {
+			@media (max-width: 900px), (max-height: 800px) {
 				font-size: 0.8125rem;
 				gap: 0.625rem;
 			}
