@@ -10,6 +10,7 @@ import { AnalyticsService } from './analytics';
 import { SerialService } from './serials';
 
 const cbSuppliers = cbData('suppliers');
+const cbSupplierHistories = cbData('supplier_histories');
 const cbPurchaseOrders = cbData('purchase_orders');
 const cbVariants = cbData('product_variants');
 const cbCategories = cbData('categories');
@@ -135,6 +136,22 @@ const supplierAdminMessages = {
     vi: 'Không tìm thấy sản phẩm quà tặng trong phiếu',
     en: 'Gift variant not found in purchase'
   } as TranslateContent,
+  historyNotFound: {
+    vi: 'Không tìm thấy bản ghi lịch sử',
+    en: 'History entry not found'
+  } as TranslateContent,
+  historyQueryFailed: {
+    vi: 'Truy vấn lịch sử thất bại',
+    en: 'Failed to query history'
+  } as TranslateContent,
+  restoreNoChanges: {
+    vi: 'Không có gì để khôi phục (dữ liệu hiện tại trùng với thời điểm đó)',
+    en: 'Nothing to restore (current data already matches that point)'
+  } as TranslateContent,
+  restoreFailed: {
+    vi: 'Khôi phục thất bại',
+    en: 'Restore failed'
+  } as TranslateContent,
 } as const;
 
 const SUPPLIER_ADMIN_SAFE_FIELDS = [
@@ -230,8 +247,123 @@ interface ListResult {
   pageSize: number;
 }
 
+// ── Timeline lịch sử thay đổi supplier (kiểu git: diff từng trường + restore) ──
+
+export interface SupplierHistoryChange {
+  field: string;
+  before: string | null;
+  after: string | null;
+}
+
+export interface SupplierHistoryEntry {
+  _id: string;
+  supplierId: string;
+  type: 'update' | 'restore';
+  actorId: string;
+  actorName?: string | null;
+  createdAt: string;
+  changes: SupplierHistoryChange[];
+}
+
+// Trường theo dõi diff (không gồm createdAt/updatedAt — metadata thời gian không đưa vào timeline)
+const SUPPLIER_HISTORY_FIELDS = [
+  'name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country',
+  'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord',
+  'avatarUrl', 'images', 'note', 'status'
+] as const;
+
+const supplierHistoriesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`supplier_histories\``;
+const MAX_HISTORY_PER_SUPPLIER = 100;
+
+/** So sánh 2 giá trị bất kỳ qua JSON string — undefined/null rỗng gộp về null cho gọn. */
+function snapshotValue(v: unknown): string | null {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v === 'string') return v;
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
+
+function buildHistoryChanges(
+  beforeDoc: Record<string, unknown>,
+  afterDoc: Record<string, unknown>
+): SupplierHistoryChange[] {
+  const changes: SupplierHistoryChange[] = [];
+  for (const field of SUPPLIER_HISTORY_FIELDS) {
+    const b = snapshotValue(beforeDoc[field]);
+    const a = snapshotValue(afterDoc[field]);
+    if (b !== a) changes.push({ field, before: b, after: a });
+  }
+  return changes;
+}
+
+/**
+ * Ghi 1 entry lịch sử sau khi update/restore THÀNH CÔNG.
+ * Fire-and-forget an toàn: lỗi ghi history KHÔNG làm fail update (chỉ log).
+ * Prune khi vượt MAX_HISTORY_PER_SUPPLIER (xoá entry cũ nhất — restore KHÔNG xoá,
+ * chỉ giới hạn dung lượng collection).
+ */
+async function recordSupplierHistory(
+  supplierId: string,
+  type: 'update' | 'restore',
+  actor: ActorContext,
+  changes: SupplierHistoryChange[]
+): Promise<void> {
+  if (changes.length === 0) return;
+  try {
+    const actorName = await resolveActorName(actor.userId);
+    const at = new Date().toISOString();
+    const historyId = `suphist_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const createRes = await cbSupplierHistories.document.create({
+      documentKey: historyId,
+      content: {
+        supplierId,
+        type,
+        actorId: actor.userId,
+        actorName: actorName ?? null,
+        createdAt: at,
+        changes
+      }
+    });
+    if (!createRes.ok) {
+      console.error('[recordSupplierHistory] create failed', createRes.status, createRes.message);
+      return;
+    }
+    // Prune cũ nhất khi vượt cap
+    const listRes = await cbSupplierHistories.query.document.search({
+      conditions: [{ fieldName: 'supplierId', keyword: supplierId }],
+      limit: 1000
+    });
+    if (listRes.ok) {
+      const rows = ((listRes.data ?? []) as Array<{ _id: string; createdAt?: string }>)
+        .filter((r) => r && r._id)
+        .sort((x, y) => (x.createdAt ?? '').localeCompare(y.createdAt ?? ''));
+      if (rows.length > MAX_HISTORY_PER_SUPPLIER) {
+        const staleIds = rows.slice(0, rows.length - MAX_HISTORY_PER_SUPPLIER).map((r) => r._id);
+        await cbSupplierHistories.document.query({
+          statement: `DELETE FROM ${supplierHistoriesKeyspace} WHERE META().id IN $1`,
+          args: [staleIds],
+          readonly: false
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[recordSupplierHistory]', e);
+  }
+}
+
+async function resolveActorName(userId: string): Promise<string | null> {
+  try {
+    const inst = await Users.getById(userId);
+    if (!inst) return null;
+    const u = inst.user as { firstname?: string; lastname?: string };
+    return [u.firstname, u.lastname].filter(Boolean).join(' ').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 // ActorContext dùng chung từ users.ts — export lại để tương thích import cũ từ file này.
 import type { ActorContext } from './users';
+import { Users } from './users';
 export type { ActorContext };
 
 type POItem = {
@@ -535,6 +667,7 @@ export class SupplierService {
     }
     updateData.updatedAt = now;
 
+    const beforeDoc = { ...(getRes as any).data } as Record<string, unknown>;
     const updateRes = await cbSuppliers.document.update({
       documentKey: supplierId,
       content: updateData
@@ -543,6 +676,101 @@ export class SupplierService {
     if (!updateRes.ok) {
       return { success: false, messages: supplierAdminMessages.updateFailed };
     }
+
+    // Timeline: ghi diff trước → sau (fire-and-forget, không chặn update)
+    await recordSupplierHistory(supplierId, 'update', actor, buildHistoryChanges(beforeDoc, updateData));
+
+    const updatedSupplier = (updateRes as any).data;
+    return { success: true, supplier: sanitizeSupplierForAdmin({...updatedSupplier, _id: supplierId}) };
+  }
+
+  // ── Timeline lịch sử thay đổi (kiểu git: diff từng trường + restore theo thời điểm) ──
+
+  /**
+   * Danh sách lịch sử thay đổi của 1 supplier (mới nhất trên đầu).
+   * Chỉ cần suppliers:view — xem lịch sử là thao tác đọc.
+   */
+  static async listSupplierHistory(
+    actor: ActorContext,
+    supplierId: string
+  ): Promise<{ success: false; messages: TranslateContent } | { success: true; entries: SupplierHistoryEntry[] }> {
+    const permError = await this.requirePermission(actor, 'suppliers:read');
+    if (permError) return permError;
+    if (!supplierId) return { success: false, messages: supplierAdminMessages.invalidInput };
+
+    try {
+      const res = await cbSupplierHistories.query.document.search({
+        conditions: [{ fieldName: 'supplierId', keyword: supplierId }],
+        limit: 200
+      });
+      if (!res.ok) return { success: false, messages: supplierAdminMessages.historyQueryFailed };
+      const rows = ((res.data ?? []) as Array<SupplierHistoryEntry & { _id?: string }>)
+        .filter((r) => r && r.supplierId)
+        .sort((x, y) => (y.createdAt ?? '').localeCompare(x.createdAt ?? ''));
+      return { success: true, entries: rows };
+    } catch (e) {
+      console.error('[SupplierService.listSupplierHistory]', e);
+      return { success: false, messages: supplierAdminMessages.historyQueryFailed };
+    }
+  }
+
+  /**
+   * Khôi phục supplier về giá trị TRƯỚC 1 entry lịch sử: ghi đè từng trường trong
+   * changes bằng giá trị before của entry đó, rồi tạo entry 'restore' ghi nhận.
+   * KHÔNG xoá lịch sử (chốt với user m01442).
+   */
+  static async restoreSupplierFromHistory(
+    actor: ActorContext,
+    supplierId: string,
+    historyId: string
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { supplier: Record<string, unknown> })> {
+    const permError = await this.requirePermission(actor, 'suppliers:manage');
+    if (permError) return permError;
+
+    const histRes = await cbSupplierHistories.document.get({ documentKey: historyId });
+    if (!histRes.ok) {
+      return { success: false, messages: supplierAdminMessages.historyNotFound };
+    }
+    const hist = (histRes as any).data as SupplierHistoryEntry;
+    if (!hist || hist.supplierId !== supplierId || !Array.isArray(hist.changes) || hist.changes.length === 0) {
+      return { success: false, messages: supplierAdminMessages.historyNotFound };
+    }
+
+    const getRes = await cbSuppliers.document.get({ documentKey: supplierId });
+    if (!getRes.ok) {
+      return { success: false, messages: supplierAdminMessages.notFound };
+    }
+
+    const now = new Date().toISOString();
+    const updateData: Record<string, unknown> = { ...(getRes as any).data };
+
+    // Ghi đè từng trường bằng before của entry — trường không có trong changes giữ nguyên.
+    // Giá trị before là JSON string snapshot: mảng/object parse lại; null → null.
+    for (const change of hist.changes) {
+      if (!(SUPPLIER_HISTORY_FIELDS as readonly string[]).includes(change.field)) continue;
+      if (change.before === null) {
+        updateData[change.field] = null;
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(change.before);
+        updateData[change.field] = parsed;
+      } catch {
+        updateData[change.field] = change.before;
+      }
+    }
+    updateData.updatedAt = now;
+
+    const updateRes = await cbSuppliers.document.update({
+      documentKey: supplierId,
+      content: updateData
+    });
+    if (!updateRes.ok) {
+      return { success: false, messages: supplierAdminMessages.restoreFailed };
+    }
+
+    const changes = buildHistoryChanges((getRes as any).data ?? {}, updateData);
+    await recordSupplierHistory(supplierId, 'restore', actor, changes);
 
     const updatedSupplier = (updateRes as any).data;
     return { success: true, supplier: sanitizeSupplierForAdmin({...updatedSupplier, _id: supplierId}) };

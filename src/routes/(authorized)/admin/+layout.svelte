@@ -945,13 +945,15 @@
 			transition: gap 200ms ease;
 		}
 
-		.admin-inset.is-scrolled :global(.admin-page) {
+		.admin-inset.is-scrolled :global(.admin-page:not(.admin-page--fullheight)) {
 			gap: 0.5rem;
 		}
 
 		/* Cuộn sâu: co padding-block trang lại để bảng chiếm nhiều không gian hơn
-		   (padding-inline giữ nguyên, căn giữa max-width không đổi). */
-		.admin-inset.is-scrolled :global(.admin-page) {
+		   (padding-inline giữ nguyên, căn giữa max-width không đổi).
+		   Batch6 suppliers: trang fullheight tự khai padding 0 khi cuộn
+		   (.admin-page--fullheight.is-scrolled) → layout không ghi đè. */
+		.admin-inset.is-scrolled :global(.admin-page:not(.admin-page--fullheight)) {
 			padding-block: 0.5rem;
 		}
 

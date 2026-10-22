@@ -3,40 +3,77 @@
 	// AddressInput — nhập địa chỉ VN với auto complete nhận dạng chuỗi:
 	// 1) ô text nhập địa chỉ chi tiết (số nhà, tên đường...)
 	// 2) gõ chuỗi địa chỉ đầy đủ → gợi ý nhận dạng Tỉnh/Thành + Quận/Huyện
-	//    (+ Phường/Xã) từ data tĩnh VN (vn-geo.json + vn-geo-wards.json)
-	//    → chọn qua select/option
-	// 3) 3 Select cascading: chọn Tỉnh → lọc Quận/Huyện → lọc Phường/Xã
+	//    (+ Phường/Xã) từ data tĩnh VN → chọn qua select/option
+	// 3) Select cascading theo HỆ ĐVHC:
+	//    - Cũ (63 tỉnh, 3 cấp: tỉnh→huyện→xã) từ vn-geo.json + vn-geo-wards.json
+	//    - Mới (34 tỉnh, 2 cấp: tỉnh→xã) từ vn-geo-2025.json (NQ sáp nhập 2025)
+	// 4) Khi parent bind newBreakdown: toggle hệ cũ/mới + GEN 2 CHIỀU qua mapping
+	//    (nhập bên nào tự điền bên kia; xã bị tách/gộp 1-nhiều → chỉ gen cấp tỉnh,
+	//    để user chọn xã thủ công)
 	// Tái sử dụng: Input (text), Select (tỉnh/huyện/ward) — import trực tiếp (tránh circular barrel)
 	import Input from '../input/Main.svelte';
 	import Select from '../select/Main.svelte';
-	import type { AddressInputProps, AddressBreakdown } from './_interface';
+	import type { AddressInputProps, AddressBreakdown, NewAddressBreakdown } from './_interface';
 
-	let { value = $bindable(''), breakdown = $bindable({ province: '', district: '' }), label = '', placeholder, disabled = false }: AddressInputProps = $props();
+	let {
+		value = $bindable(''),
+		breakdown = $bindable({ province: '', district: '' }),
+		newBreakdown = $bindable(undefined as NewAddressBreakdown | undefined),
+		label = '',
+		placeholder,
+		disabled = false
+	}: AddressInputProps = $props();
+
+	// Hệ ĐVHC đang chọn: 'old' (63 tỉnh) | 'new' (34 tỉnh) — chỉ có ý nghĩa khi newBreakdown được bind
+	let geoMode = $state<'old' | 'new'>('old');
+	const dualMode = $derived(newBreakdown !== undefined);
 
 	interface GeoProvince { n: string; c: number; d: { n: string; c: number }[] }
 	/** wards: key 'Tên tỉnh|code' → { 'Tên huyện': ['Phường A', 'Xã B'...] } */
 	type WardMap = Record<string, Record<string, string[]>>;
+	// vn-geo-2025.json shape (transform từ DiaChiMoi):
+	// np [[code,name]] tỉnh mới; nw [[code,pCode,name]] xã mới;
+	// op [[oldCode,oldName,newCode]] tỉnh cũ; od {pCode:[[code,name]]} huyện cũ;
+	// ow {oldWCode:[dCode,name,newCodeOrArray]} mapping xã cũ→mới
+	interface Geo2025 {
+		np: [string, string][];
+		nw: [string, string, string][];
+		op: [string, string, string][];
+		od: Record<string, [string, string][]>;
+		ow: Record<string, [string, string, string | string[]]>;
+	}
 	let provinces = $state<GeoProvince[]>([]);
 	let wardMap = $state<WardMap>({});
+	let geo2025 = $state<Geo2025 | null>(null);
 	let geoLoaded = $state(false);
 
-	// Load data địa chỉ 1 lần (lazy — fetch static file; geo 27KB + wards 208KB)
+	// Load data địa chỉ 1 lần (lazy — fetch static file; geo 27KB + wards 208KB + 2025 ~488KB)
+	// BẪY: geo2025 fetch phải track dualMode RIÊNG — nếu gộp chung effect có guard
+	// geoLoaded thì dualMode false lúc mount (entry chưa bind newBreakdown) → sau này
+	// dualMode bật lại cũng không fetch → gen old→new chết âm thầm.
 	$effect(() => {
 		if (geoLoaded) return;
 		geoLoaded = true;
 		Promise.all([
-			fetch('/data/vn-geo.json').then((r) => r.json() as Promise<GeoProvince[]>),
-			fetch('/data/vn-geo-wards.json').then((r) => r.json() as Promise<WardMap>)
-		])
-			.then(([g, w]) => {
-				provinces = g;
-				wardMap = w;
-			})
+			fetch('/data/vn-geo.json').then((r) => r.json() as Promise<GeoProvince[]>).then((g) => { provinces = g; }),
+			fetch('/data/vn-geo-wards.json').then((r) => r.json() as Promise<WardMap>).then((w) => { wardMap = w; })
+		]).catch(() => {
+			// data tĩnh — lỗi chỉ mất gợi ý, không chặn nhập tay
+		});
+	});
+	$effect(() => {
+		if (!dualMode || geo2025) return;
+		fetch('/data/vn-geo-2025.json')
+			.then((r) => r.json() as Promise<Geo2025>)
+			.then((g) => { geo2025 = g; })
 			.catch(() => {
-				// data tĩnh — lỗi chỉ mất gợi ý, không chặn nhập tay
+				// data tĩnh — lỗi chỉ mất gen 2 chiều, không chặn nhập tay
 			});
 	});
 
+	const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/\s+/g, ' ').trim();
+
+	// ── Hệ CŨ (63 tỉnh, 3 cấp) ──
 	const provinceOptions = $derived(provinces.map((p) => ({ value: p.n, label: p.n })));
 	const selectedProvince = $derived(provinces.find((p) => p.n === breakdown.province));
 	const districtOptions = $derived((selectedProvince?.d ?? []).map((d) => ({ value: d.n, label: d.n })));
@@ -46,9 +83,136 @@
 	);
 	const wardOptions = $derived((provinceWards[breakdown.district] ?? []).map((w) => ({ value: w, label: w })));
 
+	// ── Hệ MỚI (34 tỉnh, 2 cấp) ──
+	const newProvinceOptions = $derived((geo2025?.np ?? []).map(([code, name]) => ({ value: name, label: name })));
+	const newSelectedProvinceCode = $derived(geo2025?.np.find(([, name]) => name === newBreakdown?.province)?.[0] ?? '');
+	const newWardOptions = $derived(
+		newSelectedProvinceCode
+			? (geo2025?.nw ?? []).filter(([, pCode]) => pCode === newSelectedProvinceCode).map(([, , name]) => ({ value: name, label: name }))
+			: []
+	);
+
+	// ── GEN 2 CHIỀU giữa hệ cũ ↔ mới ──
+	// BẪY: 2 file data khác format tên — vn-geo.json 'Tỉnh Hà Giang' vs
+	// vn-geo-2025.json op 'Hà Giang'; và khác kiểu dấu ('Hoà Bình' vs 'Hòa Bình').
+	// Key map qua norm() (NFD strip marks + đ→d + lowercase + collapse spaces) TRƯỚC,
+	// rồi strip prefix 'tinh '/'thanh pho ' trên chuỗi ĐÃ normalize.
+	const normProvinceKey = (name: string) => norm(name).replace(/^(tinh|thanh pho)\s+/, '');
+	const oldToNewProvince = $derived.by(() => {
+		if (!geo2025) return null;
+		const map = new Map<string, string>();
+		for (const [oldCode, oldName, newCode] of geo2025.op) {
+			const newName = geo2025.np.find(([c]) => c === newCode)?.[1];
+			if (newName) map.set(normProvinceKey(oldName), newName);
+		}
+		return map;
+	});
+	const newToOldProvinces = $derived.by(() => {
+		if (!geo2025) return null;
+		const map = new Map<string, string[]>();
+		for (const [oldCode, oldName, newCode] of geo2025.op) {
+			const newName = geo2025.np.find(([c]) => c === newCode)?.[1];
+			if (!newName) continue;
+			const key = normProvinceKey(newName);
+			(map.get(key) ?? map.set(key, []).get(key)!).push(oldName);
+		}
+		return map;
+	});
+
+	/**
+	 * Gen hệ còn lại khi breakdown cũ đổi (xã/huyện/tỉnh): old → new.
+	 * Xã bị tách 1-nhiều → chỉ gen tỉnh (xã để user chọn).
+	 */
+	function genNewFromOld(): void {
+		if (!geo2025 || !newBreakdown) return;
+		const next: NewAddressBreakdown = { province: newBreakdown?.province ?? '', ward: newBreakdown?.ward ?? '' };
+		const newProvince = oldToNewProvince?.get(normProvinceKey(breakdown.province ?? ''));
+		if (newProvince) next.province = newProvince;
+		// xã cũ → xã mới (mapping qua ow — cần mã xã cũ; tìm qua wardMap)
+		if (breakdown.ward && next.province) {
+			const mapped = mapOldWardToNew(breakdown.province, breakdown.district, breakdown.ward, next.province);
+			next.ward = mapped;
+		} else if (!breakdown.ward) {
+			next.ward = '';
+		}
+		if (next.province !== newBreakdown?.province || next.ward !== newBreakdown?.ward) {
+			newBreakdown = next;
+		}
+	}
+
+	/**
+	 * Tìm mã xã cũ theo (tên tỉnh cũ, tên huyện cũ, tên xã cũ) rồi tra ow → tên xã mới
+	 * (thuộc tỉnh mới đích). Nhiều kết quả hoặc không tìm thấy → '' (user chọn tay).
+	 */
+	function mapOldWardToNew(oldProvince: string, oldDistrict: string, oldWard: string, newProvince: string): string {
+		if (!geo2025) return '';
+		const oldProvinceCode = geo2025.op.find(([, name]) => normProvinceKey(name) === normProvinceKey(oldProvince))?.[0];
+		if (!oldProvinceCode) return '';
+		const districtRow = (geo2025.od[oldProvinceCode] ?? []).find(([, name]) => name === oldDistrict);
+		const oldDistrictCode = districtRow?.[0];
+		if (!oldDistrictCode) return '';
+		const wardRow = Object.entries(geo2025.ow).find(([, v]) => v[0] === oldDistrictCode && v[1] === oldWard);
+		if (!wardRow) return '';
+		const target = wardRow[1][2];
+		if (Array.isArray(target)) return ''; // xã bị tách 1-nhiều — không tự chọn
+		const newWard = geo2025.nw.find(([code]) => code === target);
+		return newWard?.[2] ?? '';
+	}
+
+	/**
+	 * Gen hệ cũ khi breakdown mới đổi: new → old (qua op reverse + ow reverse).
+	 * Tên tỉnh mới có thể map về nhiều tỉnh cũ (sáp nhập) → nếu >1 thì không tự chọn tỉnh cũ.
+	 */
+	function genOldFromNew(): void {
+		if (!geo2025) return;
+		const oldCandidates = newToOldProvinces?.get(normProvinceKey(newBreakdown?.province ?? '')) ?? [];
+		const next: AddressBreakdown = { ...breakdown };
+		if (oldCandidates.length === 1) {
+			// Tên trong op không có prefix — Select hệ cũ options là 'Tỉnh X' →
+			// tìm đúng option name trong provinces theo key norm
+			const oldName = oldCandidates[0];
+			const matched = provinces.find((p) => normProvinceKey(p.n) === normProvinceKey(oldName));
+			next.province = matched?.n ?? oldName;
+		} else if (oldCandidates.length === 0) {
+			next.province = '';
+		}
+		// xã mới → xã cũ (reverse ow): tìm các xã cũ map vào xã mới này
+		if (newBreakdown?.ward && next.province) {
+			const oldWard = mapNewWardToOld(next.province, newBreakdown.province ?? '', newBreakdown.ward);
+			next.ward = oldWard.ward;
+			next.district = oldWard.district;
+		} else if (!newBreakdown?.ward) {
+			next.ward = '';
+		}
+		if (next.province !== breakdown.province || next.district !== breakdown.district || next.ward !== breakdown.ward) {
+			breakdown = next;
+		}
+	}
+
+	function mapNewWardToOld(oldProvince: string, newProvince: string, newWard: string): { district: string; ward: string } {
+		if (!geo2025) return { district: '', ward: '' };
+		const oldProvinceCode = geo2025.op.find(([, name]) => normProvinceKey(name) === normProvinceKey(oldProvince))?.[0];
+		const newProvinceCode = geo2025.np.find(([, name]) => normProvinceKey(name) === normProvinceKey(newProvince))?.[0];
+		if (!oldProvinceCode || !newProvinceCode) return { district: '', ward: '' };
+		// Social mới được chọn có thể là đích của nhiều xã cũ (gộp) — reverse ow theo TÊN xã mới + tỉnh mới
+		const hits: { dCode: string; ward: string }[] = [];
+		for (const [, [dCode, name, target]] of Object.entries(geo2025.ow)) {
+			// mã xã mới đích (1 hoặc mảng khi tách)
+			const targets = Array.isArray(target) ? target : [target];
+			const nwRow = geo2025.nw.find(([code, , name2]) => targets.includes(code) && name2 === newWard);
+			if (!nwRow || nwRow[1] !== newProvinceCode) continue;
+			hits.push({ dCode, ward: name });
+		}
+		// Giữ các hit thuộc TỈNH CŨ đang chọn (qua od)
+		const districtMap = geo2025.od[oldProvinceCode] ?? [];
+		const valid = hits.filter((h) => districtMap.some(([c]) => c === h.dCode));
+		if (valid.length !== 1) return { district: '', ward: '' };
+		const districtName = districtMap.find(([c]) => c === valid[0].dCode)?.[1] ?? '';
+		return { district: districtName, ward: valid[0].ward };
+	}
+
 	// Auto nhận dạng: quét chuỗi value tìm tên tỉnh/huyện khớp (word-boundary)
 	function detectFromText(raw: string): AddressBreakdown | null {
-		const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/\s+/g, ' ').trim();
 		const text = ` ${norm(raw)} `;
 		if (text.trim().length < 4) return null;
 		// match name ở ranh giới từ (tránh "hue" ăn trong "nguyen hue")
@@ -120,18 +284,36 @@
 		if (!suggestion) return;
 		breakdown = { ...suggestion };
 		suggestion = null;
+		if (dualMode) genNewFromOld();
 	}
 
-	// Chọn tỉnh → xoá huyện/ward nếu không còn thuộc tỉnh mới
+	// Chọn tỉnh (cũ) → xoá huyện/ward nếu không còn thuộc tỉnh mới → gen hệ mới
 	function onProvinceChange(v: string | string[]) {
 		if (typeof v !== 'string') return;
 		if (v !== breakdown.province) breakdown = { province: v, district: '', ward: '' };
+		if (dualMode) genNewFromOld();
 	}
 
-	// Chọn huyện → xoá ward nếu không còn thuộc huyện mới
+	// Chọn huyện (cũ) → xoá ward nếu không còn thuộc huyện mới → gen hệ mới
 	function onDistrictChange(v: string | string[]) {
 		if (typeof v !== 'string') return;
 		breakdown = { ...breakdown, district: v, ward: '' };
+		if (dualMode) genNewFromOld();
+	}
+
+	function onOldWardChange() {
+		if (dualMode) genNewFromOld();
+	}
+
+	// ── Hệ mới: chọn tỉnh/xã → gen hệ cũ ──
+	function onNewProvinceChange(v: string | string[]) {
+		if (typeof v !== 'string' || !newBreakdown) return;
+		if (v !== newBreakdown.province) newBreakdown = { province: v, ward: '' };
+		if (dualMode) genOldFromNew();
+	}
+
+	function onNewWardChange() {
+		if (dualMode) genOldFromNew();
 	}
 </script>
 
@@ -156,43 +338,93 @@
 			<span>Phát hiện: <strong>{suggestion.ward ? `${suggestion.ward}, ` : ''}{suggestion.district ? `${suggestion.district}, ` : ''}{suggestion.province}</strong> — bấm để áp dụng</span>
 		</button>
 	{/if}
-	<div class="address-input__selects">
-		<div class="address-input__field">
-			<span class="address-input__sub">Tỉnh/Thành phố</span>
-			<Select
-				options={provinceOptions}
-				bind:value={breakdown.province}
-				onValueChange={onProvinceChange}
-				searchable
-				clearable
-				placeholder="Chọn tỉnh/thành phố"
+	{#if dualMode}
+		<div class="address-input__mode" role="tablist" aria-label="Hệ địa giới hành chính">
+			<button
+				type="button"
+				class="address-input__mode-btn"
+				class:address-input__mode-btn--active={geoMode === 'old'}
+				aria-pressed={geoMode === 'old'}
+				onclick={() => (geoMode = 'old')}
 				disabled={disabled}
-			/>
-		</div>
-		<div class="address-input__field">
-			<span class="address-input__sub">Quận/Huyện</span>
-			<Select
-				options={districtOptions}
-				bind:value={breakdown.district}
-				onValueChange={onDistrictChange}
-				searchable
-				clearable
-				placeholder="Chọn quận/huyện"
+			>Cũ (63 tỉnh)</button>
+			<button
+				type="button"
+				class="address-input__mode-btn"
+				class:address-input__mode-btn--active={geoMode === 'new'}
+				aria-pressed={geoMode === 'new'}
+				onclick={() => (geoMode = 'new')}
 				disabled={disabled}
-			/>
+			>Mới (34 tỉnh)</button>
 		</div>
-		<div class="address-input__field">
-			<span class="address-input__sub">Phường/Xã</span>
-			<Select
-				options={wardOptions}
-				bind:value={breakdown.ward}
-				searchable
-				clearable
-				placeholder="Chọn phường/xã"
-				disabled={disabled || !breakdown.district}
-			/>
+	{/if}
+	{#if geoMode === 'old' || !dualMode}
+		<div class="address-input__selects">
+			<div class="address-input__field">
+				<span class="address-input__sub">Tỉnh/Thành phố</span>
+				<Select
+					options={provinceOptions}
+					bind:value={breakdown.province}
+					onValueChange={onProvinceChange}
+					searchable
+					clearable
+					placeholder="Chọn tỉnh/thành phố"
+					disabled={disabled}
+				/>
+			</div>
+			<div class="address-input__field">
+				<span class="address-input__sub">Quận/Huyện</span>
+				<Select
+					options={districtOptions}
+					bind:value={breakdown.district}
+					onValueChange={onDistrictChange}
+					searchable
+					clearable
+					placeholder="Chọn quận/huyện"
+					disabled={disabled}
+				/>
+			</div>
+			<div class="address-input__field">
+				<span class="address-input__sub">Phường/Xã</span>
+				<Select
+					options={wardOptions}
+					bind:value={breakdown.ward}
+					onValueChange={onOldWardChange}
+					searchable
+					clearable
+					placeholder="Chọn phường/xã"
+					disabled={disabled || !breakdown.district}
+				/>
+			</div>
 		</div>
-	</div>
+	{:else}
+		<div class="address-input__selects address-input__selects--new">
+			<div class="address-input__field">
+				<span class="address-input__sub">Tỉnh/Thành phố</span>
+				<Select
+					options={newProvinceOptions}
+					bind:value={newBreakdown!.province}
+					onValueChange={onNewProvinceChange}
+					searchable
+					clearable
+					placeholder="Chọn tỉnh/thành phố"
+					disabled={disabled}
+				/>
+			</div>
+			<div class="address-input__field">
+				<span class="address-input__sub">Phường/Xã</span>
+				<Select
+					options={newWardOptions}
+					bind:value={newBreakdown!.ward}
+					onValueChange={onNewWardChange}
+					searchable
+					clearable
+					placeholder="Chọn phường/xã"
+					disabled={disabled || !newBreakdown!.province}
+				/>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style lang="scss">
@@ -243,10 +475,40 @@
 		}
 	}
 
+	.address-input__mode {
+		display: inline-flex;
+		gap: 0.25rem;
+		align-self: flex-start;
+		padding: 0.25rem;
+		background: var(--surface-100, var(--default-100, transparent));
+		border-radius: 0.5rem;
+	}
+
+	.address-input__mode-btn {
+		padding: 0.25rem 0.625rem;
+		font-size: 0.75rem;
+		border: none;
+		border-radius: 0.375rem;
+		background: transparent;
+		color: var(--foreground-500, var(--foreground));
+		cursor: pointer;
+		transition: background 0.15s ease, color 0.15s ease;
+
+		&--active {
+			background: var(--background);
+			color: var(--foreground);
+			box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+		}
+	}
+
 	.address-input__selects {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
 		gap: 0.5rem;
+
+		&--new {
+			grid-template-columns: repeat(2, 1fr);
+		}
 
 		@media (max-width: 640px) {
 			grid-template-columns: 1fr;

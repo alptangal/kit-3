@@ -8,11 +8,19 @@ export interface AddressBreakdown {
 	ward?: string;
 }
 
+/** Địa chỉ theo hệ ĐVHC MỚI (34 tỉnh, 2 cấp tỉnh→xã, sau sáp nhập 2025) */
+export interface NewAddressBreakdown {
+	province: string;
+	ward: string;
+}
+
 export interface AddressInputProps {
 	/** Chuỗi địa chỉ chi tiết (số nhà, tên đường...) — 2 chiều */
 	value?: string;
 	/** Địa chỉ đã nhận dạng — 2 chiều (parent bind) */
 	breakdown?: AddressBreakdown;
+	/** Địa chỉ hệ MỚI (bind → bật toggle cũ/mới + gen 2 chiều qua mapping) */
+	newBreakdown?: NewAddressBreakdown;
 	/** Nhãn hiển thị */
 	label?: string;
 	placeholder?: string;

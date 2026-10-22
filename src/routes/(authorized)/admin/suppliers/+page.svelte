@@ -37,6 +37,19 @@
 		province?: string;
 		district?: string;
 		country?: string;
+		// Địa giới hệ MỚI (34 tỉnh 2 cấp, sáp nhập 2025) — song song hệ cũ
+		newProvince?: string;
+		newWard?: string;
+	}
+
+	// Entry lịch sử — khớp SupplierHistoryEntry (src/lib/server/db/suppliers.ts)
+	interface HistoryEntry {
+		_id: string;
+		type: 'update' | 'restore';
+		actorId?: string;
+		actorName?: string;
+		createdAt?: string;
+		changes: { field: string; before: string | null; after: string | null }[];
 	}
 
 	interface PurchaseOrderRow {
@@ -161,9 +174,11 @@
 			note: { vi: 'Ghi chú', en: 'Note' },
 			notePlaceholder: { vi: 'Ghi chú về nhà cung cấp...', en: 'Notes about this supplier...' },
 			phonePlaceholder: { vi: 'Số điện thoại', en: 'Phone number' },
+			phones: { vi: 'Số điện thoại', en: 'Phone numbers' },
 			addPhone: { vi: 'Thêm số điện thoại', en: 'Add phone number' },
 			removePhone: { vi: 'Xoá số điện thoại', en: 'Remove phone number' },
 			emailPlaceholder: { vi: 'Email', en: 'Email' },
+			emails: { vi: 'Email', en: 'Emails' },
 			addEmail: { vi: 'Thêm email', en: 'Add email' },
 			removeEmail: { vi: 'Xoá email', en: 'Remove email' },
 			social: { vi: 'Mạng xã hội', en: 'Social networks' },
@@ -185,6 +200,45 @@
 			submit: { vi: 'Tạo', en: 'Create' },
 			save: { vi: 'Lưu thay đổi', en: 'Save changes' },
 			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' }
+		},
+		historyModal: {
+			title: { vi: 'Lịch sử thay đổi', en: 'Change history' },
+			empty: { vi: 'Chưa có thay đổi nào được ghi nhận', en: 'No changes recorded yet' },
+			loading: { vi: 'Đang tải lịch sử…', en: 'Loading history…' },
+			update: { vi: 'Cập nhật', en: 'Updated' },
+			restore: { vi: 'Khôi phục', en: 'Restored' },
+			by: { vi: 'bởi', en: 'by' },
+			unknownActor: { vi: 'Không rõ', en: 'Unknown' },
+			noChanges: { vi: 'Không có trường nào thay đổi', en: 'No fields changed' },
+			restoreBtn: { vi: 'Khôi phục', en: 'Restore' },
+			confirmTitle: { vi: 'Khôi phục dữ liệu?', en: 'Restore data?' },
+			confirmDesc: {
+				vi: 'Các trường trong lần thay đổi này sẽ quay về giá trị trước đó. Hành động này sẽ được ghi vào lịch sử.',
+				en: 'The fields in this change will be reverted to their previous values. This action will be recorded in history.'
+			},
+			confirmYes: { vi: 'Khôi phục', en: 'Restore' },
+			cancel: { vi: 'Huỷ', en: 'Cancel' },
+			viewHistory: { vi: 'Lịch sử', en: 'History' },
+			fieldLabels: {
+				name: { vi: 'Tên', en: 'Name' },
+				contactPerson: { vi: 'Người liên hệ', en: 'Contact person' },
+				address: { vi: 'Địa chỉ', en: 'Address' },
+				ward: { vi: 'Phường/xã', en: 'Ward' },
+				district: { vi: 'Quận/huyện', en: 'District' },
+				province: { vi: 'Tỉnh/thành', en: 'Province' },
+				country: { vi: 'Quốc gia', en: 'Country' },
+				phones: { vi: 'Số điện thoại', en: 'Phone numbers' },
+				emails: { vi: 'Email', en: 'Emails' },
+				addresses: { vi: 'Danh sách địa chỉ', en: 'Addresses' },
+				zalo: { vi: 'Zalo', en: 'Zalo' },
+				facebook: { vi: 'Facebook', en: 'Facebook' },
+				telegram: { vi: 'Telegram', en: 'Telegram' },
+				discord: { vi: 'Discord', en: 'Discord' },
+				avatarUrl: { vi: 'Ảnh đại diện', en: 'Avatar' },
+				images: { vi: 'Hình ảnh', en: 'Images' },
+				note: { vi: 'Ghi chú', en: 'Note' },
+				status: { vi: 'Trạng thái', en: 'Status' }
+			}
 		},
 		poModal: {
 			title: { vi: 'Tạo đơn mua hàng', en: 'Create purchase order' },
@@ -218,6 +272,7 @@
 			supplierUpdateFailed: { vi: 'Cập nhật nhà cung cấp không thành công', en: 'Failed to update supplier' },
 			urlCopied: { vi: 'Đã copy URL ảnh', en: 'Image URL copied' },
 			draftRestored: { vi: 'Đã phục hồi bản nháp chưa lưu', en: 'Draft restored' },
+			restored: { vi: 'Đã khôi phục dữ liệu nhà cung cấp', en: 'Supplier data restored' },
 			draftSaved: { vi: 'Bản nháp đã lưu tự động', en: 'Draft saved' },
 			bulkDeleted: { vi: 'Đã xoá {count} nhà cung cấp', en: 'Deleted {count} suppliers' },
 			bulkDeleteFailed: { vi: 'Xoá hàng loạt không thành công', en: 'Bulk delete failed' },
@@ -278,6 +333,35 @@
 	// tiếp nổ "can't access property trim ... is undefined" (console prod).
 	// Mọi site .trim() trên form state đi qua helper này.
 	const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+	// Hiển thị giá trị before/after trong timeline: snapshot là JSON string
+	// (snapshotValue — JSON.stringify) → parse mảng/phần tử phức hợp ra gọn;
+	// rỗng → '—' (giá trị bị xoá/trống).
+	function snapshotDisplay(raw: string | null | undefined): string {
+		if (raw === null || raw === undefined || raw === '') return '—';
+		if (raw.startsWith('[') || raw.startsWith('{')) {
+			try {
+				const parsed: unknown = JSON.parse(raw);
+				if (Array.isArray(parsed)) {
+					if (parsed.length === 0) return '—';
+					return parsed
+						.map((item) => {
+							if (typeof item === 'string') return item;
+							if (item && typeof item === 'object' && 'address' in (item as object)) {
+								return str((item as { address?: unknown }).address) || '—';
+							}
+							return String(item);
+						})
+						.filter((s) => s && s !== '—')
+						.join(', ');
+				}
+				if (parsed && typeof parsed === 'object') return str(JSON.stringify(parsed)) || raw;
+			} catch {
+				/* không phải JSON → trả raw */
+			}
+		}
+		return raw;
+	}
 
 	const SUPPLIER_STATUSES = ['active', 'inactive'] as const;
 	const PO_STATUSES = ['draft', 'ordered', 'partially_received', 'received', 'cancelled'] as const;
@@ -441,6 +525,8 @@
 	});
 	// breakdown cho từng entry addresses (AddressInput bind 2 chiều từng phần tử)
 	let supplierAddressBreakdowns = $state<{ province: string; district: string; ward?: string }[]>([]);
+	// breakdown hệ MỚI (34 tỉnh 2 cấp) cho từng entry — gen 2 chiều với breakdown cũ qua mapping
+	let supplierNewAddressBreakdowns = $state<{ province: string; ward: string }[]>([]);
 	// ImageUpload defer ref — gọi uploadPending() khi submit, seedFromImages() khi mở modal
 	let supplierImageUpload = $state<{
 		uploadPending: () => Promise<string[] | string | undefined>;
@@ -474,6 +560,77 @@
 
 	function clearDraft() {
 		clearDraftPref(DRAFT_FORM_KEY);
+	}
+
+	// ── History timeline (batch 6: xem + khôi phục từng entry) ──
+	// Backend: POST /suppliers/history {supplierId} → {entries}; POST /suppliers/restore
+	// {supplierId, historyId} → {supplier}. Entry shape từ suppliers.ts SupplierHistoryEntry.
+	let historyDisplay = $state(false);
+	let historyLoading = $state(false);
+	let historyEntries = $state<HistoryEntry[]>([]);
+	let historySupplier: { _id: string; name?: string } | null = $state(null);
+	let restoreBusy = $state<string | null>(null); // historyId đang restore
+	let historyConfirmDisplay = $state(false);
+	let historyPendingRestore: HistoryEntry | null = $state(null);
+
+	function openHistoryModal(row: SupplierRow) {
+		historySupplier = { _id: str(row._id), name: str(row.name) };
+		historyEntries = [];
+		historyDisplay = true;
+		void loadHistory();
+	}
+
+	async function loadHistory(opts?: { keepOnFail?: boolean }) {
+		if (!historySupplier || !encryptionKeys) return;
+		historyLoading = true;
+		try {
+			const res = await encryption.fetchSecure(
+				'/api/admin/suppliers/history',
+				{
+					method: 'POST',
+					// BẪY: fetchSecure tự mã hoá body — truyền OBJECT (không stringify,
+					// stringify trước sẽ encrypt chuỗi JSON → server 400)
+					body: { supplierId: historySupplier._id }
+				},
+				encryptionKeys
+			);
+			historyEntries = ((res.data as { entries?: HistoryEntry[] } | undefined)?.entries ?? []) as HistoryEntry[];
+		} catch {
+			// keepOnFail (restore-refresh): giữ entries cũ — đừng xoá dữ liệu
+			// đang xem chỉ vì 1 lần fetch fail (network flapping tới Capella)
+			if (!opts?.keepOnFail) historyEntries = [];
+		} finally {
+			historyLoading = false;
+		}
+	}
+
+	// Restore: gọi endpoint rồi refresh bảng + danh sách history (entry 'restore' mới xuất hiện)
+	async function performRestore(entry: HistoryEntry) {
+		if (!historySupplier || !encryptionKeys || restoreBusy) return;
+		restoreBusy = entry._id;
+		try {
+			const res = await encryption.fetchSecure(
+				'/api/admin/suppliers/restore',
+				{
+					method: 'POST',
+					body: { supplierId: historySupplier._id, historyId: entry._id }
+				},
+				encryptionKeys
+			);
+			if (!res.ok) {
+				showToast(resolveServerMessage(res.message, lang, pageContents.toasts.saveFailed[lang]), 'error');
+				return;
+			}
+			showToast(pageContents.toasts.restored[lang], 'success');
+			historyConfirmDisplay = false;
+			historyPendingRestore = null;
+			await Promise.all([loadSuppliers(), loadHistory({ keepOnFail: true })]);
+		} catch {
+			showToast(pageContents.toasts.saveFailed[lang], 'error');
+		} finally {
+			// NHỊP chờ: showToast trước, reset busy sau — nút confirm không kẹt
+			restoreBusy = null;
+		}
 	}
 
 	// ── Dirty-guard (pattern brands: createCloseGuard + AlertDialog) ──
@@ -1031,6 +1188,10 @@
 			district: a.district ?? '',
 			ward: a.ward
 		}));
+		supplierNewAddressBreakdowns = supplierForm.addresses.map((a) => ({
+			province: a.newProvince ?? '',
+			ward: a.newWard ?? ''
+		}));
 		supplierError = undefined;
 		supplierModalDisplay = true;
 		void seedImagesAfterMount();
@@ -1079,6 +1240,10 @@
 			province: a.province ?? '',
 			district: a.district ?? '',
 			ward: a.ward
+		}));
+		supplierNewAddressBreakdowns = supplierForm.addresses.map((a) => ({
+			province: a.newProvince ?? '',
+			ward: a.newWard ?? ''
 		}));
 		supplierError = undefined;
 		supplierModalDisplay = true;
@@ -1166,14 +1331,18 @@
 	function buildSupplierPayload() {
 		const t = supplierForm;
 		// breakdown từng entry (bind 2 chiều với AddressInput) merge lại vào addresses
+		// — cả hệ cũ (province/district/ward) lẫn hệ mới (newProvince/newWard)
 		const entries = t.addresses.map((a, i) => {
 			const bd = supplierAddressBreakdowns[i];
+			const nbd = supplierNewAddressBreakdowns[i];
 			return {
 				label: str(a.label).trim() || undefined,
 				address: str(a.address).trim(),
 				ward: (str(bd?.ward) || str(a.ward)).trim() || undefined,
 				province: (str(bd?.province) || str(a.province)).trim() || undefined,
 				district: (str(bd?.district) || str(a.district)).trim() || undefined,
+				newProvince: (str(nbd?.province) || str(a.newProvince)).trim() || undefined,
+				newWard: (str(nbd?.ward) || str(a.newWard)).trim() || undefined,
 				country: (str(bd?.province) || str(a.province)).trim() ? 'Việt Nam' : undefined
 			};
 		});
@@ -1751,6 +1920,17 @@
 							<Button color="primary" variant="ghost" size="sm" onClick={() => openSupplierEditModal(row)}>
 								{pageContents.actions.edit[lang]}
 							</Button>
+							<!-- history = secondary (timeline + restore từng entry) -->
+							<Button
+								color="secondary"
+								variant="ghost"
+								size="sm"
+								onClick={() => openHistoryModal(row)}
+								aria-label={pageContents.historyModal.viewHistory[lang]}
+								data-test="suppliers-history-btn"
+							>
+								{pageContents.historyModal.viewHistory[lang]}
+							</Button>
 						</div>
 					{/snippet}
 				</DataTable>
@@ -1971,21 +2151,25 @@
 					</div>
 					<!-- ── Hình ảnh multiple (defer batch 3: preview local — chỉ upload
 						     KHI SUBMIT qua uploadPending, tránh rác khi hủy form) ── -->
-					<ImageUpload
-						bind:this={supplierImageUpload}
-						images={supplierForm.images}
-						bind:avatarUrl={supplierForm.avatarUrl}
-						label={pageContents.supplierModal.images[lang]}
-						disabled={supplierSubmitting}
-						defer
-					/>
-					<!-- ── Phones + emails multiple: Badge STT + Input component.
-						     Batch 3: Badge góc trái-trên + remove góc phải-trên ĐÈ LÊN VIỀN
-						     TRÊN của field (absolute, không tốn chiều cao; kích thước nhỏ). ── -->
-					<div class="form-grid" style="gap: 0.5rem;" data-field="supplier-phones">
+					<!-- ── Images: items-block solid (giống address/social, batch6) ── -->
+					<div class="items-block social-block">
+						<span class="items-block__label">{pageContents.supplierModal.images[lang]}</span>
+						<ImageUpload
+							bind:this={supplierImageUpload}
+							images={supplierForm.images}
+							bind:avatarUrl={supplierForm.avatarUrl}
+							disabled={supplierSubmitting}
+							defer
+						/>
+					</div>
+					<!-- ── Phones + emails multiple: items-block solid (giống social) +
+							     Badge STT nền ĐỤC (yêu cầu batch6: hết khuyết bg trái) +
+							     line vertical trục x giữa + label giữa border line. ── -->
+					<div class="items-block form-items-block" data-field="supplier-phones">
+						<span class="items-block__label">{pageContents.supplierModal.phones[lang]}</span>
 						{#each supplierForm.phones as phone, phoneIndex (phoneIndex)}
 							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2}>
-								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="soft" color={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
+								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="solid" color={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
 								<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
 								<button
 									type="button"
@@ -2006,9 +2190,12 @@
 								supplierForm.phones = [...supplierForm.phones, ''];
 							}}
 						>+ {pageContents.supplierModal.addPhone[lang]}</button>
+					</div>
+					<div class="items-block form-items-block" data-field="supplier-emails">
+						<span class="items-block__label">{pageContents.supplierModal.emails[lang]}</span>
 						{#each supplierForm.emails as email, emailIndex (emailIndex)}
-							<div class="field-row" class:field-row--dup={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2} data-field="supplier-emails">
-								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="soft" color={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
+							<div class="field-row" class:field-row--dup={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2}>
+								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="solid" color={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
 								<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
 								<button
 									type="button"
@@ -2024,7 +2211,7 @@
 						<button
 							type="button"
 							class="field-add"
-														disabled={supplierSubmitting || supplierForm.emails.some((e) => (e ?? '').trim() !== '' && !EMAIL_RE.test((e ?? '').trim()))}
+							disabled={supplierSubmitting || supplierForm.emails.some((e) => (e ?? '').trim() !== '' && !EMAIL_RE.test((e ?? '').trim()))}
 							onclick={() => {
 								supplierForm.emails = [...supplierForm.emails, ''];
 							}}
@@ -2032,12 +2219,12 @@
 					</div>
 					<!-- ── Multiple addresses (yêu cầu 1g: BỎ address đơn — block này là duy nhất;
 					     entry đầu = địa chỉ chính cho payload cấp 1) ── -->
-					<div class="items-block">
-						<span class="form-label">{pageContents.supplierModal.addresses[lang]}</span>
+					<div class="items-block social-block">
+						<span class="items-block__label">{pageContents.supplierModal.addresses[lang]}</span>
 						{#each supplierForm.addresses as entry, addrIndex (addrIndex)}
 							<div class="address-entry" class:field-row--dup={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2}>
 								<div class="address-entry__head">
-									<Badge class="field-row-stt" label={String(addrIndex + 1)} size="xs" variant="soft" color={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
+									<Badge class="field-row-stt" label={String(addrIndex + 1)} size="xs" variant="solid" color={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
 									<Input
 										type="text"
 										bind:value={entry.label}
@@ -2053,12 +2240,14 @@
 										onclick={() => {
 											supplierForm.addresses = supplierForm.addresses.filter((_, i) => i !== addrIndex);
 											supplierAddressBreakdowns = supplierAddressBreakdowns.filter((_, i) => i !== addrIndex);
+											supplierNewAddressBreakdowns = supplierNewAddressBreakdowns.filter((_, i) => i !== addrIndex);
 										}}
 									>✕</button>
 								</div>
 								<AddressInput
 									bind:value={entry.address}
 									bind:breakdown={supplierAddressBreakdowns[addrIndex]}
+									bind:newBreakdown={supplierNewAddressBreakdowns[addrIndex]}
 									placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
 									disabled={supplierSubmitting}
 								/>
@@ -2071,12 +2260,13 @@
 							onclick={() => {
 								supplierForm.addresses = [...supplierForm.addresses, { label: '', address: '', province: '', district: '' }];
 								supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '', ward: '' }];
+								supplierNewAddressBreakdowns = [...supplierNewAddressBreakdowns, { province: '', ward: '' }];
 							}}
 						>+ {pageContents.supplierModal.addAddress[lang]}</button>
 					</div>
 					<!-- ── Social block: Input component (yêu cầu 1e) ── -->
 					<div class="items-block social-block">
-						<span class="form-label">{pageContents.supplierModal.social[lang]}</span>
+						<span class="items-block__label">{pageContents.supplierModal.social[lang]}</span>
 						<div class="form-grid-2">
 							<div data-field="supplier-zalo">
 							<TextField name="supplier-zalo">
@@ -2189,6 +2379,97 @@
 					}}
 				>
 					{pageContents.dirty.discard[lang]}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
+{/if}
+
+<!-- ── Modal lịch sử thay đổi (timeline kiểu git + khôi phục từng entry) ── -->
+{#if historyDisplay}
+	<Modal bind:display={historyDisplay} size="lg">
+		<Modal.Container>
+			<Modal.Container.Header>
+				{pageContents.historyModal.title[lang]}{historySupplier?.name ? ` — ${historySupplier.name}` : ''}
+			</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if historyLoading}
+					<div class="history-state">{pageContents.historyModal.loading[lang]}</div>
+				{:else if historyEntries.length === 0}
+					<div class="history-state">{pageContents.historyModal.empty[lang]}</div>
+				{:else}
+					<div class="history-timeline" data-test="suppliers-history-timeline">
+						{#each historyEntries as entry (entry._id)}
+							{@const entryLabel = pageContents.historyModal[entry.type === 'restore' ? 'restore' : 'update'][lang]}
+							<div class="history-entry" class:history-entry--restore={entry.type === 'restore'}>
+								<div class="history-entry__rail">
+									<span class="history-dot" class:history-dot--restore={entry.type === 'restore'}></span>
+								</div>
+								<div class="history-entry__card">
+									<div class="history-entry__head">
+										<Badge variant="soft" color={entry.type === 'restore' ? 'success' : 'info'}>{entryLabel}</Badge>
+										<time class="history-time">{entry.createdAt ? formatDateShared(entry.createdAt, lang) : ''}</time>
+										<span class="history-actor">
+											{pageContents.historyModal.by[lang]}
+											{entry.actorName || pageContents.historyModal.unknownActor[lang]}
+										</span>
+									</div>
+									{#if entry.changes.length === 0}
+										<p class="history-nochanges">{pageContents.historyModal.noChanges[lang]}</p>
+									{:else}
+										<ul class="history-changes">
+											{#each entry.changes as ch (ch.field)}
+												<li class="history-change">
+													<span class="history-change__field">{pageContents.historyModal.fieldLabels[ch.field]?.[lang] ?? ch.field}</span>
+													<del class="history-change__before">{snapshotDisplay(ch.before)}</del>
+													<ins class="history-change__after">{snapshotDisplay(ch.after)}</ins>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+									{#if entry.type === 'update'}
+										<div class="history-entry__actions">
+											<Button
+												color="secondary"
+												variant="outline"
+												size="xs"
+												disabled={restoreBusy !== null}
+												onClick={() => {
+													historyPendingRestore = entry;
+													historyConfirmDisplay = true;
+												}}
+												data-test="suppliers-restore-btn"
+											>
+												{pageContents.historyModal.restoreBtn[lang]}
+											</Button>
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</Modal.Container.Body>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+<!-- ── AlertDialog confirm khôi phục entry ── -->
+{#if historyConfirmDisplay}
+	<AlertDialog
+		bind:open={historyConfirmDisplay}
+		title={pageContents.historyModal.confirmTitle[lang]}
+		description={pageContents.historyModal.confirmDesc[lang]}
+	>
+		<AlertDialog.Content>
+			<AlertDialog.Header variant="info">
+				<AlertDialog.Title>{pageContents.historyModal.confirmTitle[lang]}</AlertDialog.Title>
+				<AlertDialog.Description>{pageContents.historyModal.confirmDesc[lang]}</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{pageContents.historyModal.cancel[lang]}</AlertDialog.Cancel>
+				<AlertDialog.Action color="primary" disabled={restoreBusy !== null} onselect={() => historyPendingRestore && void performRestore(historyPendingRestore)}>
+					{pageContents.historyModal.confirmYes[lang]}
 				</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
@@ -2426,11 +2707,11 @@
 		}
 
 		// Scroll → co page padding + gap tăng không gian row (yêu cầu 1 sticky
-		// tab-strip: bỏ padding khi cuộn; dừng cuộn trả lại — transition tự đảo)
+		// tab-strip: bỏ padding khi cuộn; dừng cuộn trả lại — transition tự đảo).
+		// Batch6: co THÊM cả ngang — padding 0 toàn phần khi cuộn (yêu cầu 3).
 		&.is-scrolled {
 			gap: 0.375rem;
-			padding-top: 0.5rem;
-			padding-bottom: 0.5rem;
+			padding: 0.5rem 0;
 		}
 	}
 
@@ -2739,6 +3020,117 @@
 		margin-bottom: 0.75rem;
 	}
 
+	/* ── History timeline (kiểu git log: rail dọc + dot + card diff) ── */
+	.history-state {
+		padding: 2rem 1rem;
+		text-align: center;
+		color: var(--color-text-muted, var(--muted, #6b7280));
+		font-size: 0.9rem;
+	}
+	.history-timeline {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+	.history-entry {
+		display: flex;
+		gap: 0.75rem;
+	}
+	/* rail: cột 12px chứa dot + đoạn line nối xuống entry sau (nốt cuối không line) */
+	.history-entry__rail {
+		flex: 0 0 12px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding-top: 0.45rem;
+	}
+	.history-dot {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--color-sky-500, #0ea5e9);
+		flex: 0 0 auto;
+	}
+	.history-dot--restore {
+		background: var(--success, #22c55e);
+	}
+	.history-entry:not(:last-child) .history-entry__rail::after {
+		content: '';
+		flex: 1;
+		width: 1px;
+		background: var(--border, hsl(240 5.9% 90%));
+		margin-top: 4px;
+	}
+	.history-entry__card {
+		flex: 1;
+		min-width: 0;
+		border: 1px solid var(--border, hsl(240 5.9% 90%));
+		border-radius: 0.625rem;
+		padding: 0.65rem 0.85rem;
+		margin-bottom: 0.75rem;
+		background: var(--surface, transparent);
+	}
+	.history-entry--restore .history-entry__card {
+		border-color: var(--success-soft, hsl(143, 85%, 96%));
+	}
+	.history-entry__head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.5rem;
+	}
+	.history-time {
+		font-size: 0.8rem;
+		color: var(--color-text-muted, var(--muted, #6b7280));
+	}
+	.history-actor {
+		font-size: 0.8rem;
+		color: var(--color-text-muted, var(--muted, #6b7280));
+	}
+	.history-nochanges {
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--color-text-muted, var(--muted, #6b7280));
+	}
+	.history-changes {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+	.history-change {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		font-size: 0.85rem;
+		line-height: 1.45;
+	}
+	.history-change__field {
+		flex: 0 0 auto;
+		min-width: 7.5rem;
+		font-weight: 600;
+		color: var(--color-text, var(--foreground));
+	}
+	.history-change__before {
+		color: var(--error);
+		text-decoration-color: hsl(0 84% 65% / 0.6);
+		word-break: break-word;
+	}
+	.history-change__after {
+		color: var(--success, #16a34a);
+		text-decoration: none;
+		word-break: break-word;
+	}
+	.history-entry__actions {
+		margin-top: 0.5rem;
+		display: flex;
+		justify-content: flex-end;
+	}
+
 	/* Scroll-to-invalid: flash viền field lỗi 1.6s để user định vị nhanh */
 	.field-flash {
 		animation: field-flash-pulse 1.6s ease-out;
@@ -2783,9 +3175,21 @@
 		}
 	}
 
-	/* Badge STT đè viền trên góc trái — dịch trái ra ngoài 1 nửa width để
-	   "treo" trên mép (x=-50% so với góc), y giữa viền. Badge thu nhỏ:
-	   padding-inline 0.35rem + min-height 1.15rem (size-xs token lớn hơn nhu cầu). */
+	/* Line vertical trục x giữa (batch6): cột dọc nối các item qua tâm,
+	   đặt ::before bên trái mỗi row trừ row đầu — nằm giữa gap 2 item. */
+	.form-items-block > .field-row + .field-row::before {
+		content: '';
+		position: absolute;
+		left: 50%;
+		transform: translateX(-50%);
+		top: calc(-0.55rem - 1px);
+		height: calc(0.55rem + 2px);
+		width: 1px;
+		background: var(--default-300);
+	}
+
+	/* Badge STT đè viền trên góc trái — variant=solid nền ĐỤC (batch6: hết
+	   "khuyết bg trái" do badge soft bán trong suốt lộ viền input xuyên qua). */
 	.field-row > :global(.field-row-stt),
 	.field-row > .field-row-stt {
 		position: absolute;
@@ -2888,6 +3292,27 @@
 		padding: 0.75rem;
 		border: 1px dashed var(--default-300);
 		border-radius: 0.75rem;
+	}
+
+	/* Label block NGỰA TRÊN BORDER LINE (batch6): vị trí relative, label absolute
+	   dịch -50% lên giữa viền, nền background che đoạn border phía sau. */
+	.form-items-block,
+	.social-block,
+	.items-block:has(> .items-block__label) {
+		position: relative;
+	}
+
+	.items-block__label {
+		position: absolute;
+		top: 0;
+		left: 0.75rem;
+		transform: translateY(-50%);
+		padding-inline: 0.375rem;
+		background: var(--background, #fff);
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--foreground);
+		white-space: nowrap;
 	}
 
 	.po-item {
@@ -3046,7 +3471,8 @@
 		border-left-color: var(--error);
 	}
 
-	/* ── Multiple addresses: entry block (badge/remove đè viền trên — mirror .field-row) ── */
+	/* ── Multiple addresses: entry block (badge/remove đè viền trên — mirror .field-row).
+	   Batch6: solid border ĐỒNG NHẤT với social-block; line vertical trục x giữa. */
 	.address-entry {
 		position: relative;
 		display: flex;
@@ -3054,12 +3480,23 @@
 		gap: 0.4rem;
 		margin-top: 0.55rem;
 		padding: 0.6rem;
-		border: 1px solid var(--default-200);
+		border: 1px solid var(--default-300);
 		border-radius: 0.6rem;
 
 		&.field-row--dup {
 			border-color: var(--error);
 		}
+	}
+
+	.social-block > .address-entry + .address-entry::before {
+		content: '';
+		position: absolute;
+		left: 50%;
+		transform: translateX(-50%);
+		top: calc(-0.55rem - 1px);
+		height: calc(0.55rem + 2px);
+		width: 1px;
+		background: var(--default-300);
 	}
 
 	.address-entry > :global(.field-row-stt),

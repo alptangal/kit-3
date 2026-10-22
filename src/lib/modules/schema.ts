@@ -15,6 +15,8 @@ const collectionsName = [
 	'stock_movements',
 	'orders',
 	'suppliers',
+	// Lịch sử thay đổi supplier (timeline kiểu git: diff từng trường + restore theo thời điểm)
+	'supplier_histories',
 	'purchase_orders',
 	'stock_transfers',
 	'stock_takes',
@@ -517,6 +519,20 @@ export const collectionSchemas = {
 			status: { type: 'string', searchable: true, sortable: true, selectable: true }, // 'active' | 'inactive'
 			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true },
 			updatedAt: { type: 'date', searchable: true, sortable: true, selectable: true }
+		}
+	},
+
+	// ===== Lịch sử thay đổi supplier (timeline diff + restore) =====
+	// 1 doc / 1 lần thay đổi: {supplierId, at, actorId, actorName, type: 'update'|'restore',
+	// changes: [{field, before, after}]} — before/after serialize JSON string để so sánh được cả mảng/object.
+	supplier_histories: {
+		fields: {
+			supplierId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			type: { type: 'string', searchable: true, sortable: false, selectable: true },
+			actorId: { type: 'string', searchable: true, sortable: false, selectable: true },
+			actorName: { type: 'string', searchable: false, sortable: false, selectable: true },
+			changes: { type: 'array', searchable: false, sortable: false, selectable: true },
+			createdAt: { type: 'date', searchable: true, sortable: true, selectable: true }
 		}
 	},
 
