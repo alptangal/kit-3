@@ -24,6 +24,40 @@ const categoriesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`categorie
 const inventoryStockKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_stock\``;
 const inventoryLotsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_lots\``;
 
+// LIKE trong N1QL layer này case-sensitive + diacritic-sensitive ("SON" không
+// match "Sơn", "sơn" không match "Sơn lan tạp hoá") — thay bằng
+// REGEXP_CONTAINS với class ký tự mở rộng: 'o' → class chứa o/ô/ơ + mọi biến
+// thể dấu, HOA + thường (thực nghiệm: flag (?i) KHÔNG ổn định với class chứa
+// ký tự hoa unicode — đôi lúc làm chết pattern → tự lo case bằng class).
+// "son"/"sơn"/"SON" đều match "Sơn lan tạp hoá".
+const DIACRITIC_CLASSES: Record<string, string> = {
+  a: 'aàáảãạăằắẳẵặâầấẩẫậAÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬ',
+  e: 'eèéẻẽẹêềếểễệEÈÉẺẼẸÊỀẾỂỄỆ',
+  i: 'iìíỉĩịIÌÍỈĨỊ',
+  o: 'oòóỏõọôồốổỗộơờớởỡợOÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢ',
+  u: 'uùúủũụưừứửữựUÙÚỦŨỤƯỪỨỬỮỰ',
+  y: 'yỳýỷỹỵYỲÝỶỸỴ',
+  d: 'dđDĐ'
+};
+function buildDiacriticInsensitiveRegex(term: string): string {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let out = '';
+  for (const ch of escaped) {
+    // Ký tự có dấu (VD 'ơ') → base (NFD strip marks) → class mở rộng
+    const base = ch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const cls = DIACRITIC_CLASSES[base];
+    if (cls) {
+      out += `[${cls}]`;
+    } else if (/[a-zA-Z]/.test(ch)) {
+      // Chữ ASCII — class hoa + thường (không dựa (?i))
+      out += `[${ch.toLowerCase()}${ch.toUpperCase()}]`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 const supplierAdminMessages = {
   notFound: {
     vi: 'Không tìm thấy nhà cung cấp',
@@ -116,6 +150,8 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'addresses',
   'zalo',
   'facebook',
+  'telegram',
+  'discord',
   'avatarUrl',
   'images',
   'note',
@@ -330,20 +366,18 @@ export class SupplierService {
     }
 
     if (options.search?.trim()) {
-      // Tìm theo tên / người liên hệ / phone / email. LƯU Ý: LOWER()/UPPER()
-      // trong N1QL layer này không có hiệu lực (thực nghiệm: '%po%' ≠ 'QN-…',
-      // không match) → cung cấp cả 2 biến thể upper/lower của term, match
-      // case-sensitive (pattern listPurchases).
-      const term = options.search.trim();
-      const upper = `%${term.toUpperCase()}%`;
-      const lower = `%${term.toLowerCase()}%`;
-      const u = args.push(upper, upper, upper, upper) - 3;
-      const l = args.push(lower, lower, lower, lower) - 3;
-      // phones/emails là mảng — N1QL ANY…IN match từng phần tử
+      // Tìm theo tên / người liên hệ / phone / email. LIKE trong N1QL layer
+      // này case-sensitive + diacritic-sensitive → dùng REGEXP_CONTAINS với
+      // pattern (?i) + class dấu tiếng Việt (buildDiacriticInsensitiveRegex):
+      // "son"/"sơn"/"SON" đều match "Sơn lan tạp hoá". phones/emails là mảng
+      // — N1QL ANY…IN match từng phần tử.
+      const re = buildDiacriticInsensitiveRegex(options.search.trim());
+      const u = args.push(re, re, re, re) - 3;
       conditions.push(
-        `(name LIKE $${u} OR name LIKE $${l} OR contactPerson LIKE $${u + 1} OR contactPerson LIKE $${l + 1}` +
-          ` OR ANY ph IN phones SATISFIES ph LIKE $${u + 2} OR ph LIKE $${l + 2} END` +
-          ` OR ANY em IN emails SATISFIES em LIKE $${u + 3} OR em LIKE $${l + 3} END)`
+        `(REGEXP_CONTAINS(name, $${u})` +
+          ` OR REGEXP_CONTAINS(contactPerson, $${u + 1})` +
+          ` OR ANY ph IN phones SATISFIES REGEXP_CONTAINS(ph, $${u + 2}) END` +
+          ` OR ANY em IN emails SATISFIES REGEXP_CONTAINS(em, $${u + 3}) END)`
       );
     }
 
@@ -411,6 +445,8 @@ export class SupplierService {
       addresses?: unknown;
       zalo?: string;
       facebook?: string;
+      telegram?: string;
+      discord?: string;
       avatarUrl?: string;
       images?: string[];
       note?: string;
@@ -436,6 +472,8 @@ export class SupplierService {
       addresses: sanitizeAddressEntries(supplierData.addresses),
       zalo: supplierData.zalo ?? null,
       facebook: supplierData.facebook ?? null,
+      telegram: supplierData.telegram ?? null,
+      discord: supplierData.discord ?? null,
       avatarUrl: supplierData.avatarUrl ?? null,
       images: Array.isArray(supplierData.images) ? supplierData.images.filter((i): i is string => typeof i === 'string' && i.trim().length > 0).map((i) => i.trim()) : [],
       note: supplierData.note ?? null,
@@ -476,7 +514,7 @@ export class SupplierService {
     const now = new Date().toISOString();
     const updateData: Record<string, unknown> = { ...(getRes as any).data };
 
-    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'avatarUrl', 'images', 'note', 'status'] as const) {
+    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord', 'avatarUrl', 'images', 'note', 'status'] as const) {
       if (field in patch) {
         // mảng phones/emails: lọc phần tử rỗng/không phải string
         if ((SUPPLIER_ARRAY_FIELDS as readonly string[]).includes(field)) {
@@ -1480,19 +1518,14 @@ export class SupplierService {
     }
 
     if (options.search?.trim()) {
-      // Tìm theo mã phiếu / ghi chú. LƯU Ý: LOWER()/UPPER() trong N1QL layer
-      // này không có hiệu lực (thực nghiệm: '%po%' ≠ 'QN-…', không match) →
-      // cung cấp cả 2 biến thể upper/lower của term, match case-sensitive.
-      const term = options.search.trim();
-      const upper = `%${term.toUpperCase()}%`;
-      const lower = `%${term.toLowerCase()}%`;
-      args.push(upper, lower, upper, lower);
-      const u1 = args.length - 3;
-      const l1 = args.length - 2;
-      const u2 = args.length - 1;
-      const l2 = args.length;
+      // Tìm theo mã phiếu / ghi chú. LIKE case-sensitive + diacritic-sensitive
+      // → REGEXP_CONTAINS (?i) + class dấu tiếng Việt (pattern listSuppliers).
+      const re = buildDiacriticInsensitiveRegex(options.search.trim());
+      args.push(re, re);
+      const u1 = args.length - 1;
+      const u2 = args.length;
       conditions.push(
-        `(poCode LIKE $${u1} OR poCode LIKE $${l1} OR note LIKE $${u2} OR note LIKE $${l2})`
+        `(REGEXP_CONTAINS(poCode, $${u1}) OR REGEXP_CONTAINS(note, $${u2}))`
       );
     }
     if (options.branchId) {

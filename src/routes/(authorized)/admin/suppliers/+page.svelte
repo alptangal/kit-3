@@ -344,6 +344,14 @@
 	let suggestOpen = $state(false);
 	let searchFocused = $state(false);
 	let mobileFabOpen = $state(false);
+	// Mobile caption (yêu cầu 2c): search icon → text field; filter status vào
+	// popover từ nút tune; create → icon button. isMobile từ client store.
+	const isMobile = $derived(client.browser?.isMobile ?? false);
+	let mobileSearchOpen = $state(false);
+	let mobileFilterOpen = $state(false);
+	// bind:this Input component → instance { configs } (export { configs } cuối
+	// Input/Main.svelte) — focus() qua instance.configs.focus().
+	let mobileSearchInputInstance = $state<{ configs: { focus: () => void } } | undefined>(undefined);
 	let sortField = $state('');
 	let sortDirection = $state<'asc' | 'desc'>('desc');
 
@@ -524,6 +532,10 @@
 		selectedIds = [];
 		allFilteredSelected = false;
 	}
+
+	// Bulk count hiển thị: khi select-all toàn bộ kết quả filter → hiện TOTAL
+	// (fetch ids bị thiếu 1 số row → count thật lệch; user chốt hiển thị total).
+	const bulkDisplayCount = $derived(allFilteredSelected && suppliersTotal > selectedIds.length ? suppliersTotal : selectedIds.length);
 
 	// ── Modal tạo PO ──
 	let poModalDisplay = $state(false);
@@ -1262,7 +1274,7 @@
 		const tsv = [header, ...rows].join('\n');
 		navigator.clipboard
 			.writeText(tsv)
-			.then(() => showToast(pageContents.toasts.bulkCopied[lang].replace('{count}', String(selectedIds.length)), 'success'))
+			.then(() => showToast(pageContents.toasts.bulkCopied[lang].replace('{count}', String(bulkDisplayCount)), 'success'))
 			.catch(() => showToast(pageContents.toasts.requestFailed[lang], 'error'));
 	}
 
@@ -1476,6 +1488,7 @@
 <section
 	class="admin-page admin-page--fullheight"
 	class:at-bottom={wrapAtBottom}
+	class:is-scrolled={tableScrolled}
 	data-active-tab={activeTab}
 >
 
@@ -1556,6 +1569,7 @@
 					bind:allFilteredSelected={allFilteredSelected}
 					onSelectAllFiltered={selectAllFilteredSuppliers}
 					onSelectionChange={(ids) => (selectedIds = ids)}
+					class={tableScrolled ? 'caption-collapsed' : undefined}
 					data-test="suppliers-datatable"
 				>
 					{#snippet captionTools()}
@@ -1566,7 +1580,7 @@
 						{#if selectedIds.length > 0}
 							<!-- bulk-bar khi chọn ≥1 row -->
 							<div class="bulk-bar" data-test="suppliers-bulk-bar">
-								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(selectedIds.length))}</span>
+								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(bulkDisplayCount))}</span>
 								<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected}>
 									{pageContents.bulk.copy[lang]}
 								</Button>
@@ -1579,46 +1593,68 @@
 							</div>
 						{/if}
 							<div class="admin-search" data-suggest>
-								<Input
-									type="text"
-									size="sm"
-									placeholder={{ vi: 'Tìm NCC, SĐT, email…', en: 'Search name, phone, email…' }}
-									bind:value={searchQuery}
-									events={[
-										{
-											events: {
-												focus: {
-													handler() {
-														searchFocused = true;
-														suggestOpen = true;
-													}
-												},
-												blur: {
-													handler() {
-														searchFocused = false;
-														suggestOpen = false; // yêu cầu 5: blur → ẩn popover đúng flow
-														saveSearchKeyword();
+								{#if isMobile && !mobileSearchOpen}
+									<!-- mobile 2c: search icon → click mở text field (autofocus);
+									     đóng khi blur RỖNG (có từ khoá → giữ field, user chốt) -->
+									<button
+										type="button"
+										class="mobile-caption-icon"
+										aria-label={lang === 'vi' ? 'Tìm kiếm' : 'Search'}
+										data-test="suppliers-mobile-search-open"
+										onclick={() => {
+											mobileSearchOpen = true;
+											suggestOpen = true;
+											// autofocus sau khi mount (attr autofocus có thể bị bỏ qua khi re-render)
+											setTimeout(() => mobileSearchInputInstance?.configs.focus(), 0);
+										}}
+									>
+										<Icon icon={iconify['search-rounded']} size="sm" />
+									</button>
+								{:else}
+									<Input
+										bind:this={mobileSearchInputInstance}
+										type="text"
+										size="sm"
+										placeholder={{ vi: 'Tìm NCC, SĐT, email…', en: 'Search name, phone, email…' }}
+										bind:value={searchQuery}
+										events={[
+											{
+												events: {
+													focus: {
+														handler() {
+															searchFocused = true;
+															suggestOpen = true;
+														}
+													},
+													blur: {
+														handler() {
+															searchFocused = false;
+															suggestOpen = false; // yêu cầu 5: blur → ẩn popover đúng flow
+															saveSearchKeyword();
+															// mobile: rỗng → thu về icon (có từ khoá → giữ field)
+															if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
+														}
 													}
 												}
 											}
-										}
-									]}
-								>
-									{#snippet leading(data)}
-										{#if searching}
-											<!-- yêu cầu 9: đang chờ kết quả → icon thành spinner loading -->
-											<span class="admin-search-loading">
-												<Spinner size="xs" pattern="circle" />
-											</span>
-										{:else}
-											<Icon
-												icon={iconify['search-rounded']}
-												size={(data?.size ?? 'sm') as Size}
-												class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-											/>
-										{/if}
-									{/snippet}
-								</Input>
+										]}
+									>
+										{#snippet leading(data)}
+											{#if searching}
+												<!-- yêu cầu 9: đang chờ kết quả → icon thành spinner loading -->
+												<span class="admin-search-loading">
+													<Spinner size="xs" pattern="circle" />
+												</span>
+											{:else}
+												<Icon
+													icon={iconify['search-rounded']}
+													size={(data?.size ?? 'sm') as Size}
+													class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+												/>
+											{/if}
+										{/snippet}
+									</Input>
+								{/if}
 								<!-- yêu cầu 6: ĐÃ BỎ nút clear riêng — Input component có sẵn clear button -->
 								{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
 									<div class="suggest-popover" role="listbox">
@@ -1645,27 +1681,67 @@
 								{/if}
 							</div>
 							<!-- yêu cầu 7: filter VÀO caption (bỏ admin-filters row).
-							     Batch 3: Select component thay select native (tái sử dụng). -->
-							<Select
-								class="admin-filter-select"
-								size="sm"
-								bind:value={supplierStatusFilter}
-								options={supplierStatusOptions}
-								searchable
-								clearable
-								placeholder={pageContents.filters.allStatuses[lang]}
-								onValueChange={() => onFilterChange()}
-								data-test="suppliers-filter-status"
-							/>
+							     Batch 3: Select component thay select native (tái sử dụng).
+							     Mobile 2c: filter status đẩy vào popover từ nút tune. -->
+							{#if !isMobile}
+								<Select
+									class="admin-filter-select"
+									size="sm"
+									bind:value={supplierStatusFilter}
+									options={supplierStatusOptions}
+									searchable
+									clearable
+									placeholder={pageContents.filters.allStatuses[lang]}
+									onValueChange={() => onFilterChange()}
+									data-test="suppliers-filter-status"
+								/>
+							{/if}
 							<!-- nút create vào caption (yêu cầu 3: bỏ admin-header) -->
 							<div class="admin-actions-group">
-								<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
-									<Icon icon={iconify['tune-rounded']} size="sm" />
-								</Button>
+								{#if isMobile}
+									<div class="mobile-filter-anchor">
+										<button
+											type="button"
+											class="mobile-caption-icon"
+											aria-label={pageContents.filters.allStatuses[lang]}
+											data-test="suppliers-mobile-filter-btn"
+											onclick={() => (mobileFilterOpen = !mobileFilterOpen)}
+										>
+											<Icon icon={iconify['tune-rounded']} size="sm" />
+										</button>
+										{#if mobileFilterOpen}
+											<div class="mobile-filter-popover">
+												<Select
+													class="admin-filter-select"
+													size="sm"
+													bind:value={supplierStatusFilter}
+													options={supplierStatusOptions}
+													searchable
+													clearable
+													placeholder={pageContents.filters.allStatuses[lang]}
+													onValueChange={() => {
+														onFilterChange();
+													}}
+													data-test="suppliers-filter-status-mobile"
+												/>
+											</div>
+										{/if}
+									</div>
+								{:else}
+									<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
+										<Icon icon={iconify['tune-rounded']} size="sm" />
+									</Button>
+								{/if}
 								<!-- Quy ước màu nút: create = success -->
-								<Button color="success" size="sm" onClick={openSupplierModal} data-test="suppliers-create-btn">
-									{pageContents.actions.createSupplier[lang]}
-								</Button>
+								{#if isMobile}
+									<Button color="success" size="sm" onClick={openSupplierModal} aria-label={pageContents.actions.createSupplier[lang]} data-test="suppliers-create-btn">
+										<Icon icon={iconify['add-rounded']} size="sm" />
+									</Button>
+								{:else}
+									<Button color="success" size="sm" onClick={openSupplierModal} data-test="suppliers-create-btn">
+										{pageContents.actions.createSupplier[lang]}
+									</Button>
+								{/if}
 							</div>
 					{/snippet}
 					{#snippet actionsContent(row)}
@@ -1706,6 +1782,7 @@
 					caption={{ vi: 'Danh sách đơn mua hàng', en: 'Purchase orders list' }}
 					actionsLabel={{ vi: pageContents.poTable.actions[lang], en: pageContents.poTable.actions[lang] }}
 					stickyHead
+					class={tableScrolled ? 'caption-collapsed' : undefined}
 					data-test="purchase-orders-datatable"
 				>
 					{#snippet captionTools()}
@@ -1924,7 +2001,7 @@
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting || supplierForm.phones.some((p) => (p ?? '').trim() === '')}
+							disabled={supplierSubmitting || supplierForm.phones.some((p) => (p ?? '').trim() !== '' && !PHONE_RE.test((p ?? '').trim()))}
 							onclick={() => {
 								supplierForm.phones = [...supplierForm.phones, ''];
 							}}
@@ -1947,7 +2024,7 @@
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting || supplierForm.emails.some((e) => (e ?? '').trim() === '')}
+														disabled={supplierSubmitting || supplierForm.emails.some((e) => (e ?? '').trim() !== '' && !EMAIL_RE.test((e ?? '').trim()))}
 							onclick={() => {
 								supplierForm.emails = [...supplierForm.emails, ''];
 							}}
@@ -2124,7 +2201,7 @@
 		<AlertDialog.Content>
 			<AlertDialog.Header variant="danger">
 				<AlertDialog.Title>{pageContents.bulk.title[lang]}</AlertDialog.Title>
-				<AlertDialog.Description>{pageContents.bulk.desc[lang].replace('{count}', String(selectedIds.length))}</AlertDialog.Description>
+				<AlertDialog.Description>{pageContents.bulk.desc[lang].replace('{count}', String(bulkDisplayCount))}</AlertDialog.Description>
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
@@ -2337,6 +2414,7 @@
 		max-width: none;
 		gap: 0.75rem;
 		padding: 1rem 1.25rem;
+		transition: padding 200ms ease, gap 200ms ease;
 		/* caption/th sticky của DataTable đọc 3 var này từ ancestor — zero để
 		   sticky top = 0 (bám đỉnh wrap, không bị "hở" dưới header layout) */
 		--admin-header-h: 0px;
@@ -2345,6 +2423,14 @@
 
 		@media (max-width: 767px) {
 			padding: 0.75rem;
+		}
+
+		// Scroll → co page padding + gap tăng không gian row (yêu cầu 1 sticky
+		// tab-strip: bỏ padding khi cuộn; dừng cuộn trả lại — transition tự đảo)
+		&.is-scrolled {
+			gap: 0.375rem;
+			padding-top: 0.5rem;
+			padding-bottom: 0.5rem;
 		}
 	}
 
@@ -2455,6 +2541,26 @@
 			border: 1px solid var(--default-300);
 			background: var(--default-50, transparent);
 			font-size: 0.85rem;
+		}
+	}
+
+	/* Scroll → caption collapsed (DataTable root class từ page): ẩn desc +
+	   co caption đã làm ở DataTable; ở đây thu nhỏ tools (search/select/btn). */
+	:global(.datatable-root.caption-collapsed) {
+		:global(.datatable-caption-tools .admin-search .input-root),
+		:global(.datatable-caption-tools .admin-filter-select .select-trigger) {
+			height: 1.75rem;
+			min-height: 1.75rem;
+		}
+
+		:global(.datatable-caption-tools .admin-actions-group .button-root) {
+			height: 1.75rem;
+			min-height: 1.75rem;
+			padding-inline: 0.625rem;
+		}
+
+		:global(.datatable-caption-tools .bulk-bar) {
+			height: 1.75rem;
 		}
 	}
 
@@ -2872,6 +2978,46 @@
 		align-items: center;
 		gap: 0.5rem;
 		flex-wrap: wrap;
+	}
+
+	/* Mobile caption (yêu cầu 2c): icon search/filter/create thu gọn + popover filter */
+	.mobile-caption-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
+		color: var(--foreground);
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	.mobile-filter-anchor {
+		position: relative;
+	}
+
+	.mobile-filter-popover {
+		position: absolute;
+		top: calc(100% + 0.375rem);
+		right: 0;
+		z-index: 30;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.5rem;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+		padding: 0.5rem;
+		width: 12rem;
+
+		:global(.admin-filter-select) {
+			width: 100%;
+			max-width: 100%;
+		}
 	}
 
 	.bulk-bar {

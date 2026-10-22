@@ -1720,6 +1720,11 @@
 		<!-- B5: card view tự động mobile (kiểu Lark) — thay table khi isMobile +
 		     cardFields khai báo. Mỗi card: title = field đầu, còn lại label:value.
 		     Tap card → cùng flow onRowTap (guard control chung). -->
+		<!-- Mobile 2c: captionTools (search icon/filter/create của page) phải render
+		     CẢ ở card mode — trước đây chỉ table mode có caption → tools biến mất. -->
+		{#if configs.captionTools}
+			<div class="datatable-caption-tools datatable-caption-tools--cards">{@render configs.captionTools()}</div>
+		{/if}
 		<div class="datatable-cards" data-test="datatable-cards">
 			{#if configs.loading}
 				{#each Array.from({ length: Math.max(3, Math.min(pageSize, 8)) }) as _, si (si)}
@@ -2226,6 +2231,12 @@
 		.datatable-caption-tools {
 			width: 100%;
 		}
+	}
+
+	// cardMode: tools standalone trên cards (không bọc caption-heading) —
+	// cùng hàng ngang, wrap khi chật.
+	.datatable-caption-tools--cards {
+		padding: 0.25rem 0.5rem;
 	}
 
 	// Caption title + description (C1/C5): desc ẩn bằng max-height transition

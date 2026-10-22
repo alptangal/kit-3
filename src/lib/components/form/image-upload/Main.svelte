@@ -736,6 +736,7 @@
 	.image-upload__overlay {
 		position: absolute;
 		inset: 0;
+		z-index: 2; // img (Avatar.Image) z-index:1 absolute — overlay phải nằm trên img mới hover hiện được
 		display: flex;
 		align-items: center;
 		justify-content: center;
