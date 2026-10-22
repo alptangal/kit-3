@@ -1,13 +1,11 @@
 import type { BasicConfigs, BasicProps, Color, Size } from '$components/interface';
-import type { ButtonVariant } from './composables/useButtonVariant';
-import type { ButtonColor } from './composables/useButtonColor';
 
 // ── Re-export composed types ──
 export type { Color, Size };
 export type ButtonTypes = 'button' | 'submit' | 'reset';
-export type ButtonVariants = ButtonVariant;
+export type ButtonVariants = 'solid' | 'outline' | 'soft' | 'subtle' | 'link' | 'ghost';
 export type ButtonSize = Size;
-export type ButtonColorAlias = ButtonColor;
+export type ButtonColorAlias = Color;
 
 // ── Icon prop (unchanged for backward compat) ──
 export type ButtonIcon =
@@ -91,7 +89,7 @@ export interface ButtonConfigs extends BasicConfigs {
 	loadingDuration: number;
 	loading?: boolean;
 	disabled?: boolean;
-	/** tooltip text — used by useButtonState / has-tooltip class */
+	/** tooltip text — adds has-tooltip class (overflow visible) */
 	tooltip?: string;
 	transitionDisabled?: boolean;
 }

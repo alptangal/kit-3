@@ -361,7 +361,7 @@ Layout chuẩn của một component:
   **đăng ký vào `context.children` bằng Symbol context** (`setContext(Symbol('name-context'), configs)`
   + `getContext`), có **fallback auto-mount** (nếu parent không render sub → parent tự `mount()`
   sub vào `ref`, xem `releaseIndicator` trong `checkbox/index.ts`).
-- **Composable** (vd `button/composables/useButton*`): **tách logic style resolution
+- **Composable** (vd `button/_default.ts`): **tách logic style resolution
   (size / color / variant / state) khỏi render** — `Main.svelte` chỉ gọi & ráp.
 
 ---

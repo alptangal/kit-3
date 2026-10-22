@@ -21,23 +21,30 @@ $themes: 'dark', 'light';
 				@if $variant== 'solid' {
 					--border-color: transparent;
 					&.color-#{$color} {
-						--background: var(--color-#{$ref}-600);
-						--color: var(--color-#{$ref}-400);
-						@include theme-light {
-							&.loading {
-								--color: var(--color-#{$ref}-500);
-							}
-						}
+						// AA: white trên ref-700 pass ≥4.5 cả 7 màu (ref-600 fail với success/warning/info/secondary)
+						--background: var(--color-#{$ref}-700);
+						--color: white;
 
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled):not(.loading) {
-								--background: var(--color-#{$ref}-500);
+								--background: var(--color-#{$ref}-800);
 								--color: white;
 							}
 						}
 						&.button-tapped {
-							--background: var(--color-#{$ref}-500);
+							--background: var(--color-#{$ref}-900);
 							--color: white;
+						}
+						&.loading {
+							// AA: shimmer phải giữ nền tối (≥700) để chữ trắng đọc được — gradient sáng mặc định làm trắng chìm
+							--loading-background: linear-gradient(
+								100deg,
+								var(--color-#{$ref}-800) 0%,
+								var(--color-#{$ref}-700) 35%,
+								var(--color-#{$ref}-800) 50%,
+								var(--color-#{$ref}-700) 65%,
+								var(--color-#{$ref}-800) 100%
+							);
 						}
 					}
 				} @else if $variant== 'outline' {
@@ -47,8 +54,13 @@ $themes: 'dark', 'light';
 							--color: var(--foreground);
 							--border-color: var(--foreground);
 						} @else {
+							// AA: ref-500 chỉ đủ trên nền dark; light mode đẩy lên ref-700
 							--color: var(--color-#{$ref}-500);
 							--border-color: var(--color-#{$ref}-500);
+							@include theme-light {
+								--color: var(--color-#{$ref}-700);
+								--border-color: var(--color-#{$ref}-700);
+							}
 						}
 
 						@media (hover: hover) and (pointer: fine) {
@@ -105,11 +117,13 @@ $themes: 'dark', 'light';
 					&.color-#{$color} {
 						--background: var(--color-#{$ref}-100);
 						@if $color== 'default' {
-							--color: var(--foreground-500);
-							--border-color: var(--foreground-500);
+							// AA: --foreground-500 = 4.39 trên chip gray-100 (dark còn tệ: chip không đổi theme) → gray-600 6.87
+							--color: var(--color-gray-600);
+							--border-color: var(--color-gray-600);
 						} @else {
-							--color: var(--color-#{$ref}-500);
-							--border-color: var(--color-#{$ref}-500);
+							// AA: ref-500 fail trên chip ref-100 cả 2 theme (nền chip không đổi theo theme) → ref-800
+							--color: var(--color-#{$ref}-800);
+							--border-color: var(--color-#{$ref}-800);
 						}
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled):not(.loading) {
@@ -128,6 +142,9 @@ $themes: 'dark', 'light';
 							--color: var(--foreground);
 						} @else {
 							--color: var(--color-#{$ref}-500);
+							@include theme-light {
+								--color: var(--color-#{$ref}-700);
+							}
 						}
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled):not(.loading) {
@@ -169,6 +186,9 @@ $themes: 'dark', 'light';
 							--color: var(--foreground);
 						} @else {
 							--color: var(--color-#{$ref}-500);
+							@include theme-light {
+								--color: var(--color-#{$ref}-700);
+							}
 						}
 						@media (hover: hover) and (pointer: fine) {
 							&:hover:not(.disabled):not(.loading) {
@@ -247,9 +267,11 @@ $themes: 'dark', 'light';
 		}
 	}
 	// ── Tap / Active press animation ──
-	&[data-tap='true'],
-	&:active:not(.disabled):not(.loading) {
-		transform: scale(0.97);
+	@media (prefers-reduced-motion: no-preference) {
+		&[data-tap='true'],
+		&:active:not(.disabled):not(.loading) {
+			transform: scale(0.97);
+		}
 	}
 	// ── Focus Visible (keyboard navigation) ──
 	&:focus-visible:not(.disabled) {
@@ -258,9 +280,9 @@ $themes: 'dark', 'light';
 	}
 	// ── Size-based min-height (sync with Input component) ──
 	&.size-xs { --min-height: 1.875rem; }  // 30px
-	&.size-sm { --min-height: 2.5rem; }    // 40px
-	&.size-md { --min-height: 2.5rem; }    // 40px (changed from 46px to match sm)
-	&.size-lg { --min-height: 2.5rem; }    // 40px
+	&.size-sm { --min-height: 2.75rem; }    // 44px (PRODUCT.md touch target)
+	&.size-md { --min-height: 2.75rem; }    // 44px
+	&.size-lg { --min-height: 2.75rem; }    // 44px
 	&.size-xl { --min-height: 3.125rem; }  // 50px
 	&.size-2xl { --min-height: var(--font-size); }
 	&.size-3xl { --min-height: var(--font-size); }
@@ -445,4 +467,12 @@ $themes: 'dark', 'light';
 	flex-basis: 0% !important;
 	margin: 0 !important;
 	padding: 0 !important;
+}
+// ── Reduced motion: tắt shimmer/spinner/ripple (đặt cuối file để thắng .button-spinner cùng specificity) ──
+@media (prefers-reduced-motion: reduce) {
+	.button-root.loading::before,
+	.button-root .button-spinner,
+	.button-root :global(.button-ripple) {
+		animation: none;
+	}
 }

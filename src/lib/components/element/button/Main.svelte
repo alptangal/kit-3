@@ -3,7 +3,6 @@
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
-	import { pick } from 'es-toolkit/compat';
 	import type { ButtonConfigs, ButtonProps, ButtonTypes } from './_interface';
 	import { Icon } from '$components/element';
 	import type { EventListener } from '$components/interface';
@@ -29,7 +28,7 @@
 			!props.transitionDisabled ? 'transition' : undefined,
 			`color-${colorDerived}`,
 			configs.status?.tap || props.actived ? `button-tapped` : undefined,
-			tooltipDerived ? 'has_tooltip' : undefined
+			tooltipDerived ? 'has-tooltip' : undefined
 		];
 		const propStyles: (string | undefined)[] | undefined | string =
 			typeof props.class == 'object' && !Array.isArray(props.class)

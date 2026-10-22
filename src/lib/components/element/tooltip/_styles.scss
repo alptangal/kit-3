@@ -3,7 +3,7 @@
 // :global). Ở đây dùng SCSS @each lồng (y hệt button/_styles.scss) vì CSS
 // custom property KHÔNG thể nội suy từ biến CSS runtime.
 //
-// Dùng RAW PALETTE token (--color-<palette>-N) GIỐNG Button (useButtonColor.ts):
+// Dùng RAW PALETTE token (--color-<palette>-N) GIỐNG Button:
 // semantic token (--primary, --success…) ĐẢO scale theo theme (dark override
 // cả 11 bậc) → cùng "success" đổi nghĩa giữa 2 theme; raw palette giữ nguyên.
 //
