@@ -190,6 +190,18 @@
 			vi: 'Ví dụ: iPhone của tôi',
 			en: 'e.g. My iPhone'
 		},
+		passkeyExistsHint: {
+			vi: 'Thiết bị này đã đăng ký passkey cho tài khoản rồi. Hãy đăng nhập bằng passkey hiện có hoặc xoá thiết bị cũ rồi đăng ký lại.',
+			en: 'This device already has a passkey for this account. Sign in with the existing passkey, or delete it and register again.'
+		},
+		passkeyOriginMismatchHint: {
+			vi: 'Tên miền hiện tại không khớp cấu hình WebAuthn. Hãy truy cập đúng tên miền HTTPS chính thức.',
+			en: 'The current domain does not match the WebAuthn configuration. Open the official HTTPS domain.'
+		},
+		passkeyCancelledHint: {
+			vi: 'Yêu cầu đăng ký đã bị huỷ (hết thời gian chờ hoặc bạn đóng cửa sổ). Thử lại nếu muốn đăng ký.',
+			en: 'Registration was cancelled (timed out or dismissed). Try again to register.'
+		},
 
 		// ── Đổi mật khẩu ──
 		passwordTitle: {
@@ -440,9 +452,21 @@
 			toast(msg('passkeyRegisterSuccess'), undefined, 'success');
 			await loadCredentials();
 		} catch (e) {
-			// User huỷ prompt authenticator (NotAllowedError) — không hiện lỗi to
+			// Phân loại theo e.name (WebAuthnError giữ name gốc) — KHÔNG đoán qua message:
+			// Safari iOS 15 huỷ ngầm khi thiết bị đã có passkey (excludeCredentials) và
+			// message "cancelled by the user" không match regex cũ → toast lỗi to nhầm.
 			const em = e instanceof Error ? e.message : String(e);
-			if (!/NotAllowed|aborted/i.test(em)) {
+			const ename = e instanceof DOMException ? e.name : /Error/.test(em) ? em.split(':')[0].trim() : '';
+			if (/NotAllowed|InvalidState/i.test(ename)) {
+				// Không có authenticator mới khả dụng / credential đã tồn tại trên thiết bị
+				toast(msg('passkeyRegisterFailed'), msg('passkeyExistsHint'), 'error');
+			} else if (/SecurityError/i.test(ename)) {
+				// rpId/origin sai — truy cập qua domain/IP khác domain đã cấu hình
+				toast(msg('passkeyRegisterFailed'), msg('passkeyOriginMismatchHint'), 'error');
+			} else if (/NotAllowed|aborted/i.test(em)) {
+				// Fallback theo message (AbortError v.v.) — user tự huỷ, thông báo nhẹ
+				toast(msg('passkeyRegisterFailed'), msg('passkeyCancelledHint'), 'success');
+			} else {
 				toast(msg('passkeyRegisterFailed'), em, 'error');
 			}
 		} finally {

@@ -154,11 +154,12 @@ export class WebAuthnService {
 		// webauthnUserHandle: định danh ổn định cho authenticator (không đổi khi đổi email)
 		const userHandle = userDoc.webauthnUserHandle || userId;
 
-		// Exclude credential đã đăng ký để authenticator không trùng
+		// Exclude credential đã đăng ký để authenticator không trùng.
+		// CHỈ gửi id — Safari iOS 15 không xử lý tốt transports trong excludeCredentials
+		// (giá trị lạ như 'hybrid' khiến quy tắc exclude sai → prompt tự huỷ NotAllowedError).
 		const existing = await this.listCredentialsRaw(userId);
 		const excludeCredentials = existing.map((c) => ({
-			id: c.credentialId as Base64URLString,
-			transports: c.transports as AuthenticatorTransportFuture[] | undefined
+			id: c.credentialId as Base64URLString
 		}));
 
 		let options: PublicKeyCredentialCreationOptionsJSON;
@@ -173,6 +174,9 @@ export class WebAuthnService {
 					[userDoc.firstname, userDoc.lastname].filter(Boolean).join(' ') || userHandle,
 				timeout: 60_000,
 				attestationType: 'none',
+				// Chỉ ES256: Safari iOS 15 hỗ trợ chắc chắn; EdDSA (-8) đứng đầu có thể
+				// chọn alg authenticator cũ không hiểu → create() fail
+				supportedAlgorithmIDs: [-257],
 				excludeCredentials
 			});
 		} catch (e) {
