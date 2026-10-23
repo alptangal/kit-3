@@ -24,10 +24,12 @@ export const POST: RequestHandler = async (event) => {
 			phones?: string[];
 			emails?: string[];
 			addresses?: unknown;
-			zalo?: string;
-			facebook?: string;
-			telegram?: string;
-			discord?: string;
+			zalo?: string[];
+			facebook?: string[];
+			telegram?: string[];
+			discord?: string[];
+			instagram?: string[];
+			website?: string[];
 			avatarUrl?: string;
 			images?: string[];
 			note?: string;
@@ -81,6 +83,8 @@ export const POST: RequestHandler = async (event) => {
 			facebook: read.data.facebook,
 			telegram: read.data.telegram,
 			discord: read.data.discord,
+			instagram: read.data.instagram,
+			website: read.data.website,
 			avatarUrl: read.data.avatarUrl,
 			images: read.data.images,
 			note: read.data.note,

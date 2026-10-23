@@ -62,7 +62,9 @@
 			{/if}
 			{#if configs?.showIndex}
 				<th class="datatable-th datatable-th--index" scope="col">
-					{#if configs?.indexCheckboxes}
+					{#if configs?.selectAllBusy}
+						<span class="datatable-index-spinner" aria-label={configs.selectAllText}></span>
+					{:else if configs?.indexCheckboxes}
 						<span class="datatable-index-num">#</span>
 						<span class="datatable-index-check">
 							<Checkbox
@@ -198,6 +200,22 @@
 	.datatable-th--index {
 		width: 3rem;
 		text-align: center;
+	}
+
+	// Select-all filtered đang fetch: spinner thay '#'/checkbox (cùng size).
+	.datatable-index-spinner {
+		width: 1rem;
+		height: 1rem;
+		border: 2px solid var(--primary, var(--color-indigo-500));
+		border-right-color: transparent;
+		border-radius: 999px;
+		animation: dt-index-spin 700ms linear infinite;
+	}
+
+	@keyframes dt-index-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	// ── indexCheckboxes: th '#' đổi thành checkbox select-all khi hover ──

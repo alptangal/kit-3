@@ -213,6 +213,8 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	allFilteredSelected?: boolean;
 	/** 'filtered': header select-all được gọi khi user chọn select-all. */
 	onSelectAllFiltered?: () => void;
+	/** Select-all filtered đang fetch — th STT hiển thị spinner thay '#'. */
+	selectAllBusy?: boolean;
 	/** Cho phép update/delete row (PC: hover row → action buttons; mobile: tap row → expand actions). */
 	rowActions?: boolean;
 	/** B6.2: nhãn th cột actions (i18n — default 'Actions'/'Thao tác'). */
@@ -309,6 +311,8 @@ export interface DataTableConfigs extends BasicConfigs {
 	editCell: { rowId: string; columnId: string; value: string } | undefined;
 	/** Lazy load đang gọi onLoadMore? */
 	loadingMore: boolean;
+	/** Select-all filtered đang fetch (th STT hiển thị spinner). */
+	selectAllBusy: boolean;
 	/** Còn data để load không (lazy load). */
 	hasMore: boolean;
 	/** Visual config đã resolve (zebra/hover/border). */

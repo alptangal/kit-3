@@ -235,6 +235,13 @@ export const collectionSchemas = {
 				sortable: false,
 				selectable: false
 			},
+			// Avatar self-service — URL ảnh public (HF Space host), user tự đổi qua /profile
+			avatarUrl: {
+				type: 'string',
+				searchable: false,
+				sortable: false,
+				selectable: true
+			},
 			remember: {
 				type: 'boolean',
 				searchable: false,

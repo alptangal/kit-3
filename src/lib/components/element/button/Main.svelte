@@ -515,6 +515,7 @@
 	data-tap={configs.status?.tap}
 	data-long-press={configs.status?.longPress}
 	aria-label={ariaLabelDerived}
+	aria-pressed={props['aria-pressed']}
 	{...restAttrs}
 	style:--transition-duration={`${configs.transitionDuration}ms`}
 	style:--loading-duration={`${configs.loadingDuration}ms`}

@@ -35,6 +35,7 @@
 
 <script lang="ts">
 	import { Button, Icon, Image as ImageEl, Spinner } from '$components/element';
+	import { Modal } from '$components/modal';
 	import { iconify } from '$lib/assets/icons/iconify';
 	import { client } from '$store/basic.svelte';
 
@@ -80,6 +81,9 @@
 	}
 	let deferEntries = $state<DeferEntry[]>([]);
 	let deferKey = 0; // key tăng dần cho each
+	// Modal chi tiết ảnh (click thumb) — batch7
+	let detailEntry = $state<DeferEntry | undefined>(undefined);
+	let detailDisplay = $state(false);
 
 	const t = {
 		label: { vi: 'Ảnh', en: 'Image' },
@@ -97,6 +101,14 @@
 		view: { vi: 'Xem ảnh', en: 'View image' },
 		errType: { vi: 'Chỉ chấp nhận ảnh JPEG/PNG/WebP/GIF', en: 'Only JPEG/PNG/WebP/GIF images are allowed' },
 		errSize: { vi: 'Ảnh vượt quá 5MB', en: 'Image exceeds 5MB' },
+		errDuplicate: { vi: 'Ảnh này đã được thêm rồi', en: 'This image is already added' },
+		sizeLabel: { vi: 'Dung lượng', en: 'Size' },
+		typeLabel: { vi: 'Định dạng', en: 'Type' },
+		fileName: { vi: 'Tên tệp', en: 'File name' },
+		notUploaded: { vi: 'Chưa tải lên', en: 'Not uploaded' },
+		emptyTitle: { vi: 'Thêm ảnh nhà cung cấp', en: 'Add supplier images' },
+		emptyDesc: { vi: 'Bấm vào đây hoặc nút bên dưới để chọn ảnh (JPEG/PNG/WebP/GIF, tối đa 5MB)', en: 'Click here or the button below to choose images (JPEG/PNG/WebP/GIF, max 5MB)' },
+		detailTitle: { vi: 'Chi tiết ảnh', en: 'Image details' },
 		errUpload: { vi: 'Tải ảnh lên thất bại', en: 'Image upload failed' },
 		errCopy: { vi: 'Không copy được URL', en: 'Failed to copy URL' },
 		notConfigured: {
@@ -112,6 +124,29 @@
 	function toastErr(message: string) {
 		client.browser?.toasts?.create({ title: tr('errUpload'), description: message, color: 'error' });
 		onerror?.(message);
+	}
+
+	// ── Row-list helpers (batch7) ──
+	function formatSize(bytes: number): string {
+		if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+		if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+		return `${bytes} B`;
+	}
+	// Loại file hiển thị: JPEG / PNG / WebP / GIF (từ mime hoặc đuôi URL cũ)
+	function fileTypeName(entry: DeferEntry): string {
+		const mime = entry.file?.type;
+		if (mime) return mime.replace('image/', '').toUpperCase();
+		const ext = entry.preview.split('?')[0].split('.').pop() ?? '';
+		return ext.toUpperCase().slice(0, 5) || '—';
+	}
+	// Tên hiển thị: file pending = tên file; URL cũ = phần cuối path
+	function entryName(entry: DeferEntry): string {
+		if (entry.file) return entry.file.name;
+		try {
+			return decodeURIComponent(entry.preview.split('?')[0].split('/').pop() ?? '') || entry.preview;
+		} catch {
+			return entry.preview;
+		}
 	}
 
 	function pick() {
@@ -193,8 +228,17 @@
 		deferEntries = deferEntries.filter((en) => en !== entry);
 	}
 
-	/** Chọn file (defer) — preview ngay, upload sau. target = index entry đổi thay. */
+	/** Chọn file (defer) — preview ngay, upload sau. target = index entry đổi thay.
+	 *  BẪY batch7: cấm trùng (defer) — so tên+size file pending với entry có sẵn;
+	 *  URL cũ không so được (server không trả filename) → chỉ guard pending. */
 	function handleDeferFile(file: File, target?: number) {
+		if (target === undefined) {
+			const dup = deferEntries.some((en) => en.file && en.file.name === file.name && en.file.size === file.size);
+			if (dup) {
+				client.browser?.toasts?.create({ title: tr('errDuplicate'), color: 'warning' });
+				return;
+			}
+		}
 		const preview = URL.createObjectURL(file);
 		if (target !== undefined) {
 			// Đổi entry có sẵn: revoke blob cũ nếu có, giữ existing + key
@@ -431,87 +475,77 @@
 		<span class="image-upload__label">{label}</span>
 	{/if}
 
-	<!-- MODE DEFER (grid preview — file local chờ upload + URL cũ edit mode) -->
+	<!-- MODE DEFER (row-list preview — file local chờ upload + URL cũ edit mode).
+	     Empty: icon+label+desc center, click anywhere thêm file. Có item: các row
+	     (STT, thumb+filename, size, type, avatar, remove) + nút "width 100%".
+	     Click thumb → modal chi tiết. -->
 	{#if defer}
-		<div class="image-upload__grid">
-			{#each deferEntries as entry (entry.key)}
-				<div class="image-upload__preview" class:image-upload__preview--pending={!!entry.file}>
-					<ImageEl src={entry.preview} alt={label || 'image'} width="9.5rem" height="7rem" objectFit="cover" rounded="md" />
-					<div class="image-upload__overlay" data-no-tap>
-						{#if !entry.file}
-							<!-- URL cũ: đủ actions copy/view/đổi -->
-							<button
-								type="button"
-								class="image-upload__ovbtn"
-								onclick={async () => {
-									const idx = images?.indexOf(entry.preview) ?? -1;
-									if (idx >= 0) await copyUrlAt(idx);
-								}}
-								disabled={disabled}
-								title={tr('copy')}
-								aria-label={tr('copy')}
-							>
-								<Icon icon={iconify['content-copy-outline-rounded']} size="sm" />
-							</button>
-							<button
-								type="button"
-								class="image-upload__ovbtn"
-								onclick={() => window.open(entry.preview, '_blank', 'noopener')}
-								disabled={disabled}
-								title={tr('view')}
-								aria-label={tr('view')}
-							>
-								<Icon icon={iconify['visibility-outline-rounded']} size="sm" />
-							</button>
-						{/if}
-						<button
-							type="button"
-							class="image-upload__ovbtn"
-							onclick={() => {
-								uploadTarget = deferEntries.indexOf(entry);
-								inputEl?.click();
-							}}
-							disabled={disabled}
-							title={tr('change')}
-							aria-label={tr('change')}
-						>
-							<Icon icon={iconify['image-outline-rounded']} size="sm" />
-						</button>
-						<button
-							type="button"
-							class="image-upload__ovbtn image-upload__ovbtn--avatar"
-							class:image-upload__ovbtn--active={isDeferAvatar(entry)}
-							onclick={() => setDeferAvatar(entry.key)}
-							disabled={disabled}
-							title={tr('setAvatar')}
-							aria-label={tr('setAvatar')}
-						>
-							<Icon icon={iconify['person-outline-rounded']} size="sm" />
-						</button>
-						<button
-							type="button"
-							class="image-upload__ovbtn image-upload__ovbtn--remove"
-							onclick={() => removeDeferAt(entry.key)}
-							disabled={disabled}
-							title={tr('remove')}
-							aria-label={tr('remove')}
-						>
-							<Icon icon={iconify['close-rounded']} size="sm" />
-						</button>
-					</div>
-					{#if isDeferAvatar(entry)}
-						<span class="image-upload__avatar-badge">{tr('avatar')}</span>
-					{/if}
-					{#if entry.file}
-						<span class="image-upload__pending-badge">{lang === 'vi' ? 'Chưa tải lên' : 'Pending'}</span>
-					{/if}
+		<div
+			class="image-upload__dropzone"
+			class:image-upload__dropzone--filled={deferEntries.length > 0}
+			role="button"
+			tabindex="0"
+			aria-label={deferEntries.length ? tr('add') : tr('emptyTitle')}
+			onclick={() => pickAt(undefined)}
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					pickAt(undefined);
+				}
+			}}
+		>
+			{#if deferEntries.length === 0}
+				<div class="image-upload__empty-state">
+					<Icon icon={iconify['image-outline-rounded']} size="lg" />
+					<span class="image-upload__empty-title">{tr('emptyTitle')}</span>
+					<span class="image-upload__empty-desc">{tr('emptyDesc')}</span>
 				</div>
-			{/each}
-		</div>
-		<div class="image-upload__actions">
-			<Button type="button" variant="ghost" color="primary" size="sm" disabled={disabled} onclick={() => pickAt(undefined)}>
-				+ {tr('add')}
-			</Button>
+			{:else}
+				<div class="image-upload__rows">
+					{#each deferEntries as entry, i (entry.key)}
+						<div class="image-upload__row" class:image-upload__row--pending={!!entry.file}>
+							<span class="image-upload__row-stt">{i + 1}</span>
+							<!-- thumb: click → modal chi tiết; overlay actions giữ hover -->
+							<button type="button" class="image-upload__row-thumb" onclick={(e) => { e.stopPropagation(); detailEntry = entry; detailDisplay = true; }}>
+								<img src={entry.preview} alt={entryName(entry)} loading="lazy" />
+							</button>
+							<div class="image-upload__row-meta">
+								<span class="image-upload__row-name" title={entryName(entry)}>{entryName(entry)}</span>
+								<span class="image-upload__row-sub">
+									{entry.file ? formatSize(entry.file.size) : ''}{entry.file && fileTypeName(entry) !== '—' ? ' · ' : ''}{fileTypeName(entry)}
+									{#if entry.file}<em class="image-upload__row-pending"> · {tr('notUploaded')}</em>{/if}
+								</span>
+							</div>
+							<div class="image-upload__row-actions">
+								<button
+									type="button"
+									class="image-upload__row-btn"
+									class:image-upload__row-btn--active={isDeferAvatar(entry)}
+									title={tr('setAvatar')}
+									aria-label={tr('setAvatar')}
+									onclick={(e) => { e.stopPropagation(); setDeferAvatar(entry.key); }}
+								>
+									<Icon icon={iconify['person-outline-rounded']} size="sm" />
+								</button>
+								<button
+									type="button"
+									class="image-upload__row-btn image-upload__row-btn--remove"
+									title={tr('remove')}
+									aria-label={tr('remove')}
+									onclick={(e) => { e.stopPropagation(); removeDeferAt(entry.key); }}
+								>
+									<Icon icon={iconify['close-rounded']} size="sm" />
+								</button>
+							</div>
+						</div>
+					{/each}
+					<!-- Nút "width 100%" animate khi có item (thay nút ghost nhỏ) -->
+					<button type="button" class="image-upload__addbtn" disabled={disabled || uploading} onclick={(e) => { e.stopPropagation(); pickAt(undefined); }}>
+						<Icon icon={iconify['add-rounded']} size="sm" />
+						{uploading && uploadTarget === undefined ? tr('uploading') : tr('add')}
+					</button>
+				</div>
+			{/if}
 		</div>
 		{#if copied}
 			<span class="image-upload__copied image-upload__copied--float">{tr('copied')}</span>
@@ -685,6 +719,51 @@
 		aria-hidden="true"
 		tabindex={-1}
 	/>
+
+	<!-- Modal chi tiết ảnh (click thumb) — pattern Modal.Container + bind:display -->
+	<Modal bind:display={detailDisplay} size="md" isDimissable>
+		<Modal.Container>
+			<Modal.Container.Header>{tr('detailTitle')}</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if detailEntry}
+					<img class="image-upload__detail-img" src={detailEntry.preview} alt={entryName(detailEntry)} />
+					<dl class="image-upload__detail-meta">
+						<dt>{tr('fileName')}</dt>
+						<dd>{entryName(detailEntry)}</dd>
+						<dt>{tr('sizeLabel')}</dt>
+						<dd>{detailEntry.file ? formatSize(detailEntry.file.size) : tr('notUploaded')}</dd>
+						<dt>{tr('typeLabel')}</dt>
+						<dd>{fileTypeName(detailEntry)}</dd>
+					</dl>
+				{/if}
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				{#if detailEntry?.preview && !detailEntry.preview.startsWith('blob:')}
+					<Button
+						type="button"
+						variant="ghost"
+						color="primary"
+						size="sm"
+						onclick={() => {
+							window.open(detailEntry!.preview, '_blank', 'noopener');
+						}}
+					>
+						{tr('view')}
+					</Button>
+				{/if}
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					onclick={() => {
+						detailDisplay = false;
+					}}
+				>
+					{lang === 'vi' ? 'Đóng' : 'Close'}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
 </div>
 
 <style lang="scss">
@@ -847,6 +926,212 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
+	}
+
+	/* ── DEFER row-list (batch7): dropzone click-anywhere + rows ── */
+	.image-upload__dropzone {
+		border: 1px dashed var(--default-300);
+		border-radius: 0.75rem;
+		padding: 0.5rem;
+		cursor: pointer;
+		transition: border-color 150ms ease, background 150ms ease;
+
+		&:hover,
+		&:focus-visible {
+			border-color: var(--primary-400);
+			background: var(--primary-50, rgb(0 0 0 / 0.02));
+			outline: none;
+		}
+	}
+
+	.image-upload__empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		min-height: 7rem;
+		color: var(--foreground-500);
+		text-align: center;
+		padding: 1rem;
+	}
+
+	.image-upload__empty-title {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--foreground-700, var(--foreground));
+	}
+
+	.image-upload__empty-desc {
+		font-size: 0.75rem;
+		max-width: 26rem;
+	}
+
+	.image-upload__rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		cursor: default;
+	}
+
+	.image-upload__row {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.375rem 0.5rem;
+		border: 1px solid var(--default-200);
+		border-radius: 0.5rem;
+		background: var(--background);
+
+		&--pending {
+			outline: 1.5px dashed var(--warning, #f59e0b);
+			outline-offset: -1.5px;
+		}
+	}
+
+	.image-upload__row-stt {
+		flex: none;
+		width: 1.5rem;
+		text-align: center;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--foreground-500);
+	}
+
+	.image-upload__row-thumb {
+		flex: none;
+		width: 3.25rem;
+		height: 3.25rem;
+		border: none;
+		border-radius: 0.375rem;
+		overflow: hidden;
+		padding: 0;
+		cursor: zoom-in;
+		background: var(--default-100);
+
+		img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+	}
+
+	.image-upload__row-meta {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
+	.image-upload__row-name {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--foreground);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.image-upload__row-sub {
+		font-size: 0.72rem;
+		color: var(--foreground-500);
+	}
+
+	.image-upload__row-pending {
+		font-style: normal;
+		color: var(--warning, #f59e0b);
+	}
+
+	.image-upload__row-actions {
+		display: flex;
+		gap: 0.25rem;
+		flex: none;
+	}
+
+	.image-upload__row-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		border: none;
+		border-radius: 0.375rem;
+		background: transparent;
+		color: var(--foreground-600, var(--foreground));
+		cursor: pointer;
+		padding: 0;
+
+		&:hover {
+			background: rgb(0 0 0 / 0.06);
+		}
+
+		&--active {
+			background: var(--primary);
+			color: #fff;
+		}
+
+		&--remove:hover {
+			background: var(--error);
+			color: #fff;
+		}
+	}
+
+	/* Nút "Thêm ảnh" width 100% khi có item — animate */
+	.image-upload__addbtn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		width: 100%;
+		padding: 0.5rem;
+		border: 1px dashed var(--default-300);
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--primary-600, var(--primary));
+		font-size: 0.8rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background 150ms ease, border-color 150ms ease;
+
+		&:hover:not(:disabled) {
+			background: var(--primary-50, rgb(0 0 0 / 0.02));
+			border-color: var(--primary-400);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	/* Modal chi tiết ảnh */
+	.image-upload__detail-img {
+		width: 100%;
+		max-height: 24rem;
+		object-fit: contain;
+		border-radius: 0.5rem;
+		background: var(--default-100);
+	}
+
+	.image-upload__detail-meta {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.25rem 1rem;
+		margin-top: 0.75rem;
+		font-size: 0.8rem;
+
+		dt {
+			font-weight: 600;
+			color: var(--foreground-500);
+		}
+
+		dd {
+			margin: 0;
+			color: var(--foreground);
+			overflow-wrap: anywhere;
+		}
 	}
 
 	.image-upload__ovbtn--remove {

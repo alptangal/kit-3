@@ -851,8 +851,6 @@
 		}
 	}
 
-	/* Mobile: hiện nút mở sidebar trong inset header. Desktop ẩn (trigger-row
-	   trong sidebar header đã có — B3 brand + trigger cùng row). */
 	/* ── Yêu cầu 10: brand-row chiếm toàn bộ width còn lại của sidebar header
 	   sau trigger-row (expanded 1-row: TeamSwitcher giãn full, trigger sát mép
 	   phải — như demo /ui/sidebar). Collapsed/peek: _styles.scss đã có rule

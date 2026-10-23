@@ -76,6 +76,7 @@
 		selectAllMode,
 		allFilteredSelected: allFilteredSelectedProp = $bindable(false),
 		onSelectAllFiltered,
+		selectAllBusy = false,
 		rowActions,
 		actionsLabel,
 		actionsContent,
@@ -1324,6 +1325,9 @@
 		},
 		get loadingMore() {
 			return loadingMore;
+		},
+		get selectAllBusy() {
+			return selectAllBusy;
 		},
 		get hasMore() {
 			return hasMoreLazy;

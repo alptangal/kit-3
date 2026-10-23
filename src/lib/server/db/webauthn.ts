@@ -174,9 +174,10 @@ export class WebAuthnService {
 					[userDoc.firstname, userDoc.lastname].filter(Boolean).join(' ') || userHandle,
 				timeout: 60_000,
 				attestationType: 'none',
-				// Chỉ ES256: Safari iOS 15 hỗ trợ chắc chắn; EdDSA (-8) đứng đầu có thể
-				// chọn alg authenticator cũ không hiểu → create() fail
-				supportedAlgorithmIDs: [-257],
+				// ES256 (-7) + RS256 (-257): Safari iOS 15 platform authenticator chỉ
+				// hỗ trợ ES256; verifyRegistrationResponse check alg ∈ list này nên
+				// thiếu -7 → passkey Safari 15.1 fail ở bước verify
+				supportedAlgorithmIDs: [-7, -257],
 				excludeCredentials
 			});
 		} catch (e) {

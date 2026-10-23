@@ -158,6 +158,18 @@
 			vi: 'Chỉ trên thiết bị này',
 			en: 'This device only'
 		},
+		avatarChange: {
+			vi: 'Đổi ảnh đại diện',
+			en: 'Change avatar'
+		},
+		avatarUpdated: {
+			vi: 'Cập nhật ảnh đại diện thành công',
+			en: 'Avatar updated'
+		},
+		avatarUpdateFailed: {
+			vi: 'Cập nhật ảnh đại diện thất bại',
+			en: 'Failed to update avatar'
+		},
 		passkeyLoadFailed: {
 			vi: 'Không tải được danh sách thiết bị',
 			en: 'Failed to load devices'
@@ -625,6 +637,46 @@
 	let revokeTarget = $state<ApiKeyRow | undefined>(undefined);
 	let revokeDialogOpen = $state(false);
 
+	// ── Avatar self-service ──
+	let avatarUrl = $state(data.user.avatarUrl ?? '');
+	let avatarBusy = $state(false);
+	let avatarInput: HTMLInputElement | undefined = $state();
+
+	function pickAvatar() {
+		if (avatarBusy) return;
+		avatarInput?.click();
+	}
+
+	async function onAvatarChosen(e: Event) {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		(e.target as HTMLInputElement).value = '';
+		if (!file || avatarBusy) return;
+		avatarBusy = true;
+		try {
+			const fd = new FormData();
+			fd.append('file', file);
+			const up = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+			const upRes = (await up.json()) as {
+				ok?: boolean;
+				data?: { url?: string };
+				message?: string;
+			};
+			const upUrl = upRes.data?.url;
+			if (!up.ok || !upUrl) throw new Error(upRes.message ?? 'Upload failed');
+			const res = await encryption.fetchSecure('/api/agent/profile/avatar', {
+				method: 'post',
+				body: { avatarUrl: upUrl }
+			});
+			if (!res.ok) throw new Error(res.message?.[lang] ?? res.message?.en ?? 'Failed');
+			avatarUrl = upUrl;
+			toast(msg('avatarUpdated'), undefined, 'success');
+		} catch (err) {
+			toast(msg('avatarUpdateFailed'), err instanceof Error ? err.message : String(err), 'error');
+		} finally {
+			avatarBusy = false;
+		}
+	}
+
 	async function loadApiKeys() {
 		apiKeysLoading = true;
 		try {
@@ -719,9 +771,31 @@
 
 <section class="profile-page">
 	<header class="profile-header">
-		<div class="profile-avatar" aria-hidden="true">
-			{data.user.username.slice(0, 2).toUpperCase()}
-		</div>
+		<button
+			type="button"
+			class="profile-avatar"
+			aria-label={msg('avatarChange')}
+			title={msg('avatarChange')}
+			onclick={pickAvatar}
+			disabled={avatarBusy}
+			data-test="profile-avatar-btn"
+		>
+			{#if avatarUrl}
+				<img class="profile-avatar-img" src={avatarUrl} alt="" />
+			{:else}
+				{data.user.username.slice(0, 2).toUpperCase()}
+			{/if}
+			<span class="profile-avatar-edit" class:busy={avatarBusy}>
+				<Icon class="profile-avatar-edit-icon" icon="lucide:pencil" size="sm" />
+			</span>
+		</button>
+		<input
+			type="file"
+			accept="image/jpeg,image/png,image/webp,image/gif"
+			bind:this={avatarInput}
+			onchange={onAvatarChosen}
+			hidden
+		/>
 		<div class="profile-header-text">
 			<h1 class="profile-title">{pageContents.title[lang]}</h1>
 			<p class="profile-username">{data.user.username}</p>
@@ -905,6 +979,7 @@
 				loading={apiKeysCreating}
 				disabled={apiKeysCreating}
 				onclick={() => {
+					newKeyName = '';
 					showCreateModal = true;
 				}}
 			>
@@ -1118,9 +1193,21 @@
 			<AlertDialog.Title>{msg('apiKeysCreate')}</AlertDialog.Title>
 			<AlertDialog.Description>{msg('apiKeysNameLabel')}</AlertDialog.Description>
 		</AlertDialog.Header>
+		<div class="keys-create-field">
+			<Input
+				type="text"
+				bind:value={newKeyName}
+				placeholder={msg('apiKeysNamePlaceholder')}
+				data-test="profile-apikey-name"
+			/>
+		</div>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{msg('apiKeysCancel')}</AlertDialog.Cancel>
-			<AlertDialog.Action color="primary" onclick={submitCreateKey}>
+			<AlertDialog.Action
+				color="primary"
+				disabled={!newKeyName.trim() || apiKeysCreating}
+				onselect={submitCreateKey}
+			>
 				{apiKeysCreating ? msg('apiKeysCreating') : msg('apiKeysCreate')}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
@@ -1192,6 +1279,7 @@
 	}
 
 	.profile-avatar {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1203,6 +1291,38 @@
 		font-weight: 700;
 		font-size: 1.2rem;
 		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		cursor: pointer;
+		overflow: visible;
+	}
+
+	.profile-avatar-img {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		object-fit: cover;
+	}
+
+	.profile-avatar-edit {
+		position: absolute;
+		right: -2px;
+		bottom: -2px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.15rem;
+		height: 1.15rem;
+		border-radius: 999px;
+		background: var(--primary);
+		color: hsl(0 0% 100%);
+		box-shadow: 0 0 0 2px var(--background);
+	}
+
+	.profile-avatar-edit.busy {
+		opacity: 0.5;
 	}
 
 	.profile-title {
@@ -1557,6 +1677,10 @@
 
 	.passkey-item--revoked {
 		opacity: 0.55;
+	}
+
+	.keys-create-field {
+		padding: 0 1.25rem 0.75rem;
 	}
 
 	.keys-reveal {

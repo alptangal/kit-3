@@ -10,6 +10,7 @@ import { cbData } from '$modules/couchbase/clients';
 import { QrPaymentService } from '$lib/server/db/qr-payments';
 
 const cbRoles = cbData('name_roles');
+const cbUsers = cbData('users');
 
 declare global {
 	// eslint-disable-next-line no-var
@@ -67,9 +68,14 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 		// keyof theo roleName, vd 'owner'); tra fail → fallback roleId để không
 		// khoá user vì lỗi tạm thời (PermissionChecker sẽ trả false nếu không khớp).
 		let roleName: string | undefined;
+		let avatarUrl: string | undefined;
 		try {
-			const res = await cbRoles.document.get({ documentKey: payload.roleId });
-			if (res.ok && res.data) roleName = (res.data as { name?: string }).name ?? undefined;
+			const [roleRes, userRes] = await Promise.all([
+				cbRoles.document.get({ documentKey: payload.roleId }),
+				cbUsers.document.get({ documentKey: payload.sub })
+			]);
+			if (roleRes.ok && roleRes.data) roleName = (roleRes.data as { name?: string }).name ?? undefined;
+			if (userRes.ok && userRes.data) avatarUrl = (userRes.data as { avatarUrl?: string }).avatarUrl ?? undefined;
 		} catch {
 			roleName = undefined;
 		}
@@ -88,7 +94,8 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 			role: payload.roleId.includes('owner') ? 'admin' : payload.roleId.includes('manager') ? 'staff' : 'customer',
 			userId: payload.sub,
 			roleId: payload.roleId,
-			roleName: roleName ?? payload.roleId
+			roleName: roleName ?? payload.roleId,
+			avatarUrl
 		};
 
 		return user;

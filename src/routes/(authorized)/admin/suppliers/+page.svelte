@@ -52,6 +52,10 @@
 		changes: { field: string; before: string | null; after: string | null }[];
 	}
 
+	// 6 field social dạng TAG multi-value (mảng string)
+	type SocialFieldKey = 'zalo' | 'telegram' | 'discord' | 'facebook' | 'instagram' | 'website';
+	const SOCIAL_FIELDS: SocialFieldKey[] = ['zalo', 'telegram', 'discord', 'facebook', 'instagram', 'website'];
+
 	interface PurchaseOrderRow {
 		_id?: string;
 		poCode?: string;
@@ -194,12 +198,27 @@
 			facebook: { vi: 'Facebook', en: 'Facebook' },
 			facebookPlaceholder: { vi: 'Link facebook.com/...', en: 'facebook.com/... link' },
 			facebookInvalid: { vi: 'Facebook phải là link facebook.com hoặc fb.com', en: 'Facebook must be a facebook.com or fb.com link' },
+			instagram: { vi: 'Instagram', en: 'Instagram' },
+			instagramPlaceholder: { vi: '@username hoặc link instagram.com/...', en: '@username or instagram.com/... link' },
+			instagramInvalid: { vi: 'Instagram phải là @username hoặc link instagram.com', en: 'Instagram must be @username or instagram.com link' },
+			website: { vi: 'Website', en: 'Website' },
+			websitePlaceholder: { vi: 'Link trang web (https://...)', en: 'Website link (https://...)' },
+			websiteInvalid: { vi: 'Website phải là link http(s) hợp lệ', en: 'Website must be a valid http(s) link' },
+			socialAdd: { vi: 'Thêm giá trị…', en: 'Add value…' },
+			socialDuplicate: { vi: 'Giá trị đã tồn tại', en: 'Value already exists' },
+			socialInvalidTag: { vi: 'Giá trị không hợp lệ', en: 'Invalid value' },
+			socialOpen: { vi: 'Mở link', en: 'Open link' },
+			socialRemove: { vi: 'Xoá', en: 'Remove' },
+			socialEdit: { vi: 'Sửa', en: 'Edit' },
 			status: { vi: 'Trạng thái', en: 'Status' },
 			statusActive: { vi: 'Đang hoạt động', en: 'Active' },
 			statusInactive: { vi: 'Ngừng hoạt động', en: 'Inactive' },
 			submit: { vi: 'Tạo', en: 'Create' },
 			save: { vi: 'Lưu thay đổi', en: 'Save changes' },
 			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' }
+		},
+		history: {
+			viewHistory: { vi: 'Lịch sử', en: 'History' }
 		},
 		historyModal: {
 			title: { vi: 'Lịch sử thay đổi', en: 'Change history' },
@@ -234,6 +253,8 @@
 				facebook: { vi: 'Facebook', en: 'Facebook' },
 				telegram: { vi: 'Telegram', en: 'Telegram' },
 				discord: { vi: 'Discord', en: 'Discord' },
+				instagram: { vi: 'Instagram', en: 'Instagram' },
+				website: { vi: 'Website', en: 'Website' },
 				avatarUrl: { vi: 'Ảnh đại diện', en: 'Avatar' },
 				images: { vi: 'Hình ảnh', en: 'Images' },
 				note: { vi: 'Ghi chú', en: 'Note' },
@@ -315,6 +336,8 @@
 			invalidTelegram: { vi: 'Telegram phải là @username hoặc link t.me', en: 'Telegram must be @username or t.me link' },
 			invalidDiscord: { vi: 'Discord chỉ nhận tên người dùng (2-32 ký tự)', en: 'Discord accepts username only (2-32 chars)' },
 			invalidFacebook: { vi: 'Facebook phải là link facebook.com hoặc fb.com', en: 'Facebook must be a facebook.com or fb.com link' },
+			invalidInstagram: { vi: 'Instagram phải là @username hoặc link instagram.com', en: 'Instagram must be an @username or instagram.com link' },
+			invalidWebsite: { vi: 'Website phải là link http(s) hợp lệ', en: 'Website must be a valid http(s) link' },
 			requireCode: { vi: 'Vui lòng nhập mã PO', en: 'Please enter a PO code' },
 			requireSupplier: { vi: 'Vui lòng chọn nhà cung cấp', en: 'Please select a supplier' },
 			requireBranch: { vi: 'Vui lòng chọn chi nhánh', en: 'Please select a branch' },
@@ -499,10 +522,12 @@
 		phones: string[];
 		emails: string[];
 		addresses: SupplierAddressEntry[];
-		zalo: string;
-		telegram: string;
-		discord: string;
-		facebook: string;
+		zalo: string[];
+		telegram: string[];
+		discord: string[];
+		facebook: string[];
+		instagram: string[];
+		website: string[];
 		images: string[];
 		avatarUrl: string;
 		note: string;
@@ -514,10 +539,12 @@
 		phones: [],
 		emails: [],
 		addresses: [],
-		zalo: '',
-		telegram: '',
-		discord: '',
-		facebook: '',
+		zalo: [],
+		telegram: [],
+		discord: [],
+		facebook: [],
+		instagram: [],
+		website: [],
 		images: [],
 		avatarUrl: '',
 		note: '',
@@ -578,6 +605,13 @@
 		historyEntries = [];
 		historyDisplay = true;
 		void loadHistory();
+	}
+
+	// Footer form modal: nhớ row đang edit để mở history không cần tham số.
+	let historySupplierRow = $state<SupplierRow | undefined>(undefined);
+	function openHistoryFromFooter() {
+		if (!historySupplierRow) return;
+		openHistoryModal(historySupplierRow);
 	}
 
 	async function loadHistory(opts?: { keepOnFail?: boolean }) {
@@ -649,13 +683,15 @@
 	// select-all 'filtered': DataTable đọc flag này (allPageSelected) — true khi
 	// user đã chọn select-all toàn bộ kết quả filter (qua fetch ids).
 	let allFilteredSelected = $state(false);
+	let selectAllBusy = $state(false);
 	let bulkDeleteDisplay = $state(false);
 	let bulkDeleting = $state(false);
 
 	// Select-all đa trang: fetch TẤT CẢ suppliers khớp filter hiện tại (page 1,
 	// pageSize = total) rồi gán ids — mirror body loadSuppliers.
 	async function selectAllFilteredSuppliers() {
-		if (!encryptionKeys) return;
+		if (!encryptionKeys || selectAllBusy) return;
+		selectAllBusy = true;
 		try {
 			const response = await encryption.fetchSecure(
 				'/api/admin/suppliers/list',
@@ -680,6 +716,8 @@
 			allFilteredSelected = selectedIds.length > 0;
 		} catch (err) {
 			if (import.meta.env.DEV) console.error('[admin/suppliers] select-all filtered failed:', err);
+		} finally {
+			selectAllBusy = false;
 		}
 	}
 
@@ -1141,10 +1179,12 @@
 			phones: [] as string[],
 			emails: [] as string[],
 			addresses: [] as SupplierAddressEntry[],
-			zalo: '',
-			telegram: '',
-			discord: '',
-			facebook: '',
+			zalo: [] as string[],
+			telegram: [] as string[],
+			discord: [] as string[],
+			facebook: [] as string[],
+			instagram: [] as string[],
+			website: [] as string[],
 			images: [] as string[],
 			avatarUrl: '',
 			note: '',
@@ -1165,12 +1205,23 @@
 					// BẪY: mảng từ draft JSON có thể chứa null (Input unmount emit
 					// undefined qua bind → JSON.stringify biến thành null) → x.trim() nổ
 					const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+					const socialArr = (v: unknown) => {
+						// Draft cũ (batch ≤6): social là string đơn → bọc thành mảng 1 phần tử
+						if (typeof v === 'string' && v.trim()) return [v.trim()];
+						return arr(v);
+					};
 					supplierForm = {
 						...emptySupplierForm(),
 						...saved,
 						phones: arr(saved.phones),
 						emails: arr(saved.emails),
 						addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
+						zalo: socialArr(saved.zalo),
+						telegram: socialArr(saved.telegram),
+						discord: socialArr(saved.discord),
+						facebook: socialArr(saved.facebook),
+						instagram: socialArr(saved.instagram),
+						website: socialArr(saved.website),
 						images: arr(saved.images),
 						avatarUrl: saved.avatarUrl ?? '',
 						note: saved.note ?? '',
@@ -1218,6 +1269,7 @@
 		const r = row as unknown as SupplierRow;
 		supplierEditMode = 'edit';
 		supplierEditId = r._id ?? null;
+		historySupplierRow = r;
 		const addr0 = r.addresses?.[0];
 		supplierForm = {
 			name: r.name ?? '',
@@ -1227,10 +1279,13 @@
 			phones: [...(r.phones ?? [])],
 			emails: [...(r.emails ?? [])],
 			addresses: (r.addresses ?? []).map((a) => ({ ...a })),
-			zalo: (r as Record<string, unknown>).zalo as string | undefined ?? '',
-			telegram: (r as Record<string, unknown>).telegram as string | undefined ?? '',
-			discord: (r as Record<string, unknown>).discord as string | undefined ?? '',
-			facebook: (r as Record<string, unknown>).facebook as string | undefined ?? '',
+			// Social: doc cũ lưu string đơn → bọc mảng; doc mới là mảng
+			zalo: toSocialArray((r as Record<string, unknown>).zalo),
+			telegram: toSocialArray((r as Record<string, unknown>).telegram),
+			discord: toSocialArray((r as Record<string, unknown>).discord),
+			facebook: toSocialArray((r as Record<string, unknown>).facebook),
+			instagram: toSocialArray((r as Record<string, unknown>).instagram),
+			website: toSocialArray((r as Record<string, unknown>).website),
 			images: [...(r.images ?? [])],
 			avatarUrl: (r as Record<string, unknown>).avatarUrl as string | undefined ?? r.images?.[0] ?? '',
 			note: (r as Record<string, unknown>).note as string | undefined ?? '',
@@ -1258,6 +1313,104 @@
 	const TELEGRAM_RE = /^@[A-Za-z0-9_]{4,32}$|^https?:\/\/(t\.me\/\S+)$/i;
 	const DISCORD_RE = /^[A-Za-z0-9._]{2,32}$/;
 	const FACEBOOK_RE = /^https?:\/\/(www\.)?(facebook\.com|fb\.com)\/\S+$/i;
+	const INSTAGRAM_RE = /^@[A-Za-z0-9._]{1,30}$|^https?:\/\/(www\.)?instagram\.com\/\S+$/i;
+	const WEBSITE_RE = /^https?:\/\/\S+\.\S+$/i;
+
+	// Social giá trị từ server: doc cũ = string đơn, doc mới = mảng → chuẩn hoá
+	// thành mảng string sạch (dùng cho prefill edit + validate + payload).
+	function toSocialArray(v: unknown): string[] {
+		if (typeof v === 'string') {
+			const s = v.trim();
+			return s ? [s] : [];
+		}
+		if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string' && !!x.trim());
+		return [];
+	}
+
+	// Mỗi social entry hợp lệ? (validate từng tag khi add + khi submit)
+	function socialEntryInvalid(field: SocialFieldKey, value: string): boolean {
+		const s = value.trim();
+		if (!s) return true;
+		switch (field) {
+			case 'zalo':
+				return !ZALO_RE.test(s);
+			case 'telegram':
+				return !TELEGRAM_RE.test(s);
+			case 'discord':
+				return !DISCORD_RE.test(s);
+			case 'facebook':
+				return !FACEBOOK_RE.test(s);
+			case 'instagram':
+				return !INSTAGRAM_RE.test(s);
+			case 'website':
+				return !WEBSITE_RE.test(s);
+		}
+	}
+
+	// ── Social tags: add/edit/remove (multi-value, cấm trùng) ──
+	const socialDraftInputs = $state<Record<SocialFieldKey, string>>({
+		zalo: '', telegram: '', discord: '', facebook: '', instagram: '', website: ''
+	});
+	const socialTagErrors = $state<Record<SocialFieldKey, 'socialDuplicate' | 'socialInvalidTag' | null>>({
+		zalo: null, telegram: null, discord: null, facebook: null, instagram: null, website: null
+	});
+	let editingSocial = $state<{ field: SocialFieldKey; index: number; value: string } | null>(null);
+
+	function addSocialTag(field: SocialFieldKey) {
+		const value = socialDraftInputs[field].trim();
+		if (!value) return;
+		if (socialEntryInvalid(field, value)) {
+			socialTagErrors[field] = 'socialInvalidTag';
+			return;
+		}
+		// Cấm trùng (case-insensitive) trong cùng field
+		if (supplierForm[field].some((v) => v.trim().toLowerCase() === value.toLowerCase())) {
+			socialTagErrors[field] = 'socialDuplicate';
+			return;
+		}
+		socialTagErrors[field] = null;
+		supplierForm[field] = [...supplierForm[field], value];
+		socialDraftInputs[field] = '';
+	}
+
+	function removeSocialTag(field: SocialFieldKey, index: number) {
+		supplierForm[field] = supplierForm[field].filter((_, i) => i !== index);
+		if (editingSocial?.field === field && editingSocial.index === index) editingSocial = null;
+	}
+
+	function startSocialEdit(field: SocialFieldKey, index: number) {
+		editingSocial = { field, index, value: supplierForm[field][index] };
+	}
+
+	// Commit edit inline: giá trị rỗng → xoá tag; trùng/hợp lệ check như add.
+	// BẪY: onblur + Enter kích đôi (Enter → commit → editingSocial=null → blur
+	// không còn target) — commit kiểm tra editingSocial trước khi chạy.
+	function commitSocialEdit() {
+		const edit = editingSocial;
+		if (!edit) return;
+		editingSocial = null;
+		const value = edit.value.trim();
+		const others = supplierForm[edit.field].filter((_, i) => i !== edit.index);
+		if (!value) {
+			removeSocialTag(edit.field, edit.index);
+			return;
+		}
+		if (socialEntryInvalid(edit.field, value)) return; // giữ giá trị cũ
+		if (others.some((v) => v.trim().toLowerCase() === value.toLowerCase())) return; // trùng → giữ cũ
+		const next = [...supplierForm[edit.field]];
+		next[edit.index] = value;
+		supplierForm[edit.field] = next;
+	}
+
+	// Tag link → href mở tab mới. @username (telegram/instagram) đổi thành URL;
+	// zalo SĐT không có link → chỉ link khi là http(s).
+	function socialTagHref(field: SocialFieldKey, value: string): string {
+		const s = value.trim();
+		if (/^https?:\/\//i.test(s)) return s;
+		if (field === 'telegram' && s.startsWith('@')) return `https://t.me/${s.slice(1)}`;
+		if (field === 'instagram' && s.startsWith('@')) return `https://instagram.com/${s.slice(1)}`;
+		return '';
+	}
 
 	function validateSupplierForm(): string | undefined {
 		if (!str(supplierForm.name).trim()) {
@@ -1266,10 +1419,11 @@
 		const t = supplierForm;
 		if (t.phones.some((p) => str(p).trim() && !PHONE_RE.test(str(p).trim()))) return pageContents.form.invalidPhone[lang];
 		if (t.emails.some((e) => str(e).trim() && !EMAIL_RE.test(str(e).trim()))) return pageContents.form.invalidEmail[lang];
-		if (str(t.zalo).trim() && !ZALO_RE.test(str(t.zalo).trim())) return pageContents.form.invalidZalo[lang];
-		if (str(t.telegram).trim() && !TELEGRAM_RE.test(str(t.telegram).trim())) return pageContents.form.invalidTelegram[lang];
-		if (str(t.discord).trim() && !DISCORD_RE.test(str(t.discord).trim())) return pageContents.form.invalidDiscord[lang];
-		if (str(t.facebook).trim() && !FACEBOOK_RE.test(str(t.facebook).trim())) return pageContents.form.invalidFacebook[lang];
+		for (const f of SOCIAL_FIELDS) {
+			if (t[f].some((v) => socialEntryInvalid(f, v))) {
+				return pageContents.form[`invalid${f[0].toUpperCase()}${f.slice(1)}` as keyof typeof pageContents.form][lang];
+			}
+		}
 		return undefined;
 	}
 
@@ -1280,10 +1434,12 @@
 		requireName: '[data-field="supplier-name"]',
 		invalidPhone: '[data-field="supplier-phones"]',
 		invalidEmail: '[data-field="supplier-emails"]',
-		invalidZalo: '[data-field="supplier-zalo"]',
-		invalidTelegram: '[data-field="supplier-telegram"]',
-		invalidDiscord: '[data-field="supplier-discord"]',
-		invalidFacebook: '[data-field="supplier-facebook"]'
+		invalidZalo: '[data-field="social-zalo"]',
+		invalidTelegram: '[data-field="social-telegram"]',
+		invalidDiscord: '[data-field="social-discord"]',
+		invalidFacebook: '[data-field="social-facebook"]',
+		invalidInstagram: '[data-field="social-instagram"]',
+		invalidWebsite: '[data-field="social-website"]'
 	} as const;
 
 	// Scroll tới field invalid đầu tiên (trong .modal-body-root overflow container)
@@ -1363,10 +1519,12 @@
 			phones: t.phones.map((p) => str(p).trim()).filter(Boolean),
 			emails: t.emails.map((e) => str(e).trim()).filter(Boolean),
 			addresses: entries.filter((a) => a.address),
-			zalo: str(t.zalo).trim() || undefined,
-			telegram: str(t.telegram).trim() || undefined,
-			discord: str(t.discord).trim() || undefined,
-			facebook: str(t.facebook).trim() || undefined,
+			zalo: t.zalo.map((v) => v.trim()).filter(Boolean).length ? t.zalo.map((v) => v.trim()).filter(Boolean) : undefined,
+			telegram: t.telegram.map((v) => v.trim()).filter(Boolean).length ? t.telegram.map((v) => v.trim()).filter(Boolean) : undefined,
+			discord: t.discord.map((v) => v.trim()).filter(Boolean).length ? t.discord.map((v) => v.trim()).filter(Boolean) : undefined,
+			facebook: t.facebook.map((v) => v.trim()).filter(Boolean).length ? t.facebook.map((v) => v.trim()).filter(Boolean) : undefined,
+			instagram: t.instagram.map((v) => v.trim()).filter(Boolean).length ? t.instagram.map((v) => v.trim()).filter(Boolean) : undefined,
+			website: t.website.map((v) => v.trim()).filter(Boolean).length ? t.website.map((v) => v.trim()).filter(Boolean) : undefined,
 			images: images.length > 0 ? images : undefined,
 			avatarUrl: avatar || undefined,
 			note: str(t.note).trim() || undefined,
@@ -1640,6 +1798,8 @@
 		void supplierForm.telegram;
 		void supplierForm.discord;
 		void supplierForm.facebook;
+		void supplierForm.instagram;
+		void supplierForm.website;
 		void supplierForm.images;
 		void supplierForm.avatarUrl;
 		void supplierForm.note;
@@ -1713,7 +1873,7 @@
 					bind:sortDirection={sortDirection}
 					onSortChange={onSupplierSortChange}
 					resizable={{ enabled: true, fit: true }}
-					loading={suppliersLoading && !suppliersLoadedOnce || searching}
+					loading={suppliersLoading || searching}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptySuppliers[lang]}
 					loadingLabel={pageContents.states.loading[lang]}
@@ -1735,6 +1895,7 @@
 					getRowId={(row) => String((row as unknown as SupplierRow)._id ?? '')}
 					selection={selectedIds}
 					selectAllMode="filtered"
+					selectAllBusy={selectAllBusy}
 					bind:allFilteredSelected={allFilteredSelected}
 					onSelectAllFiltered={selectAllFilteredSuppliers}
 					onSelectionChange={(ids) => (selectedIds = ids)}
@@ -1916,20 +2077,9 @@
 					{#snippet actionsContent(row)}
 						{@const supplier = row as unknown as SupplierRow}
 						<div class="row-actions">
-							<!-- update/edit = primary -->
+							<!-- update/edit = primary; history đã dời vào footer form modal -->
 							<Button color="primary" variant="ghost" size="sm" onClick={() => openSupplierEditModal(row)}>
 								{pageContents.actions.edit[lang]}
-							</Button>
-							<!-- history = secondary (timeline + restore từng entry) -->
-							<Button
-								color="secondary"
-								variant="ghost"
-								size="sm"
-								onClick={() => openHistoryModal(row)}
-								aria-label={pageContents.historyModal.viewHistory[lang]}
-								data-test="suppliers-history-btn"
-							>
-								{pageContents.historyModal.viewHistory[lang]}
 							</Button>
 						</div>
 					{/snippet}
@@ -2112,8 +2262,10 @@
 		size="lg"
 		isDimissable
 		onCloseAttempt={() => closeGuard.attemptClose()}
+		// Mobile (batch7): full-size modal — class làm hook CSS scoped bên dưới
+		class="supplier-modal-root"
 	>
-		<Modal.Container>
+		<Modal.Container class="supplier-modal-container">
 			<Modal.Container.Header>
 				{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
 			</Modal.Container.Header>
@@ -2264,54 +2416,87 @@
 							}}
 						>+ {pageContents.supplierModal.addAddress[lang]}</button>
 					</div>
-					<!-- ── Social block: Input component (yêu cầu 1e) ── -->
+					<!-- ── Social block: 6 field dạng TAG multi-value (yêu cầu batch7:
+					     enter tạo mới, icon open-tab + remove, click text edit, cấm trùng) ── -->
 					<div class="items-block social-block">
 						<span class="items-block__label">{pageContents.supplierModal.social[lang]}</span>
 						<div class="form-grid-2">
-							<div data-field="supplier-zalo">
-							<TextField name="supplier-zalo">
-								<Label>{pageContents.supplierModal.zalo[lang]}</Label>
-								<Input
-									type="text"
-									bind:value={supplierForm.zalo}
-									placeholder={pageContents.supplierModal.zaloPlaceholder[lang]}
-									disabled={supplierSubmitting}
-								/>
-							</TextField>
-							</div>
-							<div data-field="supplier-telegram">
-							<TextField name="supplier-telegram">
-								<Label>{pageContents.supplierModal.telegram[lang]}</Label>
-								<Input
-									type="text"
-									bind:value={supplierForm.telegram}
-									placeholder={pageContents.supplierModal.telegramPlaceholder[lang]}
-									disabled={supplierSubmitting}
-								/>
-							</TextField>
-							</div>
-							<div data-field="supplier-discord">
-							<TextField name="supplier-discord">
-								<Label>{pageContents.supplierModal.discord[lang]}</Label>
-								<Input
-									type="text"
-									bind:value={supplierForm.discord}
-									placeholder={pageContents.supplierModal.discordPlaceholder[lang]}
-									disabled={supplierSubmitting}
-								/>
-							</TextField>
-							</div>
-							<div data-field="supplier-facebook">
-							<TextField name="supplier-facebook">
-								<Label>{pageContents.supplierModal.facebook[lang]}</Label>
-								<Input
-									type="text"
-									bind:value={supplierForm.facebook}
-									placeholder={pageContents.supplierModal.facebookPlaceholder[lang]}
-									disabled={supplierSubmitting}
-								/>
-							</TextField>
-							</div>
+							{#each SOCIAL_FIELDS as sf (sf)}
+								<div class="social-tag-block" data-field="social-{sf}">
+									<span class="social-tag-block__label">{pageContents.supplierModal[sf][lang]}</span>
+									<div class="social-tags">
+										{#each supplierForm[sf] as tag, ti (ti)}
+											{@const tagInvalid = socialEntryInvalid(sf, tag)}
+											{@const isLink = !!socialTagHref(sf, tag)}
+											<span
+												class="social-tag"
+												class:social-tag--invalid={tagInvalid}
+												class:social-tag--link={isLink}
+											>
+												{#if isLink}
+													<button
+														type="button"
+														class="social-tag__open"
+														title={pageContents.supplierModal.socialOpen[lang]}
+														aria-label={pageContents.supplierModal.socialOpen[lang]}
+														onclick={() => {
+															const href = socialTagHref(sf, tag);
+															if (href) window.open(href, '_blank', 'noopener');
+														}}
+													>
+														<Icon icon={iconify['open-in-new-rounded']} size="sm" />
+													</button>
+												{/if}
+												<!-- click text → edit inline (chuyển thành input) -->
+												{#if editingSocial?.field === sf && editingSocial.index === ti}
+													<input
+														class="social-tag__edit"
+														type="text"
+														bind:value={editingSocial.value}
+														onkeydown={(e) => {
+															if (e.key === 'Enter') commitSocialEdit();
+															else if (e.key === 'Escape') editingSocial = null;
+														}}
+														onblur={commitSocialEdit}
+													/>
+												{:else}
+													<button
+														type="button"
+														class="social-tag__text"
+														title={pageContents.supplierModal.socialEdit[lang]}
+														onclick={() => startSocialEdit(sf, ti)}
+													>{tag}</button>
+												{/if}
+												<button
+													type="button"
+													class="social-tag__remove"
+													title={pageContents.supplierModal.socialRemove[lang]}
+													aria-label={pageContents.supplierModal.socialRemove[lang]}
+													onclick={() => removeSocialTag(sf, ti)}
+												>
+													<Icon icon={iconify['close-rounded']} size="sm" />
+												</button>
+											</span>
+										{/each}
+										<input
+											class="social-tags__input"
+											type="text"
+											placeholder={pageContents.supplierModal.socialAdd[lang]}
+											bind:value={socialDraftInputs[sf]}
+											onkeydown={(e) => {
+												if (e.key === 'Enter') {
+													e.preventDefault();
+													addSocialTag(sf);
+												}
+											}}
+											disabled={supplierSubmitting}
+										/>
+									</div>
+									{#if socialTagErrors[sf]}
+										<span class="social-tag-error">{pageContents.supplierModal[socialTagErrors[sf]!][lang]}</span>
+									{/if}
+								</div>
+							{/each}
 						</div>
 					</div>
 					<!-- ── Note long text (yêu cầu 1i) ── -->
@@ -2342,6 +2527,20 @@
 				</div>
 			</Modal.Container.Body>
 			<Modal.Container.Footer>
+				<!-- History chỉ ở edit mode — nhóm riêng cách Save/Cancel khoảng trống -->
+				{#if supplierEditMode === 'edit'}
+					<Button
+						color="default"
+						variant="ghost"
+						size="sm"
+						disabled={supplierSubmitting}
+						onclick={openHistoryFromFooter}
+						data-test="suppliers-history-btn"
+					>
+						{pageContents.history.viewHistory[lang]}
+					</Button>
+				{/if}
+				<span class="supplier-footer-spacer"></span>
 				<!-- create/save = success -->
 				<Button color="success" onClick={submitSupplier} loading={supplierSubmitting} disabled={supplierSubmitting}>
 					{supplierEditMode === 'edit' ? pageContents.supplierModal.save[lang] : pageContents.supplierModal.submit[lang]}
@@ -2706,20 +2905,20 @@
 			padding: 0.75rem;
 		}
 
-		// Scroll → co page padding + gap tăng không gian row (yêu cầu 1 sticky
-		// tab-strip: bỏ padding khi cuộn; dừng cuộn trả lại — transition tự đảo).
-		// Batch6: co THÊM cả ngang — padding 0 toàn phần khi cuộn (yêu cầu 3).
+		// Scroll → co page padding BLOCK + gap tăng không gian row (yêu cầu 1 sticky
+		// tab-strip: dừng cuộn trả lại — transition tự đảo). Batch7: GIỮ padding
+		// inline (ngang) — chỉ co block (dọc).
 		&.is-scrolled {
 			gap: 0.375rem;
-			padding: 0.5rem 0;
+			padding-block: 0.5rem;
 		}
 	}
 
-	/* Cuộn tới đáy: bỏ hết padding page + pagination để tối đa không gian row.
+	/* Cuộn tới đáy: bỏ padding block page + pagination để tối đa không gian row.
 	   Rời đáy (scroll to top) → media 767 trả lại padding như ban đầu. */
 	.admin-page--fullheight.at-bottom {
 		@media (max-width: 767px) {
-			padding: 0;
+			padding-block: 0;
 		}
 	}
 
@@ -2949,34 +3148,36 @@
 	}
 
 	/* ── Pagination collapsed/pop (pattern purchases): cuộn → gọn lại; chạm đáy
-	   → "pop" animation 450ms 1 lần. ≤767 mới áp — desktop giữ nguyên. ── */
-	@media (max-width: 767px) {
-		.pagination-collapsed.admin-pagination {
-			padding-block: 0.15rem;
-			font-size: 0.75rem;
+	   → "pop" animation 450ms 1 lần. ── */
+	.admin-pagination {
+		transition: padding 200ms ease, font-size 200ms ease;
+	}
+
+	.pagination-collapsed.admin-pagination {
+		padding-block: 0.15rem;
+		font-size: 0.75rem;
+	}
+	.at-bottom .admin-pagination {
+		padding-block: 0;
+		font-size: 0.7rem;
+	}
+	.pagination-pop.admin-pagination {
+		animation: pagination-pop-anim 450ms ease-out;
+	}
+	@keyframes pagination-pop-anim {
+		0% {
+			transform: scale(0.94);
 		}
-		.at-bottom .admin-pagination {
-			padding-block: 0;
-			font-size: 0.7rem;
+		60% {
+			transform: scale(1.04);
 		}
+		100% {
+			transform: scale(1);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
 		.pagination-pop.admin-pagination {
-			animation: pagination-pop-anim 450ms ease-out;
-		}
-		@keyframes pagination-pop-anim {
-			0% {
-				transform: scale(0.94);
-			}
-			60% {
-				transform: scale(1.04);
-			}
-			100% {
-				transform: scale(1);
-			}
-		}
-		@media (prefers-reduced-motion: reduce) {
-			.pagination-pop.admin-pagination {
-				animation: none;
-			}
+			animation: none;
 		}
 	}
 
@@ -3032,6 +3233,12 @@
 		flex-direction: column;
 		gap: 0;
 	}
+	// Footer form modal: History trái — spacer đẩy Save/Cancel sang phải
+	// (footer là flex justify-end; spacer flex:1 chiếm khoảng giữa).
+	:global(.modal-footer .supplier-footer-spacer) {
+		flex: 1;
+	}
+
 	.history-entry {
 		display: flex;
 		gap: 0.75rem;
@@ -3535,6 +3742,105 @@
 		border-style: solid;
 	}
 
+	/* ── Social tags (batch7): chips multi-value — enter tạo, click text edit
+	   inline, icon open-tab link, remove; input "Thêm giá trị…" inline cuối ── */
+	.social-tag-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.social-tag-block__label {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--foreground-600, var(--foreground));
+	}
+	.social-tags {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.5rem;
+		min-height: 2.5rem;
+		border: 1px solid var(--default-200);
+		border-radius: 0.5rem;
+		background: var(--background);
+	}
+	.social-tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.125rem;
+		padding-inline: 0.375rem 0.25rem;
+		padding-block: 0.125rem;
+		border-radius: 0.375rem;
+		background: var(--primary-50, var(--default-100));
+		color: var(--primary-700, var(--foreground));
+		font-size: 0.8rem;
+		line-height: 1.2;
+		max-width: 100%;
+	}
+	.social-tag--invalid {
+		background: var(--error-50, var(--default-100));
+		color: var(--error-600, var(--error));
+		text-decoration: line-through;
+	}
+	.social-tag--invalid .social-tag__text {
+		color: inherit;
+	}
+	.social-tag__text {
+		border: none;
+		background: transparent;
+		padding: 0.125rem 0.25rem;
+		font: inherit;
+		color: inherit;
+		cursor: text;
+		overflow-wrap: anywhere;
+		text-align: left;
+	}
+	.social-tag__open,
+	.social-tag__remove {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+		padding: 0;
+		flex: none;
+	}
+	.social-tag__open:hover,
+	.social-tag__remove:hover {
+		background: rgb(0 0 0 / 0.08);
+	}
+	.social-tag__edit {
+		font: inherit;
+		color: inherit;
+		background: var(--background);
+		border: 1px solid var(--primary);
+		border-radius: 0.25rem;
+		padding: 0.0625rem 0.25rem;
+		min-width: 4rem;
+		outline: none;
+	}
+	.social-tags__input {
+		flex: 1;
+		min-width: 6rem;
+		border: none;
+		background: transparent;
+		font: inherit;
+		font-size: 0.8rem;
+		outline: none;
+		padding: 0.125rem;
+		color: var(--foreground);
+	}
+	.social-tag-error {
+		font-size: 0.75rem;
+		color: var(--error);
+	}
+
 	/* ── FAB mobile (pattern purchases) ── */
 	.fab-group {
 		position: fixed;
@@ -3654,6 +3960,31 @@
 	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) :global(.admin-inset-header) {
 		@media (max-width: 767px) {
 			padding: 0;
+		}
+	}
+
+	/* ── Mobile FULL-SIZE modal (batch7 yêu cầu 1): modal form NCC chiếm trọn
+	   màn hình — bỏ padding root, container fullwidth + fullheight, nội dung
+	   start từ trên (không center dọc), header/footer sticky tự nhiên (flex
+	   column: header/footer flex sibling đứng yên, body tự cuộn tới đáy →
+	   nút Save/Close luôn với tới được). Áp CHỈ mobile touch — desktop giữ
+	   modal giữa màn hình. ── */
+	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+		:global(.modal-root.supplier-modal-root) {
+			padding: 0;
+			align-items: stretch;
+		}
+		:global(.supplier-modal-root .modal-container-root) {
+			width: 100%;
+			max-width: none;
+			max-height: none;
+			height: 100dvh;
+			border-radius: 0;
+			margin: 0;
+		}
+		/* Header modal: co padding → gọn như breadcrumb bar */
+		:global(.supplier-modal-root .modal-header-root) {
+			padding-block: 0.5rem;
 		}
 	}
 </style>

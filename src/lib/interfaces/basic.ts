@@ -159,6 +159,8 @@ export interface MetaUser {
 	roleName?: string;
 	/** Chi nhánh của user (nếu có) — dùng cho scope 'own_branch' của PermissionChecker */
 	branchId?: string;
+	/** URL ảnh đại diện self-service (đọc từ users doc khi verify token) */
+	avatarUrl?: string;
 }
 export type Region = // Africa
 	| 'Northern Africa'

@@ -169,6 +169,8 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'facebook',
   'telegram',
   'discord',
+  'instagram',
+  'website',
   'avatarUrl',
   'images',
   'note',
@@ -177,8 +179,22 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'updatedAt'
 ] as const;
 
-// Field dạng mảng (phones/emails/images) — validate phần tử string trước khi ghi
-const SUPPLIER_ARRAY_FIELDS = ['phones', 'emails', 'images'] as const;
+// Field dạng mảng (phones/emails/images + social 6 network) — validate phần tử
+// string trước khi ghi
+const SUPPLIER_ARRAY_FIELDS = ['phones', 'emails', 'images', 'zalo', 'telegram', 'discord', 'facebook', 'instagram', 'website'] as const;
+
+// Social field doc cũ lưu string đơn → chuẩn hoá thành mảng khi đọc/ghi
+function normalizeSocialArray(value: unknown): string[] | undefined {
+  if (typeof value === 'string') {
+    const s = value.trim();
+    return s ? [s] : undefined;
+  }
+  if (Array.isArray(value)) {
+    const arr = value.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim());
+    return arr.length ? arr : undefined;
+  }
+  return undefined;
+}
 
 // Mảng addresses: phần tử là object {label?, address, ward?, district?, province?, country?}
 const SUPPLIER_ADDRESS_ENTRY_FIELDS = ['label', 'address', 'ward', 'district', 'province', 'country'] as const;
@@ -269,7 +285,7 @@ export interface SupplierHistoryEntry {
 const SUPPLIER_HISTORY_FIELDS = [
   'name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country',
   'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord',
-  'avatarUrl', 'images', 'note', 'status'
+  'instagram', 'website', 'avatarUrl', 'images', 'note', 'status'
 ] as const;
 
 const supplierHistoriesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`supplier_histories\``;
@@ -575,10 +591,12 @@ export class SupplierService {
       phones?: string[];
       emails?: string[];
       addresses?: unknown;
-      zalo?: string;
-      facebook?: string;
-      telegram?: string;
-      discord?: string;
+      zalo?: string[];
+      facebook?: string[];
+      telegram?: string[];
+      discord?: string[];
+      instagram?: string[];
+      website?: string[];
       avatarUrl?: string;
       images?: string[];
       note?: string;
@@ -602,10 +620,12 @@ export class SupplierService {
       phones: Array.isArray(supplierData.phones) ? supplierData.phones.filter((p): p is string => typeof p === 'string' && p.trim().length > 0).map((p) => p.trim()) : [],
       emails: Array.isArray(supplierData.emails) ? supplierData.emails.filter((e): e is string => typeof e === 'string' && e.trim().length > 0).map((e) => e.trim()) : [],
       addresses: sanitizeAddressEntries(supplierData.addresses),
-      zalo: supplierData.zalo ?? null,
-      facebook: supplierData.facebook ?? null,
-      telegram: supplierData.telegram ?? null,
-      discord: supplierData.discord ?? null,
+      zalo: normalizeSocialArray(supplierData.zalo) ?? null,
+      facebook: normalizeSocialArray(supplierData.facebook) ?? null,
+      telegram: normalizeSocialArray(supplierData.telegram) ?? null,
+      discord: normalizeSocialArray(supplierData.discord) ?? null,
+      instagram: normalizeSocialArray(supplierData.instagram) ?? null,
+      website: normalizeSocialArray(supplierData.website) ?? null,
       avatarUrl: supplierData.avatarUrl ?? null,
       images: Array.isArray(supplierData.images) ? supplierData.images.filter((i): i is string => typeof i === 'string' && i.trim().length > 0).map((i) => i.trim()) : [],
       note: supplierData.note ?? null,
@@ -646,14 +666,12 @@ export class SupplierService {
     const now = new Date().toISOString();
     const updateData: Record<string, unknown> = { ...(getRes as any).data };
 
-    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord', 'avatarUrl', 'images', 'note', 'status'] as const) {
+    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord', 'instagram', 'website', 'avatarUrl', 'images', 'note', 'status'] as const) {
       if (field in patch) {
-        // mảng phones/emails: lọc phần tử rỗng/không phải string
+        // social doc cũ string đơn → chuẩn hoá mảng; mảng social/phones/emails
+        // lọc phần tử rỗng/không phải string
         if ((SUPPLIER_ARRAY_FIELDS as readonly string[]).includes(field)) {
-          const arr = patch[field];
-          updateData[field] = Array.isArray(arr)
-            ? arr.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim())
-            : [];
+          updateData[field] = normalizeSocialArray(patch[field]) ?? [];
         } else if (field === 'addresses') {
           // mảng object {label?, address, province?, district?, country?}
           updateData[field] = sanitizeAddressEntries(patch[field]);
