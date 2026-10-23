@@ -453,6 +453,11 @@
 		position: fixed;
 		inset: 0;
 		width: 100vw;
+		/* KHÔNG thêm fallback 100vh cho dvh: fixed + inset:0 + height set →
+		   over-constrained (bottom bị bỏ qua) mà 100vh trên iOS = large
+		   viewport (vươn sau toolbar) → footer chìm. dvh bị drop trên iOS
+		   ≤15.3 là TỐT: height auto + inset:0 stretch = layout viewport =
+		   đúng vùng nhìn thấy. */
 		height: 100dvh;
 		z-index: 10000;
 		display: flex;

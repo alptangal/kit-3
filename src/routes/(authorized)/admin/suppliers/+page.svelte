@@ -3235,7 +3235,8 @@
 	}
 	// Footer form modal: History trái — spacer đẩy Save/Cancel sang phải
 	// (footer là flex justify-end; spacer flex:1 chiếm khoảng giữa).
-	:global(.modal-footer .supplier-footer-spacer) {
+	// Class thật của footer element là .modal-footer-root (Footer/Main.svelte).
+	:global(.modal-footer-root .supplier-footer-spacer) {
 		flex: 1;
 	}
 
@@ -3975,10 +3976,15 @@
 			align-items: stretch;
 		}
 		:global(.supplier-modal-root .modal-container-root) {
-			width: 100%;
+			/* Full-bleed qua position:fixed + inset:0 — KHÔNG dùng vh/dvh:
+			   100vh trên iOS = large viewport (vươn sau toolbar) → footer vẫn
+			   chìm; dvh chỉ hỗ trợ từ iOS 15.4. Fixed inset:0 = đúng vùng nhìn
+			   thấy trên mọi trình duyệt, kể cả Safari ≤15.3. */
+			position: fixed;
+			inset: 0;
+			width: 100% !important; /* thắng .size-lg (40rem) — scoped CSS load sau page CSS */
 			max-width: none;
 			max-height: none;
-			height: 100dvh;
 			border-radius: 0;
 			margin: 0;
 		}
