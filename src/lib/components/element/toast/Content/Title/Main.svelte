@@ -25,7 +25,19 @@
 
 <style lang="scss">
 	@use '$styles/colors.scss';
+	@use '$styles/theme-mixins' as *;
 	.toast-content-title-root {
 		color: var(--color);
+
+		/* AA: .color-* map -500 chỉ 3.08–3.81 light → -700 (tự đảo dark);
+		   dark -500 đã PASS nên giữ (chỉ sửa light). Mixin theme-light = OS light
+		   + data-theme=light (đồng bộ app theme toggle). */
+		@include theme-light {
+			&.color-warning { --color: var(--warning-700); }
+			&.color-success { --color: var(--success-700); }
+			&.color-error { --color: var(--danger-700); }
+			&.color-info,
+			&.color-primary { --color: var(--primary-700); }
+		}
 	}
 </style>

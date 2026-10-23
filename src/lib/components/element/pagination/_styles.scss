@@ -63,7 +63,8 @@
 		}
 
 		&.active {
-			background: var(--primary);
+			/* AA: --primary-500 chỉ 3.71 light → -600 (5.26 light / 8.68 dark) */
+			background: var(--primary-600);
 			color: var(--background);
 		}
 
@@ -142,7 +143,8 @@
 		}
 
 		.counter-current {
-			color: var(--primary);
+			/* AA: --primary 3.71 light → -600 (tự đảo dark 8.68) */
+			color: var(--primary-600);
 			font-weight: 600;
 		}
 

@@ -3,6 +3,7 @@
 // Chạy qua token: --color, --background, --border-color, --disabled-opacity.
 // Separator "&" của Kbd.Combo = ::before trên key con (CSS-only, không sửa DOM).
 @use '$styles/sizes.scss';
+@use '$styles/theme-mixins' as *;
 
 .kbd-root {
 	--border-color: transparent;
@@ -61,7 +62,7 @@
 		--border-color: var(--key-border);
 	}
 
-	@media (prefers-color-scheme: dark) {
+	@include theme-dark {
 		&.variant-default {
 			--key-background: var(--color-gray-800);
 			--key-border: var(--color-gray-700);
@@ -89,6 +90,7 @@
 		left: -0.1875em; /* trung tâm gap 0.375em */
 		top: 50%;
 		transform: translate(-50%, -50%);
+		/* AA: --foreground 4.39 trên gray-100 → --muted (5.74; dark 6.91) */
 		color: var(--muted, var(--foreground));
 		font-size: 0.75em;
 		font-weight: 500;

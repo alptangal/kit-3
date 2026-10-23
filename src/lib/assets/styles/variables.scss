@@ -395,6 +395,8 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 	--overlay: var(--white);
 	--overlay-foreground: var(--foreground);
 	--muted: #71717a;
+	--border: var(--foreground-200);
+	--shadow-color: rgba(0, 0, 0, 0.08);
 	--scrollbar: var(--scrollbar-thumb);
 	--scrollbar-thumb: var(--foreground);
 	--background: hsl(0 0% 100%);
@@ -461,7 +463,7 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 	--secondary-950: hsl(262.22, 77.74%, 22.86%);
 	--secondary-foreground: hsl(0 0% 100%);
 	--secondary: var(--secondary-500);
-	--success-50: 98.2% 0.018 155.826;
+	--success-50: hsl(138.5, 76.5%, 96.5%);
 	--success-100: hsl(140.65, 84.38%, 92.45%);
 	--success-200: hsl(141.14, 81.07%, 84.82%);
 	--success-300: hsl(142.66, 81.25%, 71.39%);
@@ -675,7 +677,7 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 	--min-height-2xs: 1.5rem;   // 24px
 	--min-height-xs: 1.875rem;  // 30px
 	--min-height-sm: 2.125rem;  // 34px
-	--min-height-md: 2.5rem;    // 40px
+	--min-height-md: 2.75rem;   // 44px (WCAG touch target)
 	--min-height-lg: 2.875rem;  // 46px
 	--min-height-xl: 3.125rem;  // 50px
 	// 2xl+: min-height = font-size của size token. KHÔNG viết var(--font-size)
@@ -739,6 +741,9 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 		--focus: hsl(81.97 84.52% 67.06%);
 		--overlay: hsl(0 0% 0%);
 		--divider: hsl(0 0% 100%);
+		--muted: hsl(240 5.03% 64.9%);
+		--border: var(--foreground-200);
+		--shadow-color: rgba(0, 0, 0, 0.4);
 		--content1: hsl(240 5.88% 10%);
 		--content1-foreground: hsl(0 0% 98.04%);
 		--content2: hsl(240 3.7% 15.88%);
@@ -898,6 +903,9 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 		--focus: hsl(81.97 84.52% 67.06%);
 		--overlay: hsl(0 0% 0%);
 		--divider: hsl(0 0% 100%);
+		--muted: hsl(240 5.03% 64.9%);
+		--border: var(--foreground-200);
+		--shadow-color: rgba(0, 0, 0, 0.4);
 		--content1: hsl(240 5.88% 10%);
 		--content1-foreground: hsl(0 0% 98.04%);
 		--content2: hsl(240 3.7% 15.88%);

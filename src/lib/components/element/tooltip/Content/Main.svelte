@@ -127,6 +127,16 @@
 		}
 	});
 	const tooltipCtx = getTooltipCtx();
+	// ARIA linkage (WCAG 4.1.2): content có id cố định, trigger nhận aria-describedby
+	// khi tooltip hiển thị — cleanup xoá attribute khi effect re-run/unmount.
+	const contentId = `tooltip-content-${crypto.randomUUID()}`;
+	$effect(() => {
+		const trigger = tooltipCtx?.ref;
+		if (!(trigger instanceof HTMLElement)) return;
+		if (tooltipCtx?.status?.hover) trigger.setAttribute('aria-describedby', contentId);
+		else trigger.removeAttribute('aria-describedby');
+		return () => trigger.removeAttribute('aria-describedby');
+	});
 
 	// Anchor ĐỘNG: follow=true → đọc anchor mới mỗi lần áp (mousemove đã cập nhật
 	// qua rAF); follow=false → chốt lúc load (không đổi theo chuột).
@@ -324,6 +334,8 @@
 	<svelte:element
 		this={props.as ?? 'div'}
 		bind:this={configs.ref}
+		id={contentId}
+		role="tooltip"
 		class={configs.style}
 		{@attach handleEvents(configs.event)}
 	>

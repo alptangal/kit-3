@@ -126,6 +126,31 @@
 							// Xoá anchor để lần hover sau chột lại điểm mới.
 							configs.status.hover = false;
 							configs.status.anchor = undefined;
+						},
+						// KEYBOARD (WCAG 1.4.13/4.1.2): focus mở tooltip (anchor = rect element,
+						// focus không có toạ độ chuột), blur + Esc đóng.
+						focusin(e) {
+							const target = (e as Event).target as HTMLElement;
+							if (!configs.ref || !configs.ref.contains(target)) return;
+							if (!configs.status) configs.status = {};
+							if (!configs.status.anchor) {
+								const rect = (target.closest('.tooltip-anchor') ?? target).getBoundingClientRect();
+								configs.status.anchor = { x: rect.left + rect.width / 2, y: rect.top };
+							}
+							configs.status.hover = true;
+						},
+						focusout(e) {
+							const target = (e as Event).target as HTMLElement;
+							if (!configs.ref || !configs.ref.contains(target)) return;
+							configs.status.hover = false;
+							configs.status.anchor = undefined;
+						},
+						keydown(e) {
+							if ((e as KeyboardEvent).key === 'Escape') {
+								if (!configs.status) configs.status = {};
+								configs.status.hover = false;
+								configs.status.anchor = undefined;
+							}
 						}
 					};
 			const propEvents = (props.events ?? []).map((ev) =>

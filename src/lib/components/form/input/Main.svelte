@@ -4032,6 +4032,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				inputmode={inputModeDerived}
 				name={nameDerived}
 					id={inputId}
+				aria-invalid={colorDerived == 'error' ? 'true' : undefined}
+				aria-required={requiredDerived ? 'true' : undefined}
 				onkeydown={(e) => {
 						handleEmailKeydown(e);
 						handlePhoneKeydown(e);
@@ -4081,6 +4083,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 						class="input-clear p-1!"
 						color="error"
 						variant="ghost"
+						aria-label="Xóa nội dung"
 					/>
 				{/if}
 			{/if}
@@ -4096,6 +4099,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					aspect-square
 					color="success"
 					events={configs.actionButtons.copy.event}
+					aria-label="Sao chép nội dung"
 					disabled={configs.actionButtons.copy.status.copied ||
 						value ==
 							client.browser?.clipboard?.get(
@@ -4116,6 +4120,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				aspect-square
 				color="success"
 				events={configs.actionButtons.paste.event}
+				aria-label="Dán nội dung"
 				disabled={configs.actionButtons.paste.status.pasted}
 			/>
 		{/if}
@@ -4131,6 +4136,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 				size="xs"
 				variant="ghost"
 				aspect-square
+				aria-label={configs.input.password.showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+				aria-pressed={configs.input.password.showPassword ? 'true' : 'false'}
 			/>
 		{/if}
 	</div>

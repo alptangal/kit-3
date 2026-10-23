@@ -248,10 +248,11 @@
 		}
 	}
 	@include theme-dark {
-		--placeholder-color: var(--color-gray-400);
+		--placeholder-color: var(--muted);
 	}
 	@include theme-light {
-		--placeholder-color: var(--color-gray-400);
+		/* AA: gray-400 2.36 light → --muted (4.83) */
+		--placeholder-color: var(--muted);
 	}
 	--height: calc(var(--line-height) * 1rem);
 	width: 100%;
@@ -310,7 +311,8 @@
 	// type='currency' — symbol span (prefix/suffix): muted màu phụ, không select
 	// (aria-hidden + pointer-events none), co giãn theo font-size input cha.
 	.input-currency-symbol {
-		color: var(--color-gray-500);
+		/* AA: gray-500 4.39 light / 3.63 dark → --muted (4.83 / 6.91) */
+		color: var(--muted);
 		pointer-events: none;
 		user-select: none;
 		flex-shrink: 0;

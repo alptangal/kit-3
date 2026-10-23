@@ -103,8 +103,8 @@
 	// ── Separator (span, không input — '- / · / :') ──
 	.dt-separator {
 		display: inline-block;
+		/* AA: opacity .7 làm blend màu xuống 2.60 → bỏ, --muted tự đủ mute (4.83/6.91) */
 		color: var(--muted, var(--foreground));
-		opacity: 0.7;
 		font-size: var(--font-size, 1rem);
 		font-weight: 600;
 		user-select: none;

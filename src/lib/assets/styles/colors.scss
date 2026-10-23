@@ -19,21 +19,22 @@
 .color-error {
 	--color: var(--danger);
 }
+/* Description AA: -300 chỉ 1.40–2.03 light → -700 (5.87–7.29 light, tự đảo dark 10.33+) */
 .color-description-default {
 	--color: var(--default-500);
 }
 .color-description-secondary {
-	--color: var(--secondary-300);
+	--color: var(--secondary-700);
 }
 .color-description-success {
-	--color: var(--success-300);
+	--color: var(--success-700);
 }
 .color-description-warning {
-	--color: var(--warning-300);
+	--color: var(--warning-700);
 }
 .color-description-info {
-	--color: var(--primary-300);
+	--color: var(--primary-700);
 }
 .color-description-error {
-	--color: var(--danger-300);
+	--color: var(--danger-700);
 }

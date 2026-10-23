@@ -3,6 +3,7 @@
 // (copy cấu trúc @each + $colorRefs từ tag/_styles.scss — mặt hàng surface).
 // Chạy qua token: --color, --background, --border-color, --disabled-opacity.
 @use '$styles/sizes.scss';
+@use '$styles/theme-mixins' as *;
 
 $colors: 'default', 'secondary', 'success', 'info', 'warning', 'error', 'primary';
 $colorRefs: (
@@ -98,18 +99,20 @@ $colorRefs: (
 					&.color-#{$color} {
 						@if $color == 'default' {
 							--color: var(--foreground);
-							@media (prefers-color-scheme: dark) {
+							@include theme-dark {
 								--background: rgba(82, 82, 91, 0.35);
 							}
-							@media (prefers-color-scheme: light) {
+							@include theme-light {
 								--background: rgba(226, 232, 240, 0.7);
 							}
 						} @else {
-							--color: var(--color-#{$ref}-500);
-							@media (prefers-color-scheme: dark) {
+							/* AA: light -800/-200 (5.65+), dark -400/-950 (5.13+) */
+							--color: var(--color-#{$ref}-800);
+							@include theme-dark {
+								--color: var(--color-#{$ref}-400);
 								--background: var(--color-#{$ref}-950);
 							}
-							@media (prefers-color-scheme: light) {
+							@include theme-light {
 								--background: var(--color-#{$ref}-200);
 							}
 						}
@@ -117,11 +120,12 @@ $colorRefs: (
 				} @else if $variant == 'solid' {
 					&.color-#{$color} {
 						@if $color == 'default' {
-							--background: var(--color-gray-600);
-							--color: var(--color-gray-400);
+							--background: var(--color-gray-700);
+							--color: white;
 						} @else {
-							--background: var(--color-#{$ref}-600);
-							--color: var(--color-#{$ref}-400);
+							/* AA: white/-700 (4.94+ cả 2 theme) */
+							--background: var(--color-#{$ref}-700);
+							--color: white;
 						}
 					}
 				} @else if $variant == 'outline' {
@@ -130,8 +134,13 @@ $colorRefs: (
 							--color: var(--foreground);
 							--border-color: var(--foreground);
 						} @else {
-							--color: var(--color-#{$ref}-500);
-							--border-color: var(--color-#{$ref}-500);
+							/* AA: light -700 (4.94+), dark -400 (6.73+) */
+							--color: var(--color-#{$ref}-700);
+							--border-color: var(--color-#{$ref}-700);
+							@include theme-dark {
+								--color: var(--color-#{$ref}-400);
+								--border-color: var(--color-#{$ref}-400);
+							}
 						}
 					}
 				} @else if $variant == 'ghost' {
@@ -139,23 +148,28 @@ $colorRefs: (
 						@if $color == 'default' {
 							--color: var(--foreground);
 						} @else {
-							--color: var(--color-#{$ref}-500);
+							/* AA: light -700, dark -400 (như outline) */
+							--color: var(--color-#{$ref}-700);
+							@include theme-dark {
+								--color: var(--color-#{$ref}-400);
+							}
 						}
 						--border-color: transparent;
 						@media (hover: hover) and (pointer: fine) {
 							&:hover {
 								@if $color == 'default' {
-									@media (prefers-color-scheme: dark) {
+									@include theme-dark {
 										--background: rgba(82, 82, 91, 0.25);
 									}
-									@media (prefers-color-scheme: light) {
+									@include theme-light {
 										--background: rgba(226, 232, 240, 0.5);
 									}
 								} @else {
-									@media (prefers-color-scheme: dark) {
+									/* AA: light -800/-200 (5.84+), dark -950 (5.13+) */
+									@include theme-dark {
 										--background: var(--color-#{$ref}-950);
 									}
-									@media (prefers-color-scheme: light) {
+									@include theme-light {
 										--background: var(--color-#{$ref}-200);
 									}
 								}
