@@ -504,17 +504,31 @@
 
 	// Safari iOS ≤15.3 bỏ rule có :has() + 100dvh → layout fullheight chết →
 	// .admin-table-wrap KHÔNG scroll được (scrollH ≈ clientH), cả trang cuộn
-	// bằng document → onscroll wrap không bao giờ bắn → caption-collapse +
-	// at-bottom im lặng. Fallback: khi wrap không scrollable, đọc window scroll.
+	// bên trong root Container (div.w-full.h-full.overflow-auto, +layout.svelte:178)
+	// chứ KHÔNG phải window → onscroll wrap không bắn, window.scrollY luôn 0.
+	// Fallback: khi wrap không scrollable, tìm ancestor scroll container thật.
+	function findScrollContainer(): HTMLElement | undefined {
+		let el = wrapEl?.parentElement;
+		while (el && el !== document.body) {
+			const ov = getComputedStyle(el).overflowY;
+			if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight + 4) return el;
+			el = el.parentElement;
+		}
+		return undefined;
+	}
 	function onWindowScroll() {
 		if (scrollRaf) return;
 		scrollRaf = requestAnimationFrame(() => {
 			scrollRaf = 0;
 			const el = wrapEl;
 			if (!el || el.scrollHeight > el.clientHeight + 4) return; // wrap tự cuộn — bỏ qua
-			tableScrolled = window.scrollY > 8;
-			const doc = document.documentElement;
-			wrapAtBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 4;
+			// scroll container thật: window hoặc ancestor overflow:auto (root Container)
+			const sc = findScrollContainer();
+			const top = sc ? sc.scrollTop : window.scrollY;
+			const viewH = sc ? sc.clientHeight : window.innerHeight;
+			const totalH = sc ? sc.scrollHeight : document.documentElement.scrollHeight;
+			tableScrolled = top > 8;
+			wrapAtBottom = top + viewH >= totalH - 4;
 			if (wrapAtBottom && !paginationPopped) {
 				paginationPopped = true;
 				setTimeout(() => (paginationPopped = false), 450);
@@ -1801,9 +1815,24 @@
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadBranches(), loadSuppliers()]);
 		draftHydrated = true; // mở khoá draft auto-save sau khi store đã hydrate từ layout
-		// Safari ≤15.3: document scroll fallback (xem onWindowScroll)
+		// Safari ≤15.3: scroll fallback — root Container (div.w-full.h-full.overflow-auto
+		// ở +layout.svelte) là scroll container thật, window không bắn scroll event.
+		// Gắn listener lên cả window + root container; tìm qua walk-up từ wrapEl.
+		let scrollHost: HTMLElement | null = null;
+		if (wrapEl) {
+			let el: HTMLElement | undefined | null = wrapEl.parentElement;
+			while (el && el !== document.body) {
+				const ov = getComputedStyle(el).overflowY;
+				if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight + 4) { scrollHost = el; break; }
+				el = el.parentElement;
+			}
+		}
 		window.addEventListener('scroll', onWindowScroll, { passive: true });
-		return () => window.removeEventListener('scroll', onWindowScroll);
+		scrollHost?.addEventListener('scroll', onWindowScroll, { passive: true });
+		return () => {
+			window.removeEventListener('scroll', onWindowScroll);
+			scrollHost?.removeEventListener('scroll', onWindowScroll);
+		};
 	});
 
 	// ── Draft auto-save (yêu cầu 1k): form create có dữ liệu → debounce 500ms
