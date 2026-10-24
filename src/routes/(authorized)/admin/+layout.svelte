@@ -30,8 +30,6 @@
 	// Batch8 mục 1: true khi ĐANG cuộn (scroll event gần đây), dừng 200ms → false —
 	// co padding-block header theo hành động cuộn, không theo vị trí.
 	let scrollActive: boolean = $state(false);
-	// Yêu cầu 1: ẩn inset-header khi cuộn xuống sâu (mobile only qua CSS).
-	let headerHidden: boolean = $state(false);
 
 	$effect(() => {
 		if (typeof document === 'undefined' || !insetEl) return;
@@ -84,9 +82,8 @@
 	// scroll container là div.w-full.h-full của Container root (window không cuộn).
 	// Ngưỡng 80px: user cuộn qua phần đầu trang (header + filters) → header
 	// trang con thu gọn; cuộn về gần top → trả nguyên trạng thái.
-	// Yêu cầu 1 (mobile): cuộn XUỐNG sâu (> 240px) → ẩn hẳn inset-header
-	// (trượt lên bằng margin-top âm, KHÔNG display:none — ResizeObserver vẫn
-	// đo được --admin-header-h); cuộn LÊN hoặc gần top → hiện lại.
+	// Batch8 (user m05611): BỎ cơ chế ẩn header khi cuộn sâu — breadcrumb
+	// phải luôn hiển thị mọi vị trí cuộn (iPhone mất breadcrumb).
 	$effect(() => {
 		if (typeof document === 'undefined') return;
 		const findScrollEl = (): HTMLElement | undefined => {
@@ -102,7 +99,6 @@
 			return document.scrollingElement as HTMLElement | undefined;
 		};
 		let raf = 0;
-		let lastTop = 0;
 		// Batch8 mục 1: scroll-ACTIVE theo HÀNH ĐỘNG — đang cuộn co padding-block
 		// header, dừng 200ms trả lại như ban đầu (kể cả ở giữa trang).
 		let scrollActiveTimer: ReturnType<typeof setTimeout>;
@@ -114,26 +110,7 @@
 				clearTimeout(scrollActiveTimer);
 				scrollActiveTimer = setTimeout(() => (scrollActive = false), 200);
 				if (!scrollEl) return;
-				const top = scrollEl.scrollTop;
-				isScrolled = top > 80;
-				// Hướng cuộn (delta > 0 = xuống). Sai số 4px chống jitter khi
-				// dừng (iOS momentum/firefox smooth sẽ nhấp nhô vài px).
-				const delta = top - lastTop;
-				// Bỏ qua delta âm do trình duyệt CLAMP scrollTop khi nội dung
-				// co lại (ẩn header đổi padding → docH giảm ~14px, đang ở đáy
-				// trang → scrollTop bị kéo lùi vài px ≈ "bounce"). Đây không
-				// phải cuộn lên thật — nếu không lọc sẽ nháy ẩn→hiện ngay.
-				const maxTop = scrollEl.scrollHeight - scrollEl.clientHeight;
-				const clampBounce =
-					delta < 0 && lastTop >= maxTop - 2 && top >= maxTop - 16;
-				if (top < 80) {
-					headerHidden = false;
-				} else if (delta > 4 && top > 240) {
-					headerHidden = true;
-				} else if (delta < -4 && !clampBounce) {
-					headerHidden = false;
-				}
-				lastTop = top;
+				isScrolled = scrollEl.scrollTop > 80;
 			});
 		};
 		let scrollEl = findScrollEl();
@@ -715,7 +692,6 @@
 		<div
 			class="admin-inset"
 			class:is-scrolled={isScrolled}
-			class:admin-header-hidden={headerHidden}
 			bind:this={insetEl}
 		>
 			<div
@@ -1019,42 +995,9 @@
 		}
 	}
 
-	/* ── Yêu cầu 1 (mobile): ẩn inset-header khi cuộn XUỐNG sâu ──
-	   Dùng transform (KHÔNG margin-top âm, KHÔNG display:none): transform
-	   không đổi layout/scrollHeight → không gây scroll-anchoring loop (bẫy
-	   thực tế: margin âm làm header co layout → browser clamp/anchor scrollTop
-	   → sinh scroll event ngược → nhấp nháy ẩn/hiện vô hạn). Element vẫn trong
-	   flow → ResizeObserver vẫn đo --admin-header-h; các sticky offset khác
-	   không nhảy. Header trượt lên mượt qua transition transform. Khi ẩn:
-	   filters sticky top về 0 (trượt lên chiếm chỗ header). Desktop không
-	   áp — sticky stack desktop đã tối ưu. */
-	@media (max-width: 767px) {
-		/* transition đặt trên base (không chỉ .admin-header-hidden) để cả
-		   lúc HIỆN lại (cuộn lên) cũng mượt. */
-		.admin-inset .admin-inset-header {
-			transition: transform 0.25s ease;
-		}
-
-		.admin-inset.admin-header-hidden .admin-inset-header {
-			transform: translateY(calc(var(--admin-header-h, 0px) * -1));
-		}
-
-		.admin-inset.admin-header-hidden :global(.admin-filters) {
-			top: 0;
-		}
-
-		/* ── Yêu cầu 7 (mobile): khi cuộn sâu, bỏ đệm dọc → pagination sticky
-		   sát đáy viewport, tối đa dòng data hiển thị. Chỉ khi header ẩn
-		   (đang ở vùng cuộn sâu); cuộn lên → trả đệm. LƯU Ý: KHÔNG đổi padding
-		   của .admin-page khi ẩn — padding thay đổi giữa chừng cuộn cũng gây
-		   scroll-anchor loop như margin âm (đã thử, bỏ). Padding-top body
-		   (--admin-body-pad-top) đủ để nhường chỗ. */
-		.admin-inset.admin-header-hidden .admin-inset-body {
-			--admin-body-pad-top: 0;
-		}
-		/* Pagination sticky bottom đã sát đáy sẵn — không cần đụng padding
-		   .admin-page (tránh anchor loop). */
-	}
+	/* Batch8 (user m05611): BỎ cơ chế ẩn header cuộn sâu — breadcrumb phải
+	   luôn hiển thị. Không còn transform/transition header, filters top:0
+	   hay body-pad-top:0 khi "ẩn" (toàn khối @media cũ đã xoá). */
 
 	.admin-inset-body {
 		/* Padding do .admin-page trên từng trang đảm nhiệm (chuẩn 1.5rem,
