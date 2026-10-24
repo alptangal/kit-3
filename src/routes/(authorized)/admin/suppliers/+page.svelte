@@ -502,6 +502,28 @@
 		});
 	}
 
+	// Safari iOS ≤15.3 bỏ rule có :has() + 100dvh → layout fullheight chết →
+	// .admin-table-wrap KHÔNG scroll được (scrollH ≈ clientH), cả trang cuộn
+	// bằng document → onscroll wrap không bao giờ bắn → caption-collapse +
+	// at-bottom im lặng. Fallback: khi wrap không scrollable, đọc window scroll.
+	function onWindowScroll() {
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			const el = wrapEl;
+			if (!el || el.scrollHeight > el.clientHeight + 4) return; // wrap tự cuộn — bỏ qua
+			tableScrolled = window.scrollY > 8;
+			const doc = document.documentElement;
+			wrapAtBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 4;
+			if (wrapAtBottom && !paginationPopped) {
+				paginationPopped = true;
+				setTimeout(() => (paginationPopped = false), 450);
+			} else if (!wrapAtBottom) {
+				paginationPopped = false;
+			}
+		});
+	}
+
 	// ── Modal tạo/sửa nhà cung cấp ──
 	let supplierModalDisplay = $state(false);
 	let supplierSubmitting = $state(false);
@@ -1779,6 +1801,9 @@
 		encryptionKeys = { privateKey, publicKey };
 		await Promise.all([loadBranches(), loadSuppliers()]);
 		draftHydrated = true; // mở khoá draft auto-save sau khi store đã hydrate từ layout
+		// Safari ≤15.3: document scroll fallback (xem onWindowScroll)
+		window.addEventListener('scroll', onWindowScroll, { passive: true });
+		return () => window.removeEventListener('scroll', onWindowScroll);
 	});
 
 	// ── Draft auto-save (yêu cầu 1k): form create có dữ liệu → debounce 500ms
@@ -3500,13 +3525,15 @@
 		padding: 0.75rem;
 		border: 1px dashed var(--default-300);
 		border-radius: 0.75rem;
+		/* position:relative đặt TRỰC TIẾP (không qua :has() — Safari ≤15.3 bỏ
+		   rule có :has() → label mất điểm neo absolute, trôi khỏi viền). */
+		position: relative;
 	}
 
-	/* Label block NGỰA TRÊN BORDER LINE (batch6): vị trí relative, label absolute
-	   dịch -50% lên giữa viền, nền background che đoạn border phía sau. */
+	/* Label block NGỰA TRÊN BORDER LINE (batch6): label absolute dịch -50% lên
+	   giữa viền, nền background che đoạn border phía sau. */
 	.form-items-block,
-	.social-block,
-	.items-block:has(> .items-block__label) {
+	.social-block {
 		position: relative;
 	}
 

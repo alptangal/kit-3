@@ -35,3 +35,4 @@ playwright-report/
 # Ảnh ad-hoc cho ui-checker sinh mỗi lần chạy probe (không track)
 test-results/
 tests/_ui-shots/*.png
+ios-safari-remote-debug-kit-main copy/*
