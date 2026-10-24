@@ -70,8 +70,11 @@ let visualViewportLastSize: { height: number; width: number };
 let startAt: number;
 export function updateResizeWindow() {
 	const WINDOW_RESIZE = 'window_resize';
-	let delay = client.browser?.duration ?? 300;
-	delay = typeof delay == 'number' ? delay : parseFloat(delay);
+	// Batch8 iOS: address bar thu giãn đổi visualViewport liên tục — debounce
+	// 300ms (client.browser.duration, dùng chung cho transition) + transition
+	// height 300ms = tổng lag ~600ms, height "kẹt" sai viewport. Debounce riêng
+	// 80ms cho resize sync — vẫn gom burst nhưng cảm nhận tức thì.
+	let delay = 80;
 	const timeId = client.timeId.get(WINDOW_RESIZE);
 	if (timeId) clearTimeout(timeId);
 	client.timeId.set(

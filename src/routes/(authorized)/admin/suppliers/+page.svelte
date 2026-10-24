@@ -145,7 +145,9 @@
 			createSupplier: { vi: 'Tạo nhà cung cấp', en: 'Create supplier' },
 			createPO: { vi: 'Tạo đơn mua', en: 'Create PO' },
 			updateStatus: { vi: 'Cập nhật trạng thái', en: 'Update status' },
-			edit: { vi: 'Sửa', en: 'Edit' }
+			edit: { vi: 'Sửa', en: 'Edit' },
+			search: { vi: 'Tìm kiếm', en: 'Search' },
+			filter: { vi: 'Lọc trạng thái', en: 'Filter status' }
 		},
 		states: {
 			loading: { vi: 'Đang tải dữ liệu…', en: 'Loading data…' },
@@ -479,12 +481,23 @@
 	let wrapAtBottom = $state(false);
 	let paginationPopped = $state(false);
 	let scrollRaf = 0;
+	// Batch8 mục 1: scroll-ACTIVE theo HÀNH ĐỘNG cuộn (không phải vị trí) —
+	// đang cuộn = co padding-block các thành phần cố định, dừng 200ms = trả lại
+	// như ban đầu (kể cả khi đang ở giữa trang).
+	let scrollActive = $state(false);
+	let scrollActiveTimer: ReturnType<typeof setTimeout>;
+	function markScrollActive() {
+		scrollActive = true;
+		clearTimeout(scrollActiveTimer);
+		scrollActiveTimer = setTimeout(() => (scrollActive = false), 200);
+	}
 	function onTableScroll() {
 		const el = wrapEl;
 		if (!el) return;
 		if (scrollRaf) return;
 		scrollRaf = requestAnimationFrame(() => {
 			scrollRaf = 0;
+			markScrollActive();
 			const scrollTop = el.scrollTop;
 			// BẪY: nếu nội dung vừa màn (scrollHeight ≈ clientHeight) thì atBottom
 			// luôn true → kẹt trạng thái thu padding vĩnh viễn. Chỉ coi là "đáy"
@@ -522,6 +535,7 @@
 			scrollRaf = 0;
 			const el = wrapEl;
 			if (!el || el.scrollHeight > el.clientHeight + 4) return; // wrap tự cuộn — bỏ qua
+			markScrollActive();
 			// scroll container thật: window hoặc ancestor overflow:auto (root Container)
 			const sc = findScrollContainer();
 			const top = sc ? sc.scrollTop : window.scrollY;
@@ -1872,11 +1886,12 @@
 	class="admin-page admin-page--fullheight"
 	class:at-bottom={wrapAtBottom}
 	class:is-scrolled={tableScrolled}
+	class:is-scrolling={scrollActive}
 	data-active-tab={activeTab}
 >
 
 	<!-- ── Tab ── -->
-	<div class="tab-strip" role="tablist" class:is-scrolled={tableScrolled}>
+	<div class="tab-strip" role="tablist" class:is-scrolled={tableScrolled} class:is-scrolling={scrollActive}>
 		<button
 			type="button"
 			class="tab-item"
@@ -1953,7 +1968,11 @@
 					bind:allFilteredSelected={allFilteredSelected}
 					onSelectAllFiltered={selectAllFilteredSuppliers}
 					onSelectionChange={(ids) => (selectedIds = ids)}
-					class={tableScrolled ? 'caption-collapsed' : undefined}
+					// BẪY memory: class:directive trên component CHẾT — gộp vào expression class
+					class={[
+						tableScrolled ? 'caption-collapsed' : undefined,
+						scrollActive && isMobile ? 'tools-hidden-mobile' : undefined
+					].filter(Boolean).join(' ') || undefined}
 					data-test="suppliers-datatable"
 				>
 					{#snippet captionTools()}
@@ -1961,6 +1980,9 @@
 							Bulk-bar KHÔNG swap thay search (Input unmount → onDestroy emit value=undefined
 							→ $effect search → searching=true → skeleton → mất selection hiển thị).
 							Chỉ THÊM bulk-bar cạnh search — pattern purchases (bulk-bar cuối captionTools). -->
+						<!-- Batch8 mục 2: đang cuộn trên mobile → ẨN row tools (search/filter/create)
+							bằng CSS display:none — KHÔNG {#if} (unmount Input emit undefined → reload
+							storm + mất từ khoá). Bulk-bar GIỮ khi có selection. -->
 						{#if selectedIds.length > 0}
 							<!-- bulk-bar khi chọn ≥1 row -->
 							<div class="bulk-bar" data-test="suppliers-bulk-bar">
@@ -2228,7 +2250,7 @@
 	<!-- ── Phân trang (server-side, dùng chung 2 tab) ── -->
 	<footer
 		class="admin-pagination"
-		class:pagination-collapsed={tableScrolled}
+		class:pagination-collapsed={scrollActive}
 		class:pagination-pop={paginationPopped}
 	>
 		<span class="total-count">{totalCountText}</span>
@@ -2257,11 +2279,13 @@
 		</div>
 	</footer>
 
-	<!-- ── FAB mobile (pattern purchases): nút chính toggle menu, mục menu = create theo tab ── -->
+	<!-- ── FAB mobile (pattern purchases): nút chính toggle menu, mục menu = create theo tab ──
+		Batch8 mục 2: ở đầu trang (scrollY=0 → tableScrolled=false) ẨN cả group —
+		row caption tools đang hiện, FAB thừa. Cuộn → FAB hiện. -->
 	{#if mobileFabOpen}
 		<div class="fab-menu-backdrop" onclick={() => (mobileFabOpen = false)} aria-hidden="true"></div>
 	{/if}
-	<div class="fab-group" data-suggest>
+	<div class="fab-group" class:fab-hidden={!tableScrolled} data-suggest>
 		<button
 			type="button"
 			class="fab fab--secondary"
@@ -2281,6 +2305,35 @@
 		</button>
 		{#if mobileFabOpen}
 			<div class="fab-menu" role="menu">
+				<!-- Batch8 mục 2: search/filter vào FAB khi row tools ẩn — mở lại
+					row (scrollActive=false) + trigger đúng control -->
+				<button
+					type="button"
+					class="fab-menu-item"
+					role="menuitem"
+					data-test="suppliers-fab-search"
+					onclick={() => {
+						mobileFabOpen = false;
+						mobileSearchOpen = true;
+						scrollActive = false;
+						setTimeout(() => mobileSearchInputInstance?.configs.focus(), 0);
+					}}
+				>
+					{pageContents.actions.search[lang]}
+				</button>
+				<button
+					type="button"
+					class="fab-menu-item"
+					role="menuitem"
+					data-test="suppliers-fab-filter"
+					onclick={() => {
+						mobileFabOpen = false;
+						mobileFilterOpen = true;
+						scrollActive = false;
+					}}
+				>
+					{pageContents.actions.filter[lang]}
+				</button>
 				<button
 					type="button"
 					class="fab-menu-item"
@@ -2962,7 +3015,10 @@
 		// Scroll → co page padding BLOCK + gap tăng không gian row (yêu cầu 1 sticky
 		// tab-strip: dừng cuộn trả lại — transition tự đảo). Batch7: GIỮ padding
 		// inline (ngang) — chỉ co block (dọc).
-		&.is-scrolled {
+		// Batch8: co theo HÀNH ĐỘNG cuộn (is-scrolling = đang cuộn, dừng 200ms trả
+		// lại) — is-scrolled giữ lại cho trạng thái vị trí (top > 8px).
+		&.is-scrolled,
+		&.is-scrolling {
 			gap: 0.375rem;
 			padding-block: 0.5rem;
 		}
@@ -3023,7 +3079,9 @@
 
 	// Scroll sang dưới → tab-strip thu nhỏ (pattern admin-inset-header.is-scrolled);
 	// scroll về top → trả lại padding ban đầu (transition tự đảo).
-	.tab-strip.is-scrolled {
+	// Batch8: thu nhỏ theo HÀNH ĐỘNG cuộn (is-scrolling) — dừng 200ms trả lại.
+	.tab-strip.is-scrolled,
+	.tab-strip.is-scrolling {
 		box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
 
 		.tab-item {
@@ -3095,6 +3153,19 @@
 
 		:global(.datatable-caption-tools .bulk-bar) {
 			height: 1.75rem;
+		}
+	}
+
+	/* Batch8 mục 2: mobile đang cuộn → ẨN row tools (search/filter/create) bằng
+	   display:none — Input vẫn mounted (không emit undefined qua bind:value).
+	   Class tách khỏi caption-collapsed (vị trí) — chỉ khi ĐANG cuộn (hành động).
+	   Bulk-bar + mobile-filter-popover mở vẫn hiện (user đang thao tác). */
+	:global(.datatable-root.tools-hidden-mobile) {
+		@media (max-width: 767px) {
+			:global(.datatable-caption-tools .admin-search:not(:has(.mobile-filter-popover))),
+			:global(.datatable-caption-tools .admin-actions-group:not(:has(.mobile-filter-popover))) {
+				display: none;
+			}
 		}
 	}
 
@@ -3183,6 +3254,11 @@
 	/* Fullheight: wrap tự cuộn dọc (scroll container của page) — đọc cả 2 chiều */
 	.admin-page--fullheight .admin-table-wrap {
 		overflow: auto;
+		/* Batch8: tắt scroll anchoring — anchor tự điều chỉnh scrollTop khi
+		   scroll-active co/giãn padding + ẩn/hiện tools (đổi layout) → bắn scroll
+		   event → markScrollActive lại → LOOP co/giãn vĩnh viễn (top dao động
+		   27↔63). DataTable không có ảnh lazy → mất anchor vô hại. */
+		overflow-anchor: none;
 	}
 
 	/* Nút action trong actionsContent — chống nén (bẫy 39px clip) */
@@ -3908,6 +3984,14 @@
 		align-items: center;
 		gap: 0.6rem;
 		z-index: 400;
+		/* Batch8 mục 2: ở đầu trang (scrollY=0) FAB ẩn mờ + không bấm được —
+		   row caption tools đang hiện. Cuộn → hiện lại. pointer-events chặn
+		   tap "chìm" khi opacity 0. */
+		transition: opacity 200ms ease;
+		&.fab-hidden {
+			opacity: 0;
+			pointer-events: none;
+		}
 
 		@media (min-width: 768px) {
 			display: none;

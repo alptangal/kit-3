@@ -27,6 +27,9 @@
 	let insetHeaderEl: HTMLDivElement | undefined = $state(undefined);
 	let insetEl: HTMLDivElement | undefined = $state(undefined);
 	let isScrolled: boolean = $state(false);
+	// Batch8 mục 1: true khi ĐANG cuộn (scroll event gần đây), dừng 200ms → false —
+	// co padding-block header theo hành động cuộn, không theo vị trí.
+	let scrollActive: boolean = $state(false);
 	// Yêu cầu 1: ẩn inset-header khi cuộn xuống sâu (mobile only qua CSS).
 	let headerHidden: boolean = $state(false);
 
@@ -89,17 +92,27 @@
 		const findScrollEl = (): HTMLElement | undefined => {
 			let cur = insetEl?.parentElement;
 			while (cur && cur !== document.body) {
-				if (getComputedStyle(cur).overflowY === 'auto') return cur;
+				// Batch8: phải kèm điều kiện scrollable — element overflow:auto KHÔNG
+				// cuộn được (vd root Container khi nội dung vừa màn) nhận scroll event
+				// từ element khác → listener gắn nhầm chỗ, scrollActive không bắn.
+				const ov = getComputedStyle(cur).overflowY;
+				if ((ov === 'auto' || ov === 'scroll') && cur.scrollHeight > cur.clientHeight + 4) return cur;
 				cur = cur.parentElement;
 			}
 			return document.scrollingElement as HTMLElement | undefined;
 		};
 		let raf = 0;
 		let lastTop = 0;
+		// Batch8 mục 1: scroll-ACTIVE theo HÀNH ĐỘNG — đang cuộn co padding-block
+		// header, dừng 200ms trả lại như ban đầu (kể cả ở giữa trang).
+		let scrollActiveTimer: ReturnType<typeof setTimeout>;
 		const onScroll = () => {
 			if (raf) return;
 			raf = requestAnimationFrame(() => {
 				raf = 0;
+				scrollActive = true;
+				clearTimeout(scrollActiveTimer);
+				scrollActiveTimer = setTimeout(() => (scrollActive = false), 200);
 				if (!scrollEl) return;
 				const top = scrollEl.scrollTop;
 				isScrolled = top > 80;
@@ -130,6 +143,7 @@
 			scrollEl?.removeEventListener('scroll', onScroll);
 			window.removeEventListener('scroll', onScroll);
 			if (raf) cancelAnimationFrame(raf);
+			clearTimeout(scrollActiveTimer);
 		};
 	});
 
@@ -707,6 +721,7 @@
 			<div
 				class="admin-inset-header"
 				class:is-scrolled={isScrolled}
+				class:scroll-active={scrollActive}
 				bind:this={insetHeaderEl}
 			>
 				<!-- Mobile: nút mở sidebar (aside offcanvas ẩn → trigger trong
@@ -824,7 +839,8 @@
 			z-index: 500;
 			transition: padding 200ms ease, box-shadow 200ms ease;
 
-			&.is-scrolled {
+			&.is-scrolled,
+			&.scroll-active {
 				padding-block: 0.35rem;
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}
@@ -844,7 +860,8 @@
 			z-index: 500;
 			transition: padding 200ms ease, box-shadow 200ms ease;
 
-			&.is-scrolled {
+			&.is-scrolled,
+			&.scroll-active {
 				padding-block: 0.35rem;
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}

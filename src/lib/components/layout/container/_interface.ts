@@ -11,6 +11,10 @@ export interface ContainerProps extends BasicProps {
 	 *  đẩy Container vào vùng an toàn, height trừ env giữ tổng = viewport khả dụng).
 	 *  Chỉ bật ở Container root layout — Container lồng nhau (modal, panel) tự quản lý. */
 	safeArea?: boolean;
+	/** Tắt transition (height/width/animate) — Container root layout bật để height
+	 *  sync tức thì khi iOS address bar thu giãn (transition 300ms + debounce = lag
+	 *  cảm nhận ~600ms, height "kẹt" sai viewport giữa chừng). Mặc định giữ transition. */
+	transitionDisabled?: boolean;
 }
 export interface ContainerConfigs extends BasicConfigs{
   /**

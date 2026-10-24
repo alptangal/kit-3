@@ -146,8 +146,8 @@
 		style:touch-action={props.touchActionDisabled ? 'none' : 'auto'}
 		style:width={typeof props.width == 'number' ? `${props.width}px` : (props.width ?? 'auto')}
 		style:height={safeAreaHeight ?? (typeof props.height == 'number' ? `${props.height}px` : (props.height ?? 'auto'))}
-		style:transition-duration="var(--transition-duration)"
-		style:--transition-duration={props.transitionEnabled ? `${configs.duration}ms` : undefined}
+		style:transition-duration={props.transitionDisabled ? '0ms' : 'var(--transition-duration)'}
+		style:--transition-duration={props.transitionEnabled && !props.transitionDisabled ? `${configs.duration}ms` : undefined}
 		transition:fly={client.browser?.transition?.fly}
 	>
 		{@render children()}

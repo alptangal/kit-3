@@ -178,6 +178,10 @@ import ToastWrapper from '$components/element/toast/Wrapper/Main.svelte';
 <Container
 	touchActionDisabled={profile.visualKeyboard.focusOn ? true : false}
 	transitionEnabled
+	// Batch8 iOS: address bar thu giãn đổi visualViewport liên tục — transition
+	// height 300ms + debounce = lag cảm nhận ~600ms, height "kẹt" sai viewport
+	// (user report). Tắt transition Container root để height sync tức thì.
+	transitionDisabled
 	safeArea
 	width={profile.browser.dimensions?.width ?? 0}
 	height={profile.browser.dimensions?.height ?? 0}
