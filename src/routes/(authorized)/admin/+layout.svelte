@@ -988,6 +988,18 @@
 			padding-block: 0.25rem;
 			margin-block: -1rem;
 		}
+
+		/* Mobile: pagination dính đáy viewport khi cuộn (trước đây chỉ desktop
+		   ≥768px khai sticky — Safari 15.1 iPhone: layout fullheight chết qua
+		   :has()/dvh → trang cuộn trong root Container → pagination trôi xuống
+		   đáy trang ngoài viewport. Sticky bottom không đổi flow: hết cuộn đáy
+		   pagination tự về vị trí flow. z-400 < FAB z-410 tránh đè FAB. */
+		.admin-inset :global(.admin-pagination) {
+			position: sticky;
+			bottom: 0;
+			z-index: 400;
+			background: var(--background, #fff);
+		}
 	}
 
 	/* ── Yêu cầu 1 (mobile): ẩn inset-header khi cuộn XUỐNG sâu ──
