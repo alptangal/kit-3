@@ -87,6 +87,11 @@
 	$effect(() => {
 		if (typeof document === 'undefined') return;
 		const findScrollEl = (): HTMLElement | undefined => {
+			// Batch9 (m05696): trang con fullheight (suppliers) — bảng tự cuộn trong
+			// .admin-table-wrap, scroll KHÔNG lan lên root Container → phải nghe cả
+			// wrap (đầu tiên) để breadcrumb ẩn/hiện theo cuộn bảng.
+			const wrap = document.querySelector('.admin-table-wrap');
+			if (wrap && wrap.scrollHeight > wrap.clientHeight + 4) return wrap as HTMLElement;
 			let cur = insetEl?.parentElement;
 			while (cur && cur !== document.body) {
 				// Batch8: phải kèm điều kiện scrollable — element overflow:auto KHÔNG
@@ -102,23 +107,34 @@
 		// Batch8 mục 1: scroll-ACTIVE theo HÀNH ĐỘNG — đang cuộn co padding-block
 		// header, dừng 200ms trả lại như ban đầu (kể cả ở giữa trang).
 		let scrollActiveTimer: ReturnType<typeof setTimeout>;
-		const onScroll = () => {
+		const onScroll = (event?: Event) => {
 			if (raf) return;
 			raf = requestAnimationFrame(() => {
 				raf = 0;
 				scrollActive = true;
 				clearTimeout(scrollActiveTimer);
 				scrollActiveTimer = setTimeout(() => (scrollActive = false), 200);
-				if (!scrollEl) return;
-				isScrolled = scrollEl.scrollTop > 80;
+				// Batch9: event có thể từ .admin-table-wrap (bảng tự cuộn) — vị trí
+				// TRANG không đổi khi bảng cuộn → isScrolled header chỉ tính từ
+				// scroll container trang (root Container/window), không từ wrap.
+				const t = event?.target;
+				const fromWrap = t instanceof HTMLElement && t.classList.contains('admin-table-wrap');
+				if (!fromWrap && scrollEl && !scrollEl.classList.contains('admin-table-wrap')) {
+					isScrolled = scrollEl.scrollTop > 80;
+				}
 			});
 		};
 		let scrollEl = findScrollEl();
 		scrollEl?.addEventListener('scroll', onScroll, { passive: true });
-		window.addEventListener('scroll', onScroll, { passive: true });
+		// Batch9 (m05696): scroll KHÔNG bubble nhưng capture:true trên window bắt
+		// được scroll từ MỌI element (wrap trang con cuộn nội bộ, root Container,
+		// window) — trang con mount sau layout (wrap chưa tồn tại lúc $effect chạy)
+		// cũng được phủ. onScroll tự bỏ qua event từ .admin-table-wrap khi tính
+		// isScrolled (vị trí trang không đổi khi bảng cuộn).
+		window.addEventListener('scroll', onScroll, { capture: true, passive: true });
 		return () => {
 			scrollEl?.removeEventListener('scroll', onScroll);
-			window.removeEventListener('scroll', onScroll);
+			window.removeEventListener('scroll', onScroll, { capture: true });
 			if (raf) cancelAnimationFrame(raf);
 			clearTimeout(scrollActiveTimer);
 		};
@@ -698,6 +714,7 @@
 				class="admin-inset-header"
 				class:is-scrolled={isScrolled}
 				class:scroll-active={scrollActive}
+				class:scroll-hidden={scrollActive}
 				bind:this={insetHeaderEl}
 			>
 				<!-- Mobile: nút mở sidebar (aside offcanvas ẩn → trigger trong
@@ -996,8 +1013,16 @@
 	}
 
 	/* Batch8 (user m05611): BỎ cơ chế ẩn header cuộn sâu — breadcrumb phải
-	   luôn hiển thị. Không còn transform/transition header, filters top:0
-	   hay body-pad-top:0 khi "ẩn" (toàn khối @media cũ đã xoá). */
+	   luôn hiển thị. Batch9 (user m05696): ĐANG cuộn (scroll-active) → ẨN
+	   breadcrumb tạm thời (tăng rows hiển thị), DỪNG cuộn 200ms → trả lại.
+	   Chỉ áp mobile — desktop giữ sticky stack luôn thấy. overflow:hidden +
+	   height:0 thu trọn header; transition opacity mượt. margin-bottom âm
+	   không dùng (scroll-anchor loop — bẫy batch trước). */
+	@media (max-width: 767px) {
+		.admin-inset-header.scroll-hidden {
+			display: none;
+		}
+	}
 
 	.admin-inset-body {
 		/* Padding do .admin-page trên từng trang đảm nhiệm (chuẩn 1.5rem,

@@ -2279,9 +2279,10 @@
 		</div>
 	</footer>
 
-	<!-- ── FAB mobile (pattern purchases): nút chính toggle menu, mục menu = create theo tab ──
-		Batch8 mục 2: ở đầu trang (scrollY=0 → tableScrolled=false) ẨN cả group —
-		row caption tools đang hiện, FAB thừa. Cuộn → FAB hiện. -->
+	<!-- ── FAB mobile (pattern purchases): nút chính toggle menu (Create/Search/
+		Setting), nút secondary setting mở filter/sort trực tiếp. Batch9 (m05696):
+		menu = create + search + setting (bỏ Retry — nút tune secondary đã đảm
+		nhiệm mở filter/sort). -->
 	{#if mobileFabOpen}
 		<div class="fab-menu-backdrop" onclick={() => (mobileFabOpen = false)} aria-hidden="true"></div>
 	{/if}
@@ -2289,8 +2290,13 @@
 		<button
 			type="button"
 			class="fab fab--secondary"
-			aria-label={pageContents.states.retry[lang]}
-			onclick={refresh}
+			aria-label={pageContents.actions.filter[lang]}
+			data-test="suppliers-fab-setting"
+			onclick={() => {
+				mobileFabOpen = false;
+				mobileFilterOpen = true;
+				scrollActive = false;
+			}}
 		>
 			<Icon icon={iconify['tune-rounded']} />
 		</button>
@@ -2305,8 +2311,20 @@
 		</button>
 		{#if mobileFabOpen}
 			<div class="fab-menu" role="menu">
-				<!-- Batch8 mục 2: search/filter vào FAB khi row tools ẩn — mở lại
-					row (scrollActive=false) + trigger đúng control -->
+				<!-- Batch9: menu = Create + Search + Setting (mở filter/sort);
+					chọn mục nào cũng mở lại row tools (scrollActive=false) -->
+				<button
+					type="button"
+					class="fab-menu-item"
+					role="menuitem"
+					onclick={() => {
+						mobileFabOpen = false;
+						if (activeTab === 'suppliers') openSupplierModal();
+						else openPOModal();
+					}}
+				>
+					{activeTab === 'suppliers' ? pageContents.actions.createSupplier[lang] : pageContents.actions.createPO[lang]}
+				</button>
 				<button
 					type="button"
 					class="fab-menu-item"
@@ -2325,7 +2343,7 @@
 					type="button"
 					class="fab-menu-item"
 					role="menuitem"
-					data-test="suppliers-fab-filter"
+					data-test="suppliers-fab-setting-item"
 					onclick={() => {
 						mobileFabOpen = false;
 						mobileFilterOpen = true;
@@ -2333,29 +2351,6 @@
 					}}
 				>
 					{pageContents.actions.filter[lang]}
-				</button>
-				<button
-					type="button"
-					class="fab-menu-item"
-					role="menuitem"
-					onclick={() => {
-						mobileFabOpen = false;
-						if (activeTab === 'suppliers') openSupplierModal();
-						else openPOModal();
-					}}
-				>
-					{activeTab === 'suppliers' ? pageContents.actions.createSupplier[lang] : pageContents.actions.createPO[lang]}
-				</button>
-				<button
-					type="button"
-					class="fab-menu-item"
-					role="menuitem"
-					onclick={() => {
-						mobileFabOpen = false;
-						void refresh();
-					}}
-				>
-					{pageContents.states.retry[lang]}
 				</button>
 			</div>
 		{/if}
@@ -3079,15 +3074,10 @@
 
 	// Scroll sang dưới → tab-strip thu nhỏ (pattern admin-inset-header.is-scrolled);
 	// scroll về top → trả lại padding ban đầu (transition tự đảo).
-	// Batch8: thu nhỏ theo HÀNH ĐỘNG cuộn (is-scrolling) — dừng 200ms trả lại.
-	.tab-strip.is-scrolled,
+	// Batch9 (user m05696): ĐANG cuộn → ẨN hẳn tab-strip (tăng rows hiển thị),
+	// dừng 200ms → trả lại. is-scrolled giữ cho trạng thái vị trí.
 	.tab-strip.is-scrolling {
-		box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
-
-		.tab-item {
-			padding: 0.3rem 0.75rem;
-			font-size: 0.8rem;
-		}
+		display: none;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -3277,19 +3267,15 @@
 		flex-wrap: wrap;
 	}
 
-	/* ── Pagination collapsed/pop (pattern purchases): cuộn → gọn lại; chạm đáy
-	   → "pop" animation 450ms 1 lần. ── */
+	/* ── Pagination: Batch9 ĐANG cuộn → ẨN hẳn (tăng rows hiển thị), dừng
+	   200ms → trả lại. pop-anim giữ (chạm đáy flash 1 lần khi hiện lại). ── */
 	.admin-pagination {
-		transition: padding 200ms ease, font-size 200ms ease;
+		transition: opacity 150ms ease;
 	}
 
 	.pagination-collapsed.admin-pagination {
-		padding-block: 0.15rem;
-		font-size: 0.75rem;
-	}
-	.at-bottom .admin-pagination {
-		padding-block: 0;
-		font-size: 0.7rem;
+		opacity: 0;
+		pointer-events: none;
 	}
 	.pagination-pop.admin-pagination {
 		animation: pagination-pop-anim 450ms ease-out;
