@@ -230,12 +230,19 @@
 
 	/** Chọn file (defer) — preview ngay, upload sau. target = index entry đổi thay.
 	 *  BẪY batch7: cấm trùng (defer) — so tên+size file pending với entry có sẵn;
-	 *  URL cũ không so được (server không trả filename) → chỉ guard pending. */
+	 *  URL cũ không so được (server không trả filename) → chỉ guard pending.
+	 *  Batch10 (m06635-6b): trùng → toast + ANIMATE row trùng (flash viền 1.2s)
+	 *  để user chú ý vị trí đã có. */
+	let duplicateFlashKey = $state<number | null>(null);
+	let duplicateFlashTimer: ReturnType<typeof setTimeout> | undefined;
 	function handleDeferFile(file: File, target?: number) {
 		if (target === undefined) {
-			const dup = deferEntries.some((en) => en.file && en.file.name === file.name && en.file.size === file.size);
-			if (dup) {
+			const dupEntry = deferEntries.find((en) => en.file && en.file.name === file.name && en.file.size === file.size);
+			if (dupEntry) {
 				client.browser?.toasts?.create({ title: tr('errDuplicate'), color: 'warning' });
+				duplicateFlashKey = dupEntry.key;
+				clearTimeout(duplicateFlashTimer);
+				duplicateFlashTimer = setTimeout(() => (duplicateFlashKey = null), 1300);
 				return;
 			}
 		}
@@ -503,7 +510,7 @@
 			{:else}
 				<div class="image-upload__rows">
 					{#each deferEntries as entry, i (entry.key)}
-						<div class="image-upload__row" class:image-upload__row--pending={!!entry.file}>
+						<div class="image-upload__row" class:image-upload__row--pending={!!entry.file} class:image-upload__row--flash={entry.key === duplicateFlashKey}>
 							<span class="image-upload__row-stt">{i + 1}</span>
 							<!-- thumb: click → modal chi tiết; overlay actions giữ hover -->
 							<button type="button" class="image-upload__row-thumb" onclick={(e) => { e.stopPropagation(); detailEntry = entry; detailDisplay = true; }}>
@@ -972,6 +979,11 @@
 		flex-direction: column;
 		gap: 0.375rem;
 		cursor: default;
+		/* Batch10 (m06635-6a): tên file dài không tràn ra ngoài → không sinh
+		   scrollbar ngang; ellipsis xử lý ở __row-name/__row-sub */
+		min-width: 0;
+		max-width: 100%;
+		overflow-x: hidden;
 	}
 
 	.image-upload__row {
@@ -982,10 +994,19 @@
 		border: 1px solid var(--default-200);
 		border-radius: 0.5rem;
 		background: var(--background);
+		/* Batch10 (m06635-6a): flex item con min-width:0 để ellipsis hoạt động */
+		min-width: 0;
+		overflow: hidden;
 
 		&--pending {
 			outline: 1.5px dashed var(--warning, #f59e0b);
 			outline-offset: -1.5px;
+		}
+
+		/* Batch10 (m06635-6b): chọn file trùng → animate row CŨ (user chú ý
+		   vị trí trùng) thay vì chỉ toast */
+		&--flash {
+			animation: image-row-flash 1.2s ease-out;
 		}
 	}
 
@@ -1037,6 +1058,10 @@
 	.image-upload__row-sub {
 		font-size: 0.72rem;
 		color: var(--foreground-500);
+		/* Batch10 (m06635-6a): sub dài (size · type · pending) cũng ellipsis */
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.image-upload__row-pending {
@@ -1103,6 +1128,25 @@
 		&:disabled {
 			opacity: 0.5;
 			cursor: not-allowed;
+		}
+	}
+
+	/* Batch10 (m06635-6b): flash viền error khi chọn file trùng (chỉ row trùng) */
+	@keyframes image-row-flash {
+		0%,
+		55% {
+			border-color: var(--error);
+			box-shadow: 0 0 0 2px color-mix(in oklab, var(--error) 25%, transparent);
+		}
+		100% {
+			border-color: var(--default-200);
+			box-shadow: 0 0 0 2px transparent;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.image-upload__row--flash {
+			animation: none;
+			border-color: var(--error);
 		}
 	}
 

@@ -7,6 +7,7 @@
 	// Variant 'compact': chỉ prev + counter (jump-to input) + next — không render entries.
 	// Compact counter: pageAtEditStart (blur/xoá rỗng → page trước khi edit, KHÔNG snap 1).
 	// Loading: root aria-busy + MỌI item disabled + mờ + cursor not-allowed (đồng bộ data).
+	import { flushSync } from 'svelte';
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
@@ -67,12 +68,17 @@
 	const clampPage = (n: number): number => Math.min(Math.max(1, Math.trunc(n) || 1), totalPages);
 
 	// Click counter / Enter/Space trên button: vào edit mode (draft = page hiện,
-	// focus + select-all input qua rAF — KHÔNG dùng autofocus, không tin cậy sau block DOM).
+	// focus + select-all input. Batch10 (m06635 pg-1): flushSync mount input
+	// TRONG cùng user gesture → focus hợp lệ trên iOS Safari (rAF thoát gesture
+	// → keyboard không mở). Vẫn giữ rAF cho select-all (không cần gesture).
 	function startEdit() {
 		if (loading || disabled || editing || singlePage) return;
 		draft = String(safePage);
 		pageAtEditStart = safePage;
-		editing = true;
+		flushSync(() => {
+			editing = true;
+		});
+		inputRef?.focus();
 		requestAnimationFrame(() => {
 			inputRef?.focus();
 			inputRef?.select();

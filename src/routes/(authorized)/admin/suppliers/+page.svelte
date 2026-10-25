@@ -1,6 +1,6 @@
 <!-- src/routes/(authorized)/admin/suppliers/+page.svelte -->
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { flushSync, tick } from 'svelte';
 	import { Button, DataTable, Pagination, AlertDialog, Badge, Spinner } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
@@ -116,6 +116,17 @@
 			allBranches: { vi: 'Tất cả chi nhánh', en: 'All branches' },
 			allSuppliers: { vi: 'Tất cả nhà cung cấp', en: 'All suppliers' }
 		},
+		// Batch10 (m06635-3): setting modal (filter + sort) từ nút tune header/FAB
+		settings: {
+			title: { vi: 'Cài đặt danh sách', en: 'List settings' },
+			filterStatus: { vi: 'Trạng thái', en: 'Status' },
+			sortBy: { vi: 'Sắp xếp theo', en: 'Sort by' },
+			sortDirection: { vi: 'Chiều sắp xếp', en: 'Sort direction' },
+			asc: { vi: 'Tăng dần', en: 'Ascending' },
+			desc: { vi: 'Giảm dần', en: 'Descending' },
+			apply: { vi: 'Áp dụng', en: 'Apply' },
+			reset: { vi: 'Đặt lại', en: 'Reset' }
+		},
 		supplierTable: {
 			name: { vi: 'Tên', en: 'Name' },
 			contact: { vi: 'Người liên hệ', en: 'Contact' },
@@ -187,6 +198,9 @@
 			emails: { vi: 'Email', en: 'Emails' },
 			addEmail: { vi: 'Thêm email', en: 'Add email' },
 			removeEmail: { vi: 'Xoá email', en: 'Remove email' },
+			// Batch10 (m06635-6c): cảnh báo text khi phone/email trùng trong danh sách
+			dupPhone: { vi: 'Số điện thoại đã tồn tại trong danh sách', en: 'This phone number already exists in the list' },
+			dupEmail: { vi: 'Email đã tồn tại trong danh sách', en: 'This email already exists in the list' },
 			social: { vi: 'Mạng xã hội', en: 'Social networks' },
 			zalo: { vi: 'Zalo', en: 'Zalo' },
 			zaloPlaceholder: { vi: 'Số Zalo hoặc link zalo.me/...', en: 'Zalo number or zalo.me/... link' },
@@ -452,12 +466,30 @@
 	let searchArmed = false;
 	let suggestOpen = $state(false);
 	let searchFocused = $state(false);
-	let mobileFabOpen = $state(false);
 	// Mobile caption (yêu cầu 2c): search icon → text field; filter status vào
 	// popover từ nút tune; create → icon button. isMobile từ client store.
 	const isMobile = $derived(client.browser?.isMobile ?? false);
 	let mobileSearchOpen = $state(false);
-	let mobileFilterOpen = $state(false);
+	// Batch10 (m06635-2,3): setting modal (filter + sort) — mở từ nút tune header
+	// datatable VÀ nút setting FAB thay popover gắn caption. mobileFilterOpen BỎ
+	// (popover caption xoá hẳn — modal thay thế).
+	let settingModalDisplay = $state(false);
+	// Draft sort trong setting modal (apply mới ghi vào sortField/sortDirection).
+	// Mở modal → seed draft từ state hiện tại ($effect 1 lần khi display bật).
+	let settingSortField = $state('');
+	let settingSortDirection = $state<'asc' | 'desc'>('desc');
+	$effect(() => {
+		if (settingModalDisplay) {
+			settingSortField = sortField;
+			settingSortDirection = sortDirection;
+		}
+	});
+	// Options sort từ supplierColumns sortable (mirror header sort).
+	const settingSortOptions = $derived(
+		supplierColumns
+			.filter((c) => c.sortable)
+			.map((c) => ({ value: c.id, label: c.label }))
+	);
 	// bind:this Input component → instance { configs } (export { configs } cuối
 	// Input/Main.svelte) — focus() qua instance.configs.focus().
 	let mobileSearchInputInstance = $state<{ configs: { focus: () => void } } | undefined>(undefined);
@@ -1519,6 +1551,20 @@
 		setTimeout(() => el.classList.remove('field-flash'), 1600);
 	}
 
+	// Batch10 (m06635-5b): focus input của row VỪA THÊM (cuối cùng) trong block.
+	// Gọi sau flushSync mount row — phần thân focus nằm trong cùng user gesture
+	// (iOS Safari chỉ mở keyboard khi focus trong gesture).
+	// fieldSelector: khối bọc row (vd '[data-field="supplier-phones"]');
+	// rowClass: class row bên trong (address-entry) khi không có data-field riêng.
+	function focusLastFieldRow(rootEl: HTMLElement | null | undefined, fieldSelector?: string, rowClass?: string) {
+		if (!rootEl) return;
+		const scope = fieldSelector ? rootEl.querySelector<HTMLElement>(fieldSelector) : rootEl;
+		if (!scope) return;
+		const rows = scope.querySelectorAll<HTMLElement>(rowClass ? `.${rowClass}` : '.field-row');
+		const last = rows[rows.length - 1];
+		last?.querySelector<HTMLInputElement>('input')?.focus();
+	}
+
 	// Map lỗi validate PO → selector (thứ tự khớp validatePOForm:
 	// code → supplier → branch → items).
 	const FIELD_SELECTORS_PO = {
@@ -1547,6 +1593,10 @@
 	const hasDuplicates = $derived(
 		[...phoneDupCounts.values(), ...emailDupCounts.values(), ...addressDupCounts.values()].some((n) => n >= 2)
 	);
+	// Batch10 (m06635-5c): form invalid → nút submit disable (validate toàn form
+	// + trùng phone/email/address). Tên trống + row rỗng là trạng thái khởi tạo
+	// create — vẫn tính invalid (user phải điền tối thiểu tên).
+	const supplierFormInvalid = $derived(!!validateSupplierForm() || hasDuplicates);
 
 	function buildSupplierPayload() {
 		const t = supplierForm;
@@ -2027,10 +2077,14 @@
 										aria-label={lang === 'vi' ? 'Tìm kiếm' : 'Search'}
 										data-test="suppliers-mobile-search-open"
 										onclick={() => {
-											mobileSearchOpen = true;
-											suggestOpen = true;
-											// autofocus sau khi mount (attr autofocus có thể bị bỏ qua khi re-render)
-											setTimeout(() => mobileSearchInputInstance?.configs.focus(), 0);
+											// Batch10 (m06635-1): flushSync mount field + focus TRONG
+											// user gesture (iOS Safari chỉ mở keyboard khi focus nằm
+											// trong gesture — setTimeout(0) thoát gesture → hỏng).
+											flushSync(() => {
+												mobileSearchOpen = true;
+												suggestOpen = true;
+											});
+											mobileSearchInputInstance?.configs.focus();
 										}}
 									>
 										<Icon icon={iconify['search-rounded']} size="sm" />
@@ -2121,42 +2175,25 @@
 									data-test="suppliers-filter-status"
 								/>
 							{/if}
-							<!-- nút create vào caption (yêu cầu 3: bỏ admin-header) -->
 							<div class="admin-actions-group">
+								<!-- Batch10 (m06635-3): nút setting (tune) header datatable mở
+									SETTING MODAL (filter + sort) — cả desktop lẫn mobile thay
+									popover gắn caption (bị ẩn theo row tools khi cuộn). -->
 								{#if isMobile}
-									<div class="mobile-filter-anchor">
-										<button
-											type="button"
-											class="mobile-caption-icon"
-											aria-label={pageContents.filters.allStatuses[lang]}
-											data-test="suppliers-mobile-filter-btn"
-											onclick={() => (mobileFilterOpen = !mobileFilterOpen)}
-										>
-											<Icon icon={iconify['tune-rounded']} size="sm" />
-										</button>
-										{#if mobileFilterOpen}
-											<div class="mobile-filter-popover">
-												<Select
-													class="admin-filter-select"
-													size="sm"
-													bind:value={supplierStatusFilter}
-													options={supplierStatusOptions}
-													searchable
-													clearable
-													placeholder={pageContents.filters.allStatuses[lang]}
-													onValueChange={() => {
-														onFilterChange();
-													}}
-													data-test="suppliers-filter-status-mobile"
-												/>
-											</div>
-										{/if}
-									</div>
-								{:else}
-									<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
-										<Icon icon={iconify['tune-rounded']} size="sm" />
-									</Button>
-								{/if}
+								<button
+									type="button"
+									class="mobile-caption-icon"
+									aria-label={pageContents.filters.allStatuses[lang]}
+									data-test="suppliers-mobile-filter-btn"
+									onclick={() => (settingModalDisplay = true)}
+								>
+									<Icon icon={iconify['tune-rounded']} size="sm" />
+								</button>
+							{:else}
+								<Button color="default" variant="outline" size="sm" onClick={() => (settingModalDisplay = true)} aria-label={pageContents.filters.allStatuses[lang]} data-test="suppliers-header-setting-btn">
+									<Icon icon={iconify['tune-rounded']} size="sm" />
+								</Button>
+							{/if}
 								<!-- Quy ước màu nút: create = success -->
 								{#if isMobile}
 									<Button color="success" size="sm" onClick={openSupplierModal} aria-label={pageContents.actions.createSupplier[lang]} data-test="suppliers-create-btn">
@@ -2299,38 +2336,35 @@
 	</footer>
 
 	<!-- ── FAB mobile (pattern purchases). Batch9c (m06530): 3 nút cùng cấp
-		create + search + setting (setting mở filter/sort); group ẨN theo HÀNH
-		ĐỘNG cuộn (opacity giống tab/pagination — scrollY=0 → ẩn, đang cuộn →
-		ẩn, dừng → hiện; menu mở giữ hiện qua fab-keep). -->
-	{#if mobileFabOpen}
-		<div class="fab-menu-backdrop" onclick={() => (mobileFabOpen = false)} aria-hidden="true"></div>
-	{/if}
-	<div class="fab-group" class:fab-hidden={!tableScrolled} class:is-scrolling={scrollActive} class:fab-keep={mobileFabOpen} data-suggest>
-		<!-- Batch9c: search cùng cấp — mở text field trong caption (scrollActive=false
-			để row tools hiện lại) + focus -->
+		create + search + setting; group ẨN theo HÀNH ĐỘNG cuộn (opacity giống
+		tab/pagination — scrollY=0 → ẩn, đang cuộn → ẩn, dừng → hiện). -->
+	<div class="fab-group" class:fab-hidden={!tableScrolled} class:is-scrolling={scrollActive} data-suggest>
+		<!-- Batch10 (m06635-1): flushSync mount field + focus TRONG gesture (iOS
+			Safari chỉ mở keyboard khi focus trong user gesture). Batch10-7: DOM
+			create → setting → search + column-reverse → hiển thị TỪ TRÊN XUỐNG =
+			search → setting → create (yêu cầu: search trước setting). -->
 		<button
 			type="button"
-			class="fab fab--secondary"
-			aria-label={pageContents.actions.search[lang]}
-			data-test="suppliers-fab-search-btn"
+			class="fab fab--primary"
+			aria-label={activeTab === 'suppliers' ? pageContents.actions.createSupplier[lang] : pageContents.actions.createPO[lang]}
+			data-test="suppliers-fab"
 			onclick={() => {
-				mobileFabOpen = false;
-				mobileSearchOpen = true;
-				scrollActive = false;
-				setTimeout(() => mobileSearchInputInstance?.configs.focus(), 0);
+				// Batch10 (m06635-4): create mở modal NGAY (theo activeTab) — bỏ menu.
+				if (activeTab === 'suppliers') openSupplierModal();
+				else openPOModal();
 			}}
 		>
-			<Icon icon={iconify['search-rounded']} />
+			<Icon icon={iconify['add-rounded']} />
 		</button>
-		<!-- setting: mở modal filter/sort (mobile-filter-popover từ nút tune caption) -->
+		<!-- Batch10 (m06635-2,3): setting mở SETTING MODAL (filter+sort) thay popover
+			gắn caption — popover nằm trong row tools bị ẩn khi cuộn → "không có modal". -->
 		<button
 			type="button"
 			class="fab fab--secondary"
-			aria-label={pageContents.actions.filter[lang]}
+			aria-label={pageContents.filters.allStatuses[lang]}
 			data-test="suppliers-fab-setting"
 			onclick={() => {
-				mobileFabOpen = false;
-				mobileFilterOpen = true;
+				settingModalDisplay = true;
 				scrollActive = false;
 			}}
 		>
@@ -2338,31 +2372,21 @@
 		</button>
 		<button
 			type="button"
-			class="fab fab--primary"
-			aria-label={pageContents.actions.createSupplier[lang]}
-			data-test="suppliers-fab"
-			onclick={() => (mobileFabOpen = !mobileFabOpen)}
+			class="fab fab--secondary"
+			aria-label={pageContents.actions.search[lang]}
+			data-test="suppliers-fab-search-btn"
+			onclick={() => {
+				// Batch10 (m06635-1): flushSync mount field + focus TRONG gesture
+				// (iOS Safari — keyboard chỉ mở khi focus trong user gesture).
+				flushSync(() => {
+					mobileSearchOpen = true;
+					scrollActive = false;
+				});
+				mobileSearchInputInstance?.configs.focus();
+			}}
 		>
-			<Icon icon={mobileFabOpen ? iconify['close-rounded'] : iconify['add-rounded']} />
+			<Icon icon={iconify['search-rounded']} />
 		</button>
-		{#if mobileFabOpen}
-			<div class="fab-menu" role="menu">
-				<!-- Batch9c: menu còn Create (search + setting đã lên nút cùng cấp);
-					chọn mở lại row tools (scrollActive=false) -->
-				<button
-					type="button"
-					class="fab-menu-item"
-					role="menuitem"
-					onclick={() => {
-						mobileFabOpen = false;
-						if (activeTab === 'suppliers') openSupplierModal();
-						else openPOModal();
-					}}
-				>
-					{activeTab === 'suppliers' ? pageContents.actions.createSupplier[lang] : pageContents.actions.createPO[lang]}
-				</button>
-			</div>
-		{/if}
 	</div>
 </section>
 
@@ -2443,6 +2467,9 @@
 										supplierForm.phones = supplierForm.phones.filter((_, i) => i !== phoneIndex);
 									}}
 								>✕</button>
+								{#if (phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2}
+									<span class="field-row-dup-msg">{pageContents.supplierModal.dupPhone[lang]}</span>
+								{/if}
 							</div>
 						{/each}
 						<button
@@ -2450,7 +2477,12 @@
 							class="field-add"
 							disabled={supplierSubmitting || supplierForm.phones.some((p) => (p ?? '').trim() !== '' && !PHONE_RE.test((p ?? '').trim()))}
 							onclick={() => {
-								supplierForm.phones = [...supplierForm.phones, ''];
+								// Batch10 (m06635-5b): flushSync mount row + focus TRONG gesture
+								// (iOS Safari chỉ mở keyboard khi focus trong user gesture).
+								flushSync(() => {
+									supplierForm.phones = [...supplierForm.phones, ''];
+								});
+								focusLastFieldRow(supplierModalBodyEl, '[data-field="supplier-phones"]');
 							}}
 						>+ {pageContents.supplierModal.addPhone[lang]}</button>
 					</div>
@@ -2469,6 +2501,9 @@
 										supplierForm.emails = supplierForm.emails.filter((_, i) => i !== emailIndex);
 									}}
 								>✕</button>
+								{#if (emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2}
+									<span class="field-row-dup-msg">{pageContents.supplierModal.dupEmail[lang]}</span>
+								{/if}
 							</div>
 						{/each}
 						<button
@@ -2476,7 +2511,11 @@
 							class="field-add"
 							disabled={supplierSubmitting || supplierForm.emails.some((e) => (e ?? '').trim() !== '' && !EMAIL_RE.test((e ?? '').trim()))}
 							onclick={() => {
-								supplierForm.emails = [...supplierForm.emails, ''];
+								// Batch10 (m06635-5b): flushSync + focus trong gesture.
+								flushSync(() => {
+									supplierForm.emails = [...supplierForm.emails, ''];
+								});
+								focusLastFieldRow(supplierModalBodyEl, '[data-field="supplier-emails"]');
 							}}
 						>+ {pageContents.supplierModal.addEmail[lang]}</button>
 					</div>
@@ -2521,9 +2560,13 @@
 							class="field-add"
 							disabled={supplierSubmitting || supplierForm.addresses.some((a) => (a.address ?? '').trim() === '')}
 							onclick={() => {
-								supplierForm.addresses = [...supplierForm.addresses, { label: '', address: '', province: '', district: '' }];
-								supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '', ward: '' }];
-								supplierNewAddressBreakdowns = [...supplierNewAddressBreakdowns, { province: '', ward: '' }];
+								// Batch10 (m06635-5b): flushSync + focus trong gesture.
+								flushSync(() => {
+									supplierForm.addresses = [...supplierForm.addresses, { label: '', address: '', province: '', district: '' }];
+									supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '', ward: '' }];
+									supplierNewAddressBreakdowns = [...supplierNewAddressBreakdowns, { province: '', ward: '' }];
+								});
+								focusLastFieldRow(supplierModalBodyEl, null, 'address-entry');
 							}}
 						>+ {pageContents.supplierModal.addAddress[lang]}</button>
 					</div>
@@ -2652,8 +2695,9 @@
 					</Button>
 				{/if}
 				<span class="supplier-footer-spacer"></span>
-				<!-- create/save = success -->
-				<Button color="success" onClick={submitSupplier} loading={supplierSubmitting} disabled={supplierSubmitting}>
+				<!-- create/save = success. Batch10 (m06635-5c): disable khi form invalid
+					(đỡ thao tác lãng phí — submit chỉ bật khi dữ liệu hợp lệ). -->
+				<Button color="success" onClick={submitSupplier} loading={supplierSubmitting} disabled={supplierSubmitting || supplierFormInvalid}>
 					{supplierEditMode === 'edit' ? pageContents.supplierModal.save[lang] : pageContents.supplierModal.submit[lang]}
 				</Button>
 				<Button
@@ -2693,6 +2737,93 @@
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog>
+{/if}
+
+<!-- ── Batch10 (m06635-3): Setting modal (filter status + sort) — mở từ nút
+	tune header datatable (desktop + mobile) và nút setting FAB. Thay popover
+	gắn caption (bị ẩn theo row tools khi đang cuộn → click FAB "không thấy"). ── -->
+{#if settingModalDisplay}
+	<Modal bind:display={settingModalDisplay} size="sm">
+		<Modal.Container>
+			<Modal.Container.Header>{pageContents.settings.title[lang]}</Modal.Container.Header>
+			<Modal.Container.Body>
+				<div class="setting-form" data-test="suppliers-setting-modal">
+					<TextField name="suppliers-setting-status">
+						<Label>{pageContents.settings.filterStatus[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={supplierStatusFilter}
+							options={supplierStatusOptions}
+							searchable
+							clearable
+							placeholder={pageContents.filters.allStatuses[lang]}
+							data-test="suppliers-setting-status"
+						/>
+					</TextField>
+					<TextField name="suppliers-setting-sort">
+						<Label>{pageContents.settings.sortBy[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={settingSortField}
+							options={settingSortOptions}
+							clearable
+							placeholder={pageContents.settings.sortBy[lang]}
+							data-test="suppliers-setting-sort"
+						/>
+					</TextField>
+					<TextField name="suppliers-setting-direction">
+						<Label>{pageContents.settings.sortDirection[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={settingSortDirection}
+							options={[
+								{ value: 'asc', label: pageContents.settings.asc[lang] },
+								{ value: 'desc', label: pageContents.settings.desc[lang] }
+							]}
+							data-test="suppliers-setting-direction"
+						/>
+					</TextField>
+				</div>
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<Button
+					color="secondary"
+					variant="outline"
+					disabled={supplierStatusFilter === '' && settingSortField === ''}
+					onClick={() => {
+						settingSortField = '';
+						settingSortDirection = 'desc';
+					}}
+				>
+					{pageContents.settings.reset[lang]}
+				</Button>
+				<Button
+					color="primary"
+					data-test="suppliers-setting-apply"
+					onClick={() => {
+						sortField = settingSortField;
+						sortDirection = settingSortDirection === 'asc' ? 'asc' : 'desc';
+						settingModalDisplay = false;
+						// mirror onSupplierFilterChange + onSupplierSortChange: persist
+						// (filter + sort) + về trang 1 + reload
+						saveDataTablePrefs(PREFS_KEY, {
+							filters: { status: supplierStatusFilter || null },
+							sort: sortField ? { field: sortField, direction: sortDirection } : undefined,
+							cardFields: cardFieldIds
+						});
+						suppliersPage = 1;
+						currentPagingPage = 1;
+						void loadSuppliers();
+					}}
+				>
+					{pageContents.settings.apply[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
 {/if}
 
 <!-- ── Modal lịch sử thay đổi (timeline kiểu git + khôi phục từng entry) ── -->
@@ -3503,6 +3634,13 @@
 		gap: 0.75rem;
 	}
 
+	/* Batch10 (m06635-3): setting modal — các field xếp dọc */
+	.setting-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
 	/* hàng phone/email + nút xoá.
 	   Batch 3: Badge STT (trái) + remove (phải) ĐÈ LÊN VIỀN TRÊN của field
 	   (absolute, translateY(-50%)) → không tốn chiều cao hàng; kích thước nhỏ
@@ -3815,6 +3953,16 @@
 		}
 	}
 
+	/* Batch10 (m06635-6c): text cảnh báo trùng dưới field-row */
+	.field-row-dup-msg {
+		position: absolute;
+		top: 100%;
+		left: 2.75rem;
+		font-size: 0.72rem;
+		color: var(--error);
+		pointer-events: none;
+	}
+
 	.form-dup-banner {
 		background: color-mix(in oklab, var(--error) 8%, transparent);
 		border-left-color: var(--error);
@@ -3995,7 +4143,7 @@
 		z-index: 400;
 		/* Batch9c (m06530): ẩn theo HÀNH ĐỘNG cuộn giống tab/pagination —
 		   scrollY=0 → ẩn (row caption tools đang hiện), đang cuộn → ẩn,
-		   dừng 200ms → hiện lại. fab-keep (menu mở) giữ hiện bất chấp. */
+		   dừng 200ms → hiện lại. Batch10: bỏ fab-keep (menu create đã bỏ). */
 		transition: opacity 200ms ease;
 		&.fab-hidden {
 			opacity: 0;
@@ -4005,12 +4153,6 @@
 		&.is-scrolling {
 			opacity: 0;
 			pointer-events: none;
-		}
-		&.fab-keep,
-		&.fab-keep.fab-hidden,
-		&.fab-keep.is-scrolling {
-			opacity: 1;
-			pointer-events: auto;
 		}
 
 		@media (min-width: 768px) {
@@ -4046,47 +4188,6 @@
 		height: 2.75rem;
 		background: var(--background);
 		color: var(--foreground);
-	}
-
-	.fab-menu {
-		position: absolute;
-		right: 0;
-		bottom: calc(100% + 0.5rem);
-		min-width: 11rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-		background: var(--background);
-		border: 1px solid var(--default-200);
-		border-radius: 0.75rem;
-		box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
-		padding: 0.35rem;
-	}
-
-	.fab-menu-item {
-		text-align: left;
-		padding: 0.55rem 0.75rem;
-		border: none;
-		border-radius: 0.5rem;
-		background: transparent;
-		color: var(--foreground);
-		font-size: 0.875rem;
-		cursor: pointer;
-		white-space: nowrap;
-
-		&:hover {
-			background: var(--default-100);
-		}
-	}
-
-	.fab-menu-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 390;
-
-		@media (min-width: 768px) {
-			display: none;
-		}
 	}
 
 	/* Fullheight padding bottom cho FAB (pattern purchases) — FAB group 2 nút
