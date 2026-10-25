@@ -68,7 +68,13 @@ $effect(() => {
 	let passkeySupported = $state(false);
 	/** Thiết bị có platform authenticator (false → nút disabled + hint bật Windows Hello) */
 	let passkeyAuthenticator = $state(false);
-	let passkeyLoading = $state(false);	// Ngôn ngữ hiện tại
+	let passkeyLoading = $state(false);
+
+	// Batch 11 (yêu cầu 2): icon biometric theo nền tảng — PC = USB security
+	// key, mobile = fingerprint. iconify đã map 'usb-key-rounded'.
+	const passkeyIcon = $derived(client.browser?.isMobile ? 'lucide:fingerprint' : 'usb-key-rounded');
+
+	// Ngôn ngữ hiện tại
 	const lang = $derived(client.browser?.language ?? 'en');
 	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
 
@@ -530,11 +536,13 @@ $effect(() => {
 			     Hàng riêng PHÍA TRÊN nút Sign in theo yêu cầu. Nhóm 3: không có
 			     authenticator → nút disabled + hint (thay vì ẩn hoàn toàn). -->
 			<div class="passkey-section">
+				<!-- Batch 11 (yêu cầu 2): PC dùng USB security key,
+				     mobile giữ fingerprint (Touch ID/Face ID/vân tay). -->
 				<Button
 					class="auth-btn-passkey"
 					color="primary"
 					variant="ghost"
-					icon="lucide:fingerprint"
+					icon={passkeyIcon}
 					loading={passkeyLoading}
 					onclick={handlePasskeyLogin}
 				>
@@ -558,8 +566,9 @@ $effect(() => {
 				{loading}
 				disabled={status.disabled}
 			>
+				<!-- Batch 11: BỎ span.spinner tự vẽ — Button loading đã render
+				     spinner riêng (2 indicator trùng nhau). Chỉ đổi text. -->
 				{#if loading}
-					<span class="spinner"></span>
 					<span>{lang === 'vi' ? 'Đang đăng nhập...' : 'Signing in...'}</span>
 				{:else}
 					<span>{pageContents.login[lang] ?? 'Sign in'}</span>
@@ -653,35 +662,8 @@ $effect(() => {
 	}
 
 
-	/* Loading spinner animation — nền nút success (đậm cả 2 theme) →
-	   vạch sáng dùng --solid (gần trắng), rãnh dùng cùng màu alpha. */
-	.spinner {
-		display: inline-block;
-		width: 1rem;
-		height: 1rem;
-		border: 2px solid rgb(255 255 255 / 0.3);
-		border-top-color: var(--solid);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-		margin-right: 0.5rem;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	:global(.auth-btn-submit) {
-		display: flex !important;
-		align-items: center !important;
-		justify-content: center !important;
-		gap: 0.5rem !important;
-
-		.spinner {
-			margin-right: 0;
-		}
-	}
+	/* Batch 11: .spinner cũ đã bỏ — Button loading tự render spinner (2
+	   indicator trùng nhau khi submit). @keyframes spin giữ (Button dùng keyframes riêng). */
 
 	:global(.auth-switch-btn) {
 		.link-arrow {

@@ -303,35 +303,12 @@
 		list-style: none;
 	}
 
-	/* Chấm active ở mép trái sidebar, thẳng hàng header group (yêu cầu mới:
-	   KHÔNG border trên item — chấm gắn vào trigger luôn-mount vì submenu
-	   unmount khi group đóng). :has đã dùng an toàn trong layout. */
+	/* Batch 11 (yêu cầu 3): BỎ chấm active trên label group (::before 6px ở mép
+	   trái) — user không muốn dot trước content khi group active. Giữ
+	   active-group class (JS context vẫn điền, vô hại); vệt active trên item lá
+	   (SidebarMenuButton) giữ nguyên. */
 	.sidebar-menu-group__trigger {
 		position: relative;
-	}
-
-	.sidebar-menu-group__trigger::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 50%;
-		translate: 0 -50%;
-		width: 6px;
-		height: 6px;
-		border-radius: 999px;
-		background: var(--primary, var(--color-indigo-500, hsl(243 75% 59%)));
-		opacity: 0;
-		transition: opacity var(--transition-duration, 150ms) ease;
-	}
-
-	.sidebar-menu-group:has(.sidebar-menu-button.active) .sidebar-menu-group__trigger::before {
-		opacity: 1;
-	}
-
-	/* Group ĐÓNG: submenu unmount → :has() chết — dùng class active-group do con
-	   điền qua ActiveSlot context (MenuButton $effect). Cùng một ::before. */
-	.sidebar-menu-group.active-group .sidebar-menu-group__trigger::before {
-		opacity: 1;
 	}
 
 	/* Active indicator kiểu Nuxt UI: vệt primary trên item lá (.active::before,

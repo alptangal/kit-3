@@ -13,7 +13,7 @@
 	import type { LayoutData } from '$store/user-prefs.svelte';
 	import type { TranslateContent } from '$interfaces/basic';
 	import { client, profile } from '$store/basic.svelte';
-	import { Icon } from '$components/element';
+	import { Icon, AlertDialog } from '$components/element';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
@@ -149,6 +149,8 @@
 	// resolve qua dict vi/en dưới đây (component SidebarMenuButton + Breadcrumb đã hỗ
 	// trợ TranslateContent; GroupLabel + TeamSwitcher group render inline → derive text).
 	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : 'en');
+	// Batch 11 (yêu cầu 2): rule cuộn co/ẩn chỉ áp mobile/small screen
+	const isMobileLayout = $derived(client.browser?.isMobile ?? false);
 	const tc = (vi: string, en: string): TranslateContent => ({ vi, en });
 
 	// Brand đầu sidebar — TeamSwitcher 1 team (ứng dụng hiện đơn tenant; mở
@@ -168,10 +170,19 @@
 	const pathname = $derived(page.url.pathname);
 	const isActive = (href: string) => (href === '/admin' ? pathname === '/admin' : pathname.startsWith(href));
 
+	// Batch 11 (yêu cầu 2): logout cần confirm AlertDialog trước khi thực hiện.
+	let logoutConfirmDisplay = $state(false);
+	let loggingOut = $state(false);
 	// ── Logout: POST /api/auth/logout (revoke refresh token + xoá cookies) → về /login.
 	// Gọi với finally goto để kể cả network fail vẫn rời app (cookies server-side
 	// đã cố revoke; client fallback: xoá accessToken DPoP trong sessionStorage).
-	const handleLogout = async () => {
+	// Nút sidebar mở confirm (không logout ngay).
+	const handleLogout = () => {
+		logoutConfirmDisplay = true;
+	};
+	const performLogout = async () => {
+		if (loggingOut) return;
+		loggingOut = true;
 		try {
 			await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
 		} catch {
@@ -182,6 +193,8 @@
 			sessionStorage.removeItem('dpop-keypair-jwk');
 		} catch {}
 		await goto('/login', { invalidateAll: true });
+		loggingOut = false;
+		logoutConfirmDisplay = false;
 	};
 
 	// ── Theme switch 3 nút (yêu cầu batch 3 #sidebar): 3 icon system/dark/light
@@ -198,10 +211,10 @@
 		dark: 'lucide:sun',
 		light: 'lucide:moon'
 	};
-	const themeLabels: Record<AppTheme, string> = {
-		system: tc('Hệ thống', 'System') as string,
-		dark: tc('Tối', 'Dark') as string,
-		light: tc('Sáng', 'Light') as string
+	const themeLabels: Record<AppTheme, TranslateContent> = {
+		system: tc('Hệ thống', 'System'),
+		dark: tc('Tối', 'Dark'),
+		light: tc('Sáng', 'Light')
 	};
 	const themeAria: Record<AppTheme, string> = {
 		system: lang === 'vi' ? 'Giao diện hệ thống' : 'System appearance',
@@ -686,12 +699,15 @@
 								class:active={profile.theme === t}
 								aria-label={themeAria[t]}
 								aria-pressed={profile.theme === t}
-								title={themeLabels[t]}
+								title={themeLabels[t][lang] ?? themeLabels[t].vi}
 								onclick={handleThemePick(t)}
 							>
 								<Icon icon={themeIcons[t]} />
 							</button>
 						{/each}
+						<!-- Batch 11 (yêu cầu 1): label tên theme active cạnh icon
+						     (sb-hidden ẩn khi sidebar collapsed — pattern batch 4). -->
+						<span class="admin-theme-switch__label sb-hidden">{themeLabels[profile.theme][lang] ?? themeLabels[profile.theme].vi}</span>
 					</div>
 				</Sidebar.MenuItem>
 				<Sidebar.MenuItem>
@@ -708,17 +724,34 @@
 		<Sidebar.Rail />
 	</Sidebar>
 
+		<!-- Batch 11 (yêu cầu 2): confirm trước khi logout (pattern dirty-close) -->
+		<AlertDialog bind:open={logoutConfirmDisplay}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{lang === 'vi' ? 'Đăng xuất' : 'Log out'}</AlertDialog.Title>
+					<AlertDialog.Description>{lang === 'vi' ? 'Bạn có chắc muốn đăng xuất khỏi hệ thống?' : 'Are you sure you want to log out?'}</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{lang === 'vi' ? 'Hủy' : 'Cancel'}</AlertDialog.Cancel>
+					<AlertDialog.Action color="danger" onselect={performLogout}>
+						{lang === 'vi' ? 'Đăng xuất' : 'Log out'}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+
 	<Sidebar.Inset>
 		<div
 			class="admin-inset"
-			class:is-scrolled={isScrolled}
+			// Batch 11 (yêu cầu 2): rule cuộn co/ẩn CHỈ mobile — PC giữ bố cục tĩnh
+			class:is-scrolled={isScrolled && isMobileLayout}
 			bind:this={insetEl}
 		>
 			<div
 				class="admin-inset-header"
-				class:is-scrolled={isScrolled}
-				class:scroll-active={scrollActive}
-				class:scroll-hidden={scrollActive}
+				class:is-scrolled={isScrolled && isMobileLayout}
+				class:scroll-active={scrollActive && isMobileLayout}
+				class:scroll-hidden={scrollActive && isMobileLayout}
 				bind:this={insetHeaderEl}
 			>
 				<!-- Mobile: nút mở sidebar (aside offcanvas ẩn → trigger trong
@@ -815,6 +848,18 @@
 				height: 1.125rem;
 			}
 		}
+
+		/* Batch 11 (yêu cầu 1): tên theme active cạnh icon — sb-hidden ẩn khi
+		   sidebar collapsed (pattern batch 4). */
+		.admin-theme-switch__label {
+			font-size: 0.8125rem;
+			color: var(--foreground, hsl(0 0% 9%));
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			flex: 1;
+			min-width: 0;
+		}
 	}
 
 	.admin-inset-header {
@@ -836,9 +881,11 @@
 			z-index: 500;
 			transition: padding 200ms ease, box-shadow 200ms ease;
 
+			/* Batch 11 (yêu cầu 2): co padding khi cuộn CHỈ mobile — PC giữ
+			   padding tĩnh (is-scrolled/scroll-active không set trên PC). */
+
 			&.is-scrolled,
 			&.scroll-active {
-				padding-block: 0.35rem;
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}
 		}
