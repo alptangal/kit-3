@@ -1019,12 +1019,16 @@
 	/* Batch8 (user m05611): BỎ cơ chế ẩn header cuộn sâu — breadcrumb phải
 	   luôn hiển thị. Batch9 (user m05696): ĐANG cuộn (scroll-active) → ẨN
 	   breadcrumb tạm thời (tăng rows hiển thị), DỪNG cuộn 200ms → trả lại.
-	   Chỉ áp mobile — desktop giữ sticky stack luôn thấy. overflow:hidden +
-	   height:0 thu trọn header; transition opacity mượt. margin-bottom âm
-	   không dùng (scroll-anchor loop — bẫy batch trước). */
+	   Chỉ áp mobile — desktop giữ sticky stack luôn thấy.
+	   Batch9b (m06345): display:none CO flow height → khi trả lại nội dung
+	   dưới đáy bị đẩy/xô (row cuối che mất không với tới được). Đổi OPACITY:
+	   giữ nguyên khối trong flow (height không đổi) → không xô layout, chỉ
+	   mờ dần trong lúc cuộn. pointer-events none chặn thao tác nhầm. */
 	@media (max-width: 767px) {
 		.admin-inset-header.scroll-hidden {
-			display: none;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 150ms ease;
 		}
 	}
 

@@ -3072,7 +3072,7 @@
 		   page shadow). */
 		top: var(--admin-tab-top, 0px);
 		z-index: 20;
-		transition: box-shadow 200ms ease;
+		transition: box-shadow 200ms ease, opacity 150ms ease;
 	}
 
 	.tab-item {
@@ -3099,10 +3099,14 @@
 
 	// Scroll sang dưới → tab-strip thu nhỏ (pattern admin-inset-header.is-scrolled);
 	// scroll về top → trả lại padding ban đầu (transition tự đảo).
-	// Batch9 (user m05696): ĐANG cuộn → ẨN hẳn tab-strip (tăng rows hiển thị),
+	// Batch9 (user m05696): ĐANG cuộn → ẨN tab-strip (tăng rows hiển thị),
 	// dừng 200ms → trả lại. is-scrolled giữ cho trạng thái vị trí.
+	// Batch9b (m06345): display:none co flow → khi trả lại ở đáy, nội dung bị
+	// đẩy xuống (row cuối che vĩnh viễn — max-scroll đổi giữa chừng). Đổi
+	// OPACITY: tab-strip giữ chỗ trong flow, chỉ mờ đi → max-scroll ổn định.
 	.tab-strip.is-scrolling {
-		display: none;
+		opacity: 0;
+		pointer-events: none;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -3179,7 +3183,11 @@
 		@media (max-width: 767px) {
 			:global(.datatable-caption-tools .admin-search:not(:has(.mobile-filter-popover))),
 			:global(.datatable-caption-tools .admin-actions-group:not(:has(.mobile-filter-popover))) {
-				display: none;
+				/* Batch9b (m06345): opacity thay display — giữ flow height ổn định
+				   (display:none co flow → trả lại ở đáy xô nội dung che row cuối). */
+				opacity: 0;
+				pointer-events: none;
+				transition: opacity 150ms ease;
 			}
 		}
 	}
