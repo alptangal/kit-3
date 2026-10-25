@@ -175,7 +175,9 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'images',
   'note',
   'status',
+  'createdBy',
   'createdAt',
+  'updatedBy',
   'updatedAt'
 ] as const;
 
@@ -630,7 +632,9 @@ export class SupplierService {
       images: Array.isArray(supplierData.images) ? supplierData.images.filter((i): i is string => typeof i === 'string' && i.trim().length > 0).map((i) => i.trim()) : [],
       note: supplierData.note ?? null,
       status: supplierData.status,
+      createdBy: actor.userId,
       createdAt: now,
+      updatedBy: actor.userId,
       updatedAt: now
     };
 
@@ -684,6 +688,8 @@ export class SupplierService {
       return { success: false, messages: supplierAdminMessages.invalidInput };
     }
     updateData.updatedAt = now;
+    // Track tác nhân cuối cùng chỉnh sửa (field passive modal, yêu cầu batch 11)
+    updateData.updatedBy = actor.userId;
 
     const beforeDoc = { ...(getRes as any).data } as Record<string, unknown>;
     const updateRes = await cbSuppliers.document.update({

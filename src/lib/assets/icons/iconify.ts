@@ -24,5 +24,9 @@ export const iconify = {
 	'person-outline-rounded': 'material-symbols-light:person-outline-rounded',
 	'delete-outline-rounded': 'material-symbols-light:delete-outline-rounded',
 	'open-in-new-rounded': 'material-symbols-light:open-in-new-rounded',
-	'edit-outline-rounded': 'material-symbols-light:edit-outline-rounded'
+	'edit-outline-rounded': 'material-symbols-light:edit-outline-rounded',
+	'chevron-left-rounded': 'material-symbols-light:chevron-left-rounded',
+	'usb-key-rounded': 'material-symbols-light:usb-rounded',
+	'user-round-pen': 'lucide:user-round-pen',
+	'shield-check-rounded': 'material-symbols-light:shield-check-rounded'
 };

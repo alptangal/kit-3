@@ -27,7 +27,10 @@
 		images?: string[] | null;
 		note?: string | null;
 		status?: string;
+		createdBy?: string | null;
 		createdAt?: string | null;
+		updatedBy?: string | null;
+		updatedAt?: string | null;
 	}
 
 	interface SupplierAddressEntry {
@@ -231,7 +234,10 @@
 			statusInactive: { vi: 'Ngừng hoạt động', en: 'Inactive' },
 			submit: { vi: 'Tạo', en: 'Create' },
 			save: { vi: 'Lưu thay đổi', en: 'Save changes' },
-			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' }
+			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' },
+			// Batch 11: field passive metadata (cuối form, edit mode)
+			passiveCreatedAt: { vi: 'Tạo lúc', en: 'Created' },
+			passiveUpdatedAt: { vi: 'Cập nhật lần cuối', en: 'Last updated' }
 		},
 		history: {
 			viewHistory: { vi: 'Lịch sử', en: 'History' }
@@ -444,6 +450,8 @@
 	let suppliersLoading = $state(false);
 	let suppliersError = $state<string | undefined>(undefined);
 	let suppliersLoadedOnce = $state(false);
+	// Deep-link (batch 11, 5f): ?supplier=<id> mở modal edit đúng NCC — chỉ consume 1 lần/lần load trang.
+	let deepLinkConsumed = $state(false);
 
 	let pos = $state<PurchaseOrderRow[]>([]);
 	let posTotal = $state(0);
@@ -705,6 +713,9 @@
 
 	// Footer form modal: nhớ row đang edit để mở history không cần tham số.
 	let historySupplierRow = $state<SupplierRow | undefined>(undefined);
+	// Field passive (batch 11): metadata created/updated hiển thị cuối form modal —
+	// chỉ edit mode có dữ liệu (create chưa có gì để hiển thị).
+	let supplierPassive = $state<{ createdBy?: string; createdAt?: string; updatedBy?: string; updatedAt?: string } | null>(null);
 	function openHistoryFromFooter() {
 		if (!historySupplierRow) return;
 		openHistoryModal(historySupplierRow);
@@ -771,8 +782,19 @@
 		close: () => {
 			supplierModalDisplay = false;
 			dirtyCloseDisplay = false;
+			// Deep-link (5f): đóng modal → gỡ ?supplier khỏi URL (share link
+			// chỉ hợp khi modal đang mở)
+			cleanSupplierParam();
 		}
 	});
+
+	// Deep-link (batch 11, 5f): gỡ ?supplier= khỏi URL giữ nguyên query khác
+	function cleanSupplierParam() {
+		if (page.url.searchParams.has('supplier')) {
+			page.url.searchParams.delete('supplier');
+			history.replaceState(history.state, '', page.url);
+		}
+	}
 
 	// ── Bulk selection (yêu cầu 2: STT hover → checkbox, copy/delete hàng loạt) ──
 	let selectedIds = $state<string[]>([]);
@@ -1083,6 +1105,18 @@
 				}
 				if (typeof data?.page === 'number') suppliersPage = data.page;
 				suppliersLoadedOnce = true;
+				// Deep-link (batch 11, 5f): URL ?supplier=<id> → tự mở modal edit
+				// đúng NCC một lần sau khi dữ liệu sẵn sàng.
+				if (!deepLinkConsumed) {
+					deepLinkConsumed = true;
+					const linkId = page.url.searchParams.get('supplier');
+					if (linkId) {
+						const row = suppliers.find((s) => s._id === linkId) as SupplierRow | undefined;
+						if (row) openSupplierEditModal(row as unknown as Record<string, unknown>);
+						// id không còn tồn tại → dọn param tránh mở lại vòng sau
+						else cleanSupplierParam();
+					}
+				}
 			} else {
 				suppliersError = resolveServerMessage(response.message, lang, pageContents.states.errorTitleSuppliers);
 			}
@@ -1291,6 +1325,7 @@
 	function openSupplierModal() {
 		supplierEditMode = 'create';
 		supplierEditId = null;
+		supplierPassive = null;
 		// Draft create có dữ liệu → resume; rỗng → form sạch
 		const raw = readDraftPref(DRAFT_FORM_KEY);
 		let resumed = false;
@@ -1365,7 +1400,18 @@
 		const r = row as unknown as SupplierRow;
 		supplierEditMode = 'edit';
 		supplierEditId = r._id ?? null;
+		// Deep-link (5f): giữ ?supplier=<id> trên URL để chia sẻ link đúng NCC
+		if (r._id && page.url.searchParams.get('supplier') !== r._id) {
+			page.url.searchParams.set('supplier', r._id);
+			history.replaceState(history.state, '', page.url);
+		}
 		historySupplierRow = r;
+		supplierPassive = {
+			createdBy: r.createdBy ?? undefined,
+			createdAt: r.createdAt ?? undefined,
+			updatedBy: r.updatedBy ?? undefined,
+			updatedAt: r.updatedAt ?? undefined
+		};
 		const addr0 = r.addresses?.[0];
 		supplierForm = {
 			name: r.name ?? '',
@@ -1503,8 +1549,13 @@
 	function socialTagHref(field: SocialFieldKey, value: string): string {
 		const s = value.trim();
 		if (/^https?:\/\//i.test(s)) return s;
+		// Batch 11 (5d): mọi network có thể build URL trang — nút open-tab hiện
+		// cho mọi giá trị hợp lệ, không chỉ giá trị dạng link sẵn.
 		if (field === 'telegram' && s.startsWith('@')) return `https://t.me/${s.slice(1)}`;
 		if (field === 'instagram' && s.startsWith('@')) return `https://instagram.com/${s.slice(1)}`;
+		if (field === 'zalo' && /^(\+?84|0)\d{8,10}$/.test(s)) return `https://zalo.me/${s.replace(/^\+?84/, '0')}`;
+		if (field === 'facebook') return `https://facebook.com/${s.replace(/^@/, '')}`;
+		if (field === 'website') return /^https?:/i.test(s) ? s : `https://${s}`;
 		return '';
 	}
 
@@ -1693,6 +1744,17 @@
 				);
 				if (!isEdit) clearDraft(); // create thành công → xoá draft
 				closeGuard.markClean(); // đóng programmatic không qua onCloseAttempt
+				if (isEdit) cleanSupplierParam(); // deep-link gỡ khi đóng modal
+				// Cập nhật field passive với response mới nhất (updatedBy/updatedAt từ server)
+				const respSupplier = (response.data as { supplier?: Record<string, unknown> } | undefined)?.supplier;
+				if (isEdit && respSupplier) {
+					supplierPassive = {
+						createdBy: (respSupplier.createdBy as string | null) ?? supplierPassive?.createdBy,
+						createdAt: (respSupplier.createdAt as string | null) ?? supplierPassive?.createdAt,
+						updatedBy: (respSupplier.updatedBy as string | null) ?? undefined,
+						updatedAt: (respSupplier.updatedAt as string | null) ?? undefined
+					};
+				}
 				supplierModalDisplay = false;
 				await loadSuppliers();
 			} else {
@@ -1954,13 +2016,15 @@
 <section
 	class="admin-page admin-page--fullheight"
 	class:at-bottom={wrapAtBottom}
-	class:is-scrolled={tableScrolled}
-	class:is-scrolling={scrollActive}
+	// Batch 11 (yêu cầu 2): mọi rule scroll/animate/co-padding CHỈ mobile —
+	// PC giữ nguyên bố cục tĩnh (is-scrolled thu gọn chỉ mobile qua CSS @media).
+	class:is-scrolled={tableScrolled && isMobile}
+	class:is-scrolling={scrollActive && isMobile}
 	data-active-tab={activeTab}
 >
 
 	<!-- ── Tab ── -->
-	<div class="tab-strip" role="tablist" class:is-scrolled={tableScrolled} class:is-scrolling={scrollActive}>
+	<div class="tab-strip" role="tablist" class:is-scrolled={tableScrolled && isMobile} class:is-scrolling={scrollActive && isMobile}>
 		<button
 			type="button"
 			class="tab-item"
@@ -2038,8 +2102,9 @@
 					onSelectAllFiltered={selectAllFilteredSuppliers}
 					onSelectionChange={(ids) => (selectedIds = ids)}
 					// BẪY memory: class:directive trên component CHẾT — gộp vào expression class
+					// Batch 11: caption co/ẩn khi cuộn CHỈ mobile
 					class={[
-						tableScrolled ? 'caption-collapsed' : undefined,
+						tableScrolled && isMobile ? 'caption-collapsed' : undefined,
 						scrollActive && isMobile ? 'tools-hidden-mobile' : undefined
 					].filter(Boolean).join(' ') || undefined}
 					data-test="suppliers-datatable"
@@ -2190,7 +2255,7 @@
 									<Icon icon={iconify['tune-rounded']} size="sm" />
 								</button>
 							{:else}
-								<Button color="default" variant="outline" size="sm" onClick={() => (settingModalDisplay = true)} aria-label={pageContents.filters.allStatuses[lang]} data-test="suppliers-header-setting-btn">
+								<Button color="default" variant="outline" size="sm" onClick={() => { settingModalDisplay = true; }} aria-label={pageContents.filters.allStatuses[lang]} data-test="suppliers-header-setting-btn">
 									<Icon icon={iconify['tune-rounded']} size="sm" />
 								</Button>
 							{/if}
@@ -2244,7 +2309,8 @@
 					caption={{ vi: 'Danh sách đơn mua hàng', en: 'Purchase orders list' }}
 					actionsLabel={{ vi: pageContents.poTable.actions[lang], en: pageContents.poTable.actions[lang] }}
 					stickyHead
-					class={tableScrolled ? 'caption-collapsed' : undefined}
+					// Batch 11: co caption khi cuộn CHỈ mobile
+					class={tableScrolled && isMobile ? 'caption-collapsed' : undefined}
 					data-test="purchase-orders-datatable"
 				>
 					{#snippet captionTools()}
@@ -2306,8 +2372,9 @@
 	<!-- ── Phân trang (server-side, dùng chung 2 tab) ── -->
 	<footer
 		class="admin-pagination"
-		class:pagination-collapsed={scrollActive}
-		class:pagination-pop={paginationPopped}
+		// Batch 11: co/ẩn pagination khi cuộn CHỈ mobile
+		class:pagination-collapsed={scrollActive && isMobile}
+		class:pagination-pop={paginationPopped && isMobile}
 	>
 		<span class="total-count">{totalCountText}</span>
 		<div class="page-controls">
@@ -2337,8 +2404,14 @@
 
 	<!-- ── FAB mobile (pattern purchases). Batch9c (m06530): 3 nút cùng cấp
 		create + search + setting; group ẨN theo HÀNH ĐỘNG cuộn (opacity giống
-		tab/pagination — scrollY=0 → ẩn, đang cuộn → ẩn, dừng → hiện). -->
-	<div class="fab-group" class:fab-hidden={!tableScrolled} class:is-scrolling={scrollActive} data-suggest>
+		tab/pagination — scrollY=0 → ẩn, đang cuộn → ẩn, dừng → hiện).
+		Batch 11: logic cuộn CHỈ mobile (PC @768 display:none có sẵn). -->
+	<div
+		class="fab-group"
+		class:fab-hidden={isMobile && !tableScrolled}
+		class:is-scrolling={scrollActive && isMobile}
+		data-suggest
+	>
 		<!-- Batch10 (m06635-1): flushSync mount field + focus TRONG gesture (iOS
 			Safari chỉ mở keyboard khi focus trong user gesture). Batch10-7: DOM
 			create → setting → search + column-reverse → hiển thị TỪ TRÊN XUỐNG =
@@ -2397,12 +2470,37 @@
 		size="lg"
 		isDimissable
 		onCloseAttempt={() => closeGuard.attemptClose()}
+		// Batch 11 (5b): không auto-focus nút đầu tiên (nút ✕ đầu DOM) — trên
+		// Safari iOS 15.1 trạng thái focus-ring y hệt trạng thái thường, user
+		// tưởng modal "đã sẵn sàng đóng". Giữ focus tại chỗ, chỉ cài Tab-trap.
+		autoFocus={false}
 		// Mobile (batch7): full-size modal — class làm hook CSS scoped bên dưới
 		class="supplier-modal-root"
 	>
 		<Modal.Container class="supplier-modal-container">
-			<Modal.Container.Header>
-				{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
+			<Modal.Container.Header
+				actionButtons={{ close: { display: !isMobile } }}
+			>
+				<div class="supplier-modal-title">
+					{#if isMobile}
+						<!-- Mobile: thay nút ✕ bằng breadcrumb — chevron back đóng modal -->
+						<button
+							type="button"
+							class="supplier-modal-back"
+							aria-label={pageContents.modals.cancel[lang]}
+							disabled={supplierSubmitting}
+							onclick={() => closeGuard.attemptClose()}
+						>
+							<Icon icon={iconify['chevron-left-rounded']} size="md" />
+						</button>
+					{/if}
+					<span class="supplier-modal-title__label">
+						{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
+					</span>
+					{#if supplierEditMode === 'edit' && supplierForm.name}
+						<span class="supplier-modal-title__name">{supplierForm.name}</span>
+					{/if}
+				</div>
 			</Modal.Container.Header>
 			<Modal.Container.Body bind:ref={supplierModalBodyEl}>
 				{#if supplierError}
@@ -2566,7 +2664,7 @@
 									supplierAddressBreakdowns = [...supplierAddressBreakdowns, { province: '', district: '', ward: '' }];
 									supplierNewAddressBreakdowns = [...supplierNewAddressBreakdowns, { province: '', ward: '' }];
 								});
-								focusLastFieldRow(supplierModalBodyEl, null, 'address-entry');
+								focusLastFieldRow(supplierModalBodyEl, undefined, 'address-entry');
 							}}
 						>+ {pageContents.supplierModal.addAddress[lang]}</button>
 					</div>
@@ -2678,7 +2776,24 @@
 							data-test="supplier-form-status"
 						/>
 					</div>
-				</div>
+					<!-- ── Field passive (batch 11): metadata created/updated — chỉ edit mode ── -->
+					{#if supplierEditMode === 'edit' && supplierPassive}
+						<dl class="supplier-passive" data-test="supplier-passive">
+							{#if supplierPassive.createdAt}
+								<div class="supplier-passive__row">
+									<dt>{pageContents.supplierModal.passiveCreatedAt[lang]}</dt>
+									<dd>{formatDate(supplierPassive.createdAt)}{#if supplierPassive.createdBy}<span class="supplier-passive__sep">·</span>{supplierPassive.createdBy}{/if}</dd>
+								</div>
+							{/if}
+							{#if supplierPassive.updatedAt}
+								<div class="supplier-passive__row">
+									<dt>{pageContents.supplierModal.passiveUpdatedAt[lang]}</dt>
+									<dd>{formatDate(supplierPassive.updatedAt)}{#if supplierPassive.updatedBy}<span class="supplier-passive__sep">·</span>{supplierPassive.updatedBy}{/if}</dd>
+								</div>
+							{/if}
+						</dl>
+					{/if}
+					</div>
 			</Modal.Container.Body>
 			<Modal.Container.Footer>
 				<!-- History chỉ ở edit mode — nhóm riêng cách Save/Cancel khoảng trống -->
@@ -2757,6 +2872,11 @@
 							options={supplierStatusOptions}
 							searchable
 							clearable
+							/* Batch 11 (yêu cầu 2b): panel option KHÔNG portal — nằm trong
+							   .modal-body-root (overflow-y:auto) → phần dưới list bị footer
+							   che, phải cuộn body mới thấy. Fullscreen mode = overlay riêng,
+							   không còn xung đột scroll-container. */
+							fullscreen
 							placeholder={pageContents.filters.allStatuses[lang]}
 							data-test="suppliers-setting-status"
 						/>
@@ -2769,6 +2889,7 @@
 							bind:value={settingSortField}
 							options={settingSortOptions}
 							clearable
+							fullscreen
 							placeholder={pageContents.settings.sortBy[lang]}
 							data-test="suppliers-setting-sort"
 						/>
@@ -2783,6 +2904,7 @@
 								{ value: 'asc', label: pageContents.settings.asc[lang] },
 								{ value: 'desc', label: pageContents.settings.desc[lang] }
 							]}
+							fullscreen
 							data-test="suppliers-setting-direction"
 						/>
 					</TextField>
@@ -3152,10 +3274,13 @@
 		// inline (ngang) — chỉ co block (dọc).
 		// Batch8: co theo HÀNH ĐỘNG cuộn (is-scrolling = đang cuộn, dừng 200ms trả
 		// lại) — is-scrolled giữ lại cho trạng thái vị trí (top > 8px).
-		&.is-scrolled,
-		&.is-scrolling {
-			gap: 0.375rem;
-			padding-block: 0.5rem;
+		// Batch 11 (yêu cầu 2): CHỈ mobile — PC giữ padding tĩnh.
+		@media (max-width: 767px) {
+			&.is-scrolled,
+			&.is-scrolling {
+				gap: 0.375rem;
+				padding-block: 0.5rem;
+			}
 		}
 	}
 
@@ -3277,22 +3402,25 @@
 	}
 
 	/* Scroll → caption collapsed (DataTable root class từ page): ẩn desc +
-	   co caption đã làm ở DataTable; ở đây thu nhỏ tools (search/select/btn). */
-	:global(.datatable-root.caption-collapsed) {
-		:global(.datatable-caption-tools .admin-search .input-root),
-		:global(.datatable-caption-tools .admin-filter-select .select-trigger) {
-			height: 1.75rem;
-			min-height: 1.75rem;
-		}
+	   co caption đã làm ở DataTable; ở đây thu nhỏ tools (search/select/btn).
+	   Batch 11 (yêu cầu 2): CHỈ mobile — PC caption giữ kích thước tĩnh. */
+	@media (max-width: 767px) {
+		:global(.datatable-root.caption-collapsed) {
+			:global(.datatable-caption-tools .admin-search .input-root),
+			:global(.datatable-caption-tools .admin-filter-select .select-trigger) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+			}
 
-		:global(.datatable-caption-tools .admin-actions-group .button-root) {
-			height: 1.75rem;
-			min-height: 1.75rem;
-			padding-inline: 0.625rem;
-		}
+			:global(.datatable-caption-tools .admin-actions-group .button-root) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+				padding-inline: 0.625rem;
+			}
 
-		:global(.datatable-caption-tools .bulk-bar) {
-			height: 1.75rem;
+			:global(.datatable-caption-tools .bulk-bar) {
+				height: 1.75rem;
+			}
 		}
 	}
 
@@ -4101,9 +4229,20 @@
 		padding: 0;
 		flex: none;
 	}
-	.social-tag__open:hover,
-	.social-tag__remove:hover {
+	/* Batch 11 (5d): remove button theo quy tắc thiết kế chung — màu error.
+	   Open-tab giữ màu chip (primary); hover tách riêng 2 nút. */
+	.social-tag__open:hover {
 		background: rgb(0 0 0 / 0.08);
+	}
+	.social-tag__remove {
+		color: var(--error, #dc2626);
+	}
+	.social-tag--invalid .social-tag__remove {
+		color: inherit;
+	}
+	.social-tag__remove:hover {
+		background: var(--error-50, rgb(0 0 0 / 0.08));
+		color: var(--error-600, var(--error, #dc2626));
 	}
 	.social-tag__edit {
 		font: inherit;
@@ -4253,5 +4392,83 @@
 		:global(.supplier-modal-root .modal-header-root) {
 			padding-block: 0.5rem;
 		}
+	}
+
+	/* Batch 11 (5c): title modal đồng bộ tên supplier — label + tên với ellipsis
+	   (tên dài không vỡ layout). Back chevron chỉ mobile (thay nút ✕). */
+	.supplier-modal-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.supplier-modal-back {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		margin-left: -0.375rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground);
+		cursor: pointer;
+		flex-shrink: 0;
+
+		&:hover {
+			background: hsl(0 0% 0% / 0.06);
+		}
+	}
+
+	.supplier-modal-title__label {
+		flex-shrink: 0;
+		font-weight: 600;
+	}
+
+	.supplier-modal-title__name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--foreground-500);
+		font-weight: 400;
+	}
+
+	/* Batch 11 (5e): field passive — thông tin created/updated ở cuối form */
+	.supplier-passive {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		margin: 0;
+		padding: 0.75rem 0.875rem;
+		border: 1px dashed var(--default-300, hsl(0 0% 88%));
+		border-radius: 0.625rem;
+		background: var(--default-50, hsl(0 0% 98%));
+		font-size: 0.8125rem;
+
+		dt {
+			color: var(--foreground-500);
+			font-weight: 500;
+		}
+
+		dd {
+			display: flex;
+			align-items: center;
+			gap: 0.375rem;
+			margin: 0;
+			color: var(--foreground);
+		}
+	}
+
+	.supplier-passive__row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+	}
+
+	.supplier-passive__sep {
+		color: var(--foreground-300);
 	}
 </style>
