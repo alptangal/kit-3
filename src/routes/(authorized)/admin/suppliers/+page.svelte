@@ -484,12 +484,26 @@
 	// Batch8 mục 1: scroll-ACTIVE theo HÀNH ĐỘNG cuộn (không phải vị trí) —
 	// đang cuộn = co padding-block các thành phần cố định, dừng 200ms = trả lại
 	// như ban đầu (kể cả khi đang ở giữa trang).
+	// Batch9-fix (user m05997): iOS Safari momentum + rubber-band ở đáy tiếp tục
+	// bắn scroll event 4-5 GIÂY sau khi user đã buông ngón (mỗi bounce reset
+	// timer) → tab-strip/pagination/breadcrumb kẹt ẩn "vĩnh viễn" theo cảm nhận.
+	// FIX: bỏ qua event khi (a) scrollTop KHÔNG đổi so với event trước, hoặc
+	// (b) VƯỢT biên (rubber-band: top<0 hoặc top>maxScroll — giá trị đàn hồi
+	// đổi liên tục khi bounce) — chỉ cú kéo thật trong biên mới prolong ẩn.
 	let scrollActive = $state(false);
 	let scrollActiveTimer: ReturnType<typeof setTimeout>;
-	function markScrollActive() {
-		scrollActive = true;
+	let lastActiveScrollTop = -1;
+	function markScrollActive(scrollTop: number, maxScroll: number) {
+		const rubber = scrollTop < 0 || scrollTop > maxScroll;
+		if (!rubber && scrollTop !== lastActiveScrollTop) {
+			scrollActive = true;
+		}
+		lastActiveScrollTop = scrollTop;
 		clearTimeout(scrollActiveTimer);
-		scrollActiveTimer = setTimeout(() => (scrollActive = false), 200);
+		scrollActiveTimer = setTimeout(() => {
+			scrollActive = false;
+			lastActiveScrollTop = -1;
+		}, 200);
 	}
 	function onTableScroll() {
 		const el = wrapEl;
@@ -497,7 +511,7 @@
 		if (scrollRaf) return;
 		scrollRaf = requestAnimationFrame(() => {
 			scrollRaf = 0;
-			markScrollActive();
+			markScrollActive(el.scrollTop, el.scrollHeight - el.clientHeight);
 			const scrollTop = el.scrollTop;
 			// BẪY: nếu nội dung vừa màn (scrollHeight ≈ clientHeight) thì atBottom
 			// luôn true → kẹt trạng thái thu padding vĩnh viễn. Chỉ coi là "đáy"
@@ -535,12 +549,12 @@
 			scrollRaf = 0;
 			const el = wrapEl;
 			if (!el || el.scrollHeight > el.clientHeight + 4) return; // wrap tự cuộn — bỏ qua
-			markScrollActive();
 			// scroll container thật: window hoặc ancestor overflow:auto (root Container)
 			const sc = findScrollContainer();
 			const top = sc ? sc.scrollTop : window.scrollY;
 			const viewH = sc ? sc.clientHeight : window.innerHeight;
 			const totalH = sc ? sc.scrollHeight : document.documentElement.scrollHeight;
+			markScrollActive(top, totalH - viewH);
 			tableScrolled = top > 8;
 			wrapAtBottom = top + viewH >= totalH - 4;
 			if (wrapAtBottom && !paginationPopped) {
@@ -1816,19 +1830,10 @@
 		}
 	}
 
-	onMount(async () => {
-		if (!client.browser) client.browser = {};
-		// Restore prefs TRƯỚC load (pattern purchases): sort + cardFields
-		const prefs = userPrefs.datatable?.[PREFS_KEY];
-		if (prefs?.sort?.field) {
-			sortField = prefs.sort.field;
-			sortDirection = prefs.sort.direction === 'asc' ? 'asc' : 'desc';
-		}
-		cardFieldIds = prefs?.cardFields?.length ? [...prefs.cardFields] : ['name', 'status', 'contact', 'address'];
-		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
-		encryptionKeys = { privateKey, publicKey };
-		await Promise.all([loadBranches(), loadSuppliers()]);
-		draftHydrated = true; // mở khoá draft auto-save sau khi store đã hydrate từ layout
+	// BẪY TS: onMount async trả `Promise<() => void>` — cleanup trong callback
+	// async KHÔNG hợp lệ (Svelte chỉ đọc return đồng bộ) → tách listener sync
+	// onMount riêng; async init dùng onMount(async) thứ hai không return gì.
+	onMount(() => {
 		// Safari ≤15.3: scroll fallback — root Container (div.w-full.h-full.overflow-auto
 		// ở +layout.svelte) là scroll container thật, window không bắn scroll event.
 		// Gắn listener lên cả window + root container; tìm qua walk-up từ wrapEl.
@@ -1847,6 +1852,20 @@
 			window.removeEventListener('scroll', onWindowScroll);
 			scrollHost?.removeEventListener('scroll', onWindowScroll);
 		};
+	});
+	onMount(async () => {
+		if (!client.browser) client.browser = {};
+		// Restore prefs TRƯỚC load (pattern purchases): sort + cardFields
+		const prefs = userPrefs.datatable?.[PREFS_KEY];
+		if (prefs?.sort?.field) {
+			sortField = prefs.sort.field;
+			sortDirection = prefs.sort.direction === 'asc' ? 'asc' : 'desc';
+		}
+		cardFieldIds = prefs?.cardFields?.length ? [...prefs.cardFields] : ['name', 'status', 'contact', 'address'];
+		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
+		encryptionKeys = { privateKey, publicKey };
+		await Promise.all([loadBranches(), loadSuppliers()]);
+		draftHydrated = true; // mở khoá draft auto-save sau khi store đã hydrate từ layout
 	});
 
 	// ── Draft auto-save (yêu cầu 1k): form create có dữ liệu → debounce 500ms
