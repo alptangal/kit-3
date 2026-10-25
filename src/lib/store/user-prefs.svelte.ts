@@ -34,7 +34,9 @@ export const userPrefs = $state({
 	/** C7: từ khóa tìm kiếm per-route (mới nhất đầu) — hydrate từ layout server */
 	searchKeywords: {} as Record<string, string[]>,
 	/** Draft form đang dở (key = formKey, value JSON string) — hydrate từ layout server */
-	drafts: {} as Record<string, string>
+	drafts: {} as Record<string, string>,
+	/** Batch 11 (profile yêu cầu 4): count lượt search mỗi keyword (song song searchKeywords) */
+	searchKeywordCounts: {} as Record<string, Record<string, number>>
 });
 
 /** Flag chống vòng lặp: apply bootstrap → setter → persist (không mong muốn). */
@@ -62,6 +64,11 @@ export function applyUserPrefsFromLayout(data: LayoutData | undefined): void {
 	userPrefs.searchKeywords = {
 		...userPrefs.searchKeywords,
 		...(prefs.searchKeywords ?? {})
+	};
+	// Batch 11: count lượt search — hydrate song song keywords.
+	userPrefs.searchKeywordCounts = {
+		...userPrefs.searchKeywordCounts,
+		...(prefs.searchKeywordCounts ?? {})
 	};
 
 	// ── DRAFTS ── hydrate từ DB (resume form khi reload — cross-device)
@@ -140,7 +147,10 @@ export function recordSearchKeyword(routeKey: string, keyword: string): void {
 	const old = userPrefs.searchKeywords[routeKey] ?? [];
 	const next = [kw, ...old.filter((k) => k !== kw)].slice(0, 20);
 	userPrefs.searchKeywords[routeKey] = next;
-	saveUserPrefs({ searchKeywords: { [routeKey]: next } });
+	const counts = { ...(userPrefs.searchKeywordCounts[routeKey] ?? {}) };
+	counts[kw] = (counts[kw] ?? 0) + 1;
+	userPrefs.searchKeywordCounts[routeKey] = counts;
+	saveUserPrefs({ searchKeywords: { [routeKey]: next }, searchKeywordCounts: { [routeKey]: counts } });
 }
 
 /** Đọc danh sách từ khóa đã lưu 1 route (mới nhất đầu). */
@@ -153,6 +163,11 @@ export function getAllSearchKeywords(): Record<string, string[]> {
 	return { ...userPrefs.searchKeywords };
 }
 
+/** Batch 11 (profile yêu cầu 4): map route → Record<keyword, count> (bản sao). */
+export function getAllSearchKeywordCounts(): Record<string, Record<string, number>> {
+	return { ...userPrefs.searchKeywordCounts };
+}
+
 /**
  * Nhóm 4: xóa lịch sử tìm kiếm — 1 route (routeKey) hoặc TOÀN BỘ route đã biết.
  * Server: patch mảng rỗng = xóa route (mergePrefs delete). Không truyền routeKey
@@ -161,17 +176,21 @@ export function getAllSearchKeywords(): Record<string, string[]> {
 export function clearSearchKeywords(routeKey?: string): void {
 	if (routeKey) {
 		userPrefs.searchKeywords[routeKey] = [];
-		saveUserPrefs({ searchKeywords: { [routeKey]: [] } });
+		delete userPrefs.searchKeywordCounts[routeKey];
+		saveUserPrefs({ searchKeywords: { [routeKey]: [] }, searchKeywordCounts: { [routeKey]: {} } });
 		return;
 	}
 	const routes = Object.keys(userPrefs.searchKeywords);
 	if (!routes.length) return;
 	const patch: Record<string, string[]> = {};
+	const countPatch: Record<string, Record<string, number>> = {};
 	for (const r of routes) {
 		userPrefs.searchKeywords[r] = [];
 		patch[r] = [];
+		delete userPrefs.searchKeywordCounts[r];
+		countPatch[r] = {};
 	}
-	saveUserPrefs({ searchKeywords: patch });
+	saveUserPrefs({ searchKeywords: patch, searchKeywordCounts: countPatch });
 }
 
 /** Ghi draft 1 form (key = formKey, value = JSON string) — server merge per-form. */

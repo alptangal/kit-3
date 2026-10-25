@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { Button, Icon, AlertDialog, Tabs, Accordion } from '$components/element';
 	import { Input } from '$components/form';
-	import { getAllSearchKeywords, clearSearchKeywords, recordSearchKeyword } from '$store/user-prefs.svelte';
+	import { getAllSearchKeywords, getAllSearchKeywordCounts, clearSearchKeywords, recordSearchKeyword } from '$store/user-prefs.svelte';
 	import { encryption } from '$modules/encryption';
 	import { browserSupportsWebAuthn, startRegistration, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
 	import { client } from '$store/basic.svelte';
@@ -77,6 +77,10 @@
 		searchHistoryClearAll: {
 			vi: 'Xóa tất cả',
 			en: 'Clear all'
+		},
+		searchHistoryTimes: {
+			vi: 'lượt tìm kiếm',
+			en: 'search times'
 		},
 		searchHistoryDeleted: {
 			vi: 'Đã xóa lịch sử tìm kiếm',
@@ -341,6 +345,128 @@
 		apiKeysCancel: {
 			vi: 'Huỷ',
 			en: 'Cancel'
+		},
+
+		// ── Batch 11 (yêu cầu 1): xem chi tiết ảnh avatar ──
+		avatarViewTitle: {
+			vi: 'Ảnh đại diện',
+			en: 'Profile picture'
+		},
+		avatarViewClose: {
+			vi: 'Đóng',
+			en: 'Close'
+		},
+
+		// ── Batch 11 (yêu cầu 5): cập nhật hồ sơ ──
+		editInfoTitle: {
+			vi: 'Cập nhật hồ sơ',
+			en: 'Update profile'
+		},
+		editInfoFirstname: {
+			vi: 'Tên',
+			en: 'First name'
+		},
+		editInfoMidname: {
+			vi: 'Tên đệm',
+			en: 'Middle name'
+		},
+		editInfoLastname: {
+			vi: 'Họ',
+			en: 'Last name'
+		},
+		editInfoDob: {
+			vi: 'Ngày sinh',
+			en: 'Date of birth'
+		},
+		editInfoGender: {
+			vi: 'Giới tính',
+			en: 'Gender'
+		},
+		editInfoSocial: {
+			vi: 'Mạng xã hội',
+			en: 'Social network'
+		},
+		editInfoSocialPlaceholder: {
+			vi: 'Liên kết hoặc @username',
+			en: 'Link or @username'
+		},
+		editInfoSave: {
+			vi: 'Lưu hồ sơ',
+			en: 'Save profile'
+		},
+		editInfoSaving: {
+			vi: 'Đang lưu...',
+			en: 'Saving...'
+		},
+		editInfoSuccess: {
+			vi: 'Đã cập nhật hồ sơ',
+			en: 'Profile updated'
+		},
+		editInfoFailed: {
+			vi: 'Cập nhật hồ sơ thất bại',
+			en: 'Failed to update profile'
+		},
+		genderMale: {
+			vi: 'Nam',
+			en: 'Male'
+		},
+		genderFemale: {
+			vi: 'Nữ',
+			en: 'Female'
+		},
+		genderOther: {
+			vi: 'Khác',
+			en: 'Other'
+		},
+
+		// ── Batch 11 (yêu cầu 6): 2FA authenticator app (TOTP) ──
+		totpTitle: {
+			vi: 'Xác thực 2 bước (Authenticator)',
+			en: 'Two-step authentication (Authenticator app)'
+		},
+		totpSubtitle: {
+			vi: 'Thêm một lớp bảo vệ — yêu cầu mã 6 số từ ứng dụng authenticator khi đăng nhập.',
+			en: 'Add an extra layer of security — require a 6-digit code from your authenticator app at sign-in.'
+		},
+		totpEnableBtn: {
+			vi: 'Bật xác thực 2 bước',
+			en: 'Enable two-step authentication'
+		},
+		totpSetupHint: {
+			vi: 'Quét mã QR bằng ứng dụng authenticator (Google Authenticator, Authy, 1Password...) rồi nhập mã 6 số đang hiển thị:',
+			en: 'Scan the QR code with your authenticator app (Google Authenticator, Authy, 1Password...) then enter the current 6-digit code:'
+		},
+		totpSecretLabel: {
+			vi: 'Không quét được QR? Nhập khoá thủ công:',
+			en: "Can't scan? Enter this key manually:"
+		},
+		totpCodePlaceholder: {
+			vi: 'Mã 6 số',
+			en: '6-digit code'
+		},
+		totpConfirmEnable: {
+			vi: 'Xác nhận bật',
+			en: 'Confirm enable'
+		},
+		totpConfirmDisable: {
+			vi: 'Xác nhận tắt',
+			en: 'Confirm disable'
+		},
+		totpDisableHint: {
+			vi: 'Nhập mã 6 số trong app để xác nhận tắt 2FA:',
+			en: 'Enter the current 6-digit code to confirm disabling 2FA:'
+		},
+		totpEnabledBadge: {
+			vi: 'Đang bật',
+			en: 'Enabled'
+		},
+		totpEnabled: {
+			vi: 'Đã bật xác thực 2 bước',
+			en: 'Two-step authentication enabled'
+		},
+		totpDisabled: {
+			vi: 'Đã tắt xác thực 2 bước',
+			en: 'Two-step authentication disabled'
 		}
 	};
 
@@ -349,7 +475,20 @@
 	);
 
 	// ── C6: tabs profile (overview / security / api-keys) ──
+	// Batch 11 (yêu cầu 7): tab theo URL hash (/profile#api-keys) — session mới
+	// tự active đúng tab; đổi tab ghi hash (history.replaceState, không nav).
+	const TAB_IDS = ['overview', 'security', 'api-keys', 'search'] as const;
 	let profileTab = $state('overview');
+	if (typeof location !== 'undefined') {
+		const h = location.hash.replace('#', '');
+		if ((TAB_IDS as readonly string[]).includes(h)) profileTab = h;
+	}
+	$effect(() => {
+		if (typeof location === 'undefined') return;
+		if (location.hash !== `#${profileTab}`) {
+			history.replaceState(history.state, '', `#${profileTab}`);
+		}
+	});
 
 	// ── Passkey state ──
 	interface CredentialRow {
@@ -380,6 +519,11 @@
 	const searchHistory = $derived.by(() => {
 		void searchHistoryVersion;
 		return getAllSearchKeywords(); // Record<route, string[]>
+	});
+	// Batch 11 (yêu cầu 4): count lượt search mỗi keyword (cùng version).
+	const searchCounts = $derived.by(() => {
+		void searchHistoryVersion;
+		return getAllSearchKeywordCounts();
 	});
 
 	function removeSearchKeyword(routeKey: string, keyword: string) {
@@ -677,6 +821,130 @@
 		}
 	}
 
+	// ── Batch 11 (yêu cầu 1): modal xem chi tiết ảnh avatar ──
+	let avatarViewOpen = $state(false);
+
+	function viewAvatar() {
+		if (!avatarUrl) return;
+		avatarViewOpen = true;
+	}
+
+	// ── Batch 11 (yêu cầu 5): cập nhật hồ sơ (name/dob/gender/social) ──
+	interface ProfileInfo {
+		firstname: string;
+		midname: string;
+		lastname: string;
+		dob: string;
+		gender: string;
+		social: string;
+	}
+	const initialProfile: ProfileInfo = data.profile ?? {
+		firstname: data.user.firstName ?? '',
+		midname: '',
+		lastname: data.user.lastName ?? '',
+		dob: '',
+		gender: '',
+		social: ''
+	};
+	let editInfo = $state<ProfileInfo>({ ...initialProfile });
+	let editInfoBusy = $state(false);
+
+	async function submitEditInfo() {
+		if (editInfoBusy) return;
+		if (!editInfo.firstname.trim()) return;
+		editInfoBusy = true;
+		try {
+			const res = await encryption.fetchSecure('/api/agent/profile/update', {
+				method: 'post',
+				body: { ...editInfo }
+			});
+			if (!res.ok) throw new Error(res.message?.[lang] ?? res.message?.en ?? 'Failed');
+			toast(msg('editInfoSuccess'), undefined, 'success');
+		} catch (err) {
+			toast(msg('editInfoFailed'), err instanceof Error ? err.message : String(err), 'error');
+		} finally {
+			editInfoBusy = false;
+		}
+	}
+
+	// ── Batch 11 (yêu cầu 6): 2FA authenticator app (TOTP) ──
+	interface TotpStatus {
+		enabled: boolean;
+		secret?: string;
+		otpauthUrl?: string;
+	}
+	let totpSetup = $state<TotpStatus | null>(null);
+	let totpBusy = $state(false);
+	let totpCode = $state('');
+	let totpError = $state('');
+	let totpQr = $state('');
+
+	async function startTotpSetup() {
+		if (totpBusy) return;
+		totpBusy = true;
+		totpError = '';
+		try {
+			const res = await encryption.fetchSecure('/api/agent/profile/totp/setup', {
+				method: 'post',
+				body: {}
+			});
+			if (!res.ok || !res.data) throw new Error(res.message?.[lang] ?? 'Failed');
+			totpSetup = { enabled: false, secret: res.data.secret, otpauthUrl: res.data.otpauthUrl };
+			// QR từ otpauth URI — lib qrcode (đã có trong deps, dùng dynamic import).
+			const { default: QRCode } = await import('qrcode');
+			totpQr = await QRCode.toDataURL(res.data.otpauthUrl, {
+				errorCorrectionLevel: 'M',
+				margin: 1,
+				width: 200
+			});
+		} catch (err) {
+			totpError = err instanceof Error ? err.message : String(err);
+		} finally {
+			totpBusy = false;
+		}
+	}
+
+	async function confirmTotpEnable() {
+		if (totpBusy || !/^\d{6}$/.test(totpCode)) return;
+		totpBusy = true;
+		totpError = '';
+		try {
+			const res = await encryption.fetchSecure('/api/agent/profile/totp/enable', {
+				method: 'post',
+				body: { code: totpCode }
+			});
+			if (!res.ok) throw new Error(res.message?.[lang] ?? 'Failed');
+			totpSetup = { enabled: true };
+			totpCode = '';
+			totpQr = '';
+			toast(msg('totpEnabled'), undefined, 'success');
+		} catch (err) {
+			totpError = err instanceof Error ? err.message : String(err);
+		} finally {
+			totpBusy = false;
+		}
+	}
+
+	async function confirmTotpDisable() {
+		if (totpBusy || !/^\d{6}$/.test(totpCode)) return;
+		totpBusy = true;
+		totpError = '';
+		try {
+			const res = await encryption.fetchSecure('/api/agent/profile/totp/disable', {
+				method: 'post',
+				body: { code: totpCode }
+			});
+			if (!res.ok) throw new Error(res.message?.[lang] ?? 'Failed');
+			totpSetup = null;
+			totpCode = '';
+			toast(msg('totpDisabled'), undefined, 'success');
+		} catch (err) {
+			totpError = err instanceof Error ? err.message : String(err);
+		} finally {
+			totpBusy = false;
+		}
+	}
+
 	async function loadApiKeys() {
 		apiKeysLoading = true;
 		try {
@@ -771,13 +1039,15 @@
 
 <section class="profile-page">
 	<header class="profile-header">
+		<!-- Batch 11 (yêu cầu 1): click vùng avatar → xem chi tiết ảnh (nếu có);
+		     badge pencil → đổi ảnh (stopPropagation để không kích hoạt view). -->
 		<button
 			type="button"
 			class="profile-avatar"
-			aria-label={msg('avatarChange')}
-			title={msg('avatarChange')}
-			onclick={pickAvatar}
-			disabled={avatarBusy}
+			aria-label={avatarUrl ? msg('avatarViewTitle') : msg('avatarChange')}
+			title={avatarUrl ? msg('avatarViewTitle') : msg('avatarChange')}
+			onclick={viewAvatar}
+			disabled={avatarBusy || !avatarUrl}
 			data-test="profile-avatar-btn"
 		>
 			{#if avatarUrl}
@@ -785,7 +1055,24 @@
 			{:else}
 				{data.user.username.slice(0, 2).toUpperCase()}
 			{/if}
-			<span class="profile-avatar-edit" class:busy={avatarBusy}>
+			<span
+				class="profile-avatar-edit"
+				class:busy={avatarBusy}
+				role="button"
+				tabindex="-1"
+				aria-label={msg('avatarChange')}
+				onclick={(e) => {
+					e.stopPropagation();
+					pickAvatar();
+				}}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						e.stopPropagation();
+						pickAvatar();
+					}
+				}}
+			>
 				<Icon class="profile-avatar-edit-icon" icon="lucide:pencil" size="sm" />
 			</span>
 		</button>
@@ -821,6 +1108,73 @@
 				</dd>
 			</div>
 		</dl>
+
+		<!-- Batch 11 (yêu cầu 5): form cập nhật hồ sơ — fullname/dob/gender/social
+		     (email/username cố định vì documentKey phụ thuộc blind index). -->
+		<section class="pwd-section" data-test="profile-edit-info">
+			<header class="pwd-header">
+				<div class="passkey-heading">
+					<Icon class="passkey-icon" icon="lucide:user-round-pen" size="md" />
+					<div>
+						<h2 class="passkey-title">{msg('editInfoTitle')}</h2>
+					</div>
+				</div>
+			</header>
+			<div class="pwd-form">
+				<div class="edit-info-grid">
+					<label class="edit-info-field">
+						<span>{msg('editInfoFirstname')}</span>
+						<Input
+							type="text"
+							bind:value={editInfo.firstname}
+							placeholder={initialProfile.firstname}
+							data-test="profile-edit-firstname"
+						/>
+					</label>
+					<label class="edit-info-field">
+						<span>{msg('editInfoMidname')}</span>
+						<Input type="text" bind:value={editInfo.midname} placeholder={initialProfile.midname} />
+					</label>
+					<label class="edit-info-field">
+						<span>{msg('editInfoLastname')}</span>
+						<Input type="text" bind:value={editInfo.lastname} placeholder={initialProfile.lastname} />
+					</label>
+					<label class="edit-info-field">
+						<span>{msg('editInfoDob')}</span>
+						<!-- Batch 11: Input component chưa hỗ trợ type="date" → dùng input native (value = chuỗi ISO yyyy-mm-dd) -->
+						<input class="edit-info-date" type="date" bind:value={editInfo.dob} />
+					</label>
+					<label class="edit-info-field">
+						<span>{msg('editInfoGender')}</span>
+						<select class="edit-info-select" bind:value={editInfo.gender}>
+							<option value="">{msg('genderOther')}</option>
+							<option value="male">{msg('genderMale')}</option>
+							<option value="female">{msg('genderFemale')}</option>
+						</select>
+					</label>
+					<label class="edit-info-field">
+						<span>{msg('editInfoSocial')}</span>
+						<Input
+							type="text"
+							bind:value={editInfo.social}
+							placeholder={msg('editInfoSocialPlaceholder')}
+						/>
+					</label>
+				</div>
+				<div>
+					<Button
+						color="success"
+						variant="solid"
+						loading={editInfoBusy}
+						disabled={editInfoBusy || !editInfo.firstname.trim()}
+						onclick={submitEditInfo}
+						data-test="profile-edit-save"
+					>
+						{editInfoBusy ? msg('editInfoSaving') : msg('editInfoSave')}
+					</Button>
+				</div>
+			</div>
+		</section>
 	{/snippet}
 
 	{#snippet tabSecurityContent()}
@@ -960,6 +1314,93 @@
 			</div>
 		</form>
 	</section>
+
+	<!-- Batch 11 (yêu cầu 6): 2FA authenticator app (TOTP) -->
+	<section class="passkey-section" data-test="profile-totp-section">
+		<header class="passkey-header">
+			<div class="passkey-heading">
+				<Icon class="passkey-icon" icon="material-symbols-light:shield-check-rounded" size="md" />
+				<div>
+					<h2 class="passkey-title">{msg('totpTitle')}</h2>
+					<p class="passkey-subtitle">{msg('totpSubtitle')}</p>
+				</div>
+			</div>
+			{#if totpSetup?.enabled}
+				<span class="totp-badge" data-test="profile-totp-badge">{msg('totpEnabledBadge')}</span>
+			{:else if !totpSetup}
+				<Button
+					color="primary"
+					variant="ghost"
+					loading={totpBusy}
+					disabled={totpBusy}
+					onclick={startTotpSetup}
+					data-test="profile-totp-start"
+				>
+					{msg('totpEnableBtn')}
+				</Button>
+			{/if}
+		</header>
+
+		{#if totpSetup && !totpSetup.enabled}
+			<div class="totp-setup">
+				<p class="totp-hint">{msg('totpSetupHint')}</p>
+				{#if totpQr}
+					<img class="totp-qr" src={totpQr} alt={msg('totpTitle')} width="200" height="200" />
+				{/if}
+				<div class="totp-secret">
+					<span>{msg('totpSecretLabel')}</span>
+					<code>{totpSetup.secret}</code>
+				</div>
+				<div class="totp-confirm">
+					<Input
+						type="text"
+						inputmode="numeric"
+						maxLength={6}
+						bind:value={totpCode}
+						placeholder={msg('totpCodePlaceholder')}
+						data-test="profile-totp-code"
+					/>
+					<Button
+						color="success"
+						variant="solid"
+						loading={totpBusy}
+						disabled={totpBusy || !/^\d{6}$/.test(totpCode)}
+						onclick={confirmTotpEnable}
+						data-test="profile-totp-enable"
+					>
+						{msg('totpConfirmEnable')}
+					</Button>
+				</div>
+			</div>
+		{:else if totpSetup?.enabled}
+			<div class="totp-setup">
+				<p class="totp-hint">{msg('totpDisableHint')}</p>
+				<div class="totp-confirm">
+					<Input
+						type="text"
+						inputmode="numeric"
+						maxLength={6}
+						bind:value={totpCode}
+						placeholder={msg('totpCodePlaceholder')}
+						data-test="profile-totp-code-disable"
+					/>
+					<Button
+						color="error"
+						variant="outline"
+						loading={totpBusy}
+						disabled={totpBusy || !/^\d{6}$/.test(totpCode)}
+						onclick={confirmTotpDisable}
+						data-test="profile-totp-disable"
+					>
+						{msg('totpConfirmDisable')}
+					</Button>
+				</div>
+			</div>
+		{/if}
+		{#if totpError}
+			<p class="totp-error" role="alert">{totpError}</p>
+		{/if}
+	</section>
 	{/snippet}
 
 	{#snippet tabApiKeysContent()}
@@ -1068,6 +1509,10 @@
 								{#each keywords as kw (kw)}
 									<span class="sh-chip">
 										<span class="sh-chip-text">{kw}</span>
+										<!-- Batch 11 (yêu cầu 4): số lượt tìm kiếm mỗi keyword -->
+										{#if (searchCounts[routeKey]?.[kw] ?? 0) > 0}
+											<span class="sh-chip-count" title="{msg('searchHistoryTimes')}: {(searchCounts[routeKey]?.[kw] ?? 0)}">{searchCounts[routeKey][kw]}</span>
+										{/if}
 										<button
 											type="button"
 											class="sh-chip-x"
@@ -1261,6 +1706,23 @@
 	</AlertDialog.Content>
 </AlertDialog>
 
+<!-- Batch 11 (yêu cầu 1): modal xem chi tiết ảnh avatar -->
+<AlertDialog bind:open={avatarViewOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{msg('avatarViewTitle')}</AlertDialog.Title>
+		</AlertDialog.Header>
+		<div class="avatar-view-body">
+			{#if avatarUrl}
+				<img src={avatarUrl} alt={msg('avatarViewTitle')} />
+			{/if}
+		</div>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{msg('avatarViewClose')}</AlertDialog.Cancel>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog>
+
 <style lang="scss">
 	.profile-page {
 		display: flex;
@@ -1319,10 +1781,14 @@
 		background: var(--primary);
 		color: hsl(0 0% 100%);
 		box-shadow: 0 0 0 2px var(--background);
+		/* Batch 11 (yêu cầu 1): badge là nút đổi ảnh riêng — pointer + z-index */
+		cursor: pointer;
+		z-index: 2;
 	}
 
 	.profile-avatar-edit.busy {
 		opacity: 0.5;
+		cursor: wait;
 	}
 
 	.profile-title {
@@ -1430,7 +1896,8 @@
 
 	.passkey-heading {
 		display: flex;
-		align-items: flex-start;
+		/* Batch 11 (yêu cầu 2): align center — icon + title/subtitle thẳng hàng */
+		align-items: center;
 		gap: 0.6rem;
 		min-width: 0;
 	}
@@ -1441,7 +1908,6 @@
 	.passkey-section :global(.passkey-icon) {
 		color: var(--primary-600);
 		flex-shrink: 0;
-		margin-top: 0.15rem;
 	}
 
 	.passkey-title {
@@ -1535,6 +2001,19 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	/* Batch 11 (yêu cầu 4): badge count lượt search mỗi keyword */
+	.sh-chip-count {
+		display: inline-flex;
+		align-items: center;
+		padding: 0 0.4rem;
+		border-radius: 999px;
+		background: var(--primary-soft, hsl(212 92% 95%));
+		color: var(--primary, hsl(212 92% 45%));
+		font-size: 0.72rem;
+		font-weight: 600;
+		line-height: 1.2;
 	}
 
 	.sh-chip-x {
@@ -1634,6 +2113,17 @@
 		padding: 1.25rem;
 	}
 
+	/* Batch 11 (yêu cầu 3): gap giữa các block con trong 1 tab (section cách
+	   section) — chỉ ảnh hưởng trong vùng Tabs/Accordion profile. */
+	.profile-tabs > :global(*) {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.profile-accordion :global(.accordion-content-inner) > :global(*) + :global(*) {
+		margin-top: 1rem;
+	}
+
 	.pwd-header {
 		display: flex;
 		align-items: flex-start;
@@ -1647,6 +2137,128 @@
 		flex-direction: column;
 		gap: 0.85rem;
 		max-width: 26rem;
+	}
+
+	/* Batch 11 (yêu cầu 5): grid form hồ sơ — section edit-info dùng pwd-section
+	   nhưng max-width nới rộng 2 cột. */
+	.pwd-section:has(.edit-info-grid) {
+		max-width: 42rem;
+	}
+
+	.edit-info-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.85rem;
+
+		@media (max-width: 640px) {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.edit-info-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.85rem;
+		color: var(--foreground-500);
+
+		> span {
+			font-weight: 500;
+		}
+	}
+
+	.edit-info-select {
+		height: 2.5rem;
+		padding: 0 0.6rem;
+		border: 1px solid var(--default-400, hsl(0 0% 80%));
+		border-radius: 0.5rem;
+		background: var(--default-100, hsl(0 0% 97%));
+		color: var(--foreground);
+		font-size: 0.9rem;
+	}
+
+	/* input date native — cùng hình thái select/edit-info */
+	.edit-info-date {
+		height: 2.5rem;
+		padding: 0 0.6rem;
+		border: 1px solid var(--default-400, hsl(0 0% 80%));
+		border-radius: 0.5rem;
+		background: var(--default-100, hsl(0 0% 97%));
+		color: var(--foreground);
+		font-size: 0.9rem;
+	}
+
+	/* Batch 11 (yêu cầu 1): ảnh avatar trong modal xem chi tiết */
+	.avatar-view-body {
+		display: flex;
+		justify-content: center;
+
+		img {
+			max-width: 100%;
+			max-height: 70dvh;
+			border-radius: 0.75rem;
+			object-fit: contain;
+		}
+	}
+
+	/* Batch 11 (yêu cầu 6): 2FA TOTP */
+	.totp-badge {
+		padding: 0.2rem 0.7rem;
+		border-radius: 999px;
+		background: hsl(142 76% 36% / 0.12);
+		color: var(--success, hsl(142 76% 36%));
+		font-size: 0.8125rem;
+		font-weight: 600;
+	}
+
+	.totp-setup {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+
+	.totp-hint {
+		margin: 0;
+		font-size: 0.875rem;
+		color: var(--foreground-500);
+	}
+
+	.totp-qr {
+		align-self: center;
+		border-radius: 0.5rem;
+		background: hsl(0 0% 100%);
+		padding: 0.5rem;
+	}
+
+	.totp-secret {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		font-size: 0.8125rem;
+		color: var(--foreground-500);
+
+		code {
+			font-size: 0.95rem;
+			letter-spacing: 0.08em;
+			color: var(--foreground);
+			user-select: all;
+		}
+	}
+
+	.totp-confirm {
+		display: flex;
+		gap: 0.6rem;
+		align-items: center;
+
+		> :first-child {
+			width: 9rem;
+		}
+	}
+
+	.totp-error {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--error);
 	}
 
 	.pwd-field {

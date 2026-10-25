@@ -40,6 +40,9 @@ export interface UserPreferences {
 	/** Draft form đang dở (resume khi reload) — key = formKey, value JSON string.
 	 * Tách khỏi datatable.filters vì filters cap 100 chars/form-key; draft form dài hơn. */
 	drafts?: Record<string, string>;
+	/** Batch 11 (profile yêu cầu 4): số lượt tìm kiếm mỗi keyword — key = route,
+	 * value = Record<keyword, count>. Song song searchKeywords (chỉ count > 0). */
+	searchKeywordCounts?: Record<string, Record<string, number>>;
 	updatedAt?: string;
 }
 
@@ -188,6 +191,24 @@ function sanitizePatch(patch: UserPreferencesPatch | undefined): UserPreferences
 		}
 		clean.drafts = drafts;
 	}
+	// Batch 11: searchKeywordCounts — song song searchKeywords: tối đa 10 route,
+	// mỗi route ≤ 20 keyword ≤ 100 chars, count nguyên dương ≤ 1e6.
+	if (patch.searchKeywordCounts && typeof patch.searchKeywordCounts === 'object') {
+		const entries = Object.entries(patch.searchKeywordCounts as Record<string, unknown>).slice(0, 10);
+		const counts: Record<string, Record<string, number>> = {};
+		for (const [key, value] of entries) {
+			if (typeof key !== 'string' || key.length === 0 || key.length > 100) continue;
+			if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+			const inner: Record<string, number> = {};
+			for (const [kw, cnt] of Object.entries(value as Record<string, unknown>).slice(0, 20)) {
+				if (typeof kw !== 'string' || kw.length === 0 || kw.length > 100) continue;
+				if (typeof cnt !== 'number' || !Number.isFinite(cnt) || cnt <= 0) continue;
+				inner[kw] = Math.min(Math.round(cnt), 1_000_000);
+			}
+			counts[key] = inner;
+		}
+		clean.searchKeywordCounts = counts;
+	}
 	return clean;
 }
 
@@ -200,6 +221,7 @@ function mergePrefs(
 		language: current?.language,
 		datatable: { ...(current?.datatable ?? {}) },
 		searchKeywords: { ...(current?.searchKeywords ?? {}) },
+		searchKeywordCounts: { ...(current?.searchKeywordCounts ?? {}) },
 		drafts: { ...(current?.drafts ?? {}) },
 		updatedAt: new Date().toISOString()
 	};
@@ -232,6 +254,17 @@ function mergePrefs(
 				if (mergedList.length >= 20) break;
 			}
 			merged.searchKeywords[key] = mergedList;
+		}
+	}
+	if (patch.searchKeywordCounts && merged.searchKeywordCounts) {
+		// Batch 11: merge per-route per-keyword — count patch ĐÈ count cũ (client
+		// đã cộng dồn trước khi gửi). Route rỗng trong patch = XÓA route.
+		for (const [key, kwCounts] of Object.entries(patch.searchKeywordCounts)) {
+			if (!kwCounts || Object.keys(kwCounts).length === 0) {
+				delete merged.searchKeywordCounts[key];
+				continue;
+			}
+			merged.searchKeywordCounts[key] = { ...(merged.searchKeywordCounts[key] ?? {}), ...kwCounts };
 		}
 	}
 	if (patch.drafts && merged.drafts) {

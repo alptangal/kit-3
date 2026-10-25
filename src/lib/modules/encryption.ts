@@ -538,5 +538,49 @@ export const encryption = {
 	hmacBlindIndex,
 	setupIndexKey,
 	unlockIndexKey,
-	getDataHash
+	getDataHash,
+	encryptWithIndexKey,
+	decryptWithIndexKey
 };
+
+// ── Batch 11 (profile yêu cầu 6 — 2FA TOTP): mã hoá server-side bằng indexKey ──
+// systemVault.indexKey là raw AES-256 key (Uint8Array) — import thành AES-GCM key
+// để mã hoá TOTP secret (server cần đọc secret lúc đăng nhập, không có mật khẩu
+// user nên không dùng được vault DEK của user).
+async function encryptWithIndexKey(
+	indexKey: Uint8Array,
+	plaintext: string
+): Promise<string> {
+	const keyBuffer = indexKey.buffer.slice(
+		indexKey.byteOffset,
+		indexKey.byteOffset + indexKey.byteLength
+	) as ArrayBuffer;
+	const key = await crypto.subtle.importKey('raw', keyBuffer, { name: 'AES-GCM' }, false, [
+		'encrypt'
+	]);
+	const iv = crypto.getRandomValues(new Uint8Array(12));
+	const enc = new TextEncoder().encode(plaintext);
+	const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc);
+	const merged = new Uint8Array(iv.length + ct.byteLength);
+	merged.set(iv, 0);
+	merged.set(new Uint8Array(ct), iv.length);
+	return bufToBase64(merged);
+}
+
+async function decryptWithIndexKey(
+	indexKey: Uint8Array,
+	payloadB64: string
+): Promise<string> {
+	const merged = base64ToBytes(payloadB64);
+	const iv = merged.slice(0, 12);
+	const ct = merged.slice(12);
+	const keyBuffer = indexKey.buffer.slice(
+		indexKey.byteOffset,
+		indexKey.byteOffset + indexKey.byteLength
+	) as ArrayBuffer;
+	const key = await crypto.subtle.importKey('raw', keyBuffer, { name: 'AES-GCM' }, false, [
+		'decrypt'
+	]);
+	const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+	return new TextDecoder().decode(pt);
+}

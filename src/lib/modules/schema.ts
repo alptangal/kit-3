@@ -106,6 +106,18 @@ export const collectionSchemas = {
 			lastname: { type: 'string', searchable: true, sortable: true, selectable: true },
 			description: { type: 'string', searchable: true, sortable: false, selectable: true },
 
+			// Batch 11 (profile yêu cầu 5): hồ sơ bổ sung — plain (không mật như
+			// email/phone, không cần vault; profileEncrypted giữ nguyên không đổi).
+			dob: { type: 'string', searchable: false, sortable: false, selectable: true },
+			gender: { type: 'string', searchable: false, sortable: false, selectable: true },
+			social: { type: 'string', searchable: false, sortable: false, selectable: true },
+
+			// Batch 11 (profile yêu cầu 6): 2FA TOTP. Secret mã hoá bằng indexKey
+			// (server-side — cần đọc lúc đăng nhập, không có mật khẩu user).
+			totpSecretEncrypted: { type: 'string', searchable: false, sortable: false, selectable: false },
+			totpEnabled: { type: 'boolean', searchable: false, sortable: false, selectable: false },
+			totpCreatedAt: { type: 'string', searchable: false, sortable: false, selectable: false },
+
 			// Tham chiếu tới name_roles theo DOCUMENT KEY (vd 'role-owner'), KHÔNG PHẢI field `name`
 			// ('owner'). Chỗ nào cần lấy roleName dạng chuỗi ('owner'/'manager'/...) để đưa vào
 			// ActorContext.roleName / PermissionChecker phải fetch name_roles.get({documentKey: roleId})
