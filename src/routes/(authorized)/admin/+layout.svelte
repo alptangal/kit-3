@@ -44,6 +44,10 @@
 			const pageHeaderEl = inset.querySelector<HTMLElement>('.admin-header');
 			const p = pageHeaderEl?.getBoundingClientRect().height ?? 0;
 			inset.style.setProperty('--admin-header-h', `${Math.round(h)}px`);
+			// Batch9: tab-strip trang con (suppliers) sticky phải ghim DƯỚI header —
+			// không dùng --admin-header-h vì trang fullheight zero-hoá var này cho
+			// DataTable sticky (shadow inheritance) → var riêng không bị đè.
+			inset.style.setProperty('--admin-tab-top', `${Math.round(h)}px`);
 			inset.style.setProperty('--admin-filters-h', `${Math.round(f)}px`);
 			inset.style.setProperty('--admin-page-header-h', `${Math.round(p)}px`);
 		};

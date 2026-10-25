@@ -3064,7 +3064,13 @@
 		border-bottom: 1px solid var(--default-200);
 		background: var(--background);
 		position: sticky;
-		top: 0;
+		/* Layout cuộn ở root (Safari <15.4 không dvh → fullheight chết): header
+		   breadcrumb sticky top:0 z-500 ĐÈ tab-strip sticky top:0 z-20 khi cả hai
+		   cùng ghim → tab cần top = chiều cao header. KHÔNG dùng --admin-header-h:
+		   page zero-hoá var này cho DataTable sticky (khối .admin-page--fullheight
+		   ở trên) → tab-strip kế thừa 0px. Layout set --admin-tab-top (không bị
+		   page shadow). */
+		top: var(--admin-tab-top, 0px);
 		z-index: 20;
 		transition: box-shadow 200ms ease;
 	}
