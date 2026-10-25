@@ -2298,14 +2298,31 @@
 		</div>
 	</footer>
 
-	<!-- ── FAB mobile (pattern purchases): nút chính toggle menu (Create/Search/
-		Setting), nút secondary setting mở filter/sort trực tiếp. Batch9 (m05696):
-		menu = create + search + setting (bỏ Retry — nút tune secondary đã đảm
-		nhiệm mở filter/sort). -->
+	<!-- ── FAB mobile (pattern purchases). Batch9c (m06530): 3 nút cùng cấp
+		create + search + setting (setting mở filter/sort); group ẨN theo HÀNH
+		ĐỘNG cuộn (opacity giống tab/pagination — scrollY=0 → ẩn, đang cuộn →
+		ẩn, dừng → hiện; menu mở giữ hiện qua fab-keep). -->
 	{#if mobileFabOpen}
 		<div class="fab-menu-backdrop" onclick={() => (mobileFabOpen = false)} aria-hidden="true"></div>
 	{/if}
-	<div class="fab-group" class:fab-hidden={!tableScrolled} data-suggest>
+	<div class="fab-group" class:fab-hidden={!tableScrolled} class:is-scrolling={scrollActive} class:fab-keep={mobileFabOpen} data-suggest>
+		<!-- Batch9c: search cùng cấp — mở text field trong caption (scrollActive=false
+			để row tools hiện lại) + focus -->
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.actions.search[lang]}
+			data-test="suppliers-fab-search-btn"
+			onclick={() => {
+				mobileFabOpen = false;
+				mobileSearchOpen = true;
+				scrollActive = false;
+				setTimeout(() => mobileSearchInputInstance?.configs.focus(), 0);
+			}}
+		>
+			<Icon icon={iconify['search-rounded']} />
+		</button>
+		<!-- setting: mở modal filter/sort (mobile-filter-popover từ nút tune caption) -->
 		<button
 			type="button"
 			class="fab fab--secondary"
@@ -2330,8 +2347,8 @@
 		</button>
 		{#if mobileFabOpen}
 			<div class="fab-menu" role="menu">
-				<!-- Batch9: menu = Create + Search + Setting (mở filter/sort);
-					chọn mục nào cũng mở lại row tools (scrollActive=false) -->
+				<!-- Batch9c: menu còn Create (search + setting đã lên nút cùng cấp);
+					chọn mở lại row tools (scrollActive=false) -->
 				<button
 					type="button"
 					class="fab-menu-item"
@@ -2343,33 +2360,6 @@
 					}}
 				>
 					{activeTab === 'suppliers' ? pageContents.actions.createSupplier[lang] : pageContents.actions.createPO[lang]}
-				</button>
-				<button
-					type="button"
-					class="fab-menu-item"
-					role="menuitem"
-					data-test="suppliers-fab-search"
-					onclick={() => {
-						mobileFabOpen = false;
-						mobileSearchOpen = true;
-						scrollActive = false;
-						setTimeout(() => mobileSearchInputInstance?.configs.focus(), 0);
-					}}
-				>
-					{pageContents.actions.search[lang]}
-				</button>
-				<button
-					type="button"
-					class="fab-menu-item"
-					role="menuitem"
-					data-test="suppliers-fab-setting-item"
-					onclick={() => {
-						mobileFabOpen = false;
-						mobileFilterOpen = true;
-						scrollActive = false;
-					}}
-				>
-					{pageContents.actions.filter[lang]}
 				</button>
 			</div>
 		{/if}
@@ -4003,13 +3993,24 @@
 		align-items: center;
 		gap: 0.6rem;
 		z-index: 400;
-		/* Batch8 mục 2: ở đầu trang (scrollY=0) FAB ẩn mờ + không bấm được —
-		   row caption tools đang hiện. Cuộn → hiện lại. pointer-events chặn
-		   tap "chìm" khi opacity 0. */
+		/* Batch9c (m06530): ẩn theo HÀNH ĐỘNG cuộn giống tab/pagination —
+		   scrollY=0 → ẩn (row caption tools đang hiện), đang cuộn → ẩn,
+		   dừng 200ms → hiện lại. fab-keep (menu mở) giữ hiện bất chấp. */
 		transition: opacity 200ms ease;
 		&.fab-hidden {
 			opacity: 0;
 			pointer-events: none;
+		}
+		/* Batch8: đang cuộn mờ đi (giữ chỗ trong flow — pointer-events chặn tap chìm) */
+		&.is-scrolling {
+			opacity: 0;
+			pointer-events: none;
+		}
+		&.fab-keep,
+		&.fab-keep.fab-hidden,
+		&.fab-keep.is-scrolling {
+			opacity: 1;
+			pointer-events: auto;
 		}
 
 		@media (min-width: 768px) {
