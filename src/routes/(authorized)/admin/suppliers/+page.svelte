@@ -2537,7 +2537,7 @@
 					<!-- ── Hình ảnh multiple (defer batch 3: preview local — chỉ upload
 						     KHI SUBMIT qua uploadPending, tránh rác khi hủy form) ── -->
 					<!-- ── Images: items-block solid (giống address/social, batch6) ── -->
-					<div class="items-block social-block">
+					<div class="items-block social-group">
 						<span class="items-block__label">{pageContents.supplierModal.images[lang]}</span>
 						<ImageUpload
 							bind:this={supplierImageUpload}
@@ -2619,7 +2619,7 @@
 					</div>
 					<!-- ── Multiple addresses (yêu cầu 1g: BỎ address đơn — block này là duy nhất;
 					     entry đầu = địa chỉ chính cho payload cấp 1) ── -->
-					<div class="items-block social-block">
+					<div class="items-block social-group">
 						<span class="items-block__label">{pageContents.supplierModal.addresses[lang]}</span>
 						{#each supplierForm.addresses as entry, addrIndex (addrIndex)}
 							<div class="address-entry" class:field-row--dup={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2}>
@@ -2670,7 +2670,7 @@
 					</div>
 					<!-- ── Social block: 6 field dạng TAG multi-value (yêu cầu batch7:
 					     enter tạo mới, icon open-tab + remove, click text edit, cấm trùng) ── -->
-					<div class="items-block social-block">
+					<div class="items-block social-group">
 						<span class="items-block__label">{pageContents.supplierModal.social[lang]}</span>
 						<div class="form-grid-2">
 							{#each SOCIAL_FIELDS as sf (sf)}
@@ -3913,7 +3913,7 @@
 	/* Label block NGỰA TRÊN BORDER LINE (batch6): label absolute dịch -50% lên
 	   giữa viền, nền background che đoạn border phía sau. */
 	.form-items-block,
-	.social-block {
+	.social-group {
 		position: relative;
 	}
 
@@ -4097,7 +4097,7 @@
 	}
 
 	/* ── Multiple addresses: entry block (badge/remove đè viền trên — mirror .field-row).
-	   Batch6: solid border ĐỒNG NHẤT với social-block; line vertical trục x giữa. */
+	   Batch6: solid border ĐỒNG NHẤT với social-group; line vertical trục x giữa. */
 	.address-entry {
 		position: relative;
 		display: flex;
@@ -4113,7 +4113,7 @@
 		}
 	}
 
-	.social-block > .address-entry + .address-entry::before {
+	.social-group > .address-entry + .address-entry::before {
 		content: '';
 		position: absolute;
 		left: 50%;
@@ -4156,7 +4156,7 @@
 		height: 2.25rem;
 	}
 
-	.social-block {
+	.social-group {
 		border-style: solid;
 	}
 
