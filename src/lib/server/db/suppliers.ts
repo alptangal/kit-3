@@ -173,6 +173,7 @@ const SUPPLIER_ADMIN_SAFE_FIELDS = [
   'website',
   'avatarUrl',
   'images',
+  'imageFulls',
   'note',
   'status',
   'createdBy',
@@ -287,7 +288,7 @@ export interface SupplierHistoryEntry {
 const SUPPLIER_HISTORY_FIELDS = [
   'name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country',
   'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord',
-  'instagram', 'website', 'avatarUrl', 'images', 'note', 'status'
+  'instagram', 'website', 'avatarUrl', 'images', 'imageFulls', 'note', 'status'
 ] as const;
 
 const supplierHistoriesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`supplier_histories\``;
@@ -578,6 +579,38 @@ export class SupplierService {
   }
 
   /**
+   * Batch 15 (m12278-7): check tên supplier đã tồn tại chưa (name = key nghiệp
+   * vụ). Case + diacritic-insensitive (buildDiacriticInsensitiveRegex — "Sơn
+   * Lan" chặn cả "son lan"). excludeId cho edit mode (bỏ qua chính nó).
+   */
+  static async checkNameExists(
+    actor: ActorContext,
+    name: string,
+    excludeId?: string
+  ): Promise<{ success: false; messages: TranslateContent } | { success: true; exists: boolean }> {
+    const scope = await PermissionChecker.getScope(actor.roleName, 'suppliers:read');
+    if (!scope) return { success: false, messages: supplierAdminMessages.permissionDenied };
+
+    const trimmed = name.trim();
+    if (!trimmed) return { success: true, exists: false };
+
+    const re = buildDiacriticInsensitiveRegex(trimmed);
+    // name khớp EXACT pattern (bọc ^...$) — không phải substring
+    const statement =
+      `SELECT RAW COUNT(*) FROM ${suppliersKeyspace} ` +
+      `WHERE REGEXP_CONTAINS(name, $1)` +
+      (excludeId ? ' AND META().id != $2' : '');
+    const args: (string | number)[] = excludeId ? [`^${re}$`, excludeId] : [`^${re}$`];
+
+    const res = await cbSuppliers.document.query({ statement, args, readonly: true });
+    if (!res.ok) {
+      return { success: false, messages: supplierAdminMessages.queryFailed };
+    }
+    const total = Number(res.data?.results?.[0] ?? 0);
+    return { success: true, exists: total > 0 };
+  }
+
+  /**
    * Create a supplier.
    */
   static async createSupplier(
@@ -601,6 +634,8 @@ export class SupplierService {
       website?: string[];
       avatarUrl?: string;
       images?: string[];
+      /** Batch 15 (m12278-5): original URLs tương ứng 1-1 images (thumb) — full-view */
+      imageFulls?: string[];
       note?: string;
       status: string;
     }
@@ -630,6 +665,16 @@ export class SupplierService {
       website: normalizeSocialArray(supplierData.website) ?? null,
       avatarUrl: supplierData.avatarUrl ?? null,
       images: Array.isArray(supplierData.images) ? supplierData.images.filter((i): i is string => typeof i === 'string' && i.trim().length > 0).map((i) => i.trim()) : [],
+      // Batch 15 (m12278-5): original URLs 1-1 với images (thumb) — ảnh thiếu
+      // khớp không đưa vào. Chỉ set khi có ít nhất 1 cặp.
+      ...(Array.isArray(supplierData.imageFulls) && Array.isArray(supplierData.images)
+        ? {
+            imageFulls: supplierData.images
+              .map((thumb, i) => ({ thumb: (thumb ?? '').trim(), full: (supplierData.imageFulls?.[i] ?? '').trim() }))
+              .filter((p) => p.thumb && p.full)
+              .map((p) => p.full)
+          }
+        : {}),
       note: supplierData.note ?? null,
       status: supplierData.status,
       createdBy: actor.userId,
@@ -670,11 +715,18 @@ export class SupplierService {
     const now = new Date().toISOString();
     const updateData: Record<string, unknown> = { ...(getRes as any).data };
 
-    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord', 'instagram', 'website', 'avatarUrl', 'images', 'note', 'status'] as const) {
+    for (const field of ['name', 'contactPerson', 'address', 'ward', 'district', 'province', 'country', 'phones', 'emails', 'addresses', 'zalo', 'facebook', 'telegram', 'discord', 'instagram', 'website', 'avatarUrl', 'images', 'imageFulls', 'note', 'status'] as const) {
       if (field in patch) {
+        // Batch 15 (m12278-5): imageFulls = mảng URL original 1-1 images (thumb);
+        // undefined trong patch → xoá field (user bỏ hết ảnh full).
+        if (field === 'imageFulls') {
+          const fulls = Array.isArray(patch[field]) ? (patch[field] as unknown[]).filter((u): u is string => typeof u === 'string' && !!u.trim()).map((u) => u.trim()) : [];
+          if (fulls.length) updateData[field] = fulls;
+          else updateData[field] = [];
+        }
         // social doc cũ string đơn → chuẩn hoá mảng; mảng social/phones/emails
         // lọc phần tử rỗng/không phải string
-        if ((SUPPLIER_ARRAY_FIELDS as readonly string[]).includes(field)) {
+        else if ((SUPPLIER_ARRAY_FIELDS as readonly string[]).includes(field)) {
           updateData[field] = normalizeSocialArray(patch[field]) ?? [];
         } else if (field === 'addresses') {
           // mảng object {label?, address, province?, district?, country?}

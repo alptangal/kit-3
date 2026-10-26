@@ -65,6 +65,27 @@ export function formatDate(raw?: string | Date | null, lang?: Lang | string): st
 	}
 }
 
+/**
+ * Format datetime đầy đủ với giây (mẫu: yyyy MMM dd HH:mm:ss) — timeline
+ * history suppliers (batch 15 m12278: entry cần giờ:phút:giây, không chỉ ngày).
+ */
+export function formatDateTimeSec(raw?: string | Date | null, lang?: Lang | string): string {
+	if (!raw) return '—';
+	try {
+		const date = typeof raw === 'string' ? new Date(raw) : raw;
+		return new Intl.DateTimeFormat(getLocale(lang), {
+			year: 'numeric',
+			month: 'short',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		}).format(date);
+	} catch {
+		return '—';
+	}
+}
+
 /** Format số theo locale lang (Intl.NumberFormat, mặc định không thập phân lẻ ảo). */
 export function formatNumber(value?: number | null, lang?: Lang | string): string {
 	if (value === null || value === undefined || Number.isNaN(value)) return '—';

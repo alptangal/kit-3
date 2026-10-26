@@ -32,6 +32,8 @@ export const POST: RequestHandler = async (event) => {
 			website?: string[];
 			avatarUrl?: string;
 			images?: string[];
+			/** Batch 15 (m12278-5): original URLs 1-1 images (thumb) — full-view */
+			imageFulls?: string[];
 			note?: string;
 			status: string;
 		}>(event);
@@ -87,6 +89,7 @@ export const POST: RequestHandler = async (event) => {
 			website: read.data.website,
 			avatarUrl: read.data.avatarUrl,
 			images: read.data.images,
+			imageFulls: read.data.imageFulls,
 			note: read.data.note,
 			status: read.data.status
 		});

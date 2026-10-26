@@ -10,7 +10,7 @@
 	import type { Size } from '$components/interface';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
-	import { formatDate as formatDateShared } from '$modules/i18n';
+	import { formatDate as formatDateShared, formatDateTimeSec } from '$modules/i18n';
 	import { onMount } from 'svelte';	import { page } from '$app/state';
 	import { resolveServerMessage } from '../_interface';
 	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs, saveDraftPref, clearDraftPref, readDraftPref } from '$store/user-prefs.svelte';
@@ -58,6 +58,12 @@
 	// 6 field social dạng TAG multi-value (mảng string)
 	type SocialFieldKey = 'zalo' | 'telegram' | 'discord' | 'facebook' | 'instagram' | 'website';
 	const SOCIAL_FIELDS: SocialFieldKey[] = ['zalo', 'telegram', 'discord', 'facebook', 'instagram', 'website'];
+
+	// Batch 15 (m12278-8): placeholder gợi ý theo field (url/username/value hợp
+	// lệ) — key `${sf}Placeholder` trong supplierModal i18n.
+	function sfPlaceholderKey(sf: SocialFieldKey) {
+		return `${sf}Placeholder` as keyof typeof pageContents.supplierModal;
+	}
 
 	interface PurchaseOrderRow {
 		_id?: string;
@@ -182,6 +188,8 @@
 			title: { vi: 'Tạo nhà cung cấp', en: 'Create supplier' },
 			titleEdit: { vi: 'Sửa nhà cung cấp', en: 'Edit supplier' },
 			name: { vi: 'Tên nhà cung cấp', en: 'Supplier name' },
+			nameChecking: { vi: 'đang kiểm tra…', en: 'checking…' },
+			nameTaken: { vi: 'Tên đã tồn tại', en: 'Name already exists' },
 			contact: { vi: 'Người liên hệ (tuỳ chọn)', en: 'Contact person (optional)' },
 			address: { vi: 'Địa chỉ (tuỳ chọn)', en: 'Address (optional)' },
 			addressPlaceholder: { vi: 'Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành...', en: 'House number, street, ward, district, province...' },
@@ -279,6 +287,7 @@
 				website: { vi: 'Website', en: 'Website' },
 				avatarUrl: { vi: 'Ảnh đại diện', en: 'Avatar' },
 				images: { vi: 'Hình ảnh', en: 'Images' },
+				imageFulls: { vi: 'Ảnh bản gốc', en: 'Original images' },
 				note: { vi: 'Ghi chú', en: 'Note' },
 				status: { vi: 'Trạng thái', en: 'Status' }
 			}
@@ -634,6 +643,8 @@
 		instagram: string[];
 		website: string[];
 		images: string[];
+		/** Batch 15 (m12278-5): original URLs 1-1 images (thumb) — full-view detail */
+		imageFulls: string[];
 		avatarUrl: string;
 		note: string;
 		status: string;
@@ -651,6 +662,7 @@
 		instagram: [],
 		website: [],
 		images: [],
+		imageFulls: [],
 		avatarUrl: '',
 		note: '',
 		status: 'active'
@@ -659,12 +671,74 @@
 	let supplierAddressBreakdowns = $state<{ province: string; district: string; ward?: string }[]>([]);
 	// breakdown hệ MỚI (34 tỉnh 2 cấp) cho từng entry — gen 2 chiều với breakdown cũ qua mapping
 	let supplierNewAddressBreakdowns = $state<{ province: string; ward: string }[]>([]);
-	// ImageUpload defer ref — gọi uploadPending() khi submit, seedFromImages() khi mở modal
+	// ImageUpload defer ref — gọi uploadPending() khi submit, seedFromImages() khi mở modal.
+	// Batch 15 (m12278-5): getUploadPairs() trả { thumb, original }[] — payload
+	// lưu images = thumb URLs + imageFulls = original URLs (full-view detail).
 	let supplierImageUpload = $state<{
 		uploadPending: () => Promise<string[] | string | undefined>;
 		seedFromImages: (urls: string[]) => void;
+		seedFromImagePairs: (pairs: { thumb: string; original?: string }[]) => void;
+		syncFulls: (fulls: string[]) => void;
+		getUploadPairs: () => { thumb: string; original?: string }[];
 		hasDeferPending: boolean;
 	} | undefined>(undefined);
+
+	// ── Batch 15 (m12278-7): name check realtime — name = key nghiệp vụ ──
+	// Debounce 400ms sau khi gõ → POST /api/admin/suppliers/check-name →
+	// supplierNameTaken → disable submit + badge đỏ cạnh field. Edit exclude
+	// chính nó (supplierEditId). Kiểm tra lại khi mở modal (draft resume/edit
+	// prefill) — server là nguồn sự thật.
+	let supplierNameTaken = $state(false);
+	let supplierNameChecking = $state(false);
+	let nameCheckTimer: ReturnType<typeof setTimeout> | undefined;
+
+	async function checkSupplierNameNow() {
+		const name = str(supplierForm.name).trim();
+		if (!name || !encryptionKeys) {
+			supplierNameTaken = false;
+			return;
+		}
+		supplierNameChecking = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/suppliers/check-name',
+				{
+					method: 'POST',
+					body: {
+						name,
+						// Edit: bỏ qua chính nó (đổi field khác không tính là trùng tên)
+						excludeId: supplierEditMode === 'edit' ? supplierEditId ?? undefined : undefined
+					}
+				},
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as { exists?: boolean } | undefined;
+				supplierNameTaken = !!data?.exists;
+			} else {
+				// API lỗi → không chặn submit (chỉ mất check, server không có unique)
+				supplierNameTaken = false;
+			}
+		} catch {
+			supplierNameTaken = false;
+		} finally {
+			supplierNameChecking = false;
+		}
+	}
+
+	function scheduleNameCheck() {
+		clearTimeout(nameCheckTimer);
+		const name = str(supplierForm.name).trim();
+		if (!name) {
+			supplierNameTaken = false;
+			supplierNameChecking = false;
+			return;
+		}
+		supplierNameChecking = true;
+		nameCheckTimer = setTimeout(() => {
+			void checkSupplierNameNow();
+		}, 400);
+	}
 
 	// ── Draft DB (yêu cầu 1k: reload page → resume) — field `drafts` trong
 	// user-prefs (server cap 5 form × 20KB). Tách khỏi datatable.filters vì
@@ -1317,6 +1391,8 @@
 			instagram: [] as string[],
 			website: [] as string[],
 			images: [] as string[],
+			/** Batch 15 (m12278-5): original URLs 1-1 images (thumb) — full-view */
+			imageFulls: [] as string[],
 			avatarUrl: '',
 			note: '',
 			status: 'active'
@@ -1355,6 +1431,7 @@
 						instagram: socialArr(saved.instagram),
 						website: socialArr(saved.website),
 						images: arr(saved.images),
+						imageFulls: arr(saved.imageFulls),
 						avatarUrl: saved.avatarUrl ?? '',
 						note: saved.note ?? '',
 						status: saved.status ?? 'active'
@@ -1392,10 +1469,15 @@
 	async function seedImagesAfterMount() {
 		await tick();
 		if (supplierModalDisplay && supplierImageUpload) {
-			supplierImageUpload.seedFromImages(supplierForm.images);
+			// Batch 15 (m12278-5): seed kèm imageFulls — entry EXISTING biết URL
+			// bản gốc cho full-view (imageFulls 1-1 theo index images).
+			const pairs = supplierForm.images.map((thumb, i) => ({
+				thumb,
+				original: str(supplierForm.imageFulls[i] ?? '').trim() || undefined
+			}));
+			supplierImageUpload.seedFromImagePairs(pairs);
 		}
 	}
-
 	// ── Edit: prefill form từ row của bảng (dùng chung form với create) ──
 	function openSupplierEditModal(row: Record<string, unknown>) {
 		const r = row as unknown as SupplierRow;
@@ -1430,6 +1512,7 @@
 			instagram: toSocialArray((r as Record<string, unknown>).instagram),
 			website: toSocialArray((r as Record<string, unknown>).website),
 			images: [...(r.images ?? [])],
+			imageFulls: [...((r as Record<string, unknown>).imageFulls as string[] ?? [])],
 			avatarUrl: (r as Record<string, unknown>).avatarUrl as string | undefined ?? r.images?.[0] ?? '',
 			note: (r as Record<string, unknown>).note as string | undefined ?? '',
 			status: r.status ?? 'active'
@@ -1661,7 +1744,8 @@
 	// Batch10 (m06635-5c): form invalid → nút submit disable (validate toàn form
 	// + trùng phone/email/address). Tên trống + row rỗng là trạng thái khởi tạo
 	// create — vẫn tính invalid (user phải điền tối thiểu tên).
-	const supplierFormInvalid = $derived(!!validateSupplierForm() || hasDuplicates);
+	// Batch 15 (m12278-7): tên TRÙNG DB (nameTaken) → chặn submit.
+	const supplierFormInvalid = $derived(!!validateSupplierForm() || hasDuplicates || supplierNameTaken);
 
 	function buildSupplierPayload() {
 		const t = supplierForm;
@@ -1699,6 +1783,12 @@
 		// khớp URL nào → dùng ảnh đầu)
 		const images = t.images.map((u) => str(u).trim()).filter(Boolean);
 		const avatar = images.includes(str(t.avatarUrl)) ? str(t.avatarUrl) : (images[0] ?? '');
+		// Batch 15 (m12278-5): cặp thumb→original theo thứ tự images — imageFulls
+		// 1-1 images (index khớp) để detail full-view lấy bản gốc.
+		const imageFulls = t.imageFulls ?? [];
+		const alignedFulls = images
+			.map((thumb, i) => str(imageFulls[i] ?? '').trim())
+			.filter(Boolean);
 		return {
 			name: str(t.name).trim(),
 			contactPerson: str(t.contactPerson).trim() || undefined,
@@ -1717,6 +1807,7 @@
 			instagram: t.instagram.map((v) => v.trim()).filter(Boolean).length ? t.instagram.map((v) => v.trim()).filter(Boolean) : undefined,
 			website: t.website.map((v) => v.trim()).filter(Boolean).length ? t.website.map((v) => v.trim()).filter(Boolean) : undefined,
 			images: images.length > 0 ? images : undefined,
+			imageFulls: images.length > 0 && alignedFulls.length > 0 ? alignedFulls : undefined,
 			avatarUrl: avatar || undefined,
 			note: str(t.note).trim() || undefined,
 			status: t.status
@@ -1748,6 +1839,10 @@
 				}
 				if (Array.isArray(uploaded)) supplierForm.images = uploaded;
 				else supplierForm.images = [uploaded];
+				// Batch 15 (m12278-5): kéo pairs thumb→original vào form — payload
+				// build SupplierPayload đọc t.imageFulls theo index images.
+				const pairs = supplierImageUpload.getUploadPairs();
+				supplierForm.imageFulls = pairs.map((p) => p.original ?? '');
 			}
 			const isEdit = supplierEditMode === 'edit' && !!supplierEditId;
 			const response = await encryption.fetchSecure(
@@ -1769,9 +1864,10 @@
 					'success'
 				);
 				if (!isEdit) clearDraft(); // create thành công → xoá draft
-				closeGuard.markClean(); // đóng programmatic không qua onCloseAttempt
-				if (isEdit) cleanSupplierParam(); // deep-link gỡ khi đóng modal
-				// Cập nhật field passive với response mới nhất (updatedBy/updatedAt từ server)
+				closeGuard.markClean();
+				// Batch 15 (m12278-6): GIỮ MODAL MỞ cả 2 mode — create: reset form
+				// (sẵn sàng nhập NCC tiếp theo); edit: dữ liệu modal đồng bộ theo
+				// response (user thấy ngay kết quả). Đóng = user bấm ✕/back.
 				const respSupplier = (response.data as { supplier?: Record<string, unknown> } | undefined)?.supplier;
 				if (isEdit && respSupplier) {
 					supplierPassive = {
@@ -1780,8 +1876,20 @@
 						updatedBy: (respSupplier.updatedBy as string | null) ?? undefined,
 						updatedAt: (respSupplier.updatedAt as string | null) ?? undefined
 					};
+					// Đồng bộ images/imageFulls theo doc mới (upload URL thật)
+					if (Array.isArray(respSupplier.images)) supplierForm.images = respSupplier.images as string[];
+					if (Array.isArray(respSupplier.imageFulls)) supplierForm.imageFulls = respSupplier.imageFulls as string[];
+					// Re-seed ImageUpload entries: file pending đã upload xong →
+					// entries trở thành URL (không còn pending).
+					void seedImagesAfterMount();
+				} else {
+					// CREATE thành công → reset về form trống (giữ modal mở)
+					supplierForm = emptySupplierForm();
+					supplierAddressBreakdowns = [];
+					supplierNewAddressBreakdowns = [];
+					supplierError = undefined;
+					void seedImagesAfterMount();
 				}
-				supplierModalDisplay = false;
 				await loadSuppliers();
 			} else {
 				supplierError = resolveServerMessage(response.message, lang, isEdit ? pageContents.toasts.supplierUpdateFailed : pageContents.toasts.supplierFailed);
@@ -2032,6 +2140,22 @@
 		if (str(supplierForm.name).trim() || supplierForm.phones.length > 0 || supplierForm.emails.length > 0) {
 			saveDraftDebounced();
 		}
+	});
+
+	// ── Batch 15 (m12278-7): name check realtime — track tên + mode/id, debounce
+	// 400ms → API check. Modal đóng → huỷ timer + reset badge.
+	$effect(() => {
+		if (!supplierModalDisplay) {
+			clearTimeout(nameCheckTimer);
+			supplierNameTaken = false;
+			supplierNameChecking = false;
+			return;
+		}
+		void supplierForm.name;
+		void supplierEditMode;
+		void supplierEditId;
+		scheduleNameCheck();
+		return () => clearTimeout(nameCheckTimer);
 	});
 </script>
 
@@ -2510,8 +2634,11 @@
 				actionButtons={{ close: { display: !isMobile } }}
 			>
 				<div class="supplier-modal-title">
-					{#if isMobile}
-						<!-- Mobile: thay nút ✕ bằng breadcrumb — chevron back đóng modal -->
+					<!-- Batch 15 (m12278-10): edit mode mobile BỎ chevron back —
+					     breadcrumb Suppliers › supplier_name đã đủ nghĩa quay lại
+					     datatable; chỉ create mới giữ back. Label hiển thị dạng
+					     breadcrumb "Suppliers › Tên" (dấu › phân tách). -->
+					{#if isMobile && supplierEditMode !== 'edit'}
 						<button
 							type="button"
 							class="supplier-modal-back"
@@ -2526,6 +2653,7 @@
 						{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
 					</span>
 					{#if supplierEditMode === 'edit' && supplierForm.name}
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 						<span class="supplier-modal-title__name">{supplierForm.name}</span>
 					{/if}
 				</div>
@@ -2543,12 +2671,22 @@
 					<div class="form-grid-2">
 							<div data-field="supplier-name">
 						<!-- yêu cầu 1e: dùng Input component (không native input) -->
+						<!-- Batch 15 (m12278-7): badge đỏ "Tên đã tồn tại" cạnh label —
+						     chặn submit khi name = key nghiệp vụ trùng DB -->
 							<TextField name="supplier-name" required>
-								<Label>{pageContents.supplierModal.name[lang]}</Label>
+								<Label>
+									{pageContents.supplierModal.name[lang]}
+									{#if supplierNameChecking}
+										<span class="supplier-name-check supplier-name-check--checking">{pageContents.supplierModal.nameChecking[lang]}</span>
+									{:else if supplierNameTaken}
+										<span class="supplier-name-check supplier-name-check--taken">{pageContents.supplierModal.nameTaken[lang]}</span>
+									{/if}
+								</Label>
 								<Input
 									type="text"
 									bind:value={supplierForm.name}
 									disabled={supplierSubmitting}
+									class={supplierNameTaken ? 'supplier-name-taken' : undefined}
 									data-test="supplier-form-name"
 								/>
 							</TextField>
@@ -2714,18 +2852,20 @@
 												class:social-tag--link={isLink}
 											>
 												{#if isLink}
-													<button
-														type="button"
+													<!-- Batch 15 (m12278-9): <a> thật thay vì window.open —
+													     window.open(url,'_blank','noopener') bị popup blocker
+													     chặn âm thầm (bấm không có tác dụng). <a target=_blank>
+													     khai báo sẵn → browser cho phép, middle-click cũng chạy. -->
+													<a
 														class="social-tag__open"
+														href={socialTagHref(sf, tag)}
+														target="_blank"
+														rel="noopener noreferrer"
 														title={pageContents.supplierModal.socialOpen[lang]}
 														aria-label={pageContents.supplierModal.socialOpen[lang]}
-														onclick={() => {
-															const href = socialTagHref(sf, tag);
-															if (href) window.open(href, '_blank', 'noopener');
-														}}
 													>
 														<Icon icon={iconify['open-in-new-rounded']} size="sm" />
-													</button>
+													</a>
 												{/if}
 												<!-- click text → edit inline (chuyển thành input) -->
 												{#if editingSocial?.field === sf && editingSocial.index === ti}
@@ -2761,7 +2901,7 @@
 										<input
 											class="social-tags__input"
 											type="text"
-											placeholder={pageContents.supplierModal.socialAdd[lang]}
+											placeholder={pageContents.supplierModal[sfPlaceholderKey(sf)][lang]}
 											bind:value={socialDraftInputs[sf]}
 											onkeydown={(e) => {
 												if (e.key === 'Enter') {
@@ -2999,7 +3139,8 @@
 								<div class="history-entry__card">
 									<div class="history-entry__head">
 										<Badge variant="soft" color={entry.type === 'restore' ? 'success' : 'info'}>{entryLabel}</Badge>
-										<time class="history-time">{entry.createdAt ? formatDateShared(entry.createdAt, lang) : ''}</time>
+										<!-- Batch 15 (m12278-2): timeline thêm giờ:phút:giây -->
+										<time class="history-time">{entry.createdAt ? formatDateTimeSec(entry.createdAt, lang) : ''}</time>
 										<span class="history-actor">
 											{pageContents.historyModal.by[lang]}
 											{entry.actorName || pageContents.historyModal.unknownActor[lang]}
@@ -4258,6 +4399,7 @@
 		cursor: pointer;
 		padding: 0;
 		flex: none;
+		text-decoration: none; /* Batch 15: __open giờ là <a> — bỏ underline */
 	}
 	/* Batch 11 (5d): remove button theo quy tắc thiết kế chung — màu error.
 	   Open-tab giữ màu chip (primary); hover tách riêng 2 nút. */
@@ -4464,6 +4606,48 @@
 		white-space: nowrap;
 		color: var(--foreground-500);
 		font-weight: 400;
+	}
+
+	/* Batch 15 (m12278-10): dấu phân tách breadcrumb — không co giãn */
+	.supplier-modal-title__name[aria-hidden='true'] {
+		flex: none;
+		overflow: visible;
+	}
+
+	/* Batch 15 (m12278-7): badge trạng thái check name — tách khỏi label,
+	   không chiếm layout label (inline-flex nhỏ, self-end căn theo đáy chữ). */
+	.supplier-name-check {
+		display: inline-flex;
+		align-items: center;
+		margin-left: 0.375rem;
+		padding: 0.0625rem 0.375rem;
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+		line-height: 1.2;
+		white-space: nowrap;
+		vertical-align: middle;
+
+		&--checking {
+			color: var(--foreground-500, hsl(240 3.83% 46.08%));
+			background: var(--default-100, hsl(210 40.55% 96.05%));
+		}
+
+		&--taken {
+			color: hsl(0 0% 100%);
+			background: var(--error, hsl(356.95 95.9% 57.72%));
+			font-weight: 500;
+		}
+	}
+
+	/* Batch 15 (m12278-7): viền đỏ input khi name trùng — class nằm CÙNG
+	   phần tử .input-root (props.class ghép qua styleSynced) → :global().
+	   BẪY 2 lớp: (1) data-field div KHÔNG có class .form-field → selector
+	   theo attr; (2) modal Body (.modal-body-root) set border-color
+	   TRỰC TIẾP longhand var(--default-400) → phải set longhand + !important
+	   đè cả :focus-within (đỏ giữ nguyên khi focus). */
+	[data-field='supplier-name'] :global(.supplier-name-taken.input-root),
+	[data-field='supplier-name'] :global(.supplier-name-taken.input-root:focus-within) {
+		border-color: var(--error, hsl(356.95 95.9% 57.72%)) !important;
 	}
 
 	/* Batch 11 (5e): field passive — thông tin created/updated ở cuối form */

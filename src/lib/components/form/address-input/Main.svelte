@@ -477,6 +477,22 @@
 		stepLevel = level;
 		stepSearch = '';
 	}
+
+	// Batch 15 (m12278-11): chuỗi giá trị ĐÃ CHỌN (tỉnh › huyện › xã) hiển thị
+	// trên search field — chỉ gồm các cấp có giá trị; stepBack tới cấp đã chọn
+	// chỉ hợp lệ khi level < stepLevel (không tiến lên từ summary).
+	const stepSelectedChain = $derived.by(() => {
+		const chain: { level: number; label: string }[] = [];
+		const isNew = geoMode === 'new' && dualMode;
+		if (isNew) {
+			if (newBreakdown?.province) chain.push({ level: 0, label: newBreakdown.province });
+		} else {
+			if (breakdown.province) chain.push({ level: 0, label: breakdown.province });
+			if (breakdown.district) chain.push({ level: 1, label: breakdown.district });
+			if (breakdown.ward) chain.push({ level: 2, label: breakdown.ward });
+		}
+		return chain;
+	});
 	// Xoá lựa chọn cấp hiện tại + các cấp sâu hơn (nút ✕ trên breadcrumb/cleared field)
 	function stepClearCurrent() {
 		stepDir = -1;
@@ -724,6 +740,19 @@
 					<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
 				</button>
 			</header>
+			<!-- Batch 15 (m12278-11): hàng tóm tắt ĐÃ CHỌN nằm trên search field —
+			     chuỗi tỉnh › huyện › xã của các cấp có giá trị; tap 1 cấp → quay lại
+			     cấp đó (stepBack) để chọn lại. -->
+			{#if stepSelectedChain.length > 0}
+				<nav class="address-step__selected" aria-label="Đã chọn">
+					{#each stepSelectedChain as sel, si (sel.level)}
+						{#if si > 0}<span class="address-step__selected-sep" aria-hidden="true">›</span>{/if}
+						<button type="button" class="address-step__selected-item" onclick={() => stepBack(sel.level)}>
+							{sel.label}
+						</button>
+					{/each}
+				</nav>
+			{/if}
 			<div class="address-step__search">
 				<input
 					type="text"
@@ -1025,6 +1054,43 @@
 		}
 
 		&__crumb-sep {
+			color: var(--foreground-400, hsl(0 0% 62%));
+		}
+
+		/* Batch 15 (m12278-11): hàng tóm tắt đã chọn trên search — chips nhỏ
+		   bọc giá trị, tap quay lại cấp đó. */
+		&__selected {
+			display: flex;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 0.25rem;
+			padding: 0.375rem 0.625rem;
+			border-bottom: 1px solid var(--border, var(--default-200, #e5e7eb));
+		}
+
+		&__selected-item {
+			display: inline-flex;
+			align-items: center;
+			max-width: 100%;
+			padding: 0.125rem 0.5rem;
+			border: none;
+			border-radius: 0.375rem;
+			background: var(--primary-soft, hsl(212 92% 95%));
+			color: var(--primary, hsl(212 92% 45%));
+			font-size: 0.8125rem;
+			font-weight: 500;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			cursor: pointer;
+
+			@media (prefers-color-scheme: dark) {
+				background: hsl(212 92% 20%);
+				color: hsl(212 92% 70%);
+			}
+		}
+
+		&__selected-sep {
 			color: var(--foreground-400, hsl(0 0% 62%));
 		}
 

@@ -57,6 +57,12 @@
 
 	const MAX_SIZE = 5 * 1024 * 1024; // 5MB — khớp route /api/admin/upload
 	const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+	// Batch 15 (m12278-5): thumb tối ưu — ảnh lớn resize còn THUMB_MAX_EDGE px
+	// (JPEG quality 0.82) làm bản thumb; original giữ nguyên cho full-view.
+	// GIF giữ nguyên (canvas mất animation); file nhỏ (<200KB) 1 bản duy nhất.
+	const THUMB_MAX_EDGE = 640;
+	const THUMB_QUALITY = 0.82;
+	const THUMB_SKIP_BYTES = 200 * 1024;
 
 	let uploading = $state(false);
 	// upload đang gán vào thumb nào (mode multiple) — undefined = thumb add mới
@@ -78,6 +84,12 @@
 		wantAvatar?: boolean;
 		/** Key ổn định cho each (objectURL không hash được) */
 		key: number;
+		/** Batch 15 (m12278-4): % upload 0-100 (per-row indicator bar) */
+		progress?: number;
+		/** Batch 15 (m12278-5): bản thumb đã resize (blob/File) — upload cùng original */
+		thumbFile?: File | Blob;
+		/** URL original (full) sau khi upload — thumbUrl = URL chính trong images */
+		thumbUrl?: string;
 	}
 	let deferEntries = $state<DeferEntry[]>([]);
 	let deferKey = 0; // key tăng dần cho each
@@ -102,6 +114,10 @@
 		errType: { vi: 'Chỉ chấp nhận ảnh JPEG/PNG/WebP/GIF', en: 'Only JPEG/PNG/WebP/GIF images are allowed' },
 		errSize: { vi: 'Ảnh vượt quá 5MB', en: 'Image exceeds 5MB' },
 		errDuplicate: { vi: 'Ảnh này đã được thêm rồi', en: 'This image is already added' },
+		/** Batch 15 (m12278-3): chọn nhiều file cùng lúc */
+		multiHint: { vi: '(có thể chọn nhiều ảnh cùng lúc)', en: '(you can select multiple images at once)' },
+		thumbLabel: { vi: 'Bản thu nhỏ', en: 'Thumbnail' },
+		originalLabel: { vi: 'Bản gốc', en: 'Original' },
 		sizeLabel: { vi: 'Dung lượng', en: 'Size' },
 		typeLabel: { vi: 'Định dạng', en: 'Type' },
 		fileName: { vi: 'Tên tệp', en: 'File name' },
@@ -152,6 +168,42 @@
 	function pick() {
 		if (disabled || uploading) return;
 		inputEl?.click();
+	}
+
+	// ── Batch 15 (m12278-5): tạo bản thumb bằng canvas ──
+	// Ảnh > THUMB_SKIP_BYTES → vẽ vào canvas scale dài cạnh lớn về
+	// THUMB_MAX_EDGE, xuất JPEG quality 0.82 làm bản thumb (File). GIF + mọi
+	// lỗi canvas → trả undefined (upload nguyên bản, không chết luồng).
+	async function makeThumb(file: File): Promise<File | Blob | undefined> {
+		if (file.size <= THUMB_SKIP_BYTES || file.type === 'image/gif') return undefined;
+		try {
+			const bitmap = await createImageBitmap(file);
+			const { width, height } = bitmap;
+			const scale = Math.min(1, THUMB_MAX_EDGE / Math.max(width, height));
+			if (scale >= 1) {
+				bitmap.close();
+				return undefined;
+			}
+			const canvas = document.createElement('canvas');
+			canvas.width = Math.max(1, Math.round(width * scale));
+			canvas.height = Math.max(1, Math.round(height * scale));
+			const ctx = canvas.getContext('2d');
+			if (!ctx) {
+				bitmap.close();
+				return undefined;
+			}
+			ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+			bitmap.close();
+			const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', THUMB_QUALITY));
+			if (!blob) return undefined;
+			// PNG trong suốt nén JPEG mất alpha nhưng thumb vẫn ok (preview list).
+			// Thumb LỚN HƠN gốc (ảnh noise khó nén) → bỏ, dùng gốc làm thumb.
+			if (blob.size >= file.size) return undefined;
+			const base = file.name.replace(/\.[^.]+$/, '');
+			return new File([blob], `${base}_thumb.jpg`, { type: 'image/jpeg' });
+		} catch {
+			return undefined;
+		}
 	}
 
 	// Mode multiple: mở picker — gán vào thumb có sẵn (đổi) hoặc thêm mới
@@ -216,6 +268,30 @@
 		deferEntries = urls.map((url) => ({ preview: url, existing: url, key: deferKey++ }));
 	}
 
+	/**
+	 * Batch 15 (m12278-5): seed kèm original URLs (imageFulls 1-1 images) —
+	 * entry EXISTING cũng biết URL bản gốc → detail modal full-view bản gốc
+	 * (không chỉ entry vừa upload trong phiên).
+	 */
+	function seedFromImagePairs(pairs: { thumb: string; original?: string }[]) {
+		for (const en of deferEntries) {
+			if (en.preview.startsWith('blob:')) URL.revokeObjectURL(en.preview);
+		}
+		deferEntries = pairs.map((p) => ({
+			preview: p.thumb,
+			existing: p.thumb,
+			thumbUrl: p.original,
+			key: deferKey++
+		}));
+	}
+
+	/** Đồng bộ entries hiện có với imageFulls của cha (gọi khi form đổi ngoài). */
+	function syncFulls(fulls: string[]) {
+		deferEntries.forEach((en, i) => {
+			en.thumbUrl = (fulls[i] ?? '').trim() || undefined;
+		});
+	}
+
 	/** Entry đang là avatar (defer): wantAvatar, hoặc preview khớp avatarUrl. */
 	function isDeferAvatar(entry: DeferEntry): boolean {
 		if (entry.file) return !!entry.wantAvatar;
@@ -269,6 +345,9 @@
 	 * abort + toast, trả undefined (cha giữ modal mở). Thành công: gán URL
 	 * vào images (theo existing cũ nếu là thay thế) / avatarUrl, sync value
 	 * (single). Trả mảng URLs đầy đủ (multiple) hoặc string (single).
+	 * Batch 15 (m12278-4): progress per-row qua XHR onprogress.
+	 * Batch 15 (m12278-5): upload thumb trước → original; images lưu THUMB
+	 * (nếu có) ở vị trí entry, original lưu vào entry.thumbUrl (full-view).
 	 */
 	async function uploadPending(): Promise<string[] | string | undefined> {
 		const pending = deferEntries.filter((en) => en.file);
@@ -280,44 +359,70 @@
 		try {
 			for (const entry of pending) {
 				const file = entry.file!;
-				const fd = new FormData();
-				fd.append('name', file.name);
-				fd.append('file', file, file.name);
-				const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
-				let url: string | undefined;
-				let message: string | undefined;
-				try {
-					const body = (await res.json()) as { ok?: boolean; data?: { url?: string }; message?: { vi?: string; en?: string } };
-					url = body.data?.url;
-					const m = body.message;
-					message = typeof m === 'string' ? m : m?.[lang] ?? m?.en;
-				} catch {
-					message = `HTTP ${res.status}`;
+				// ── Upload qua XHR (progress events — fetch không có) ──
+				const uploadOne = (blob: Blob, name: string) =>
+					new Promise<{ url?: string; message?: string }>((resolve, reject) => {
+						const xhr = new XMLHttpRequest();
+						xhr.open('POST', '/api/admin/upload');
+						xhr.upload.onprogress = (ev) => {
+							if (ev.lengthComputable) entry.progress = Math.round((ev.loaded / ev.total) * 100);
+						};
+						xhr.onload = () => {
+							try {
+								const body = JSON.parse(xhr.responseText) as { ok?: boolean; data?: { url?: string }; message?: { vi?: string; en?: string } | string };
+								const m = body.message;
+								resolve({ url: body.data?.url, message: typeof m === 'string' ? m : m?.[lang] ?? m?.en });
+							} catch {
+								resolve({ message: `HTTP ${xhr.status}` });
+							}
+						};
+						xhr.onerror = () => reject(new Error('Network error'));
+						xhr.ontimeout = () => reject(new Error('Timeout'));
+						const fd = new FormData();
+						fd.append('name', name);
+						fd.append('file', blob, name);
+						xhr.send(fd);
+					});
+				// Thumb trước (nếu có) — URL thumb là URL chính trong images
+				let thumbUrl: string | undefined;
+				if (entry.thumbFile) {
+					const r = await uploadOne(entry.thumbFile, entry.thumbFile instanceof File ? entry.thumbFile.name : file.name);
+					if (!r.url) {
+						toastErr(r.message || 'HTTP error');
+						return undefined;
+					}
+					thumbUrl = r.url;
 				}
-				if (!res.ok || !url) {
-					toastErr(message || `HTTP ${res.status}`);
+				const res = await uploadOne(file, file.name);
+				if (!res.url) {
+					toastErr(res.message || 'HTTP error');
 					return undefined;
 				}
+				entry.progress = 100;
 				// Thay thế: URL mới chiếm chỗ existing cũ trong images (giữ vị trí);
-				// Thêm mới: push cuối.
+				// Thêm mới: push cuối. images = THUMB (hiển thị list nhẹ), original
+				// URL nằm sau '?full=1' query — không, lưu trực tiếp trong entry.
 				const replacing = entry.existing;
 				URL.revokeObjectURL(entry.preview);
-				entry.preview = url;
+				entry.preview = thumbUrl ?? res.url;
 				entry.file = undefined;
-				entry.existing = url;
+				entry.existing = thumbUrl ?? res.url;
+				entry.progress = undefined;
 				if (multiple && images !== undefined) {
 					const next = [...images];
 					if (replacing && next.includes(replacing)) {
-						next[next.indexOf(replacing)] = url;
+						next[next.indexOf(replacing)] = thumbUrl ?? res.url;
 					} else {
-						next.push(url);
+						next.push(thumbUrl ?? res.url);
 					}
 					images = next;
 				} else {
-					value = url;
+					value = thumbUrl ?? res.url;
 				}
+				// Original URL giữ trong entry (full-view) — batch 15 m12278-5
+				entry.thumbUrl = res.url;
 				// Avatar: entry muốn avatar → set; hoặc file đầu tiên chưa có avatar
-				if (entry.wantAvatar || (!avatarUrl && !replacing)) avatarUrl = url;
+				if (entry.wantAvatar || (!avatarUrl && !replacing)) avatarUrl = thumbUrl ?? res.url;
 				entry.wantAvatar = false;
 			}
 			if (multiple) return images ?? [];
@@ -342,26 +447,43 @@
 
 	async function handleFile(e: Event) {
 		const input = e.target as HTMLInputElement;
-		const file = input.files?.[0];
+		// Batch 15 (m12278-3): multi-select — xử lý TẤT CẢ file trong input
+		// (file đầu là target khi đang "đổi ảnh" một entry có sẵn).
+		const files = Array.from(input.files ?? []);
 		input.value = ''; // cho phép chọn lại cùng 1 file
-		if (!file || uploading) return;
+		if (!files.length || uploading) return;
 
-		if (!ALLOWED.includes(file.type)) {
-			toastErr(tr('errType'));
-			return;
+		const accepted: File[] = [];
+		for (const file of files) {
+			if (!ALLOWED.includes(file.type)) {
+				toastErr(tr('errType'));
+				continue;
+			}
+			if (file.size > MAX_SIZE) {
+				toastErr(tr('errSize'));
+				continue;
+			}
+			accepted.push(file);
 		}
-		if (file.size > MAX_SIZE) {
-			toastErr(tr('errSize'));
-			return;
-		}
+		if (!accepted.length) return;
 
-		// DEFER: preview local, upload khi submit (uploadPending từ cha)
+		// DEFER: preview local + tạo thumb (song song), upload khi submit
 		if (defer) {
-			handleDeferFile(file, uploadTarget);
+			for (let i = 0; i < accepted.length; i++) {
+				const file = accepted[i];
+				handleDeferFile(file, i === 0 ? uploadTarget : undefined);
+			}
 			uploadTarget = undefined;
+			// Tạo thumb song song sau khi entry đã vào list (không chờ preview)
+			for (const file of accepted) {
+				const thumb = await makeThumb(file);
+				const entry = deferEntries.find((en) => en.file === file);
+				if (entry && thumb) entry.thumbFile = thumb;
+			}
 			return;
 		}
 
+		const file = accepted[0];
 		uploading = true;
 		try {
 			const fd = new FormData();
@@ -468,13 +590,25 @@
 		}
 	}
 
-	// Expose cho cha (bind:this): seed entries khi mở modal + upload khi submit
+	// Expose cho cha (bind:this): seed entries khi mở modal + upload khi submit.
+	// Batch 15 (m12278-5): getUploadPairs — map thumb→original (full-view detail).
 	export {
 		uploadPending,
 		seedFromImages,
+		seedFromImagePairs,
+		syncFulls,
+		getUploadPairs,
 		/** Có file chờ upload (cảnh báo "chưa tải lên") */
 		hasPending as hasDeferPending
 	};
+
+	/** pairs thumb→original theo images hiện tại (gọi SAU uploadPending). */
+	function getUploadPairs(): { thumb: string; original?: string }[] {
+		return (images ?? []).map((thumb) => {
+			const en = deferEntries.find((e) => e.existing === thumb || e.preview === thumb);
+			return { thumb, original: en?.thumbUrl };
+		});
+	}
 </script>
 
 <div class="image-upload" class:image-upload--disabled={disabled}>
@@ -522,6 +656,13 @@
 									{entry.file ? formatSize(entry.file.size) : ''}{entry.file && fileTypeName(entry) !== '—' ? ' · ' : ''}{fileTypeName(entry)}
 									{#if entry.file}<em class="image-upload__row-pending"> · {tr('notUploaded')}</em>{/if}
 								</span>
+								<!-- Batch 15 (m12278-4): indicator bar upload per-row — hiện khi
+								     entry đang upload (progress có giá trị) -->
+								{#if entry.progress !== undefined && entry.progress < 100}
+									<span class="image-upload__row-progress" role="progressbar" aria-valuenow={entry.progress} aria-valuemin={0} aria-valuemax={100}>
+										<span class="image-upload__row-progress-fill" style={`width: ${entry.progress}%`}></span>
+									</span>
+								{/if}
 							</div>
 							<div class="image-upload__row-actions">
 								<button
@@ -722,6 +863,7 @@
 		class="image-upload__input"
 		type="file"
 		accept={ALLOWED.join(',')}
+		multiple
 		onchange={handleFile}
 		aria-hidden="true"
 		tabindex={-1}
@@ -733,7 +875,9 @@
 			<Modal.Container.Header>{tr('detailTitle')}</Modal.Container.Header>
 			<Modal.Container.Body>
 				{#if detailEntry}
-					<img class="image-upload__detail-img" src={detailEntry.preview} alt={entryName(detailEntry)} />
+					<!-- Batch 15 (m12278-5): full-view ORIGINAL — thumbUrl giữ URL bản
+					     gốc; preview (thumb) chỉ là bản thu nhỏ cho list -->
+					<img class="image-upload__detail-img" src={detailEntry.thumbUrl ?? detailEntry.preview} alt={entryName(detailEntry)} />
 					<dl class="image-upload__detail-meta">
 						<dt>{tr('fileName')}</dt>
 						<dd class="image-upload__detail-name">{entryName(detailEntry)}</dd>
@@ -741,18 +885,24 @@
 						<dd>{detailEntry.file ? formatSize(detailEntry.file.size) : tr('notUploaded')}</dd>
 						<dt>{tr('typeLabel')}</dt>
 						<dd>{fileTypeName(detailEntry)}</dd>
+						{#if detailEntry.thumbUrl}
+							<dt>{tr('thumbLabel')}</dt>
+							<dd><a class="image-upload__detail-link" href={detailEntry.preview} target="_blank" rel="noopener">URL</a></dd>
+							<dt>{tr('originalLabel')}</dt>
+							<dd><a class="image-upload__detail-link" href={detailEntry.thumbUrl} target="_blank" rel="noopener">URL</a></dd>
+						{/if}
 					</dl>
 				{/if}
 			</Modal.Container.Body>
 			<Modal.Container.Footer>
-				{#if detailEntry?.preview && !detailEntry.preview.startsWith('blob:')}
+				{#if detailEntry && (detailEntry.thumbUrl ?? detailEntry.preview) && !(detailEntry.thumbUrl ?? detailEntry.preview).startsWith('blob:')}
 					<Button
 						type="button"
 						variant="ghost"
 						color="primary"
 						size="sm"
 						onclick={() => {
-							window.open(detailEntry!.preview, '_blank', 'noopener');
+							window.open(detailEntry!.thumbUrl ?? detailEntry!.preview, '_blank', 'noopener');
 						}}
 					>
 						{tr('view')}
@@ -1069,6 +1219,25 @@
 		color: var(--warning, #f59e0b);
 	}
 
+	/* Batch 15 (m12278-4): indicator bar upload per-row — track mảnh dưới meta,
+	   fill primary trượt theo % progress (XHR onprogress). */
+	.image-upload__row-progress {
+		display: block;
+		height: 0.25rem;
+		border-radius: 9999px;
+		background: var(--default-200, #e5e7eb);
+		overflow: hidden;
+		margin-top: 0.25rem;
+	}
+
+	.image-upload__row-progress-fill {
+		display: block;
+		height: 100%;
+		border-radius: inherit;
+		background: var(--primary, hsl(212 92% 45%));
+		transition: width 200ms ease;
+	}
+
 	.image-upload__row-actions {
 		display: flex;
 		gap: 0.25rem;
@@ -1186,6 +1355,17 @@
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
+		}
+	}
+
+	/* Batch 15 (m12278-5): link URL thumb/original trong modal chi tiết */
+	.image-upload__detail-link {
+		color: var(--primary, hsl(212 92% 45%));
+		text-decoration: underline;
+		text-underline-offset: 2px;
+
+		&:hover {
+			color: var(--primary-600, var(--primary));
 		}
 	}
 

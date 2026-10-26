@@ -269,14 +269,17 @@
 			themePillStyle = 'opacity: 0;';
 			return;
 		}
-		// Pill bọc từ mép trái button active → mép phải label (nếu label hiển thị)
+		// Pill bọc từ mép trái button active → mép phải label (nếu label hiển thị).
+		// Batch 15 (m12278-2): đệm PILL_PAD px hai bên — trước đây label sát
+		// mép phải pill, lệch với khoảng đệm trái của icon.
+		const PILL_PAD = 6;
 		const btnOffset = btn.offsetLeft;
 		let width = btn.offsetWidth;
 		if (themeLabelEl && themeLabelEl.offsetParent !== null) {
 			const labelRight = themeLabelEl.offsetLeft + themeLabelEl.offsetWidth;
 			width = Math.max(width, labelRight - btnOffset);
 		}
-		themePillStyle = `opacity: 1; transform: translateX(${btnOffset}px); width: ${width}px;`;
+		themePillStyle = `opacity: 1; transform: translateX(${btnOffset - PILL_PAD}px); width: ${width + PILL_PAD * 2}px;`;
 	};
 	$effect(() => {
 		// deps: theme đổi → đo lại; label mount/unmount (đổi theme/lang) → đo lại
@@ -883,7 +886,8 @@
 		}
 
 		/* Pill liquid: absolute dưới 2 nút (z) — trượt theo theme active bằng
-		   left/width đo từ DOM ($effect trong script), transition 260ms ease. */
+		   left/width đo từ DOM ($effect trong script), transition 260ms ease.
+		   Batch 15 (m12278-2): đệm 6px hai bên (measure tự cộng PILL_PAD). */
 		.admin-theme-switch__pill {
 			position: absolute;
 			top: 0.25rem;
