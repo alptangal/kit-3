@@ -795,7 +795,9 @@
 				const firstIndex = configs.visibleOptions.findIndex((o) => !o.disabled);
 				configs.status.highlightedIndex = firstIndex >= 0 ? firstIndex : -1;
 				// Autofocus search input (an toàn iOS Safari — requestAnimationFrame + preventScroll)
-				configs.focusSearchInput();
+				// Fullscreen: KHÔNG auto-focus — iOS 15 bật keyboard ngay → viewport co 746→430,
+				// modal full màn nhảy layout = lag cảm giác. User tự tap ô search khi cần gõ.
+				if (!fullscreenDerived) configs.focusSearchInput();
 				// Load options async lần đầu (nếu có loadOptions)
 				if (props.loadOptions && !initialOptionsLoaded) {
 					configs.loadInitialOptions();
@@ -1965,7 +1967,10 @@
 			size="full"
 			variant="opaque"
 			transitionType="none"
-			initialFocus={configs.searchable ? '.select-search-input' : undefined}
+			// KHÔNG initialFocus/autoFocus: fullscreen chỉ chạy trên mobile (AddressInput
+			// truyền fullscreen khi isMobile) — focus trap nhắm search input → iOS 15
+			// bật keyboard ngay khi mở panel. User tự tap ô search khi cần.
+			autoFocus={false}
 			onClose={() => configs.close()}
 			bind:display={fullscreenDisplay}
 		>

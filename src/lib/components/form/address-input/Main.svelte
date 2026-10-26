@@ -13,6 +13,7 @@
 	// Tái sử dụng: Input (text), Select (tỉnh/huyện/ward) — import trực tiếp (tránh circular barrel)
 	import Input from '../input/Main.svelte';
 	import Select from '../select/Main.svelte';
+	import { client } from '$store/basic.svelte';
 	import type { AddressInputProps, AddressBreakdown, NewAddressBreakdown } from './_interface';
 
 	let {
@@ -27,6 +28,10 @@
 	// Hệ ĐVHC đang chọn: 'old' (63 tỉnh) | 'new' (34 tỉnh) — chỉ có ý nghĩa khi newBreakdown được bind
 	let geoMode = $state<'old' | 'new'>('old');
 	const dualMode = $derived(newBreakdown !== undefined);
+	// Mobile: Select địa chỉ mở FULLSCREEN (reuse Modal) — dropdown absolute trong modal body
+	// cuộn bị option trôi ra ngoài viewport (touch bị nuốt) + auto-focus search bật keyboard
+	// iOS co viewport → lag cảm giác. Batch 12b (m10214).
+	const selectFullscreen = $derived(client.browser?.isMobile === true);
 
 	interface GeoProvince { n: string; c: number; d: { n: string; c: number }[] }
 	/** wards: key 'Tên tỉnh|code' → { 'Tên huyện': ['Phường A', 'Xã B'...] } */
@@ -416,6 +421,7 @@
 					onValueChange={onProvinceChange}
 					searchable
 					clearable
+					fullscreen={selectFullscreen}
 					placeholder="Chọn tỉnh/thành phố"
 					disabled={disabled}
 				/>
@@ -428,6 +434,7 @@
 					onValueChange={onDistrictChange}
 					searchable
 					clearable
+					fullscreen={selectFullscreen}
 					placeholder="Chọn quận/huyện"
 					disabled={disabled}
 				/>
@@ -440,6 +447,7 @@
 					onValueChange={onOldWardChange}
 					searchable
 					clearable
+					fullscreen={selectFullscreen}
 					placeholder="Chọn phường/xã"
 					disabled={disabled || !breakdown.district}
 				/>
@@ -455,6 +463,7 @@
 					onValueChange={onNewProvinceChange}
 					searchable
 					clearable
+					fullscreen={selectFullscreen}
 					placeholder="Chọn tỉnh/thành phố"
 					disabled={disabled}
 				/>
@@ -467,6 +476,7 @@
 					onValueChange={onNewWardChange}
 					searchable
 					clearable
+					fullscreen={selectFullscreen}
 					placeholder="Chọn phường/xã"
 					disabled={disabled || !newBreakdown!.province}
 				/>
