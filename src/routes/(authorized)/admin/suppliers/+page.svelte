@@ -354,6 +354,7 @@
 			requireName: { vi: 'Vui lòng nhập tên nhà cung cấp', en: 'Please enter a supplier name' },
 			invalidPhone: { vi: 'Số điện thoại không hợp lệ', en: 'Invalid phone number' },
 			invalidEmail: { vi: 'Email không hợp lệ', en: 'Invalid email' },
+			invalidAddress: { vi: 'Địa chỉ cần chọn tỉnh/thành (hệ cũ hoặc mới)', en: 'Address needs a province selected (old or new system)' },
 			invalidZalo: { vi: 'Zalo phải là số điện thoại hoặc link zalo.me', en: 'Zalo must be a phone number or zalo.me link' },
 			invalidTelegram: { vi: 'Telegram phải là @username hoặc link t.me', en: 'Telegram must be @username or t.me link' },
 			invalidDiscord: { vi: 'Discord chỉ nhận tên người dùng (2-32 ký tự)', en: 'Discord accepts username only (2-32 chars)' },
@@ -1458,6 +1459,15 @@
 	const INSTAGRAM_RE = /^@[A-Za-z0-9._]{1,30}$|^https?:\/\/(www\.)?instagram\.com\/\S+$/i;
 	const WEBSITE_RE = /^https?:\/\/\S+\.\S+$/i;
 
+	// Batch14 (m11713): address entry "hợp lệ" = đã chọn địa giới (tỉnh hệ cũ
+	// hoặc hệ mới) — điều kiện để bật nút "+ Add address" và validate submit.
+	// Entry chỉ có text địa chỉ chi tiết mà không có tỉnh vẫn tính CHƯA hợp lệ.
+	function addressEntryInvalid(index: number): boolean {
+		const bd = supplierAddressBreakdowns[index];
+		const nbd = supplierNewAddressBreakdowns[index];
+		return !str(bd?.province).trim() && !str(nbd?.province).trim();
+	}
+
 	// Social giá trị từ server: doc cũ = string đơn, doc mới = mảng → chuẩn hoá
 	// thành mảng string sạch (dùng cho prefill edit + validate + payload).
 	function toSocialArray(v: unknown): string[] {
@@ -1566,6 +1576,9 @@
 		const t = supplierForm;
 		if (t.phones.some((p) => str(p).trim() && !PHONE_RE.test(str(p).trim()))) return pageContents.form.invalidPhone[lang];
 		if (t.emails.some((e) => str(e).trim() && !EMAIL_RE.test(str(e).trim()))) return pageContents.form.invalidEmail[lang];
+		// Batch14 (m11713): address có text nhưng chưa chọn tỉnh (cũ/mới) → chưa hợp lệ.
+		// Entry rỗng hoàn toàn thì bỏ qua (được prune lúc submit).
+		if (t.addresses.some((a, i) => str(a.address).trim() && addressEntryInvalid(i))) return pageContents.form.invalidAddress[lang];
 		for (const f of SOCIAL_FIELDS) {
 			if (t[f].some((v) => socialEntryInvalid(f, v))) {
 				return pageContents.form[`invalid${f[0].toUpperCase()}${f.slice(1)}` as keyof typeof pageContents.form][lang];
@@ -1581,6 +1594,7 @@
 		requireName: '[data-field="supplier-name"]',
 		invalidPhone: '[data-field="supplier-phones"]',
 		invalidEmail: '[data-field="supplier-emails"]',
+		invalidAddress: '[data-field="supplier-addresses"]',
 		invalidZalo: '[data-field="social-zalo"]',
 		invalidTelegram: '[data-field="social-telegram"]',
 		invalidDiscord: '[data-field="social-discord"]',
@@ -1651,11 +1665,23 @@
 
 	function buildSupplierPayload() {
 		const t = supplierForm;
+		// Batch14 (m11713): prune entry RỖNG (không text + không chọn tỉnh) khỏi
+		// addresses + breakdowns ĐỒNG THỜI (giữ index khớp nhau) — dọn node rác
+		// do draft resume/add-row bỏ trống trước khi build payload.
+		const keepIdx: number[] = [];
+		t.addresses.forEach((a, i) => {
+			if (str(a.address).trim() || str(supplierAddressBreakdowns[i]?.province).trim() || str(supplierNewAddressBreakdowns[i]?.province).trim()) {
+				keepIdx.push(i);
+			}
+		});
+		const keptAddresses = keepIdx.map((i) => t.addresses[i]);
+		const keptBds = keepIdx.map((i) => supplierAddressBreakdowns[i]);
+		const keptNbds = keepIdx.map((i) => supplierNewAddressBreakdowns[i]);
 		// breakdown từng entry (bind 2 chiều với AddressInput) merge lại vào addresses
 		// — cả hệ cũ (province/district/ward) lẫn hệ mới (newProvince/newWard)
-		const entries = t.addresses.map((a, i) => {
-			const bd = supplierAddressBreakdowns[i];
-			const nbd = supplierNewAddressBreakdowns[i];
+		const entries = keptAddresses.map((a, i) => {
+			const bd = keptBds[i];
+			const nbd = keptNbds[i];
 			return {
 				label: str(a.label).trim() || undefined,
 				address: str(a.address).trim(),
@@ -2621,7 +2647,7 @@
 					</div>
 					<!-- ── Multiple addresses (yêu cầu 1g: BỎ address đơn — block này là duy nhất;
 					     entry đầu = địa chỉ chính cho payload cấp 1) ── -->
-					<div class="items-block social-group">
+					<div class="items-block social-group" data-field="supplier-addresses">
 						<span class="items-block__label">{pageContents.supplierModal.addresses[lang]}</span>
 						{#each supplierForm.addresses as entry, addrIndex (addrIndex)}
 							<div class="address-entry" class:field-row--dup={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2}>
@@ -2658,7 +2684,7 @@
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting || supplierForm.addresses.some((a) => (a.address ?? '').trim() === '')}
+							disabled={supplierSubmitting || (supplierForm.addresses.length > 0 && addressEntryInvalid(supplierForm.addresses.length - 1))}
 							onclick={() => {
 								// Batch10 (m06635-5b): flushSync + focus trong gesture.
 								flushSync(() => {
@@ -4126,8 +4152,14 @@
 		background: var(--default-300);
 	}
 
+	/* Batch14 (m11713-3): badge/remove nằm trong .address-entry__head (flex row
+	   cùng Input label) — KHÔNG phải con trực tiếp → selector phải ĐI QUA head,
+	   không dùng `>` trực tiếp (trước đây `.address-entry > .field-row-stt`
+	   không khớp → badge hiển thị flex thường, KHÁC phone/email). */
 	.address-entry > :global(.field-row-stt),
-	.address-entry > .field-row-stt {
+	.address-entry__head > :global(.field-row-stt),
+	.address-entry > .field-row-stt,
+	.address-entry__head > .field-row-stt {
 		position: absolute;
 		top: 0;
 		left: 0.6rem;
@@ -4141,7 +4173,8 @@
 		box-shadow: 0 0 0 2px var(--background, #fff);
 	}
 
-	.address-entry .field-row-remove {
+	.address-entry > .field-row-remove,
+	.address-entry .address-entry__head > .field-row-remove {
 		top: 0;
 		right: 0.6rem;
 		transform: translate(50%, -50%);
@@ -4151,11 +4184,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.address-entry__label {
-		flex: 1;
-		height: 2.25rem;
 	}
 
 	.social-group {

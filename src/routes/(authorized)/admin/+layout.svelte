@@ -208,8 +208,8 @@
 	const THEMES: AppTheme[] = ['system', 'dark', 'light'];
 	const themeIcons: Record<AppTheme, string> = {
 		system: 'lucide:monitor-cog',
-		dark: 'lucide:sun',
-		light: 'lucide:moon'
+		dark: 'lucide:moon',
+		light: 'lucide:sun'
 	};
 	const themeLabels: Record<AppTheme, TranslateContent> = {
 		system: tc('Hệ thống', 'System'),
@@ -250,6 +250,57 @@
 		const rect = node.getBoundingClientRect();
 		setTheme(next, rect.left + rect.width / 2, rect.top + rect.height / 2);
 	};
+
+	// ── Batch14 (m11713-3): pill LIQUID cho theme switch ──
+	// Đo DOM thực của button active + label active (label là sibling, có thể
+	// ẩn khi collapsed) → style left/width cho pill. Pill lùi về 0 khi không
+	// đo được (SSR trước mount). transition CSS lo phần trượt mượt.
+	let themePillEl = $state<HTMLElement | undefined>(undefined);
+	let themeLabelEl = $state<HTMLElement | undefined>(undefined);
+	let themeGroupEl = $state<HTMLElement | undefined>(undefined);
+	const themeBtnEls: (HTMLElement | undefined)[] = Array.from({ length: THEMES.length }, () => undefined);
+	let themePillStyle = $state('opacity: 0;');
+	// measureThemePill đọc offsetLeft/offsetWidth thực. offsetParent null =
+	// label đang ẩn (display:none, sb-hidden khi collapsed) → pill co về icon.
+	const measureThemePill = () => {
+		const activeIdx = THEMES.indexOf(profile.theme);
+		const btn = themeBtnEls[activeIdx];
+		if (!themePillEl || !btn) {
+			themePillStyle = 'opacity: 0;';
+			return;
+		}
+		// Pill bọc từ mép trái button active → mép phải label (nếu label hiển thị)
+		const btnOffset = btn.offsetLeft;
+		let width = btn.offsetWidth;
+		if (themeLabelEl && themeLabelEl.offsetParent !== null) {
+			const labelRight = themeLabelEl.offsetLeft + themeLabelEl.offsetWidth;
+			width = Math.max(width, labelRight - btnOffset);
+		}
+		themePillStyle = `opacity: 1; transform: translateX(${btnOffset}px); width: ${width}px;`;
+	};
+	$effect(() => {
+		// deps: theme đổi → đo lại; label mount/unmount (đổi theme/lang) → đo lại
+		void profile.theme;
+		void themeLabelEl;
+		void themePillEl;
+		measureThemePill();
+		// Collapsed đổi → label sb-hidden (display:none) KHÔNG bắn effect nào ở
+		// đây (layout svelte không đọc context sidebar — Provider là component CON).
+		// ResizeObserver trên group bắt mọi đổi kích thước (collapse, resize cửa
+		// sổ, font load) → đo lại pill. rAF throttle cho gọn.
+		const group = themeGroupEl;
+		if (!group) return;
+		let raf = 0;
+		const ro = new ResizeObserver(() => {
+			cancelAnimationFrame(raf);
+			raf = requestAnimationFrame(measureThemePill);
+		});
+		ro.observe(group);
+		return () => {
+			ro.disconnect();
+			cancelAnimationFrame(raf);
+		};
+	});
 
 	// Breadcrumb derive từ route hiện tại (đơn giản: Home + tên trang).
 	const routeNames: Record<string, TranslateContent> = {
@@ -697,8 +748,14 @@
 						aria-label={themeLabel}
 						onclick={handleThemeCycle}
 						data-test="admin-nav-theme"
+						bind:this={themeGroupEl}
 					>
-						{#each THEMES as t (t)}
+						<!-- Batch14 (m11713-3): pill LIQUID — nền viên thuốc bọc CẢ icon+label
+						     của theme active, trượt mượt khi đổi theme. Vị trí/width ĐO DOM
+						     thực ($effect + nodeRefs) — đúng cả khi label ẩn (collapsed) /
+						     đổi lang / font load xong. transition left/width 260ms. -->
+						<span class="admin-theme-switch__pill" bind:this={themePillEl} style={themePillStyle}></span>
+						{#each THEMES as t, ti (t)}
 							<button
 								type="button"
 								class="admin-theme-switch__btn"
@@ -707,6 +764,7 @@
 								aria-pressed={profile.theme === t}
 								title={themeLabels[t][lang] ?? themeLabels[t].vi}
 								onclick={handleThemePick(t)}
+								bind:this={themeBtnEls[ti]}
 							>
 								<Icon icon={themeIcons[t]} />
 							</button>
@@ -714,7 +772,7 @@
 							     (trước đây 1 label ngoài each + flex:1 đẩy sát phải);
 							     sb-hidden ẩn khi sidebar collapsed — pattern batch 4. -->
 							{#if profile.theme === t}
-								<span class="admin-theme-switch__label sb-hidden">{themeLabels[t][lang] ?? themeLabels[t].vi}</span>
+								<span class="admin-theme-switch__label sb-hidden" bind:this={themeLabelEl}>{themeLabels[t][lang] ?? themeLabels[t].vi}</span>
 							{/if}
 						{/each}
 					</div>
@@ -804,11 +862,12 @@
 		padding: 0.5rem 0.75rem 0.25rem;
 	}
 
-	/* ── Theme switch 3 nút (batch 3 #sidebar) ──
+	/* ── Theme switch 3 nút (batch 3 #sidebar; batch14 pill liquid m11713-3) ──
 	   Node cha chứa 3 icon cạnh nhau trong Sidebar.Footer. Nhấn icon → theme đó;
-	   nhấn vùng còn lại (node cha) → next icon bên cạnh (tuần hoàn). Icon active
-	   nổi bật (color primary + nền soft); icon thường mờ → gợi ý vị trí hiện tại. */
+	   nhấn vùng còn lại (node cha) → next icon bên cạnh (tuần hoàn). Pill nền
+	   primary-soft bọc CẢ icon+label theme active, trượt mượt khi đổi theme. */
 	.admin-theme-switch {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -823,7 +882,27 @@
 			background: var(--accent, hsl(0 0% 96%));
 		}
 
+		/* Pill liquid: absolute dưới 2 nút (z) — trượt theo theme active bằng
+		   left/width đo từ DOM ($effect trong script), transition 260ms ease. */
+		.admin-theme-switch__pill {
+			position: absolute;
+			top: 0.25rem;
+			bottom: 0.25rem;
+			left: 0;
+			z-index: 0;
+			border-radius: 9999px;
+			background: var(--primary-soft, hsl(212 92% 95%));
+			transition: transform 260ms cubic-bezier(0.4, 0, 0.2, 1), width 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 150ms ease;
+			pointer-events: none;
+
+			@media (prefers-color-scheme: dark) {
+				background: hsl(212 92% 20%);
+			}
+		}
+
 		.admin-theme-switch__btn {
+			position: relative;
+			z-index: 1;
 			display: inline-flex;
 			align-items: center;
 			justify-content: center;
@@ -835,19 +914,17 @@
 			background: transparent;
 			color: var(--foreground-400, hsl(0 0% 62%));
 			cursor: pointer;
-			transition: color 150ms ease, background 150ms ease;
+			transition: color 150ms ease;
 
 			&:hover {
 				color: var(--foreground, hsl(0 0% 9%));
 			}
 
-			/* Icon active = theme đang áp dụng — nổi bật để user biết vị trí. */
+			/* Icon active = theme đang áp dụng — màu primary (pill lo nền). */
 			&.active {
-				background: var(--primary-soft, hsl(212 92% 95%));
 				color: var(--primary, hsl(212 92% 45%));
 
 				@media (prefers-color-scheme: dark) {
-					background: hsl(212 92% 20%);
 					color: hsl(212 92% 70%);
 				}
 			}
@@ -862,12 +939,19 @@
 		   icon (bỏ flex:1 — label mới theo each, đẩy phải không còn ý nghĩa);
 		   sb-hidden ẩn khi sidebar collapsed (pattern batch 4). */
 		.admin-theme-switch__label {
+			position: relative;
+			z-index: 1;
 			font-size: 0.8125rem;
-			color: var(--foreground, hsl(0 0% 9%));
+			color: var(--primary, hsl(212 92% 45%));
+			font-weight: 500;
 			white-space: nowrap;
 			overflow: hidden;
 			text-overflow: ellipsis;
 			min-width: 0;
+
+			@media (prefers-color-scheme: dark) {
+				color: hsl(212 92% 70%);
+			}
 		}
 	}
 
