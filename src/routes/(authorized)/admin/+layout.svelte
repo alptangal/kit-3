@@ -710,10 +710,13 @@
 							>
 								<Icon icon={themeIcons[t]} />
 							</button>
+							<!-- Batch 13 (m10824-5): label nằm CẠNH icon theme ACTIVE
+							     (trước đây 1 label ngoài each + flex:1 đẩy sát phải);
+							     sb-hidden ẩn khi sidebar collapsed — pattern batch 4. -->
+							{#if profile.theme === t}
+								<span class="admin-theme-switch__label sb-hidden">{themeLabels[t][lang] ?? themeLabels[t].vi}</span>
+							{/if}
 						{/each}
-						<!-- Batch 11 (yêu cầu 1): label tên theme active cạnh icon
-						     (sb-hidden ẩn khi sidebar collapsed — pattern batch 4). -->
-						<span class="admin-theme-switch__label sb-hidden">{themeLabels[profile.theme][lang] ?? themeLabels[profile.theme].vi}</span>
 					</div>
 				</Sidebar.MenuItem>
 				<Sidebar.MenuItem>
@@ -855,15 +858,15 @@
 			}
 		}
 
-		/* Batch 11 (yêu cầu 1): tên theme active cạnh icon — sb-hidden ẩn khi
-		   sidebar collapsed (pattern batch 4). */
+		/* Batch 11 (yêu cầu 1) + Batch 13 (m10824-5): tên theme active nằm cạnh
+		   icon (bỏ flex:1 — label mới theo each, đẩy phải không còn ý nghĩa);
+		   sb-hidden ẩn khi sidebar collapsed (pattern batch 4). */
 		.admin-theme-switch__label {
 			font-size: 0.8125rem;
 			color: var(--foreground, hsl(0 0% 9%));
 			white-space: nowrap;
 			overflow: hidden;
 			text-overflow: ellipsis;
-			flex: 1;
 			min-width: 0;
 		}
 	}

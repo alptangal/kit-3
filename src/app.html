@@ -29,6 +29,30 @@
 				});
 			}
 		</script>
+		<!-- Batch 13 (m10824-3): cảm giác native-app trên iOS — chặn pinch-zoom 2 ngón
+		     (gesturestart; meta user-scalable=no bị iOS ≥10 bỏ qua) + pull-to-refresh
+		     (overscroll-behavior chỉ iOS 16+; iOS ≤15 chặn touchmove khi document ở
+		     đỉnh VÀ target không cuộn được nội bộ — guard closest('[data-overscroll]')). -->
+		<script>
+			document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+			document.addEventListener('touchmove', function (e) {
+				if (e.touches.length !== 1) return;
+				if (e.target.closest && e.target.closest('[data-overscroll]')) return;
+				if (document.documentElement.scrollTop <= 0 &&
+				    (document.scrollingElement || document.documentElement).scrollTop <= 0 &&
+				    (window.scrollY || 0) <= 0 && document.body && document.body.scrollTop <= 0) {
+					// Root Container là scroll host thật (body/window luôn 0) — chỉ chặn khi
+					// target ở vùng cuộn gốc, không đụng các vùng [data-overscroll] nội bộ.
+					var el = e.target;
+					while (el && el !== document.body) {
+						var ov = getComputedStyle(el).overflowY;
+						if (ov === 'auto' || ov === 'scroll') return;
+						el = el.parentElement;
+					}
+					e.preventDefault();
+				}
+			}, { passive: false });
+		</script>
 
 		%unocss-svelte-scoped.global%
 		<!--------------------- -->

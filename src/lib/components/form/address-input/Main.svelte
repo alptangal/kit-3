@@ -79,21 +79,28 @@
 	const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/\s+/g, ' ').trim();
 
 	// ── Hệ CŨ (63 tỉnh, 3 cấp) ──
+	// Batch 13 (m10824-1b): option dạng STEP TREE — label chỉ tên node,
+	// description = đường dẫn cha (Tỉnh > Huyện). Không lặp tên cha trong label
+	// → list gọn + search vẫn khớp (Select filter cả description).
 	const provinceOptions = $derived(provinces.map((p) => ({ value: p.n, label: p.n })));
 	const selectedProvince = $derived(provinces.find((p) => p.n === breakdown.province));
-	const districtOptions = $derived((selectedProvince?.d ?? []).map((d) => ({ value: d.n, label: d.n })));
+	const districtOptions = $derived(
+		(selectedProvince?.d ?? []).map((d) => ({ value: d.n, label: d.n, description: breakdown.province }))
+	);
 	/** wards của tỉnh đang chọn (khớp qua key 'tên|code') */
 	const provinceWards = $derived(
 		breakdown.province ? wardMap[`${breakdown.province}|${selectedProvince?.c ?? ''}`] ?? {} : {}
 	);
-	const wardOptions = $derived((provinceWards[breakdown.district] ?? []).map((w) => ({ value: w, label: w })));
+	const wardOptions = $derived(
+		(provinceWards[breakdown.district] ?? []).map((w) => ({ value: w, label: w, description: `${breakdown.province} › ${breakdown.district}` }))
+	);
 
 	// ── Hệ MỚI (34 tỉnh, 2 cấp) ──
 	const newProvinceOptions = $derived((geo2025?.np ?? []).map(([code, name]) => ({ value: name, label: name })));
 	const newSelectedProvinceCode = $derived(geo2025?.np.find(([, name]) => name === newBreakdown?.province)?.[0] ?? '');
 	const newWardOptions = $derived(
 		newSelectedProvinceCode
-			? (geo2025?.nw ?? []).filter(([, pCode]) => pCode === newSelectedProvinceCode).map(([, , name]) => ({ value: name, label: name }))
+			? (geo2025?.nw ?? []).filter(([, pCode]) => pCode === newSelectedProvinceCode).map(([, , name]) => ({ value: name, label: name, description: newBreakdown?.province }))
 			: []
 	);
 

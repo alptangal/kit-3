@@ -23,6 +23,24 @@ function normalizeError(e: unknown, context: string): Error {
 	}
 	return new Error(`${context}: ${String(e)}`);
 }
+
+// Batch 13 (m10824-6): Capella HTTP API thỉnh thoảng đứt socket ngay khi bắt tay
+// (UND_ERR_SOCKET 'other side closed' / ECONNRESET) — SSR crash ở hooks init làm
+// 503 cả trang. fetch wrapper retry 2 lần (250ms → 1s) CHỈ khi fetch THROW (lỗi
+// mạng/socket); status >= 400 là response hợp lệ của server → KHÔNG retry.
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function cbFetch(url: string, init?: RequestInit): Promise<Response> {
+	let lastErr: unknown;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		if (attempt > 0) await sleep(attempt === 1 ? 250 : 1000);
+		try {
+			return await fetch(url, init);
+		} catch (e) {
+			lastErr = e;
+		}
+	}
+	throw lastErr;
+}
 type CloudProvider =
 	| {
 			type: 'aws';
@@ -923,7 +941,7 @@ const dataApi = <C extends CollectionName>(data: {
 	const getDocument = async (data: { documentKey: string }): Promise<DocumentResponse> => {
 		try {
 			const { documentKey } = data;
-			const res = await fetch(
+			const res = await cbFetch(
 				`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 				{
 					headers
@@ -950,7 +968,7 @@ const dataApi = <C extends CollectionName>(data: {
 			}): Promise<DocumentResponse> {
 				try {
 					const { documentKey = randomUUID(), content } = data;
-					const res = await fetch(
+					const res = await cbFetch(
 						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 						{
 							headers,
@@ -985,7 +1003,7 @@ const dataApi = <C extends CollectionName>(data: {
 							currentDocument = response.data;
 						}
 					}
-					const res = await fetch(
+					const res = await cbFetch(
 						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 						{
 							headers,
@@ -1008,7 +1026,7 @@ const dataApi = <C extends CollectionName>(data: {
 			async delete(data: { documentKey: string }): Promise<DocumentResponse> {
 				try {
 					const { documentKey } = data;
-					const res = await fetch(
+					const res = await cbFetch(
 						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}`,
 						{
 							headers,
@@ -1037,7 +1055,7 @@ const dataApi = <C extends CollectionName>(data: {
 			}): Promise<DocumentResponse> {
 				try {
 					const { documentKey, expiry, returnContent } = data;
-					const res = await fetch(
+					const res = await cbFetch(
 						`https://${clusterId}.data.cloud.couchbase.com/v1/buckets/${bucketName}/scopes/${scopeName}/collections/${collectionName}/documents/${encodeKey(documentKey)}/touch`,
 						{
 							headers,
@@ -1089,7 +1107,7 @@ const dataApi = <C extends CollectionName>(data: {
 						controls = false,
 						...options
 					} = data;
-					const res = await fetch(
+					const res = await cbFetch(
 						`https://${clusterId}.data.cloud.couchbase.com/_p/query/query/service`,
 						{
 							headers,
@@ -1299,7 +1317,7 @@ const dataApi = <C extends CollectionName>(data: {
 						try {
 							const { indexName } = data;
 							const url = `https://${clusterId}.data.cloud.couchbase.com/_p/fts/api/index/${indexName}/count`;
-							const res = await fetch(url, { headers });
+							const res = await cbFetch(url, { headers });
 
 							if (res.ok) {
 								const jsonData = (await res.json()) as Record<string, any>;
@@ -1366,7 +1384,7 @@ const dataApi = <C extends CollectionName>(data: {
 
 							const url = `https://${clusterId}.data.cloud.couchbase.com/_p/fts/api/bucket/${bucketName}/scope/${scopeName}/index/${indexName}/query`;
 
-							const res = await fetch(url, {
+							const res = await cbFetch(url, {
 								method: 'post',
 								headers,
 								body: JSON.stringify({

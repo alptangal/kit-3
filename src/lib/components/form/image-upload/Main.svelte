@@ -736,7 +736,7 @@
 					<img class="image-upload__detail-img" src={detailEntry.preview} alt={entryName(detailEntry)} />
 					<dl class="image-upload__detail-meta">
 						<dt>{tr('fileName')}</dt>
-						<dd>{entryName(detailEntry)}</dd>
+						<dd class="image-upload__detail-name">{entryName(detailEntry)}</dd>
 						<dt>{tr('sizeLabel')}</dt>
 						<dd>{detailEntry.file ? formatSize(detailEntry.file.size) : tr('notUploaded')}</dd>
 						<dt>{tr('typeLabel')}</dt>
@@ -1175,6 +1175,17 @@
 			margin: 0;
 			color: var(--foreground);
 			overflow-wrap: anywhere;
+		}
+
+		/* Batch 13 (m10824-2): filename dài hơn cột 1fr → ELLIPSIS 1 dòng thay vì
+		   wrap làm modal cao ≠ hàng — QUY TẮC CHUNG: node lá hiển thị tên file/
+		   chuỗi động dài trong layout cố định dùng ellipsis (min-width:0 trên
+		   grid/flex child + overflow hidden + nowrap) thay vì để tràn/wrap. */
+		dd.image-upload__detail-name {
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 	}
 

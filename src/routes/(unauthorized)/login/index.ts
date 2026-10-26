@@ -72,6 +72,11 @@ export const pageContents: { [k: string]: TranslateContent } = {
 		vi: 'Đăng nhập bằng sinh trắc học',
 		en: 'Sign in with biometrics'
 	},
+	// Batch 13 (m10824-4): text PC — USB security key / passkey storage.
+	passkeyLoginUsb: {
+		vi: 'Đăng nhập bằng USB key / passkey',
+		en: 'Sign in with USB key / passkey'
+	},
 	passkeyOr: {
 		vi: 'hoặc',
 		en: 'or'
@@ -96,6 +101,11 @@ export const pageContents: { [k: string]: TranslateContent } = {
 	passkeyGuide: {
 		vi: 'Cách bật và dùng đăng nhập sinh trắc học',
 		en: 'How to enable and use biometric sign-in'
+	},
+	// Batch 13 (m10824-4): guide link lên trước divider — text phủ cả USB key.
+	passkeyGuideUsb: {
+		vi: 'Cách bật và dùng đăng nhập bằng passkey / USB key',
+		en: 'How to enable and use passkey / USB key sign-in'
 	},
 	passkeyUnavailableHint: {
 		vi: 'Thiết bị chưa có authenticator — bật Windows Hello / Touch ID rồi tải lại trang.',

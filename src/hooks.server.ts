@@ -32,7 +32,12 @@ if (!globalThis.__appInitialized || !vaultReady()) {
 		// Auto polling QR payment (chỉ chạy khi QR_CHECKER_AUTO_POLL=true + có URL tool —
 		// guard bên trong startAutoPolling; no-op khi chưa cấu hình).
 		QrPaymentService.startAutoPolling();
-	})();
+		// Batch 13 (m10824-6): init lỗi → xoá promise để request sau được retry thay vì
+		// await một promise đã rejected mãi mãi (503 'system initializing' vĩnh viễn).
+	})().catch((e) => {
+		globalThis.__initPromise = undefined;
+		console.error('[hooks] init failed:', e);
+	});
 }
 
 // Ensure initialization completes before handling requests.

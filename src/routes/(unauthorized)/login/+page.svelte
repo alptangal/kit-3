@@ -74,6 +74,20 @@ $effect(() => {
 	// key, mobile = fingerprint. iconify đã map 'usb-key-rounded'.
 	const passkeyIcon = $derived(client.browser?.isMobile ? 'lucide:fingerprint' : 'usb-key-rounded');
 
+	// Batch 13 (m10824-4): text nút theo device — PC = USB key / passkey
+	// storage, mobile giữ sinh trắc học.
+	const passkeyLoginText = $derived(
+		client.browser?.isMobile
+			? pageContents.passkeyLogin
+			: (pageContents.passkeyLoginUsb ?? pageContents.passkeyLogin)
+	);
+	// Batch 13 (m10824-4): guide text theo device tương tự nút.
+	const passkeyGuideText = $derived(
+		client.browser?.isMobile
+			? pageContents.passkeyGuide
+			: (pageContents.passkeyGuideUsb ?? pageContents.passkeyGuide)
+	);
+
 	// Ngôn ngữ hiện tại
 	const lang = $derived(client.browser?.language ?? 'en');
 	const currentLang = $derived(lang === 'vi' ? 'vi' : 'en');
@@ -538,6 +552,11 @@ $effect(() => {
 			<div class="passkey-section">
 				<!-- Batch 11 (yêu cầu 2): PC dùng USB security key,
 				     mobile giữ fingerprint (Touch ID/Face ID/vân tay). -->
+				<!-- Batch 13 (m10824-4): guide link DỊCH lên trước divider để liền
+				     mạch với nút passkey; text nút theo device (PC = USB key). -->
+				<a class="passkey-guide-link" href="/docs/biometric-login.html" target="_blank" rel="noopener" data-test="passkey-guide-link">
+					{passkeyGuideText[lang] ?? (lang === 'vi' ? passkeyGuideText.vi : passkeyGuideText.en)}
+				</a>
 				<Button
 					class="auth-btn-passkey"
 					color="primary"
@@ -546,14 +565,11 @@ $effect(() => {
 					loading={passkeyLoading}
 					onclick={handlePasskeyLogin}
 				>
-					{pageContents.passkeyLogin[lang] ?? (lang === 'vi' ? 'Đăng nhập bằng sinh trắc học' : 'Sign in with biometrics')}
+					{passkeyLoginText[lang] ?? (lang === 'vi' ? passkeyLoginText.vi : passkeyLoginText.en)}
 				</Button>
 				<div class="passkey-divider">
 					<span>{pageContents.passkeyOr[lang] ?? (lang === 'vi' ? 'hoặc' : 'or')}</span>
 				</div>
-				<a class="passkey-guide-link" href="/docs/biometric-login.html" target="_blank" rel="noopener" data-test="passkey-guide-link">
-					{pageContents.passkeyGuide[lang]}
-				</a>
 			</div>
 		{/if}
 
@@ -673,7 +689,9 @@ $effect(() => {
 		}
 	}
 
-	/* Passkey: hàng riêng PHÍA TRÊN nút Sign in (nút + divider "hoặc") */
+	/* Passkey: hàng riêng PHÍA TRÊN nút Sign in (guide link → nút → divider).
+	   Batch 13 (m10824-4): guide link DỊCH lên trước divider — liền mạch với
+	   nút passkey; divider là ranh giới cuối cùng trước nút Sign in. */
 	.passkey-section {
 		display: flex;
 		flex-direction: column;
@@ -688,6 +706,9 @@ $effect(() => {
 		width: 100%;
 		color: var(--foreground-500);
 		font-size: 0.8rem;
+		/* Batch 13: divider giờ là phần tử CUỐI section — thêm khoảng hở
+		   phía trên tách khỏi nút passkey. */
+		margin-top: 0.375rem;
 
 		&::before,
 		&::after {
@@ -713,7 +734,6 @@ $effect(() => {
 
 	/* Nhóm 3: link hướng dẫn khi thiếu authenticator */
 	.passkey-guide-link {
-		margin-top: 0.15rem;
 		/* ≥ 0.8125rem (13px): tap target chữ trên mobile — 0.78rem quá nhỏ */
 		font-size: 0.8125rem;
 		color: var(--primary-600);

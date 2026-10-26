@@ -180,3 +180,13 @@
 		transition-duration: 0s !important;
 	}
 }
+
+/* ── Batch 13 (m10824-3): native-app feel trên iOS ─────────────────────────
+   Pull-to-refresh: overscroll-behavior chỉ iOS 16+ (caniuse) — iOS ≤15 chặn bằng
+   JS touchmove trong app.html. Rule này forward-fix + giúp Chrome Android.
+   `none` trên html/body; vùng cuộn nội bộ (Container/DataTable/modal) tự xử lý
+   qua [data-overscroll] + overscroll-behavior-y: contain sẵn của modal body. */
+html,
+body {
+	overscroll-behavior-y: none;
+}
