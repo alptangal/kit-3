@@ -156,6 +156,67 @@
 		aspect-ratio: 1 / 1;
 		min-height: 0;
 	}
+
+	/* Batch 12 (yêu cầu 1): rail 56px không đủ chứa search field full → ẨN field
+	   (giữ mount — filter state không mất), hiện nút icon search thay thế
+	   (collapseToggle — bấm mở rộng + focus field). Theme switch tương tự:
+	   3 icon + label → chỉ icon theme ACTIVE giữ lại. */
+	:global(.sidebar-search) {
+		display: none;
+	}
+
+	:global(.sidebar-search__toggle) {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		aspect-ratio: 1 / 1;
+		padding: 0;
+		margin: 0;
+		border: 0;
+		background: transparent;
+		border-radius: 0.5rem;
+		color: var(--muted-foreground, hsl(0 0% 45%));
+		cursor: pointer;
+
+		&:hover {
+			background: var(--accent, hsl(0 0% 96%));
+			color: var(--foreground);
+		}
+	}
+
+	:global(.admin-theme-switch .admin-theme-switch__btn:not(.active)),
+	:global(.admin-theme-switch .admin-theme-switch__label) {
+		display: none;
+	}
+
+	:global(.admin-theme-switch) {
+		justify-content: center;
+	}
+}
+
+/* PEEK hover: field search + theme switch khôi phục (mirror rule collapsed —
+   Peek = "trở lại layout đầy đủ"; nút icon toggle ẩn đi vì field đã hiện). */
+.sidebar-aside.sidebar-collapsed:hover {
+	:global(.sidebar-search) {
+		display: block;
+	}
+
+	:global(.sidebar-search__toggle) {
+		display: none;
+	}
+
+	:global(.admin-theme-switch .admin-theme-switch__btn:not(.active)) {
+		display: inline-flex;
+	}
+
+	:global(.admin-theme-switch .admin-theme-switch__label) {
+		display: revert;
+	}
+
+	:global(.admin-theme-switch) {
+		justify-content: flex-start;
+	}
 }
 
 /* PEEK: khi sidebar ẩn (collapsed) nhưng đang hover aside (:hover) → tạm hiện

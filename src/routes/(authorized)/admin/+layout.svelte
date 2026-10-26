@@ -307,9 +307,15 @@
 		</Sidebar.Header>
 
 		<Sidebar.Content>
-			<!-- Tìm kiếm menu (filter + auto-expand group theo query — P2). -->
+			<!-- Tìm kiếm menu (filter + auto-expand group theo query — P2).
+			     Batch 12: rail 56px ẨN field (rule _styles.scss) → Sidebar.Search
+			     tự hiện nút icon thay thế (collapseToggle), bấm mở rộng + focus. -->
 			<div class="admin-sidebar-search">
-				<Sidebar.Search placeholder={lang === 'vi' ? 'Tìm trong menu…' : 'Search menu…'} data-test="admin-sidebar-search" />
+				<Sidebar.Search
+					placeholder={lang === 'vi' ? 'Tìm trong menu…' : 'Search menu…'}
+					collapseToggle
+					data-test="admin-sidebar-search"
+				/>
 			</div>
 			<Sidebar.MenuGroup id="overview" label={lang === 'vi' ? 'Tổng quan' : 'Overview'} icon="lucide:layout-dashboard">
 				<Sidebar.Menu>

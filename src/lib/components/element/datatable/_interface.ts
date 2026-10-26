@@ -171,6 +171,9 @@ export interface DataTableRootProps<T = Record<string, unknown>> extends BasicPr
 	searchable?: boolean;
 	/** Placeholder ô search (i18n). */
 	searchPlaceholder?: TranslateContent | string;
+	/** Query điều khiển TỪ NGOÀI (search box riêng của trang — highlight + filter vẫn chạy;
+	 * internal search box thắng khi prop không truyền). */
+	searchQuery?: string;
 	/** Cho phép đổi page size (hiện select). */
 	pageSizeOptions?: number[];
 	/** Hiện thanh pagination. */

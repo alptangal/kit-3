@@ -55,6 +55,7 @@
 		selectable,
 		searchable,
 		searchPlaceholder,
+		searchQuery: searchQueryProp,
 		pageSizeOptions: pageSizeOptionsProp,
 		showPagination,
 		density: densityProp,
@@ -356,8 +357,11 @@
 		rows.map((row, index) => ({ row, index }))
 	);
 	// 2) filter (search, case-insensitive + nhạy dấu, mọi cột filterable)
+	// BẪY: mọi chỗ đọc query phải qua effectiveQuery — prop searchQuery (trang tự
+	// quản search box) thắng internal; đọc trực tiếp biến query sẽ bỏ sót external.
+	const effectiveQuery = $derived(searchQueryProp ?? query);
 	const filtered: { row: Record<string, unknown>; index: number }[] = $derived.by(() => {
-		const q = query.trim();
+		const q = effectiveQuery.trim();
 		if (!q) return indexed;
 		return indexed.filter(({ row }) => {
 			for (const col of columns) {
@@ -539,8 +543,8 @@
 		row: Record<string, unknown>
 	): TextSegment[] => {
 		const text = cellTextOf(value, col, row);
-		if (!query.trim() || col.noHighlight) return [{ text, isMatch: false }];
-		return matchSegments(text, query.trim());
+		if (!effectiveQuery.trim() || col.noHighlight) return [{ text, isMatch: false }];
+		return matchSegments(text, effectiveQuery.trim());
 	};
 
 	// ── ACTIONS edit cell / delete / row actions / lazy load ──
@@ -1491,7 +1495,10 @@
 			return columns;
 		},
 		get query() {
-			return query;
+			// Batch 12: query điều khiển từ ngoài (prop searchQuery) thắng khi có —
+			// trang tự quản search box riêng, highlight/filter theo đó; không truyền →
+			// internal search box (searchable) như cũ.
+			return searchQueryProp ?? query;
 		},
 		get filteredCount() {
 			return filtered.length;

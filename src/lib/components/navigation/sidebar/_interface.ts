@@ -185,6 +185,10 @@ export interface SidebarResizeHandleProps extends BasicProps {
 export interface SidebarSearchProps extends BasicProps {
 	/** placeholder (i18n hoặc string, mặc định "Tìm kiếm menu…") — cũng là accessible name */
 	placeholder?: TranslateContent | string;
+	/** Batch 12: hiện nút icon thay field khi collapsed (bấm → expand + focus
+	 * field). Field vẫn ẩn qua rule _styles.scss khi rail — nút này cho phép
+	 * mở lại từ rail. Mặc định false (demo cũ không đổi). */
+	collapseToggle?: boolean;
 }
 
 /**

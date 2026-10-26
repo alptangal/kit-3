@@ -98,6 +98,54 @@
 	// Key map qua norm() (NFD strip marks + đ→d + lowercase + collapse spaces) TRƯỚC,
 	// rồi strip prefix 'tinh '/'thanh pho ' trên chuỗi ĐÃ normalize.
 	const normProvinceKey = (name: string) => norm(name).replace(/^(tinh|thanh pho)\s+/, '');
+
+	// ── INDEX NGƯỢC (batch 12) ──
+	// BẪY LỚN: mapNewWardToOld/mapOldWardToNew cũ quét vét Object.entries(ow) 10.035
+	// vòng × nw.find 3.321 phần tử (~16-33M phép lặp) QUA deep-proxy $state, ĐỒNG BỘ
+	// mỗi lần chọn xã → treo vài giây trên mobile. Data là TĨNH → tính index 1 LẦN
+	// khi geo2025 load xong, các hàm map chỉ tra O(1). geo2025 giữ $state (rẻ —
+	// proxy chi phí khi READ thuộc tính, index đã rời reactivity).
+	let geoIndex: {
+		// newWardCode → tên xã mới (từ nw)
+		nwName: Map<string, string>;
+		// newWardCode → mã tỉnh mới (từ nw)
+		nwProvince: Map<string, string>;
+		// 'mã xã mới' → các xã cũ đích đến nó [{dCode, ward}] (reverse ow)
+		newWardToOlds: Map<string, { dCode: string; ward: string }[]>;
+		// 'mã huyện cũ' → tên xã cũ + target (lookup xã cũ theo huyện, O(1) thay find)
+		owByDistrict: Map<string, { name: string; target: string | string[] }[]>;
+		// 'mã tỉnh mới|norm tên xã mới' → mã xã mới (BẮT BUỘC kèm tỉnh: tên xã
+		// trùng giữa các tỉnh — vd 'Phường 1' — key đơn trả sai mã)
+		nwNameKey: Map<string, string>;
+	} | null = null;
+	$effect(() => {
+		if (!geo2025 || geoIndex) return;
+		const g = geo2025;
+		const nwName = new Map<string, string>();
+		const nwProvince = new Map<string, string>();
+		const nwNameKey = new Map<string, string>();
+		for (const [code, pCode, name] of g.nw) {
+			nwName.set(code, name);
+			nwProvince.set(code, pCode);
+			nwNameKey.set(`${pCode}|${norm(name)}`, code);
+		}
+		const newWardToOlds = new Map<string, { dCode: string; ward: string }[]>();
+		const owByDistrict = new Map<string, { name: string; target: string | string[] }[]>();
+		for (const [code, [dCode, name, target]] of Object.entries(g.ow)) {
+			const targets = Array.isArray(target) ? target : [target];
+			for (const t of targets) {
+				const arr = newWardToOlds.get(t);
+				if (arr) arr.push({ dCode, ward: name });
+				else newWardToOlds.set(t, [{ dCode, ward: name }]);
+			}
+			const byD = owByDistrict.get(dCode);
+			const entry = { name, target };
+			if (byD) byD.push(entry);
+			else owByDistrict.set(dCode, [entry]);
+		}
+		geoIndex = { nwName, nwProvince, newWardToOlds, owByDistrict, nwNameKey };
+	});
+
 	const oldToNewProvince = $derived.by(() => {
 		if (!geo2025) return null;
 		const map = new Map<string, string>();
@@ -145,18 +193,18 @@
 	 * (thuộc tỉnh mới đích). Nhiều kết quả hoặc không tìm thấy → '' (user chọn tay).
 	 */
 	function mapOldWardToNew(oldProvince: string, oldDistrict: string, oldWard: string, newProvince: string): string {
-		if (!geo2025) return '';
+		if (!geo2025 || !geoIndex) return '';
 		const oldProvinceCode = geo2025.op.find(([, name]) => normProvinceKey(name) === normProvinceKey(oldProvince))?.[0];
 		if (!oldProvinceCode) return '';
 		const districtRow = (geo2025.od[oldProvinceCode] ?? []).find(([, name]) => name === oldDistrict);
 		const oldDistrictCode = districtRow?.[0];
 		if (!oldDistrictCode) return '';
-		const wardRow = Object.entries(geo2025.ow).find(([, v]) => v[0] === oldDistrictCode && v[1] === oldWard);
+		// Tra index owByDistrict (O(số xã của huyện) thay quét 10.035 xã toàn quốc)
+		const wardRow = (geoIndex.owByDistrict.get(oldDistrictCode) ?? []).find((e) => e.name === oldWard);
 		if (!wardRow) return '';
-		const target = wardRow[1][2];
+		const target = wardRow.target;
 		if (Array.isArray(target)) return ''; // xã bị tách 1-nhiều — không tự chọn
-		const newWard = geo2025.nw.find(([code]) => code === target);
-		return newWard?.[2] ?? '';
+		return geoIndex.nwName.get(target) ?? '';
 	}
 
 	/**
@@ -190,22 +238,22 @@
 	}
 
 	function mapNewWardToOld(oldProvince: string, newProvince: string, newWard: string): { district: string; ward: string } {
-		if (!geo2025) return { district: '', ward: '' };
+		if (!geo2025 || !geoIndex) return { district: '', ward: '' };
 		const oldProvinceCode = geo2025.op.find(([, name]) => normProvinceKey(name) === normProvinceKey(oldProvince))?.[0];
 		const newProvinceCode = geo2025.np.find(([, name]) => normProvinceKey(name) === normProvinceKey(newProvince))?.[0];
 		if (!oldProvinceCode || !newProvinceCode) return { district: '', ward: '' };
-		// Social mới được chọn có thể là đích của nhiều xã cũ (gộp) — reverse ow theo TÊN xã mới + tỉnh mới
-		const hits: { dCode: string; ward: string }[] = [];
-		for (const [, [dCode, name, target]] of Object.entries(geo2025.ow)) {
-			// mã xã mới đích (1 hoặc mảng khi tách)
-			const targets = Array.isArray(target) ? target : [target];
-			const nwRow = geo2025.nw.find(([code, , name2]) => targets.includes(code) && name2 === newWard);
-			if (!nwRow || nwRow[1] !== newProvinceCode) continue;
-			hits.push({ dCode, ward: name });
-		}
-		// Giữ các hit thuộc TỈNH CŨ đang chọn (qua od)
+		// Social mới được chọn có thể là đích của nhiều xã cũ (gộp) — reverse ow qua index:
+		// tra theo MÃ xã mới (match tên → mã O(1)), index đã gộp theo target (1 hoặc mảng).
+		const newWardCode = geoIndex.nwNameKey.get(`${newProvinceCode}|${norm(newWard)}`);
+		if (!newWardCode) return { district: '', ward: '' };
+		const hits = geoIndex.newWardToOlds.get(newWardCode) ?? [];
+		// Giữ các hit thuộc TỈNH CŨ đang chọn (qua od) + xã mới đích đúng tỉnh mới
 		const districtMap = geo2025.od[oldProvinceCode] ?? [];
-		const valid = hits.filter((h) => districtMap.some(([c]) => c === h.dCode));
+		const valid = hits.filter((h) => {
+			if (!districtMap.some(([c]) => c === h.dCode)) return false;
+			// hit này là xã cũ có target trúng newWardCode — kiểm nw của newWardCode thuộc tỉnh mới
+			return geoIndex!.nwProvince.get(newWardCode) === newProvinceCode;
+		});
 		if (valid.length !== 1) return { district: '', ward: '' };
 		const districtName = districtMap.find(([c]) => c === valid[0].dCode)?.[1] ?? '';
 		return { district: districtName, ward: valid[0].ward };

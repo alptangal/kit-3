@@ -2076,6 +2076,8 @@
 					onSortChange={onSupplierSortChange}
 					resizable={{ enabled: true, fit: true }}
 					loading={suppliersLoading || searching}
+						// Batch 12: highlight + filter theo query search box của trang
+						searchQuery={searchQuery ?? ''}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptySuppliers[lang]}
 					loadingLabel={pageContents.states.loading[lang]}
