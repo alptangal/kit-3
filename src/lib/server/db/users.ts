@@ -298,7 +298,10 @@ export class Users {
 
 	static async login(
 		input: Partial<Pick<User, 'emailBlindIndex' | 'usernameBlindIndex'>> & { password: string },
-		ipAddress?: string
+		ipAddress?: string,
+		// touchLastLogin=false khi route sẽ bước sang challenge 2FA — lastLoginAt/lastLoginIp
+		// chỉ được tính là "đăng nhập" sau khi TOTP pass (route tự update lúc đó).
+		opts?: { touchLastLogin?: boolean }
 	): Promise<{ success: true; user: Users } | { success: false; messages: TranslateContent }> {
 		const { password, ...lookup } = input;
 		let found: Awaited<ReturnType<typeof Users.getBy>>;
@@ -332,16 +335,19 @@ export class Users {
 			});
 			const instance = Users.fromDocument(doc);
 			// cập nhật lastLoginAt/lastLoginIp — không await để không làm chậm phản hồi login,
-			// nhưng vẫn log lỗi nếu update thất bại
-			cbUsers.document
-				.update({
-					documentKey: instance.getDocumentKey()!,
-					content: {
-						lastLoginAt: new Date().toISOString(),
-						lastLoginIp: ipAddress ?? null
-					} as Partial<User> as User
-				})
-				.catch((e) => console.error('[login] update lastLoginAt failed', e));
+			// nhưng vẫn log lỗi nếu update thất bại. Khi bật 2FA, login route pass
+			// touchLastLogin=false — timestamp chỉ ghi sau khi bước 2 (verify TOTP) thành công.
+			if (opts?.touchLastLogin !== false) {
+				cbUsers.document
+					.update({
+						documentKey: instance.getDocumentKey()!,
+						content: {
+							lastLoginAt: new Date().toISOString(),
+							lastLoginIp: ipAddress ?? null
+						} as Partial<User> as User
+					})
+					.catch((e) => console.error('[login] update lastLoginAt failed', e));
+			}
 			return { success: true, user: instance };
 		} catch {
 			return { success: false, messages: authMessages.invalidCredentials };

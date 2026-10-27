@@ -467,6 +467,29 @@
 		totpDisabled: {
 			vi: 'Đã tắt xác thực 2 bước',
 			en: 'Two-step authentication disabled'
+		},
+		// ── Batch 16: đổi key xác thực (totp/change) ──
+		totpChangeBtn: {
+			vi: 'Đổi key xác thực',
+			en: 'Change authenticator key'
+		},
+		totpChangeHint: {
+			vi: 'Nhập mã 6 số hiện tại trong app để cấp khoá mới:',
+			en: 'Enter the current 6-digit code to issue a new key:'
+		},
+		totpChangeConfirm: {
+			vi: 'Cấp khoá mới',
+			en: 'Issue new key'
+		},
+		totpChangeSuccess: {
+			vi: 'Đã cấp khoá mới — quét QR để bật lại xác thực 2 bước',
+			en: 'New key issued — scan the QR code to re-enable two-step authentication'
+		},
+		// Batch 16: label chung cho ô mã 2FA trên các form nhạy cảm
+		// (change-password, create/revoke API key)
+		sensitiveTotpLabel: {
+			vi: 'Mã xác thực 2 bước',
+			en: 'Two-factor code'
 		}
 	};
 
@@ -744,13 +767,19 @@
 		try {
 			const res = await encryption.fetchSecure('/api/agent/profile/change-password', {
 				method: 'post',
-				body: { oldPassword: pwdOld, newPassword: pwdNew }
+				body: {
+					oldPassword: pwdOld,
+					newPassword: pwdNew,
+					// Batch 16: guard 2FA — server requireTotpCode khi totpEnabled
+					totpCode: sensitiveTotpCode.trim() || undefined
+				}
 			});
 			if (res.ok) {
 				toast(msg('passwordSuccess'), undefined, 'success');
 				pwdOld = '';
 				pwdNew = '';
 				pwdConfirm = '';
+				sensitiveTotpCode = '';
 			} else {
 				toast(res.message?.[lang] ?? res.message?.en ?? 'Error', undefined, 'error');
 			}
@@ -837,6 +866,7 @@
 		dob: string;
 		gender: string;
 		social: string;
+		totpEnabled?: boolean;
 	}
 	const initialProfile: ProfileInfo = data.profile ?? {
 		firstname: data.user.firstName ?? '',
@@ -873,11 +903,20 @@
 		secret?: string;
 		otpauthUrl?: string;
 	}
-	let totpSetup = $state<TotpStatus | null>(null);
+	// Batch 16: seed trạng thái từ server load (totpEnabled trong profile) —
+	// trước đây null khiến badge/guard không hiển thị cho user đã bật 2FA từ
+	// session trước. fallback null khi +page.server load lỗi profile.
+	// (data.profile đọc 1 lần khi init state — đúng ý, không phải reactive.)
+	let totpSetup = $state<TotpStatus | null>(
+		// svelte-ignore state_referenced_locally
+		data.profile ? { enabled: data.profile.totpEnabled === true } : null
+	);
 	let totpBusy = $state(false);
 	let totpCode = $state('');
 	let totpError = $state('');
 	let totpQr = $state('');
+	/** Batch 16: mở/đóng form "Đổi key xác thực" (chỉ liên quan khi enabled) */
+	let totpChangeOpen = $state(false);
 
 	async function startTotpSetup() {
 		if (totpBusy) return;
@@ -945,6 +984,40 @@
 		}
 	}
 
+	// ── Batch 16: guard totpCode cho endpoint nhạy cảm (server totp-guard:
+	// change-password / keys/create / keys/revoke bắt buộc totpCode khi 2FA bật).
+	// 1 ô mã dùng chung, reset sau mỗi thao tác; thiếu/sai → toast lỗi server.
+	let sensitiveTotpCode = $state('');
+
+	// ── Batch 16: đổi key xác thực — POST totp/change { currentCode } → server
+	// xoá key cũ + trả secret/otpauthUrl MỚI + totpEnabled=false. Dùng lại khối
+	// setup (totpSetup && !enabled) để user quét QR + nhập mã mới → enable.
+	async function startTotpChange() {
+		if (totpBusy || !/^\d{6}$/.test(totpCode)) return;
+		totpBusy = true;
+		totpError = '';
+		try {
+			const res = await encryption.fetchSecure('/api/agent/profile/totp/change', {
+				method: 'post',
+				body: { currentCode: totpCode }
+			});
+			if (!res.ok || !res.data) throw new Error(res.message?.[lang] ?? 'Failed');
+			totpSetup = { enabled: false, secret: res.data.secret, otpauthUrl: res.data.otpauthUrl };
+			const { default: QRCode } = await import('qrcode');
+			totpQr = await QRCode.toDataURL(res.data.otpauthUrl, {
+				errorCorrectionLevel: 'M',
+				margin: 1,
+				width: 200
+			});
+			totpCode = '';
+			toast(msg('totpChangeSuccess'), undefined, 'success');
+		} catch (err) {
+			totpError = err instanceof Error ? err.message : String(err);
+		} finally {
+			totpBusy = false;
+		}
+	}
+
 	async function loadApiKeys() {
 		apiKeysLoading = true;
 		try {
@@ -969,13 +1042,18 @@
 		try {
 			const res = await encryption.fetchSecure('/api/agent/keys/create', {
 				method: 'post',
-				body: { name }
+				body: {
+					name,
+					// Batch 16: guard 2FA (totp-guard keys/create)
+					totpCode: sensitiveTotpCode.trim() || undefined
+				}
 			});
 			if (res.ok && res.data?.key) {
 				createdKey = res.data.key as string;
 				copied = false;
 				newKeyName = '';
 				showCreateModal = false;
+				sensitiveTotpCode = '';
 				toast(msg('apiKeysCreateSuccess'), undefined, 'success');
 				await loadApiKeys();
 			} else {
@@ -1009,12 +1087,17 @@
 		try {
 			const res = await encryption.fetchSecure('/api/agent/keys/revoke', {
 				method: 'post',
-				body: { documentKey: key.documentKey }
+				body: {
+					documentKey: key.documentKey,
+					// Batch 16: guard 2FA (totp-guard keys/revoke)
+					totpCode: sensitiveTotpCode.trim() || undefined
+				}
 			});
 			if (res.ok) {
 				apiKeys = apiKeys.map((k) =>
 					k.documentKey === key.documentKey ? { ...k, revokedAt: new Date().toISOString() } : k
 				);
+				sensitiveTotpCode = '';
 				toast(msg('apiKeysRevokeSuccess'), undefined, 'success');
 			} else {
 				toast(msg('apiKeysRevokeFailed'), res.message?.[lang] ?? res.message?.en, 'error');
@@ -1307,8 +1390,24 @@
 				<span class="pwd-label">{msg('passwordConfirm')}</span>
 				<Input type="password" bind:value={pwdConfirm} autocomplete="new-password" required />
 			</label>
+			<!-- Batch 16: mã 2FA bắt buộc khi tài khoản đã bật TOTP (server guard) —
+			     ẩn khi chưa bật để form giữ gọn như trước. -->
+			{#if totpSetup?.enabled}
+				<label class="pwd-field">
+					<span class="pwd-label">{msg('sensitiveTotpLabel')}</span>
+					<Input
+						type="text"
+						inputmode="numeric"
+						maxLength={6}
+						autocomplete="one-time-code"
+						bind:value={sensitiveTotpCode}
+						placeholder={msg('totpCodePlaceholder')}
+						data-test="profile-pwd-totp"
+					/>
+				</label>
+			{/if}
 			<div class="pwd-actions">
-				<Button type="submit" color="primary" variant="solid" disabled={pwdSaving} loading={pwdSaving}>
+				<Button type="submit" color="primary" variant="solid" disabled={pwdSaving || (totpSetup?.enabled === true && !/^\d{6}$/.test(sensitiveTotpCode))} loading={pwdSaving}>
 					{pwdSaving ? msg('passwordSaving') : msg('passwordSave')}
 				</Button>
 			</div>
@@ -1326,7 +1425,22 @@
 				</div>
 			</div>
 			{#if totpSetup?.enabled}
-				<span class="totp-badge" data-test="profile-totp-badge">{msg('totpEnabledBadge')}</span>
+				<div class="totp-header-actions">
+					<span class="totp-badge" data-test="profile-totp-badge">{msg('totpEnabledBadge')}</span>
+					<!-- Batch 16: nút "Đổi key xác thực" — chỉ hiện khi 2FA đang bật -->
+					<Button
+						color="primary"
+						variant="ghost"
+						disabled={totpBusy}
+						onclick={() => {
+							totpChangeOpen = !totpChangeOpen;
+							totpError = '';
+						}}
+						data-test="profile-totp-change-toggle"
+					>
+						{msg('totpChangeBtn')}
+					</Button>
+				</div>
 			{:else if !totpSetup}
 				<Button
 					color="primary"
@@ -1342,6 +1456,9 @@
 		</header>
 
 		{#if totpSetup && !totpSetup.enabled}
+			<!-- Chưa bật (mới setup hoặc vừa đổi key): QR + secret + nhập mã mới
+			     → enable. Server đã set totpEnabled=false khi đổi key → khối này
+			     chính là "banner nhắc quét QR để bật lại". -->
 			<div class="totp-setup">
 				<p class="totp-hint">{msg('totpSetupHint')}</p>
 				{#if totpQr}
@@ -1373,6 +1490,36 @@
 				</div>
 			</div>
 		{:else if totpSetup?.enabled}
+			<!-- Batch 16: đổi key xác thực — nhập mã hiện tại → server cấp
+			     secret/otpauthUrl mới + totpEnabled=false → khối setup "chưa bật"
+			     (phía trên) hiện lại để quét QR + bật lại. Chỉ mở khi bấm nút. -->
+			{#if totpChangeOpen}
+			<div class="totp-setup">
+				<p class="totp-hint">{msg('totpChangeHint')}</p>
+				<div class="totp-confirm">
+					<Input
+						type="text"
+						inputmode="numeric"
+						maxLength={6}
+						bind:value={totpCode}
+						placeholder={msg('totpCodePlaceholder')}
+						data-test="profile-totp-code-change"
+					/>
+					<Button
+						color="primary"
+						variant="solid"
+						loading={totpBusy}
+						disabled={totpBusy || !/^\d{6}$/.test(totpCode)}
+						onclick={startTotpChange}
+						data-test="profile-totp-change"
+					>
+						{msg('totpChangeConfirm')}
+					</Button>
+				</div>
+			</div>
+			{/if}
+			<!-- Tắt 2FA — vẫn hiện khi enabled (đứng CÙNG khối change, không else-if
+			     nếu không bị che mất) -->
 			<div class="totp-setup">
 				<p class="totp-hint">{msg('totpDisableHint')}</p>
 				<div class="totp-confirm">
@@ -1646,11 +1793,25 @@
 				data-test="profile-apikey-name"
 			/>
 		</div>
+		<!-- Batch 16: mã 2FA khi tài khoản đã bật TOTP (server guard keys/create) -->
+		{#if totpSetup?.enabled}
+			<div class="keys-create-field">
+				<Input
+					type="text"
+					inputmode="numeric"
+					maxLength={6}
+					autocomplete="one-time-code"
+					bind:value={sensitiveTotpCode}
+					placeholder={msg('totpCodePlaceholder')}
+					data-test="profile-apikey-totp"
+				/>
+			</div>
+		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{msg('apiKeysCancel')}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				color="primary"
-				disabled={!newKeyName.trim() || apiKeysCreating}
+				disabled={!newKeyName.trim() || apiKeysCreating || (totpSetup?.enabled === true && !/^\d{6}$/.test(sensitiveTotpCode))}
 				onselect={submitCreateKey}
 			>
 				{apiKeysCreating ? msg('apiKeysCreating') : msg('apiKeysCreate')}
@@ -1686,9 +1847,26 @@
 			<AlertDialog.Title>{msg('apiKeysRevokeConfirmTitle')}</AlertDialog.Title>
 			<AlertDialog.Description>{revokeTarget?.name} — {msg('apiKeysRevokeConfirmBody')}</AlertDialog.Description>
 		</AlertDialog.Header>
+		<!-- Batch 16: mã 2FA khi tài khoản đã bật TOTP (server guard keys/revoke) -->
+		{#if totpSetup?.enabled}
+			<div class="keys-create-field">
+				<Input
+					type="text"
+					inputmode="numeric"
+					maxLength={6}
+					autocomplete="one-time-code"
+					bind:value={sensitiveTotpCode}
+					placeholder={msg('totpCodePlaceholder')}
+					data-test="profile-apikey-revoke-totp"
+				/>
+			</div>
+		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{msg('apiKeysCancel')}</AlertDialog.Cancel>
-			<AlertDialog.Action color="danger" onclick={handleRevoke}>{msg('apiKeysRevoke')}</AlertDialog.Action>
+			<AlertDialog.Action
+				color="danger"
+				disabled={totpSetup?.enabled === true && !/^\d{6}$/.test(sensitiveTotpCode)}
+				onclick={handleRevoke}>{msg('apiKeysRevoke')}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog>
@@ -1891,6 +2069,15 @@
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	/* Batch 16: cụm badge "Đang bật" + nút "Đổi key xác thực" — cụm phải header,
+	   không bị space-between dải đều 3 con lệch. */
+	.totp-header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 		flex-wrap: wrap;
 	}
 

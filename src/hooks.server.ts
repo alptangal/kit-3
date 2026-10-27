@@ -64,6 +64,10 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 	try {
 		const payload = await verifyAccessToken(token);
 
+		// Token có field 'purpose' KHÔNG phải session (vd challenge 2FA purpose='totp'
+		// từ /api/login bước 1) — từ chối làm session để không escalate đặc quyền.
+		if (payload.purpose) return undefined;
+
 		// Extract user info from JWT payload
 		// JWT payload (signAccessToken): sub = user docKey, username = firstname,
 		// roleId = role docKey, statusId, iat, exp.
@@ -130,7 +134,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// trang xem/giỏ/thanh toán vẫn đọc locals.user nếu có (cart API tự 401).
 	// '/api/webhooks/qr-payment': webhook thanh toán QR từ tool đối soát ngoài —
 	// route tự xác thực bằng QR_WEBHOOK_TOKEN (Bearer), không dùng session.
-	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/store', '/api/storefront', '/api/auth/webauthn/auth', '/api/auth/refresh', '/api/auth/logout', '/api/agent', '/api/webhooks/qr-payment'];
+	const publicPaths = ['/login', '/register', '/forgot-password', '/api/encryption', '/api/login', '/api/login/totp', '/api/register', '/api/forgot-password', '/reset-password', '/api/reset-password', '/api/dev-emails', '/verify-email', '/api/verify-email', '/api/resend-verification', '/ui', '/api/health', '/api/test', '/store', '/api/storefront', '/api/auth/webauthn/auth', '/api/auth/refresh', '/api/auth/logout', '/api/agent', '/api/webhooks/qr-payment'];
 	const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
 
 	// API routes that don't require authentication

@@ -28,5 +28,13 @@ export const iconify = {
 	'chevron-left-rounded': 'material-symbols-light:chevron-left-rounded',
 	'usb-key-rounded': 'material-symbols-light:usb-rounded',
 	'user-round-pen': 'lucide:user-round-pen',
-	'shield-check-rounded': 'material-symbols-light:shield-check-rounded'
+	'shield-check-rounded': 'material-symbols-light:shield-check-rounded',
+	// Batch 16: icon form-field suppliers + 2FA login step
+	'mail-outline-rounded': 'material-symbols-light:mail-outline-rounded',
+	'call-outline-rounded': 'material-symbols-light:call-outline-rounded',
+	'globe-outline-rounded': 'material-symbols-light:globe-outline-rounded',
+	'map-pin-outline-rounded': 'material-symbols-light:map-pin-outline-rounded',
+	'storefront-outline-rounded': 'material-symbols-light:storefront-outline-rounded',
+	'at-sign': 'lucide:at-sign',
+	'kayaking': 'material-symbols-light:kayaking'
 };

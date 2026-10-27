@@ -57,6 +57,16 @@ $effect(() => {
 	/** Thông báo lỗi hiển thị trực tiếp trên form */
 	let formError = $state<string | undefined>(undefined);
 
+	// ── Batch 16: bước 2 TOTP (2FA) ──
+	/** Đang ở bước 2 (nhập mã authenticator) sau khi /api/login trả requireTotp */
+	let totpStep = $state(false);
+	/** Mã 6 số user nhập */
+	let totpCode = $state('');
+	/** Loading riêng cho bước 2 (không đụng `loading` của bước 1) */
+	let totpLoading = $state(false);
+	/** Lỗi inline màn TOTP — tách khỏi formError để không bị effect clear của bước 1 xoá */
+	let totpError = $state<string | undefined>(undefined);
+
 	/** Thông báo thành công khi vừa đăng ký xong (từ ?registered=1) */
 	let registeredSuccess = $state(false);
 
@@ -264,6 +274,16 @@ $effect(() => {
 			);
 
 			if (response.ok) {
+				// Batch 16: tài khoản bật 2FA → server trả requireTotp (chưa cấp session,
+				// có cookie totp_challenge) → chuyển bước 2, KHÔNG redirect.
+				if (response.data?.requireTotp === true) {
+					totpStep = true;
+					totpCode = '';
+					totpError = undefined;
+					// KHÔNG set previousSubmited — giữ nút bước 1 enable để user quay lại.
+					return;
+				}
+
 				previousSubmited = {
 					username: requestBody.username,
 					password: requestBody.password,
@@ -312,6 +332,67 @@ $effect(() => {
 		try {
 			if (typeof localStorage !== 'undefined') localStorage.removeItem(REMEMBER_STORAGE_KEY);
 		} catch {}
+	}
+
+	// ===== Batch 16: bước 2 TOTP — xác nhận mã authenticator =====
+	// Gửi y hệt body login (mã hoá hybrid fetchSecure) + field `code`; challenge
+	// đã ở cookie totp_challenge từ bước 1. Sai → 401 message inline; đúng →
+	// session + data.user — xử lý thành công như login cũ (toast + redirect).
+	async function handleTotpVerify() {
+		const code = totpCode.trim();
+		if (!/^\d{6}$/.test(code) || !encryptionKeys || totpLoading) return;
+
+		totpLoading = true;
+		totpError = undefined;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/login/totp',
+				{
+					method: 'post',
+					body: {
+						code,
+						publicKeyB64: await encryption.exportKeyToBase64(encryptionKeys.public, 'spki'),
+						dpopJwk: await getDpopPublicJwk()
+					}
+				},
+				{ privateKey: encryptionKeys.private, publicKey: encryptionKeys.public }
+			);
+
+			if (response.ok) {
+				try {
+					if (typeof localStorage !== 'undefined') {
+						if (configs.remember.checked && configs.username.value?.trim()) {
+							localStorage.setItem(REMEMBER_STORAGE_KEY, configs.username.value.trim());
+						} else {
+							localStorage.removeItem(REMEMBER_STORAGE_KEY);
+						}
+					}
+				} catch {}
+
+				client.browser?.toasts?.create({
+					title: pageContents.responseOk[lang] ?? (lang === 'vi' ? 'Đăng nhập thành công' : 'Login successful'),
+					color: 'success'
+				});
+
+				const redirectTo = page.url.searchParams.get('redirect') ?? '/';
+				await goto(redirectTo);
+			} else {
+				totpError =
+					(response.message ? (response.message[lang] ?? response.message.en) : undefined) ??
+					pageContents.responseFail[lang];
+			}
+		} catch (e) {
+			totpError = e instanceof Error ? e.message : String(e);
+		} finally {
+			totpLoading = false;
+		}
+	}
+
+	// ===== Batch 16: quay lại bước 1 — clear mã + lỗi =====
+	function handleTotpBack() {
+		totpStep = false;
+		totpCode = '';
+		totpError = undefined;
 	}
 
 	// ===== Đăng nhập bằng Passkey (WebAuthn) =====
@@ -453,12 +534,22 @@ $effect(() => {
 </svelte:head>
 
 <AuthLayout
-	title={pageContents.title[lang] ?? 'Welcome back'}
-	subtitle={pageContents.subtitle[lang] ?? 'Sign in to your account'}
-	headline={lang === 'vi' ? 'Chào mừng trở lại!' : 'Welcome back!'}
-	description={lang === 'vi'
-		? 'Đăng nhập để tiếp tục trải nghiệm dịch vụ của chúng tôi.'
-		: 'Sign in to continue your seamless experience.'}
+	title={totpStep
+		? (pageContents.totpTitle[lang] ?? 'Two-factor authentication')
+		: (pageContents.title[lang] ?? 'Welcome back')}
+	subtitle={totpStep
+		? (pageContents.totpHint[lang] ?? 'Enter the code from your authenticator app')
+		: (pageContents.subtitle[lang] ?? 'Sign in to your account')}
+	headline={totpStep
+		? (lang === 'vi' ? 'Xác thực hai yếu tố' : 'Two-factor authentication')
+		: (lang === 'vi' ? 'Chào mừng trở lại!' : 'Welcome back!')}
+	description={totpStep
+		? (lang === 'vi'
+			? 'Nhập mã 6 số từ ứng dụng authenticator để tiếp tục.'
+			: 'Enter the 6-digit code from your authenticator app to continue.')
+		: (lang === 'vi'
+			? 'Đăng nhập để tiếp tục trải nghiệm dịch vụ của chúng tôi.'
+			: 'Sign in to continue your seamless experience.')}
 	features={[
 		lang === 'vi' ? 'Bảo mật đầu cuối' : 'End-to-end encryption',
 		lang === 'vi' ? 'Đăng nhập nhanh chóng' : 'Lightning fast sign-in',
@@ -467,8 +558,63 @@ $effect(() => {
 	successMessage={registeredSuccess
 		? (pageContents.registeredSuccess[lang] ?? 'Registration successful! Please sign in.')
 		: undefined}
-	{formError}
+	formError={totpStep ? totpError : formError}
 >
+	{#if totpStep}
+		<!-- ── Batch 16: BƯỚC 2 — nhập mã authenticator 6 số ── -->
+		<Form onSubmit={handleTotpVerify}>
+			<TextField name="totp-code" required>
+				<Label>{pageContents.totpCode[lang] ?? 'Verification code'}</Label>
+				<div class="auth-input-wrapper">
+					<Input
+						type="text"
+						bind:value={totpCode}
+						placeholder={{ vi: 'Nhập mã 6 số', en: 'Enter 6-digit code' }}
+						inputmode="numeric"
+						maxLength={6}
+						autocomplete="one-time-code"
+						class="auth-input totp-input"
+						data-test="login-totp-code"
+					/>
+					<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<path
+							fill-rule="evenodd"
+							d="M10 1a4 4 0 00-4 4v1H5a2 2 0 00-2 2v8a2 2 0 002 2h10a2 2 0 002-2V8a2 2 0 00-2-2h-1V5a4 4 0 00-4-4zm-2.5 5V5a2.5 2.5 0 115 0v1h-5z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+				</div>
+			</TextField>
+
+			<!-- Nút hành động bước 2: xác nhận + quay lại bước 1 -->
+			<div class="auth-actions">
+				<Button
+					class="auth-btn-submit"
+					color="success"
+					type="submit"
+					loading={totpLoading}
+					disabled={totpLoading || !/^\d{6}$/.test(totpCode.trim())}
+					data-test="login-totp-verify"
+				>
+					<span>{totpLoading
+						? (pageContents.totpVerifying[lang] ?? 'Verifying...')
+						: (pageContents.totpVerify[lang] ?? 'Verify')}</span>
+				</Button>
+
+				<Button
+					class="auth-btn-reset"
+					color="default"
+					type="button"
+					variant="ghost"
+					size="md"
+					onclick={handleTotpBack}
+					data-test="login-totp-back"
+				>
+					{pageContents.totpBack[lang] ?? 'Back'}
+				</Button>
+			</div>
+		</Form>
+	{:else}
 	<Form onSubmit={handleLogin} onReset={handleReset}>
 		<TextField name="username" required>
 			<Label>{pageContents.username[lang] ?? 'Username / Email'}</Label>
@@ -602,6 +748,7 @@ $effect(() => {
 			</Button>
 		</div>
 	</Form>
+	{/if}
 
 	{#snippet footer()}
 		<!-- Divider -->
@@ -655,12 +802,30 @@ $effect(() => {
 		}
 	}
 
+	/* Batch 16: bước 2 TOTP — mã 6 số hiển thị dạng khoảng cách, font to nhẹ
+	   (dễ đọc), letter-spacing tách ký tự như OTP thông dụng. */
+	:global(.totp-input) :global(.input-highlight-wrapper) {
+		letter-spacing: 0.5em;
+		font-size: 1.05rem;
+		font-weight: 600;
+	}
+	/* Mobile: placeholder dài + letter-spacing tràn đè counter 0/6 (ui-checker bắt)
+	   → mobile giảm letter-spacing + rút gọn placeholder bằng font-size nhỏ hơn. */
+	@media (max-width: 480px) {
+		:global(.totp-input) :global(.input-highlight-wrapper) {
+			letter-spacing: 0.3em;
+			font-size: 1rem;
+		}
+		:global(.totp-input) :global(.input-max-length) {
+			display: none;
+		}
+	}
+
 	.login-options {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
-
 		:global(.checkbox-root) {
 			white-space: nowrap;
 		}

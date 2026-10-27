@@ -110,5 +110,31 @@ export const pageContents: { [k: string]: TranslateContent } = {
 	passkeyUnavailableHint: {
 		vi: 'Thiết bị chưa có authenticator — bật Windows Hello / Touch ID rồi tải lại trang.',
 		en: 'No authenticator on this device — enable Windows Hello / Touch ID and reload.'
+	},
+
+	// ── Batch 16: bước 2 xác thực hai yếu tố (TOTP) ──
+	totpTitle: {
+		vi: 'Xác thực hai yếu tố',
+		en: 'Two-factor authentication'
+	},
+	totpHint: {
+		vi: 'Nhập mã từ ứng dụng authenticator',
+		en: 'Enter the code from your authenticator app'
+	},
+	totpCode: {
+		vi: 'Mã xác thực',
+		en: 'Verification code'
+	},
+	totpBack: {
+		vi: 'Quay lại',
+		en: 'Back'
+	},
+	totpVerify: {
+		vi: 'Xác nhận',
+		en: 'Verify'
+	},
+	totpVerifying: {
+		vi: 'Đang xác nhận...',
+		en: 'Verifying...'
 	}
 };

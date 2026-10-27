@@ -5,12 +5,18 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import type { LoginRequestBody } from '../../(unauthorized)/login/_interface';
 import type { ServerResponse } from '$interfaces/basic';
 import { Users } from '$lib/server/db/users';
+import { cbData } from '$modules/couchbase/clients';
+import type { User } from '$modules/schema';
 import { dev } from '$app/environment';
 import { resolveLang, localizePayload } from '$lib/server/i18n';
 import { signAccessToken } from '$lib/server/jwt';
 import { createRefreshToken } from '$lib/server/db/tokens';
 import { calculateJwkThumbprint } from '$lib/dpop/thumbprint';
 import { getClientIp } from '$lib/server/rate-limit';
+
+// Collection users — dùng cho update lastLoginAt sau khi login hoàn tất
+// (bật 2FA thì ghi ở bước 2 /api/login/totp thay vì tại đây).
+const cbUsers = cbData('users');
 
 export const POST: RequestHandler = async ({ request, getClientAddress, cookies }) => {
 	// Ngôn ngữ client yêu cầu — thu gọn mọi message về đúng 1 ngôn ngữ này
@@ -94,13 +100,19 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 		}
 
 		// ── 7. Xác thực đăng nhập qua domain class Users ──
+		// touchLastLogin=false khi user bật 2FA (nhánh 8a sẽ trả challenge thay vì
+		// session) — nhưng cần biết trước có 2FA hay không trước khi gọi login.
+		// Giải pháp: luôn pass touchLastLogin=false, nhánh không bật 2FA ghi lại
+		// lastLoginAt ngay tại đây (giữ nguyên hành vi cũ), nhánh bật 2FA ghi
+		// sau khi bước 2 pass.
 		const loginResult = await Users.login(
 			{
 				usernameBlindIndex,
 				emailBlindIndex,
 				password
 			},
-			clientIp
+			clientIp,
+			{ touchLastLogin: false }
 		);
 
 		if (!loginResult.success) {
@@ -117,6 +129,41 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 		const userInstance = loginResult.user;
 		// getDocumentKey trả string | undefined — login thành công thì key luôn tồn tại
 		const userDocKey = userInstance.getDocumentKey() as string;
+
+		// ── 8a. Bước 1 của login 2 lớp: mật khẩu đúng + user bật 2FA → KHÔNG cấp session.
+		// Cấp challenge JWT (purpose 'totp', sống 5 phút) qua cookie httpOnly riêng —
+		// token này KHÔNG phải session: hooks.server.ts getUserFromToken() từ chối mọi
+		// payload có field 'purpose', nên không dùng được để gọi API khác.
+		// lastLoginAt/lastLoginIp chưa ghi — chỉ ghi sau khi bước 2 (verify TOTP) pass.
+		if (userInstance.user.totpEnabled && userInstance.user.totpSecretEncrypted) {
+			const iat = Math.floor(Date.now() / 1000);
+			const challengeToken = await signAccessToken({
+				sub: userDocKey,
+				purpose: 'totp',
+				iat,
+				exp: iat + 300
+			});
+			cookies.set('totp_challenge', challengeToken, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'lax',
+				secure: !dev,
+				maxAge: 300
+			});
+			return respond({ ok: true, data: { requireTotp: true } }, 200);
+		}
+
+		// Không bật 2FA — đây là "đăng nhập hoàn tất": ghi lastLoginAt/lastLoginIp
+		// (fire-and-forget như logic cũ trong Users.login trước khi tách cơ chế).
+		cbUsers.document
+			.update({
+				documentKey: userDocKey,
+				content: {
+					lastLoginAt: new Date().toISOString(),
+					lastLoginIp: clientIp ?? null
+				} as Partial<User> as User
+			})
+			.catch((e) => console.error('[POST /api/login] update lastLoginAt failed', e));
 
 		// Ký JWT access token (ES256) để hooks.server.ts verifyAccessToken() khớp
 		const sessionPayload = {

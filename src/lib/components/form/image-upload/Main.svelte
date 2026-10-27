@@ -86,6 +86,11 @@
 		key: number;
 		/** Batch 15 (m12278-4): % upload 0-100 (per-row indicator bar) */
 		progress?: number;
+		/** Batch 16 (m13579-1): lỗi upload per-row — row viền đỏ + text lỗi trong sub */
+		error?: string;
+		/** Batch 16 (m13579-1): timestamp upload xong (ms) — giữ bar trong DOM
+		    đủ ~1.3s để animation fade ẩn kịp chạy (progress/file reset ngay). */
+		progressDone?: number;
 		/** Batch 15 (m12278-5): bản thumb đã resize (blob/File) — upload cùng original */
 		thumbFile?: File | Blob;
 		/** URL original (full) sau khi upload — thumbUrl = URL chính trong images */
@@ -130,7 +135,9 @@
 		notConfigured: {
 			vi: 'Chưa cấu hình token dịch vụ lưu ảnh (IMAGE_HOST_TOKEN trong .env)',
 			en: 'Image hosting token not configured (IMAGE_HOST_TOKEN in .env)'
-		}
+		},
+		/** Batch 16 (m13579-2): lỗi tạo thumb (canvas fail) — vẫn tiếp tục upload gốc */
+		errThumb: { vi: 'Không tạo được bản thu nhỏ — sẽ tải bản gốc lên', en: 'Thumbnail failed — uploading the original image' }
 	} as const;
 
 	function tr(key: keyof typeof t): string {
@@ -202,6 +209,9 @@
 			const base = file.name.replace(/\.[^.]+$/, '');
 			return new File([blob], `${base}_thumb.jpg`, { type: 'image/jpeg' });
 		} catch {
+			// Batch 16 (m13579-2): canvas/bitmap fail không còn im lặng — toast
+			// cảnh báo, luồng vẫn chạy tiếp (upload nguyên bản gốc).
+			toastErr(tr('errThumb'));
 			return undefined;
 		}
 	}
@@ -315,6 +325,9 @@
 		if (target === undefined) {
 			const dupEntry = deferEntries.find((en) => en.file && en.file.name === file.name && en.file.size === file.size);
 			if (dupEntry) {
+				// Batch 16 (m13579-2): trùng → toast CÓ SẴN + per-row error để row
+				// biết nguyên nhân (không chỉ flash viền)
+				dupEntry.error = tr('errDuplicate');
 				client.browser?.toasts?.create({ title: tr('errDuplicate'), color: 'warning' });
 				duplicateFlashKey = dupEntry.key;
 				clearTimeout(duplicateFlashTimer);
@@ -324,11 +337,12 @@
 		}
 		const preview = URL.createObjectURL(file);
 		if (target !== undefined) {
-			// Đổi entry có sẵn: revoke blob cũ nếu có, giữ existing + key
+			// Đổi entry có sẵn: revoke blob cũ nếu có, giữ existing + key;
+			// reset lỗi + progress cũ (file mới = lần thử mới)
 			const old = deferEntries[target];
 			if (old) {
 				if (old.preview.startsWith('blob:')) URL.revokeObjectURL(old.preview);
-				deferEntries[target] = { ...old, preview, file };
+				deferEntries[target] = { ...old, preview, file, error: undefined, progress: undefined };
 			} else {
 				deferEntries = [...deferEntries, { preview, file, key: deferKey++ }];
 			}
@@ -359,6 +373,8 @@
 		try {
 			for (const entry of pending) {
 				const file = entry.file!;
+				// Batch 16 (m13579-1): reset lỗi cũ — lần upload lại phải sạch state
+				entry.error = undefined;
 				// ── Upload qua XHR (progress events — fetch không có) ──
 				const uploadOne = (blob: Blob, name: string) =>
 					new Promise<{ url?: string; message?: string }>((resolve, reject) => {
@@ -388,14 +404,16 @@
 				if (entry.thumbFile) {
 					const r = await uploadOne(entry.thumbFile, entry.thumbFile instanceof File ? entry.thumbFile.name : file.name);
 					if (!r.url) {
-						toastErr(r.message || 'HTTP error');
+						entry.error = r.message || 'HTTP error';
+						toastErr(entry.error);
 						return undefined;
 					}
 					thumbUrl = r.url;
 				}
 				const res = await uploadOne(file, file.name);
 				if (!res.url) {
-					toastErr(res.message || 'HTTP error');
+					entry.error = res.message || 'HTTP error';
+					toastErr(entry.error);
 					return undefined;
 				}
 				entry.progress = 100;
@@ -408,6 +426,16 @@
 				entry.file = undefined;
 				entry.existing = thumbUrl ?? res.url;
 				entry.progress = undefined;
+				// Batch 16 (m13579-1): GIỮ bar trong DOM đủ ~1.3s — progress/file
+				// reset ngay nhưng progressDone giữ markup (class --done fade ẩn),
+				// sau đó teardown tự gỡ để row gọn lại. Mutate TRỰC TIẾP entry
+				// tìm theo key (tạo object mới qua map sẽ detach entry đang lặp
+				// ở vòng sau khi upload multi-file).
+				entry.progressDone = Date.now();
+				setTimeout(() => {
+					const done = deferEntries.find((en2) => en2.key === entry.key);
+					if (done) done.progressDone = undefined;
+				}, 1300);
 				if (multiple && images !== undefined) {
 					const next = [...images];
 					if (replacing && next.includes(replacing)) {
@@ -428,7 +456,11 @@
 			if (multiple) return images ?? [];
 			return value;
 		} catch (err) {
-			toastErr(err instanceof Error ? err.message : String(err));
+			// Batch 16 (m13579-2): network error/timeout — toast + ĐÁNH DẤU entry
+			// đang dở (file còn) để row hiện viền đỏ + text lỗi, không câm lặng.
+			const msg = err instanceof Error ? err.message : String(err);
+			for (const en of deferEntries) if (en.file) en.error = msg;
+			toastErr(msg);
 			return undefined;
 		} finally {
 			uploading = false;
@@ -644,7 +676,7 @@
 			{:else}
 				<div class="image-upload__rows">
 					{#each deferEntries as entry, i (entry.key)}
-						<div class="image-upload__row" class:image-upload__row--pending={!!entry.file} class:image-upload__row--flash={entry.key === duplicateFlashKey}>
+						<div class="image-upload__row" class:image-upload__row--pending={!!entry.file} class:image-upload__row--error={!!entry.error} class:image-upload__row--flash={entry.key === duplicateFlashKey}>
 							<span class="image-upload__row-stt">{i + 1}</span>
 							<!-- thumb: click → modal chi tiết; overlay actions giữ hover -->
 							<button type="button" class="image-upload__row-thumb" onclick={(e) => { e.stopPropagation(); detailEntry = entry; detailDisplay = true; }}>
@@ -654,14 +686,33 @@
 								<span class="image-upload__row-name" title={entryName(entry)}>{entryName(entry)}</span>
 								<span class="image-upload__row-sub">
 									{entry.file ? formatSize(entry.file.size) : ''}{entry.file && fileTypeName(entry) !== '—' ? ' · ' : ''}{fileTypeName(entry)}
-									{#if entry.file}<em class="image-upload__row-pending"> · {tr('notUploaded')}</em>{/if}
+									{#if entry.error}
+										<em class="image-upload__row-error">{entry.error}</em>
+									{:else if entry.file}
+										<em class="image-upload__row-pending"> · {tr('notUploaded')}</em>
+									{/if}
 								</span>
-								<!-- Batch 15 (m12278-4): indicator bar upload per-row — hiện khi
-								     entry đang upload (progress có giá trị) -->
-								{#if entry.progress !== undefined && entry.progress < 100}
-									<span class="image-upload__row-progress" role="progressbar" aria-valuenow={entry.progress} aria-valuemin={0} aria-valuemax={100}>
-										<span class="image-upload__row-progress-fill" style={`width: ${entry.progress}%`}></span>
+								<!-- Batch 16 (m13579-1): bar per-row hiện NGAY khi chọn file defer
+								     (0% track rỗng — user biết sẽ upload); fill theo progress khi
+								     upload; xong → class --done fade ẩn rồi gỡ qua progressDone.
+								     progressDone giữ bar trong DOM 1.3s SAU khi file reset. -->
+								{#if entry.file || entry.progressDone !== undefined}
+									{@const pct = entry.progressDone !== undefined ? 100 : entry.progress ?? 0}
+									<span
+										class="image-upload__row-progress"
+										class:image-upload__row-progress--done={pct >= 100}
+										role="progressbar"
+										aria-valuenow={pct}
+										aria-valuemin={0}
+										aria-valuemax={100}
+										aria-label={`${entryName(entry)} ${pct}%`}
+									>
+										<span class="image-upload__row-progress-fill" style={`width: ${pct}%`}></span>
 									</span>
+									<!-- % số: chỉ khi đang upload (chưa chọn = bar 0% đủ nghĩa) -->
+									{#if entry.progress !== undefined && entry.progress < 100}
+										<span class="image-upload__row-pct">{entry.progress}%</span>
+									{/if}
 								{/if}
 							</div>
 							<div class="image-upload__row-actions">
@@ -1153,6 +1204,13 @@
 			outline-offset: -1.5px;
 		}
 
+		/* Batch 16 (m13579-1): upload fail per-row — viền đỏ thay outline pending */
+		&--error {
+			outline: 1.5px solid var(--error);
+			outline-offset: -1.5px;
+			border-color: var(--error);
+		}
+
 		/* Batch10 (m06635-6b): chọn file trùng → animate row CŨ (user chú ý
 		   vị trí trùng) thay vì chỉ toast */
 		&--flash {
@@ -1219,6 +1277,22 @@
 		color: var(--warning, #f59e0b);
 	}
 
+	/* Batch 16 (m13579-1): text lỗi per-row trong __row-sub — đè pending text,
+	   cùng cỡ chữ, màu error */
+	.image-upload__row-error {
+		font-style: normal;
+		color: var(--error);
+	}
+
+	/* Batch 16 (m13579-1): % số cạnh progress bar khi đang upload — nhỏ gọn
+	   đồng bộ style __row-sub */
+	.image-upload__row-pct {
+		font-size: 0.72rem;
+		color: var(--foreground-500);
+		font-variant-numeric: tabular-nums;
+		margin-top: 0.25rem;
+	}
+
 	/* Batch 15 (m12278-4): indicator bar upload per-row — track mảnh dưới meta,
 	   fill primary trượt theo % progress (XHR onprogress). */
 	.image-upload__row-progress {
@@ -1236,6 +1310,36 @@
 		border-radius: inherit;
 		background: var(--primary, hsl(212 92% 45%));
 		transition: width 200ms ease;
+	}
+
+	/* Batch 16 (m13579-1): upload xong → fill full rồi cả bar fade ẩn ~1.2s
+	   (opacity giữ trạng thái cuối bằng animation-fill-mode: forwards). */
+	.image-upload__row-progress--done {
+		animation: image-row-progress-fade 1.2s ease-out forwards;
+	}
+
+	@keyframes image-row-progress-fade {
+		from {
+			opacity: 1;
+		}
+		/* giữ full 1 nửa thời gian để user thấy 100%, nửa sau mới mờ dần */
+		40% {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		/* reduced-motion: không animate — ẩn ngay khi xong (giữ layout) */
+		.image-upload__row-progress--done {
+			animation: none;
+			opacity: 0;
+		}
+		.image-upload__row--flash {
+			animation: none;
+		}
 	}
 
 	.image-upload__row-actions {

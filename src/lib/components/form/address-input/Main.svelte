@@ -22,7 +22,13 @@
 		newBreakdown = $bindable(undefined as NewAddressBreakdown | undefined),
 		label = '',
 		placeholder,
-		disabled = false
+		disabled = false,
+		// Batch 16 (mục 8): breadcrumb 3 cấp trong header step modal (mobile) —
+		// breadcrumbHome có giá trị mới render (trang khác không truyền → không đổi gì)
+		breadcrumbHome = null as string | null,
+		breadcrumbName = null as string | null,
+		breadcrumbCurrent = null as string | null,
+		onBreadcrumbHomeTap
 	}: AddressInputProps = $props();
 
 	// Hệ ĐVHC đang chọn: 'old' (63 tỉnh) | 'new' (34 tỉnh) — chỉ có ý nghĩa khi newBreakdown được bind
@@ -32,6 +38,18 @@
 	// cuộn bị option trôi ra ngoài viewport (touch bị nuốt) + auto-focus search bật keyboard
 	// iOS co viewport → lag cảm giác. Batch 12b (m10214).
 	const selectFullscreen = $derived(client.browser?.isMobile === true);
+
+	// Batch 16 (mục 8-9): i18n cho step modal — language từ store client (mặc định 'en').
+	// Tên `i18n` thay vì `t` để tránh trùng biến vòng lặp `t` (for targets); pattern
+	// { key: { vi, en } } như image-upload.
+	const lang = $derived(client.browser?.language === 'vi' ? 'vi' : 'en');
+	const i18n = {
+		selectProvince: { vi: 'Chọn tỉnh/thành phố', en: 'Select province' },
+		selectDistrict: { vi: 'Chọn quận/huyện', en: 'Select district' },
+		selectWard: { vi: 'Chọn phường/xã', en: 'Select ward' },
+		address: { vi: 'Địa chỉ', en: 'Address' }
+	} as const;
+	const tr = (key: keyof typeof i18n): string => i18n[key][lang] ?? i18n[key].en;
 
 	interface GeoProvince { n: string; c: number; d: { n: string; c: number }[] }
 	/** wards: key 'Tên tỉnh|code' → { 'Tên huyện': ['Phường A', 'Xã B'...] } */
@@ -413,15 +431,31 @@
 		return q ? src.filter((o) => norm(o.label).includes(q)) : src;
 	});
 
-	// Tiêu đề từng cấp + breadcrumb quay lại (cấp đã chọn trước đó)
+	// Tiêu đề từng cấp + breadcrumb quay lại (cấp đã chọn trước đó).
+	// Batch 16 (mục 9): placeholder 'Chọn X' tích hợp thẳng vào crumbs (không tạo
+	// mảng song song) — cấp chưa có giá trị → label = 'Chọn tỉnh/quận/phường'
+	// (ACTIVE: hiển thị như cấp hiện tại, tap vô hiệu qua guard stepBack), cấp đã
+	// chọn → label = tên (tap → stepBack về cấp đó).
 	const stepCrumbs = $derived.by(() => {
 		const isNew = geoMode === 'new' && dualMode;
-		const crumbs: { level: number; label: string }[] = [{ level: 0, label: isNew ? 'Tỉnh/Thành phố' : 'Tỉnh/Thành phố' }];
-		if (isNew) {
-			if (newBreakdown?.province) crumbs.push({ level: 1, label: newBreakdown.province });
-		} else {
-			if (breakdown.province) crumbs.push({ level: 1, label: breakdown.province });
-			if (breakdown.province && breakdown.district) crumbs.push({ level: 2, label: breakdown.district });
+		const crumbs: { level: number; label: string; hasValue: boolean }[] = [];
+		const prov = isNew ? newBreakdown?.province : breakdown.province;
+		// Cấp 0 (tỉnh): chưa chọn → placeholder 'Chọn tỉnh/thành phố'
+		crumbs.push({ level: 0, label: prov || tr('selectProvince'), hasValue: !!prov });
+		if (prov) {
+			if (isNew) {
+				// Hệ mới 2 cấp: tỉnh → xã
+				if (newBreakdown?.ward) crumbs.push({ level: 1, label: newBreakdown.ward, hasValue: true });
+				else if (stepLevel >= 1) crumbs.push({ level: 1, label: tr('selectWard'), hasValue: false });
+			} else {
+				// Hệ cũ 3 cấp: tỉnh → huyện → xã
+				if (breakdown.district) crumbs.push({ level: 1, label: breakdown.district, hasValue: true });
+				else if (stepLevel >= 1) crumbs.push({ level: 1, label: tr('selectDistrict'), hasValue: false });
+				if (breakdown.district) {
+					if (breakdown.ward) crumbs.push({ level: 2, label: breakdown.ward, hasValue: true });
+					else if (stepLevel >= 2) crumbs.push({ level: 2, label: tr('selectWard'), hasValue: false });
+				}
+			}
 		}
 		return crumbs;
 	});
@@ -722,7 +756,23 @@
 					</button>
 				{/if}
 				<nav class="address-step__crumbs" aria-label="Cấp địa giới">
+					{#if breadcrumbHome}
+						<!-- Batch 16 (mục 8): breadcrumb trang từ props cha — phần 1 (home) +
+						     phần 2 (name) DEACTIVE, tap → onBreadcrumbHomeTap (suppliers:
+						     đóng step modal quay lại form). Phần 3 = breadcrumbCurrent
+						     (mặc định i18n 'Địa chỉ') ACTIVE. stepCrumbs nối tiếp sau. -->
+						<button type="button" class="address-step__crumb" onclick={onBreadcrumbHomeTap}>{breadcrumbHome}</button>
+						<span class="address-step__crumb-sep" aria-hidden="true">›</span>
+						{#if breadcrumbName}
+							<button type="button" class="address-step__crumb" onclick={onBreadcrumbHomeTap}>{breadcrumbName}</button>
+							<span class="address-step__crumb-sep" aria-hidden="true">›</span>
+						{/if}
+						<span class="address-step__crumb address-step__crumb--current">{breadcrumbCurrent ?? tr('address')}</span>
+						<span class="address-step__crumb-sep" aria-hidden="true">›</span>
+					{/if}
 					{#each stepCrumbs as crumb, ci (crumb.level)}
+						<!-- breadcrumbHome đã in sep cuối trước each → sep chỉ khi ci > 0
+						     (double-sep khi ci=0 bị ui-checker bắt, batch 16). -->
 						{#if ci > 0}<span class="address-step__crumb-sep" aria-hidden="true">›</span>{/if}
 						{#if crumb.level === stepLevel}
 							<span class="address-step__crumb address-step__crumb--current">{crumb.label}</span>
@@ -730,14 +780,13 @@
 							<button type="button" class="address-step__crumb" onclick={() => stepBack(crumb.level)}>{crumb.label}</button>
 						{/if}
 					{/each}
-					{#if stepLevel === 1 && stepCrumbs.length === 2}
-						<span class="address-step__crumb address-step__crumb--muted">Chọn {geoMode === 'new' && dualMode ? 'phường/xã' : 'quận/huyện'}</span>
-					{:else if stepLevel === 2}
-						<span class="address-step__crumb address-step__crumb--muted">Chọn phường/xã</span>
-					{/if}
 				</nav>
 				<button type="button" class="address-step__close" aria-label="Đóng" onclick={() => (stepOpen = false)}>
-					<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+					<!-- Batch 16 (mục 8): icon ✕ bọc span riêng để trang cha querySelector
+					     (.address-step__close-icon) bấm hộ khi tap breadcrumb cha — dùng
+					     dispatchEvent MouseEvent (click() bị Playwright intercept timeout,
+					     memory suppliers-batch4). -->
+					<span class="address-step__close-icon" aria-hidden="true">✕</span>
 				</button>
 			</header>
 			<!-- Batch 15 (m12278-11): hàng tóm tắt ĐÃ CHỌN nằm trên search field —
@@ -1012,6 +1061,17 @@
 			}
 		}
 
+		/* ✕ bọc span (batch 16) — kích thước theo nút, giữ stroke-like glyph */
+		&__close-icon {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 1.25em;
+			height: 1.25em;
+			font-size: 1em;
+			line-height: 1;
+		}
+
 		&__crumbs {
 			display: flex;
 			align-items: center;
@@ -1028,6 +1088,10 @@
 		}
 
 		&__crumb {
+			/* Batch 16 (mục 8): min-width:0 + ellipsis để từng phần co được trong flex
+			   khi breadcrumb 3 cấp (home › name › current › step) chật header;
+			   phần cuối (--current) co trước (flex-shrink 2). */
+			min-width: 0;
 			font-size: 0.875rem;
 			font-weight: 500;
 			color: var(--foreground-500, var(--foreground));
@@ -1045,11 +1109,7 @@
 				color: var(--foreground, inherit);
 				font-weight: 600;
 				cursor: default;
-			}
-
-			&--muted {
-				color: var(--foreground-400, hsl(0 0% 62%));
-				font-weight: 400;
+				flex-shrink: 2;
 			}
 		}
 

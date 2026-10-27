@@ -691,11 +691,21 @@
 	let supplierNameTaken = $state(false);
 	let supplierNameChecking = $state(false);
 	let nameCheckTimer: ReturnType<typeof setTimeout> | undefined;
+	// Batch 16 (m13579-3): tên GỐC của row đang sửa — quay về đúng tên gốc thì
+	// không gọi API check (name = chính nó, không phải trùng). Create = ''.
+	let supplierOriginalName = '';
 
 	async function checkSupplierNameNow() {
 		const name = str(supplierForm.name).trim();
 		if (!name || !encryptionKeys) {
 			supplierNameTaken = false;
+			return;
+		}
+		// Batch 16: về đúng giá trị gốc (kể cả trim) → coi như không trùng,
+		// bỏ qua API (badge "đang kiểm tra" do scheduleNameCheck bật sẽ tắt ngay).
+		if (name === supplierOriginalName.trim()) {
+			supplierNameTaken = false;
+			supplierNameChecking = false;
 			return;
 		}
 		supplierNameChecking = true;
@@ -730,6 +740,12 @@
 		clearTimeout(nameCheckTimer);
 		const name = str(supplierForm.name).trim();
 		if (!name) {
+			supplierNameTaken = false;
+			supplierNameChecking = false;
+			return;
+		}
+		// Batch 16: về đúng tên gốc → bỏ qua check luôn (không bật checking)
+		if (name === supplierOriginalName.trim()) {
 			supplierNameTaken = false;
 			supplierNameChecking = false;
 			return;
@@ -869,6 +885,15 @@
 			page.url.searchParams.delete('supplier');
 			history.replaceState(history.state, '', page.url);
 		}
+	}
+
+	// Batch 16 (mục 8): tap phần Suppliers/tên trên breadcrumb step-picker địa giới
+	// (mobile) → đóng step modal về form supplier (liền mạch, KHÔNG đóng form modal).
+	// Bấm hộ nút ✕ của step modal bằng synthetic event — address-input không expose
+	// API đóng; dispatchEvent (không .click()) vì Playwright/probe intercept.
+	function attemptCloseStepModal() {
+		const closeBtn = document.querySelector<HTMLButtonElement>('.address-step__close');
+		closeBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 	}
 
 	// ── Bulk selection (yêu cầu 2: STT hover → checkbox, copy/delete hàng loạt) ──
@@ -1402,6 +1427,7 @@
 	function openSupplierModal() {
 		supplierEditMode = 'create';
 		supplierEditId = null;
+		supplierOriginalName = '';
 		supplierPassive = null;
 		// Draft create có dữ liệu → resume; rỗng → form sạch
 		const raw = readDraftPref(DRAFT_FORM_KEY);
@@ -1483,6 +1509,7 @@
 		const r = row as unknown as SupplierRow;
 		supplierEditMode = 'edit';
 		supplierEditId = r._id ?? null;
+		supplierOriginalName = r.name ?? '';
 		// Deep-link (5f): giữ ?supplier=<id> trên URL để chia sẻ link đúng NCC
 		if (r._id && page.url.searchParams.get('supplier') !== r._id) {
 			page.url.searchParams.set('supplier', r._id);
@@ -1529,6 +1556,9 @@
 		supplierError = undefined;
 		supplierModalDisplay = true;
 		void seedImagesAfterMount();
+		// Batch 16 (m13579-5): baseline Save-gate chụp CÙNG thời điểm markClean
+		// (event handler — không cần untrack) → dirty-guard và Save nhất quán.
+		supplierEditBaseline = JSON.stringify(supplierForm);
 		closeGuard.markClean();
 	}
 
@@ -1745,7 +1775,11 @@
 	// + trùng phone/email/address). Tên trống + row rỗng là trạng thái khởi tạo
 	// create — vẫn tính invalid (user phải điền tối thiểu tên).
 	// Batch 15 (m12278-7): tên TRÙNG DB (nameTaken) → chặn submit.
+	// Batch 16 (m13579-5): edit chưa sửa gì (bằng baseline chụp lúc mở modal)
+	// → Save disable (đồng bộ dirty-guard — cả hai cùng chụp 1 thời điểm).
 	const supplierFormInvalid = $derived(!!validateSupplierForm() || hasDuplicates || supplierNameTaken);
+	let supplierEditBaseline = '';
+	const supplierEditDirty = $derived(supplierEditMode !== 'edit' || JSON.stringify(supplierForm) !== supplierEditBaseline);
 
 	function buildSupplierPayload() {
 		const t = supplierForm;
@@ -2638,6 +2672,9 @@
 					     breadcrumb Suppliers › supplier_name đã đủ nghĩa quay lại
 					     datatable; chỉ create mới giữ back. Label hiển thị dạng
 					     breadcrumb "Suppliers › Tên" (dấu › phân tách). -->
+					<!-- Batch 16 (m13579-2): mobile — label là breadcrumb item
+					     DEACTIVE nhưng TAP ĐƯỢC (quay lại datatable qua
+					     attemptClose, dirty-guard vẫn chặn); name = item ACTIVE. -->
 					{#if isMobile && supplierEditMode !== 'edit'}
 						<button
 							type="button"
@@ -2649,12 +2686,23 @@
 							<Icon icon={iconify['chevron-left-rounded']} size="md" />
 						</button>
 					{/if}
-					<span class="supplier-modal-title__label">
-						{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
-					</span>
+					{#if isMobile}
+						<button
+							type="button"
+							class="supplier-modal-title__label supplier-modal-title__crumb"
+							disabled={supplierSubmitting}
+							onclick={() => closeGuard.attemptClose()}
+						>
+							{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
+						</button>
+					{:else}
+						<span class="supplier-modal-title__label">
+							{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
+						</span>
+					{/if}
 					{#if supplierEditMode === 'edit' && supplierForm.name}
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-						<span class="supplier-modal-title__name">{supplierForm.name}</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">{supplierForm.name}</span>
 					{/if}
 				</div>
 			</Modal.Container.Header>
@@ -2676,28 +2724,33 @@
 							<TextField name="supplier-name" required>
 								<Label>
 									{pageContents.supplierModal.name[lang]}
-									{#if supplierNameChecking}
-										<span class="supplier-name-check supplier-name-check--checking">{pageContents.supplierModal.nameChecking[lang]}</span>
-									{:else if supplierNameTaken}
+									{#if supplierNameTaken}
 										<span class="supplier-name-check supplier-name-check--taken">{pageContents.supplierModal.nameTaken[lang]}</span>
 									{/if}
 								</Label>
-								<Input
-									type="text"
-									bind:value={supplierForm.name}
-									disabled={supplierSubmitting}
-									class={supplierNameTaken ? 'supplier-name-taken' : undefined}
-									data-test="supplier-form-name"
-								/>
+								<div class="field-icon-wrap">
+									<Input
+										type="text"
+										bind:value={supplierForm.name}
+										disabled={supplierSubmitting}
+										loading={supplierNameChecking}
+										class={supplierNameTaken ? 'supplier-name-taken' : undefined}
+										data-test="supplier-form-name"
+									/>
+									<Icon class="field-icon" icon={iconify['storefront-outline-rounded']} />
+								</div>
 							</TextField>
 							</div>
 						<TextField name="supplier-contact">
 							<Label>{pageContents.supplierModal.contact[lang]}</Label>
-							<Input
-								type="text"
-								bind:value={supplierForm.contactPerson}
-								disabled={supplierSubmitting}
-							/>
+							<div class="field-icon-wrap">
+								<Input
+									type="text"
+									bind:value={supplierForm.contactPerson}
+									disabled={supplierSubmitting}
+								/>
+								<Icon class="field-icon" icon={iconify['person-outline-rounded']} />
+							</div>
 						</TextField>
 					</div>
 					<!-- ── Hình ảnh multiple (defer batch 3: preview local — chỉ upload
@@ -2721,7 +2774,10 @@
 						{#each supplierForm.phones as phone, phoneIndex (phoneIndex)}
 							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2}>
 								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="solid" color={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
-								<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
+								<div class="field-icon-wrap">
+									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
+									<Icon class="field-icon" icon={iconify['call-outline-rounded']} />
+								</div>
 								<button
 									type="button"
 									class="field-row-remove"
@@ -2755,7 +2811,10 @@
 						{#each supplierForm.emails as email, emailIndex (emailIndex)}
 							<div class="field-row" class:field-row--dup={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2}>
 								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="solid" color={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
-								<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
+								<div class="field-icon-wrap">
+									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
+									<Icon class="field-icon" icon={iconify['mail-outline-rounded']} />
+								</div>
 								<button
 									type="button"
 									class="field-row-remove"
@@ -2791,13 +2850,16 @@
 							<div class="address-entry" class:field-row--dup={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2}>
 								<div class="address-entry__head">
 									<Badge class="field-row-stt" label={String(addrIndex + 1)} size="xs" variant="solid" color={(addressDupCounts.get(str(entry.address).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-address-stt-${addrIndex}`} />
-									<Input
-										type="text"
-										bind:value={entry.label}
-										placeholder={pageContents.supplierModal.addressLabelPlaceholder[lang]}
-										disabled={supplierSubmitting}
-										size="sm"
-									/>
+									<div class="field-icon-wrap address-label-wrap">
+										<Input
+											type="text"
+											bind:value={entry.label}
+											placeholder={pageContents.supplierModal.addressLabelPlaceholder[lang]}
+											disabled={supplierSubmitting}
+											size="sm"
+										/>
+										<Icon class="field-icon" icon={iconify['map-pin-outline-rounded']} />
+									</div>
 									<button
 										type="button"
 										class="field-row-remove"
@@ -2810,12 +2872,19 @@
 										}}
 									>✕</button>
 								</div>
+								<!-- Batch 16 (mục 8): breadcrumb 3 cấp trên step modal mobile —
+								     tap Suppliers/tên → đóng step modal về form (liền mạch).
+								     Comment để NGOÀI tag: comment HTML trong tag = lỗi cú pháp
+								     Svelte "Expected token >". -->
 								<AddressInput
 									bind:value={entry.address}
 									bind:breakdown={supplierAddressBreakdowns[addrIndex]}
 									bind:newBreakdown={supplierNewAddressBreakdowns[addrIndex]}
 									placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
 									disabled={supplierSubmitting}
+									breadcrumbHome={pageContents.title[lang] ?? 'Suppliers'}
+									breadcrumbName={supplierForm.name || null}
+									onBreadcrumbHomeTap={attemptCloseStepModal}
 								/>
 							</div>
 						{/each}
@@ -2980,7 +3049,8 @@
 				<span class="supplier-footer-spacer"></span>
 				<!-- create/save = success. Batch10 (m06635-5c): disable khi form invalid
 					(đỡ thao tác lãng phí — submit chỉ bật khi dữ liệu hợp lệ). -->
-				<Button color="success" onClick={submitSupplier} loading={supplierSubmitting} disabled={supplierSubmitting || supplierFormInvalid}>
+				<!-- Batch 16 (m13579-5): edit mode — Save chỉ bật khi form dirty. -->
+				<Button color="success" onClick={submitSupplier} loading={supplierSubmitting} disabled={supplierSubmitting || supplierFormInvalid || !supplierEditDirty}>
 					{supplierEditMode === 'edit' ? pageContents.supplierModal.save[lang] : pageContents.supplierModal.submit[lang]}
 				</Button>
 				<Button
@@ -3137,10 +3207,14 @@
 									<span class="history-dot" class:history-dot--restore={entry.type === 'restore'}></span>
 								</div>
 								<div class="history-entry__card">
+									<!-- Batch 16 (m13579-11): timeline 2 row — row 1 badge+time,
+									     row 2 "by actor"; mỗi row ellipsis chống kéo dãn card. -->
 									<div class="history-entry__head">
-										<Badge variant="soft" color={entry.type === 'restore' ? 'success' : 'info'}>{entryLabel}</Badge>
+										<Badge variant="soft" color={entry.type === 'restore' ? 'success' : 'info'} label={entryLabel} />
 										<!-- Batch 15 (m12278-2): timeline thêm giờ:phút:giây -->
 										<time class="history-time">{entry.createdAt ? formatDateTimeSec(entry.createdAt, lang) : ''}</time>
+									</div>
+									<div class="history-entry__actor">
 										<span class="history-actor">
 											{pageContents.historyModal.by[lang]}
 											{entry.actorName || pageContents.historyModal.unknownActor[lang]}
@@ -3848,18 +3922,33 @@
 	.history-entry--restore .history-entry__card {
 		border-color: var(--success-soft, hsl(143, 85%, 96%));
 	}
+	/* Batch 16 (m13579-11): 2 row — head (badge+time) + actor ("by" + tên).
+	   Actor dài → ellipsis, không dãn card / scrollbar. */
 	.history-entry__head {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		flex-wrap: wrap;
+		min-width: 0;
+		margin-bottom: 0.25rem;
+	}
+	.history-entry__actor {
+		min-width: 0;
 		margin-bottom: 0.5rem;
 	}
 	.history-time {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: 0.8rem;
 		color: var(--color-text-muted, var(--muted, #6b7280));
 	}
 	.history-actor {
+		display: block;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: 0.8rem;
 		color: var(--color-text-muted, var(--muted, #6b7280));
 	}
@@ -3951,9 +4040,51 @@
 		gap: 0.5rem;
 		margin-top: 0.55rem;
 
-		& > :global(.input-root) {
+		& > :global(.input-root),
+		& > .field-icon-wrap {
 			flex: 1;
 			min-width: 0;
+		}
+	}
+
+	/* ── Batch 16: icon trong input (pattern .auth-input-wrapper login —
+	   icon absolute trái, input padding-left đền. Icon ĐỨNG SAU Input trong
+	   DOM → sibling `~` sync màu khi .input-root.color-error (không :has(),
+	   Safari 15 target). ── */
+	.field-icon-wrap {
+		position: relative;
+		display: flex;
+		align-items: center;
+		min-width: 0;
+		flex: 1;
+
+		:global(.input-root) {
+			flex: 1;
+			min-width: 0;
+		}
+
+		:global(.field-icon) {
+			position: absolute;
+			left: 0.875rem;
+			top: 50%;
+			transform: translateY(-50%);
+			font-size: 1.125rem;
+			color: var(--foreground-400);
+			pointer-events: none;
+			z-index: 2;
+			transition: color 0.2s;
+		}
+
+		:global(.input-root.color-error) ~ :global(.field-icon) {
+			color: var(--error) !important;
+		}
+
+		:global(.input-root.color-success) ~ :global(.field-icon) {
+			color: var(--success) !important;
+		}
+
+		:global(.input-root) :global(.input-highlight-wrapper) {
+			padding-left: 2.5rem !important;
 		}
 	}
 
@@ -4071,6 +4202,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+		/* min-width:0 — grid item mặc định min-width:auto: tên file ImageUpload dài
+		   đẩy min-content cột grid phình, ellipsis trong component không bao giờ
+		   kích hoạt (batch 16 fix ellipsis tên file). */
+		min-width: 0;
 		padding: 0.75rem;
 		border: 1px dashed var(--default-300);
 		border-radius: 0.75rem;
@@ -4560,9 +4695,12 @@
 			border-radius: 0;
 			margin: 0;
 		}
-		/* Header modal: co padding → gọn như breadcrumb bar */
+		/* Header modal: co padding → gọn như breadcrumb bar. Batch 16 (m13579-2):
+		   title breadcrumb đẩy sang TRÁI (header mặc định justify-end làm title
+		   trôi phải khi ẩn nút close trên mobile). */
 		:global(.supplier-modal-root .modal-header-root) {
 			padding-block: 0.5rem;
+			justify-content: flex-start;
 		}
 	}
 
@@ -4599,6 +4737,27 @@
 		font-weight: 600;
 	}
 
+	/* Batch 16 (m13579-2): mobile — label thành nút breadcrumb item DEACTIVE
+	   (muted) nhưng tap được (quay lại datatable qua attemptClose). Reset
+	   style button về dạng text, min-width 0 để label dài co được trong header. */
+	.supplier-modal-title__crumb {
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font: inherit;
+		font-weight: 600;
+		color: var(--foreground-500);
+		cursor: pointer;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		&:disabled {
+			cursor: default;
+		}
+	}
+
 	.supplier-modal-title__name {
 		min-width: 0;
 		overflow: hidden;
@@ -4606,6 +4765,30 @@
 		white-space: nowrap;
 		color: var(--foreground-500);
 		font-weight: 400;
+	}
+
+	/* Batch 16 (m13579-2): name = breadcrumb item ACTIVE (đậm hơn item label). */
+	.supplier-modal-title__name--active {
+		color: var(--foreground);
+		font-weight: 600;
+	}
+
+	/* Batch 16 (m13579-10): nút ✕ variant outline ĐỎ (viền + icon red-500/700
+	   hiển thị VĨNH VIỄN) trông như đang focus/hold ngay khi mở modal. Loại
+	   trừ state kẹt bằng code: tap state theo instance (mỗi lần mở = Button
+	   mới), autoFocus=false giữ focus ở trigger, :active chỉ trong lúc nhấn.
+	   → root cause là thiết kế outline đỏ. ✕ = đóng (không destructive) →
+	   trung tính hoá RIÊNG modal này, không đụng Header dùng chung. */
+	:global(.supplier-modal-root .modal-container-root .modal-close-button) {
+		--color: var(--foreground-500, hsl(240 3.83% 46.08%)) !important;
+		--border-color: transparent !important;
+
+		@media (hover: hover) and (pointer: fine) {
+			&:hover {
+				--background: var(--default-200, hsl(240 4.9% 89.8%));
+				--color: var(--foreground);
+			}
+		}
 	}
 
 	/* Batch 15 (m12278-10): dấu phân tách breadcrumb — không co giãn */
@@ -4627,11 +4810,8 @@
 		white-space: nowrap;
 		vertical-align: middle;
 
-		&--checking {
-			color: var(--foreground-500, hsl(240 3.83% 46.08%));
-			background: var(--default-100, hsl(210 40.55% 96.05%));
-		}
-
+		/* Batch 16 (m13579-3b): bỏ badge checking (spinner trên Input thay thế
+		   qua prop loading) — chỉ còn modifier --taken. */
 		&--taken {
 			color: hsl(0 0% 100%);
 			background: var(--error, hsl(356.95 95.9% 57.72%));

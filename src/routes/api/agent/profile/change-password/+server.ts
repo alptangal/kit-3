@@ -8,6 +8,7 @@ import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { readAdminRequest, respondEncrypted, getActorContext } from '$lib/server/admin/api';
 import { Users } from '$lib/server/db/users';
+import { requireTotpCode } from '$lib/server/totp-guard';
 
 export const POST: RequestHandler = async (event) => {
 	try {
@@ -48,6 +49,16 @@ export const POST: RequestHandler = async (event) => {
 				401
 			);
 		}
+
+		// Đổi mật khẩu là thao tác nhạy cảm — 2FA bật thì bắt buộc kèm mã TOTP
+		const totp = await requireTotpCode(
+			user,
+			typeof data.totpCode === 'string' ? data.totpCode : undefined,
+			publicKeyB64,
+			lang
+		);
+		if (!totp.ok) return totp.response;
+
 		const result = await user.changePassword(oldPassword, newPassword);
 		return respond({ ok: result.success, message: result.messages }, result.success ? 200 : 400);
 	} catch (e) {

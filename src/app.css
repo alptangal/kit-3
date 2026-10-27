@@ -190,3 +190,41 @@ html,
 body {
 	overscroll-behavior-y: none;
 }
+
+/* ── Batch 16: chặn Safari iOS tự zoom trang khi focus input font < 16px ────
+   Safari iOS zoom-in viewport khi tap focus vào control có font-size < 16px.
+   KHÔNG dùng maximum-scale=1 / user-scalable=no (vi phạm WCAG 1.4.4 — zoom
+   accessibility, iOS ≥10 cũng bỏ qua user-scalable) → ép SÀN 16px cho mọi
+   control nhập liệu trên thiết bị cảm ứng.
+
+   - @supports (-webkit-touch-callout: none): chỉ WebKit hỗ trợ → Safari iOS.
+   - @media (hover: none) and (pointer: coarse): loại desktop Safari (chuột =
+     fine pointer) — chỉ thiết bị cảm ứng (cùng media với block mobile sẵn
+     của Input ở components/form/input/_styles.scss:390).
+   - max(16px, 1em): sàn 16px nhưng GIỮ size design to hơn — 1em = font-size
+     kế thừa từ cha (Input size-lg/xl 18/20px giữ nguyên qua font:inherit;
+     size-xs/sm đã được bump 1rem sẵn ở media block trên nên 1em = 16px,
+     không đổi gì thêm).
+   - !important BẮT BUỘC (quyết định đã cân nhắc): selector element (0,0,1)
+     KHÔNG THỂ thắng class (0,1,0) như .admin-input / .select-search-input /
+     .datatable-cell-input, hay (0,2,0) như .input-root .input-barcode-edit —
+     các class này rải vô định qua 22+ trang admin + nhiều component, không
+     có cách liệt kê selector thường thắng được tất cả. Đã grep toàn repo:
+     KHÔNG có font-size !important nào khác nhắm vào input/textarea/select
+     (3 chỗ .form-hint/.terms-modal-* ở auth pages là text Description,
+     không đụng control) → không xung đột.
+   - Layout an toàn: input min-height ≥ 2.5rem, OTP/datetime box 2.75rem;
+     chỉ control đang font < 16px được nâng lên (thành 16px đúng chuẩn).
+     Highlight-layer của Input (div, KHÔNG ăn rule) khớp glyph với native
+     input nhờ font: inherit — cả hai cùng kế thừa font-size cha, còn
+     1em của input CHÍNH LÀ giá trị kế thừa đó → max() không đổi khi cha
+     đã ≥ 16px (mobile size-chain luôn 'md' = 1rem). */
+@supports (-webkit-touch-callout: none) {
+	@media (hover: none) and (pointer: coarse) {
+		input,
+		textarea,
+		select {
+			font-size: max(16px, 1em) !important;
+		}
+	}
+}

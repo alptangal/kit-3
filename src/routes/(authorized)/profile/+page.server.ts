@@ -21,7 +21,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 				lastname: typeof d.lastname === 'string' ? d.lastname : '',
 				dob: typeof d.dob === 'string' ? d.dob : '',
 				gender: typeof d.gender === 'string' ? d.gender : '',
-				social: typeof d.social === 'string' ? d.social : ''
+				social: typeof d.social === 'string' ? d.social : '',
+				// Batch 16: trạng thái 2FA ban đầu — client seed totpSetup để badge/
+				// guard totpCode hiển thị đúng ngay khi mở page (không phải sau 1 action).
+				totpEnabled: d.totpEnabled === true
 			}
 		};
 	} catch {
