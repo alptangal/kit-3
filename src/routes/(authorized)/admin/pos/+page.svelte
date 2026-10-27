@@ -2205,7 +2205,7 @@
 	}
 	.pos-serial-row--active {
 		border-color: var(--primary, #2563eb);
-		background: var(--primary-soft, #eff6ff);
+		background: var(--primary-soft);
 	}
 	.pos-serial-code {
 		font-family: monospace;

@@ -4150,6 +4150,22 @@
 			opacity: 0.5;
 			cursor: not-allowed;
 		}
+
+		/* Audit m00440: touch 18px quá nhỏ trên cảm ứng (chuẩn 44px). Desktop
+		   pointer fine giữ 18px (mật độ form); coarse pointer mở hit-area.
+		   width/height đủ 28px nhìn thấy + pseudo ::after phủ 44px quanh tâm —
+		   không phá layout absolute giữa field-row (transform giữ nguyên). */
+		@media (pointer: coarse) {
+			width: 1.75rem;
+			height: 1.75rem;
+			font-size: 0.75rem;
+
+			&::after {
+				content: '';
+				position: absolute;
+				inset: -0.5rem;
+			}
+		}
 	}
 
 	.field-add {
@@ -4535,6 +4551,18 @@
 		padding: 0;
 		flex: none;
 		text-decoration: none; /* Batch 15: __open giờ là <a> — bỏ underline */
+
+		/* Audit m00440: 20px khó bấm trên cảm ứng — hit-area 44px qua pseudo
+		   (không đổi size hiển thị, chip vẫn gọn). Chỉ coarse pointer. */
+		@media (pointer: coarse) {
+			position: relative;
+
+			&::after {
+				content: '';
+				position: absolute;
+				inset: -0.625rem;
+			}
+		}
 	}
 	/* Batch 11 (5d): remove button theo quy tắc thiết kế chung — màu error.
 	   Open-tab giữ màu chip (primary); hover tách riêng 2 nút. */
@@ -4571,6 +4599,12 @@
 		outline: none;
 		padding: 0.125rem;
 		color: var(--foreground);
+		/* Audit m00440: input thô — placeholder dài ("Zalo number or zalo.me/... link")
+		   KHÔNG tự ellipsis ở mọi browser → cắt cụt giữa từ trên mobile.
+		   overflow-hidden + ellipsis cho cả value lẫn placeholder. */
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.social-tag-error {
 		font-size: 0.75rem;

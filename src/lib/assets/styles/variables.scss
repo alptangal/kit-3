@@ -450,6 +450,9 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 	--primary-950: hsl(226.51, 58.74%, 21.15%);
 	--primary-foreground: hsl(0 0% 100%);
 	--primary: var(--primary-500);
+	/* Soft tint nền pill/section nhấn nhá primary — dùng kèm chữ --primary.
+	   AA-checked: --primary-600 (4.0+) hoặc label tối hơn trên nền này. */
+	--primary-soft: var(--primary-50);
 	--secondary-50: hsl(250, 98.58%, 97.62%);
 	--secondary-100: hsl(251.44, 93.48%, 95.5%);
 	--secondary-200: hsl(250.56, 100%, 91.93%);
@@ -776,6 +779,7 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 		--primary-900: hsl(212.5 92.31% 94.9%);
 		--primary-foreground: hsl(0 0% 0%);
 		--primary: hsl(212.02 100% 46.67%);
+		--primary-soft: var(--primary-100);
 		--secondary-50: hsl(270 66.67% 9.41%);
 		--secondary-100: hsl(270 66.67% 18.82%);
 		--secondary-200: hsl(270 66.67% 28.24%);
@@ -938,6 +942,7 @@ $colors: 'default', 'primary', 'secondary', 'success', 'warning', 'danger';
 		--primary-900: hsl(212.5 92.31% 94.9%);
 		--primary-foreground: hsl(0 0% 0%);
 		--primary: hsl(212.02 100% 46.67%);
+		--primary-soft: var(--primary-100);
 		--secondary-50: hsl(270 66.67% 9.41%);
 		--secondary-100: hsl(270 66.67% 18.82%);
 		--secondary-200: hsl(270 66.67% 28.24%);

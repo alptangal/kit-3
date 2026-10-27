@@ -228,3 +228,38 @@ body {
 		}
 	}
 }
+
+/* ══════════════════════════════════════════════════════
+   SCROLLBAR — đồng bộ theme (audit suppliers m00390)
+   Windows Chrome/Edge render scrollbar root WINDOWS mặc định
+   trắng lóa trên dark modal/admin → đáng chú ý nhất khi dark.
+   - scrollbar-color: 2 giá trị (thumb, track) — chuẩn Firefox +
+     Chrome 121+; thumb dùng --foreground-300 (nhạt, đủ thấy trên
+     cả light/dark), track trong suốt để không vẽ khối màu lạ.
+   - ::-webkit-scrollbar dự phòng cho Chrome/Edge/Safari cũ hơn:
+     thumb --foreground-300 + border trong suốt (mô phỏng min-width
+     native 8px), track trong suốt. Không đụng các thanh tự vẽ
+     (sidebar 6px, navigation-bar) vì rule element của chúng có
+     specificity cao hơn rule toàn cục này.
+   ══════════════════════════════════════════════════════ */
+* {
+	scrollbar-color: var(--foreground-300, hsl(240 4.88% 83.92%)) transparent;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--foreground-300, hsl(240 4.88% 83.92%));
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-corner {
+	background: transparent;
+}

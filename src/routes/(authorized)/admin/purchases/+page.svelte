@@ -4595,7 +4595,7 @@
 		width: 100%;
 		padding: 0.35rem 0.5rem;
 		border-radius: var(--field-radius, 0.75rem);
-		background: var(--primary-soft, hsl(239 84% 67% / 0.12));
+		background: var(--primary-soft);
 	}
 
 	.bulk-count {

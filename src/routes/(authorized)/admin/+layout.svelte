@@ -887,7 +887,8 @@
 
 		/* Pill liquid: absolute dưới 2 nút (z) — trượt theo theme active bằng
 		   left/width đo từ DOM ($effect trong script), transition 260ms ease.
-		   Batch 15 (m12278-2): đệm 6px hai bên (measure tự cộng PILL_PAD). */
+		   Batch 15 (m12278-2): đệm 6px hai bên (measure tự cộng PILL_PAD).
+		   --primary-soft: token hệ (variables.scss) — bỏ fallback rời. */
 		.admin-theme-switch__pill {
 			position: absolute;
 			top: 0.25rem;
@@ -895,13 +896,9 @@
 			left: 0;
 			z-index: 0;
 			border-radius: 9999px;
-			background: var(--primary-soft, hsl(212 92% 95%));
+			background: var(--primary-soft);
 			transition: transform 260ms cubic-bezier(0.4, 0, 0.2, 1), width 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 150ms ease;
 			pointer-events: none;
-
-			@media (prefers-color-scheme: dark) {
-				background: hsl(212 92% 20%);
-			}
 		}
 
 		.admin-theme-switch__btn {
@@ -924,9 +921,11 @@
 				color: var(--foreground, hsl(0 0% 9%));
 			}
 
-			/* Icon active = theme đang áp dụng — màu primary (pill lo nền). */
+			/* Icon active = theme đang áp dụng — màu primary (pill lo nền).
+			   AA: --primary p500 2.82:1 trên primary-soft → --primary-800 6.31:1 (light);
+			   dark giữ hsl 70% (21.6:1 trên primary-100). */
 			&.active {
-				color: var(--primary, hsl(212 92% 45%));
+				color: var(--primary-800, hsl(227.1 75.74% 41.14%));
 
 				@media (prefers-color-scheme: dark) {
 					color: hsl(212 92% 70%);
@@ -946,7 +945,8 @@
 			position: relative;
 			z-index: 1;
 			font-size: 0.8125rem;
-			color: var(--primary, hsl(212 92% 45%));
+			/* AA trên nền pill --primary-soft: --primary-800 (6.31:1) thay --primary (2.82:1) */
+			color: var(--primary-800, hsl(227.1 75.74% 41.14%));
 			font-weight: 500;
 			white-space: nowrap;
 			overflow: hidden;

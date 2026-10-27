@@ -11,7 +11,9 @@
 	--border-color: transparent;
 	--background: transparent;
 	--color: var(--foreground);
-	--placeholder-color: var(--color-gray-400);
+	/* AA: đồng bộ input-root — gray-400 2.5:1 light → --muted (4.83).
+	   Đặt TRONG .select-root để kế thừa mọi variant/hover/focus bên dưới. */
+	--placeholder-color: var(--muted);
 
 	position: relative;
 	display: inline-flex;

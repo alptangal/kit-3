@@ -904,7 +904,11 @@
 	</div>
 	{/if}
 
-	<span class="image-upload__hint">{tr('hint')}</span>
+	<!-- Hint format: ẩn khi empty-state đang hiển thị (emptyDesc đã chứa cùng
+	     thông tin — tránh lặp 2 lần giữa dropzone và đáy, audit m00390). -->
+	{#if !defer || deferEntries.length > 0}
+		<span class="image-upload__hint">{tr('hint')}</span>
+	{/if}
 	{#if showUrl}
 		<span class="image-upload__url" title={value}>{value}</span>
 	{/if}
@@ -1360,6 +1364,18 @@
 		color: var(--foreground-600, var(--foreground));
 		cursor: pointer;
 		padding: 0;
+
+		/* Audit m00440: 28px dưới chuẩn cảm ứng 44px — mở hit-area bằng pseudo,
+		   giữ size hiển thị (row ảnh đã chật). */
+		@media (pointer: coarse) {
+			position: relative;
+
+			&::after {
+				content: '';
+				position: absolute;
+				inset: -0.5rem;
+			}
+		}
 
 		&:hover {
 			background: rgb(0 0 0 / 0.06);

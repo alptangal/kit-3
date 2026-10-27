@@ -468,6 +468,7 @@
 {/if}
 
 <style lang="scss">
+	@use '$styles/theme-mixins' as *;
 	@use '_styles.scss' as dt;
 
 	.datatable-body {
@@ -944,6 +945,9 @@
 	}
 
 	// Status pill (map token semantic).
+	// AA 12px/600 (cần 4.5:1): chữ dùng bậc đậm hơn token gốc — light --success-500
+	// chỉ 3.19:1 trên tint 14% tự trộn; --success-700 đạt 5.37:1. Dark token sẵn pass
+	// (7+:1) — giữ nguyên. Cùng pattern cho danger (5.58) / warning (4.63 trên tint 10).
 	.datatable-status {
 		display: inline-block;
 		padding: 0.125rem 0.5rem;
@@ -953,16 +957,28 @@
 		border-radius: 9999px;
 
 		&--success {
-			color: var(--success, var(--color-indigo-500));
+			color: var(--success-700, hsl(150 100% 20.98%));
 			background: color-mix(in srgb, var(--success, var(--color-indigo-500)) 14%, transparent);
+
+			@include theme-dark {
+				color: var(--success, var(--color-indigo-500));
+			}
 		}
 		&--danger {
-			color: var(--danger, var(--color-indigo-500));
+			color: var(--danger-700, hsl(353.32 100% 34.72%));
 			background: color-mix(in srgb, var(--danger, var(--color-indigo-500)) 14%, transparent);
+
+			@include theme-dark {
+				color: var(--danger-500, hsl(339 90% 60.78%));
+			}
 		}
 		&--warning {
-			color: var(--warning, var(--color-indigo-500));
-			background: color-mix(in srgb, var(--warning, var(--color-indigo-500)) 18%, transparent);
+			color: var(--warning-700, hsl(31.95 100% 32.16%));
+			background: color-mix(in srgb, var(--warning, var(--color-indigo-500)) 14%, transparent);
+
+			@include theme-dark {
+				color: var(--warning, hsl(37.03 91.27% 55.1%));
+			}
 		}
 		&--info {
 			color: var(--content2-foreground, #18181b);

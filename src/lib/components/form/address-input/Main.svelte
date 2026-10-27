@@ -1135,8 +1135,9 @@
 			padding: 0.125rem 0.5rem;
 			border: none;
 			border-radius: 0.375rem;
-			background: var(--primary-soft, hsl(212 92% 95%));
-			color: var(--primary, hsl(212 92% 45%));
+			/* AA trên --primary-soft: chữ --primary-800 (6.31:1) thay --primary (2.82:1) */
+			background: var(--primary-soft);
+			color: var(--primary-800, hsl(227.1 75.74% 41.14%));
 			font-size: 0.8125rem;
 			font-weight: 500;
 			white-space: nowrap;
