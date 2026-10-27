@@ -109,6 +109,8 @@
 		change: { vi: 'Đổi ảnh', en: 'Change' },
 		remove: { vi: 'Xoá ảnh', en: 'Remove image' },
 		setAvatar: { vi: 'Đặt làm đại diện', en: 'Set as avatar' },
+		/** Batch 17 (m00004): toast xác nhận đặt đại diện */
+		avatarSet: { vi: 'Đã đặt làm ảnh đại diện', en: 'Set as representative image' },
 		avatar: { vi: 'Đại diện', en: 'Avatar' },
 		uploading: { vi: 'Đang tải lên...', en: 'Uploading...' },
 		empty: { vi: 'Chưa có ảnh', en: 'No image yet' },
@@ -147,6 +149,11 @@
 	function toastErr(message: string) {
 		client.browser?.toasts?.create({ title: tr('errUpload'), description: message, color: 'error' });
 		onerror?.(message);
+	}
+
+	/** Batch 17 (m00004): toast xác nhận hành động thành công (đặt đại diện). */
+	function toastOk(title: string) {
+		client.browser?.toasts?.create({ title, color: 'success' });
 	}
 
 	// ── Row-list helpers (batch7) ──
@@ -262,7 +269,10 @@
 	function setAvatarAt(index: number) {
 		const url = images?.[index];
 		if (!url) return;
+		// Batch 17 (m00004): idempotent — đã là đại diện thì không toast lại
+		const changed = avatarUrl !== url;
 		avatarUrl = url;
+		if (changed) toastOk(tr('avatarSet'));
 	}
 
 	// ── DEFER helpers ──
@@ -615,10 +625,16 @@
 		const entry = deferEntries.find((en) => en.key === key);
 		if (!entry) return;
 		if (entry.file) {
+			// Batch 17 (m00004): idempotent — wantAvatar đã true thì không toast lại
+			const changed = !entry.wantAvatar;
 			// Chỉ 1 entry wantAvatar tại 1 thời điểm
 			for (const en of deferEntries) en.wantAvatar = en === entry;
+			if (changed) toastOk(tr('avatarSet'));
 		} else if (entry.existing) {
+			// Idempotent như trên: existing đã là đại diện → bỏ qua toast
+			const changed = avatarUrl !== entry.existing;
 			avatarUrl = entry.existing;
+			if (changed) toastOk(tr('avatarSet'));
 		}
 	}
 
@@ -726,6 +742,22 @@
 								>
 									<Icon icon={iconify['person-outline-rounded']} size="sm" />
 								</button>
+								<!-- Batch 17 (m00004) 3i: thay ảnh defer — pickAt(i) → input click →
+								     handleDeferFile(target=i) replace entry (logic có sẵn).
+								     Disable khi đang upload dở (progress chạy, chưa done/lỗi). -->
+								{#if !disabled && !(entry.file && entry.progress !== undefined && entry.progressDone === undefined && !entry.error)}
+									<button
+										type="button"
+										class="image-upload__row-btn image-upload__row-btn--replace"
+										title={tr('change')}
+										aria-label={tr('change')}
+										onclick={(e) => { e.stopPropagation(); pickAt(i); }}
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="1em" height="1em" aria-hidden="true">
+											<path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+										</svg>
+									</button>
+								{/if}
 								<button
 									type="button"
 									class="image-upload__row-btn image-upload__row-btn--remove"
@@ -1385,6 +1417,9 @@
 			background: var(--primary);
 			color: #fff;
 		}
+
+		/* Batch 17 (m00004) 3i: nút thay ảnh — neutral, kế thừa hover base chung
+		   của .image-upload__row-btn (không cần rule riêng — khác --remove đỏ). */
 
 		&--remove:hover {
 			background: var(--error);

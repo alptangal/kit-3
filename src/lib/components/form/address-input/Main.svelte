@@ -15,6 +15,7 @@
 	import Select from '../select/Main.svelte';
 	import { client } from '$store/basic.svelte';
 	import type { AddressInputProps, AddressBreakdown, NewAddressBreakdown } from './_interface';
+	import type { SelectConfigs } from '../select/_interface';
 
 	let {
 		value = $bindable(''),
@@ -102,25 +103,33 @@
 	// → list gọn + search vẫn khớp (Select filter cả description).
 	const provinceOptions = $derived(provinces.map((p) => ({ value: p.n, label: p.n })));
 	const selectedProvince = $derived(provinces.find((p) => p.n === breakdown.province));
-	const districtOptions = $derived(
-		(selectedProvince?.d ?? []).map((d) => ({ value: d.n, label: d.n, description: breakdown.province }))
-	);
+	// Batch 17 (m00004): description (đường dẫn cha) CHỈ cho mobile step picker —
+	// search khớp cả cha; PC grid bỏ desc cho list gọn.
+	const districtOptions = $derived.by(() => {
+		const opts = (selectedProvince?.d ?? []).map((d) => ({ value: d.n, label: d.n }));
+		return selectFullscreen ? opts.map((o) => ({ ...o, description: breakdown.province })) : opts;
+	});
 	/** wards của tỉnh đang chọn (khớp qua key 'tên|code') */
 	const provinceWards = $derived(
 		breakdown.province ? wardMap[`${breakdown.province}|${selectedProvince?.c ?? ''}`] ?? {} : {}
 	);
-	const wardOptions = $derived(
-		(provinceWards[breakdown.district] ?? []).map((w) => ({ value: w, label: w, description: `${breakdown.province} › ${breakdown.district}` }))
-	);
+	const wardOptions = $derived.by(() => {
+		const opts = (provinceWards[breakdown.district] ?? []).map((w) => ({ value: w, label: w }));
+		return selectFullscreen
+			? opts.map((o) => ({ ...o, description: `${breakdown.province} › ${breakdown.district}` }))
+			: opts;
+	});
 
 	// ── Hệ MỚI (34 tỉnh, 2 cấp) ──
 	const newProvinceOptions = $derived((geo2025?.np ?? []).map(([code, name]) => ({ value: name, label: name })));
 	const newSelectedProvinceCode = $derived(geo2025?.np.find(([, name]) => name === newBreakdown?.province)?.[0] ?? '');
-	const newWardOptions = $derived(
-		newSelectedProvinceCode
-			? (geo2025?.nw ?? []).filter(([, pCode]) => pCode === newSelectedProvinceCode).map(([, , name]) => ({ value: name, label: name, description: newBreakdown?.province }))
-			: []
-	);
+	const newWardOptions = $derived.by(() => {
+		const opts = newSelectedProvinceCode
+			? (geo2025?.nw ?? []).filter(([, pCode]) => pCode === newSelectedProvinceCode).map(([, , name]) => ({ value: name, label: name }))
+			: [];
+		// Batch 17 (m00004): desc chỉ mobile step picker (như district/wardOptions)
+		return selectFullscreen ? opts.map((o) => ({ ...o, description: newBreakdown?.province })) : opts;
+	});
 
 	// ── GEN 2 CHIỀU giữa hệ cũ ↔ mới ──
 	// BẪY: 2 file data khác format tên — vn-geo.json 'Tỉnh Hà Giang' vs
@@ -366,16 +375,48 @@
 	}
 
 	// Chọn tỉnh (cũ) → xoá huyện/ward nếu không còn thuộc tỉnh mới → gen hệ mới
+	// Batch 17 (m00004): PC auto-advance — chọn tỉnh xong mở panel huyện.
+	// bind:this Select trả exports object (export { configs } — precedent
+	// useVisualKeyboard đọc component.configs).
+	let provinceSelect: { configs: SelectConfigs } | undefined = $state();
+	let districtSelect: { configs: SelectConfigs } | undefined = $state();
+	let wardSelect: { configs: SelectConfigs } | undefined = $state();
+	let newProvinceSelect: { configs: SelectConfigs } | undefined = $state();
+	let newWardSelect: { configs: SelectConfigs } | undefined = $state();
+	// BẪY: selectOption chạy onValueChange TRƯỚC configs.close() của panel đang
+	// mở (selectOption: set value → setter emit → close) → open() đồng bộ sẽ bị
+	// close() tắt ngay — defer rAF để mở sau khi panel cũ đóng.
+	function advanceTo(select: { configs: SelectConfigs } | undefined) {
+		if (selectFullscreen || disabled || !select) return;
+		requestAnimationFrame(() => select.configs.open());
+	}
+
+	// BẪY (Batch 17): bind:value={breakdown.x} cập nhật breakdown ĐỒNG BỘ TRƯỚC
+	// onValueChange emit (selectOption: configs.value setter gán bindable trước emit)
+	// → trong handler KHÔNG SO SÁNH v với breakdown.x (luôn bằng nhau) — phải
+	// theo dõi giá trị trước đó qua biến riêng _prev.
+	let _prevProvince = breakdown.province;
+	let _prevDistrict = breakdown.district;
+	let _prevNewProvince = newBreakdown?.province ?? '';
+
 	function onProvinceChange(v: string | string[]) {
 		if (typeof v !== 'string') return;
-		if (v !== breakdown.province) breakdown = { province: v, district: '', ward: '' };
+		if (v !== _prevProvince) {
+			_prevProvince = v;
+			breakdown = { province: v, district: '', ward: '' };
+			// Chọn tỉnh hợp lệ (không phải clear) → mở panel bước sau
+			if (v) advanceTo(districtSelect);
+		}
 		if (dualMode) genNewFromOld();
 	}
 
 	// Chọn huyện (cũ) → xoá ward nếu không còn thuộc huyện mới → gen hệ mới
 	function onDistrictChange(v: string | string[]) {
 		if (typeof v !== 'string') return;
+		const changed = v !== _prevDistrict;
+		_prevDistrict = v;
 		breakdown = { ...breakdown, district: v, ward: '' };
+		if (v && changed) advanceTo(wardSelect);
 		if (dualMode) genNewFromOld();
 	}
 
@@ -386,7 +427,12 @@
 	// ── Hệ mới: chọn tỉnh/xã → gen hệ cũ ──
 	function onNewProvinceChange(v: string | string[]) {
 		if (typeof v !== 'string' || !newBreakdown) return;
-		if (v !== newBreakdown.province) newBreakdown = { province: v, ward: '' };
+		if (v !== _prevNewProvince) {
+			_prevNewProvince = v;
+			newBreakdown = { province: v, ward: '' };
+			// Batch 17 (m00004): PC auto-advance tỉnh mới → panel xã
+			if (v) advanceTo(newWardSelect);
+		}
 		if (dualMode) genOldFromNew();
 	}
 
@@ -670,6 +716,7 @@
 						options={provinceOptions}
 						bind:value={breakdown.province}
 						onValueChange={onProvinceChange}
+						bind:this={provinceSelect}
 						searchable
 						clearable
 						fullscreen={selectFullscreen}
@@ -683,6 +730,7 @@
 						options={districtOptions}
 						bind:value={breakdown.district}
 						onValueChange={onDistrictChange}
+						bind:this={districtSelect}
 						searchable
 						clearable
 						fullscreen={selectFullscreen}
@@ -696,6 +744,7 @@
 						options={wardOptions}
 						bind:value={breakdown.ward}
 						onValueChange={onOldWardChange}
+						bind:this={wardSelect}
 						searchable
 						clearable
 						fullscreen={selectFullscreen}
@@ -712,6 +761,7 @@
 						options={newProvinceOptions}
 						bind:value={newBreakdown!.province}
 						onValueChange={onNewProvinceChange}
+						bind:this={newProvinceSelect}
 						searchable
 						clearable
 						fullscreen={selectFullscreen}
@@ -725,6 +775,7 @@
 						options={newWardOptions}
 						bind:value={newBreakdown!.ward}
 						onValueChange={onNewWardChange}
+						bind:this={newWardSelect}
 						searchable
 						clearable
 						fullscreen={selectFullscreen}

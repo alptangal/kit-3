@@ -2,7 +2,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Button, Icon, AlertDialog, Tabs, Accordion } from '$components/element';
-	import { Input } from '$components/form';
+	import { Input, InputOtp } from '$components/form';
 	import { getAllSearchKeywords, getAllSearchKeywordCounts, clearSearchKeywords, recordSearchKeyword } from '$store/user-prefs.svelte';
 	import { encryption } from '$modules/encryption';
 	import { browserSupportsWebAuthn, startRegistration, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
@@ -490,6 +490,23 @@
 		sensitiveTotpLabel: {
 			vi: 'Mã xác thực 2 bước',
 			en: 'Two-factor code'
+		},
+		// ── Batch 17: modal xác nhận OTP khi đổi mật khẩu (2FA bật) ──
+		pwdOtpTitle: {
+			vi: 'Xác thực hai lớp',
+			en: 'Two-factor verification'
+		},
+		pwdOtpDesc: {
+			vi: 'Nhập mã 6 số từ ứng dụng xác thực để đổi mật khẩu.',
+			en: 'Enter the 6-digit code from your authenticator app to change your password.'
+		},
+		pwdOtpConfirm: {
+			vi: 'Xác nhận',
+			en: 'Confirm'
+		},
+		pwdOtpCancel: {
+			vi: 'Huỷ',
+			en: 'Cancel'
 		}
 	};
 
@@ -756,13 +773,36 @@
 	let pwdNew = $state('');
 	let pwdConfirm = $state('');
 	let pwdSaving = $state(false);
+	// ── Batch 17: modal xác nhận OTP khi tài khoản bật 2FA ──
+	let pwdOtpModalOpen = $state(false);
+	let pwdOtpCode = $state('');
+	let pwdOtpSubmitting = $state(false);
 
-	async function submitPassword() {
-		if (pwdSaving) return;
+	// Validate form password (3 field + match). Return true nếu hợp lệ.
+	function validatePasswordFields(): boolean {
+		if (!pwdOld.trim() || !pwdNew.trim() || !pwdConfirm.trim()) return false;
 		if (pwdNew !== pwdConfirm) {
 			toast(msg('passwordMismatch'), undefined, 'error');
-			return;
+			return false;
 		}
+		return true;
+	}
+
+	// Submit handler form: validate → 2FA bật thì mở modal OTP, tắt thì gọi thẳng.
+	function handlePasswordSubmit() {
+		if (!validatePasswordFields()) return;
+		if (totpSetup?.enabled === true) {
+			pwdOtpCode = '';
+			pwdOtpModalOpen = true;
+		} else {
+			void submitPassword(undefined);
+		}
+	}
+
+	// Batch 17: totpCode đọc từ THAM SỐ (modal OTP hoặc undefined khi 2FA tắt).
+	async function submitPassword(totpCode: string | undefined) {
+		if (pwdSaving) return;
+		if (totpSetup?.enabled && !/^\d{6}$/.test(totpCode ?? '')) return;
 		pwdSaving = true;
 		try {
 			const res = await encryption.fetchSecure('/api/agent/profile/change-password', {
@@ -771,7 +811,7 @@
 					oldPassword: pwdOld,
 					newPassword: pwdNew,
 					// Batch 16: guard 2FA — server requireTotpCode khi totpEnabled
-					totpCode: sensitiveTotpCode.trim() || undefined
+					totpCode: totpCode?.trim() || undefined
 				}
 			});
 			if (res.ok) {
@@ -779,16 +819,41 @@
 				pwdOld = '';
 				pwdNew = '';
 				pwdConfirm = '';
-				sensitiveTotpCode = '';
+				pwdOtpCode = '';
+				pwdOtpModalOpen = false;
 			} else {
+				// Dialog Action tự close ĐỒNG BỘ sau onselect — fail → mở lại modal
+				// + reset OTP để user nhập lại (chỉ khi 2FA bật, tức request đi từ modal).
+				pwdOtpCode = '';
+				if (totpSetup?.enabled) pwdOtpModalOpen = true;
 				toast(res.message?.[lang] ?? res.message?.en ?? 'Error', undefined, 'error');
 			}
 		} catch (e) {
+			pwdOtpCode = '';
+			if (totpSetup?.enabled) pwdOtpModalOpen = true;
 			toast(e instanceof Error ? e.message : String(e), undefined, 'error');
 		} finally {
 			pwdSaving = false;
 		}
 	}
+
+	// Batch 17: xác nhận OTP trong modal → gọi submitPassword với mã vừa nhập.
+	async function handlePwdOtpConfirm() {
+		if (pwdOtpSubmitting || !/^\d{6}$/.test(pwdOtpCode)) return;
+		pwdOtpSubmitting = true;
+		try {
+			await submitPassword(pwdOtpCode);
+		} finally {
+			pwdOtpSubmitting = false;
+		}
+	}
+
+	// Modal đóng bằng ESC/backdrop (bind:open tự set false) → reset mã.
+	// submitPassword success/fail path tự reset trước khi/đ kèm set open —
+	// effect này chỉ bảo hiểm cho đóng ngoài ý muốn (ESC/backdrop/Cancel).
+	$effect(() => {
+		if (!pwdOtpModalOpen && pwdOtpCode) pwdOtpCode = '';
+	});
 
 	// ── Secret Key API ──
 	interface ApiKeyRow {
@@ -986,8 +1051,10 @@
 
 	// ── Batch 16: guard totpCode cho endpoint nhạy cảm (server totp-guard:
 	// change-password / keys/create / keys/revoke bắt buộc totpCode khi 2FA bật).
-	// 1 ô mã dùng chung, reset sau mỗi thao tác; thiếu/sai → toast lỗi server.
-	let sensitiveTotpCode = $state('');
+	// Batch 17: tách state OTP riêng per-modal (InputOtp) — reset sau mỗi thao tác;
+	// thiếu/sai → toast lỗi server.
+	let keyCreateOtpCode = $state('');
+	let keyRevokeOtpCode = $state('');
 
 	// ── Batch 16: đổi key xác thực — POST totp/change { currentCode } → server
 	// xoá key cũ + trả secret/otpauthUrl MỚI + totpEnabled=false. Dùng lại khối
@@ -1045,7 +1112,7 @@
 				body: {
 					name,
 					// Batch 16: guard 2FA (totp-guard keys/create)
-					totpCode: sensitiveTotpCode.trim() || undefined
+					totpCode: keyCreateOtpCode.trim() || undefined
 				}
 			});
 			if (res.ok && res.data?.key) {
@@ -1053,13 +1120,15 @@
 				copied = false;
 				newKeyName = '';
 				showCreateModal = false;
-				sensitiveTotpCode = '';
+				keyCreateOtpCode = '';
 				toast(msg('apiKeysCreateSuccess'), undefined, 'success');
 				await loadApiKeys();
 			} else {
+				keyCreateOtpCode = '';
 				toast(msg('apiKeysCreateFailed'), res.message?.[lang] ?? res.message?.en, 'error');
 			}
 		} catch (e) {
+			keyCreateOtpCode = '';
 			toast(msg('apiKeysCreateFailed'), e instanceof Error ? e.message : String(e), 'error');
 		} finally {
 			apiKeysCreating = false;
@@ -1078,6 +1147,7 @@
 
 	function confirmRevoke(key: ApiKeyRow) {
 		revokeTarget = key;
+		keyRevokeOtpCode = '';
 		revokeDialogOpen = true;
 	}
 
@@ -1090,19 +1160,21 @@
 				body: {
 					documentKey: key.documentKey,
 					// Batch 16: guard 2FA (totp-guard keys/revoke)
-					totpCode: sensitiveTotpCode.trim() || undefined
+					totpCode: keyRevokeOtpCode.trim() || undefined
 				}
 			});
 			if (res.ok) {
 				apiKeys = apiKeys.map((k) =>
 					k.documentKey === key.documentKey ? { ...k, revokedAt: new Date().toISOString() } : k
 				);
-				sensitiveTotpCode = '';
+				keyRevokeOtpCode = '';
 				toast(msg('apiKeysRevokeSuccess'), undefined, 'success');
 			} else {
+				keyRevokeOtpCode = '';
 				toast(msg('apiKeysRevokeFailed'), res.message?.[lang] ?? res.message?.en, 'error');
 			}
 		} catch (e) {
+			keyRevokeOtpCode = '';
 			toast(msg('apiKeysRevokeFailed'), e instanceof Error ? e.message : String(e), 'error');
 		} finally {
 			revokeTarget = undefined;
@@ -1375,7 +1447,7 @@
 			class="pwd-form"
 			onsubmit={(e) => {
 				e.preventDefault();
-				void submitPassword();
+				handlePasswordSubmit();
 			}}
 		>
 			<label class="pwd-field">
@@ -1390,29 +1462,43 @@
 				<span class="pwd-label">{msg('passwordConfirm')}</span>
 				<Input type="password" bind:value={pwdConfirm} autocomplete="new-password" required />
 			</label>
-			<!-- Batch 16: mã 2FA bắt buộc khi tài khoản đã bật TOTP (server guard) —
-			     ẩn khi chưa bật để form giữ gọn như trước. -->
-			{#if totpSetup?.enabled}
-				<label class="pwd-field">
-					<span class="pwd-label">{msg('sensitiveTotpLabel')}</span>
-					<Input
-						type="text"
-						inputmode="numeric"
-						maxLength={6}
-						autocomplete="one-time-code"
-						bind:value={sensitiveTotpCode}
-						placeholder={msg('totpCodePlaceholder')}
-						data-test="profile-pwd-totp"
-					/>
-				</label>
-			{/if}
 			<div class="pwd-actions">
-				<Button type="submit" color="primary" variant="solid" disabled={pwdSaving || (totpSetup?.enabled === true && !/^\d{6}$/.test(sensitiveTotpCode))} loading={pwdSaving}>
+				<Button type="submit" color="primary" variant="solid" disabled={pwdSaving} loading={pwdSaving}>
 					{pwdSaving ? msg('passwordSaving') : msg('passwordSave')}
 				</Button>
 			</div>
 		</form>
 	</section>
+
+	<!-- Batch 17: modal xác nhận OTP khi đổi mật khẩu (2FA bật) -->
+	<AlertDialog bind:open={pwdOtpModalOpen}>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Title>{msg('pwdOtpTitle')}</AlertDialog.Title>
+				<AlertDialog.Description>{msg('pwdOtpDesc')}</AlertDialog.Description>
+			</AlertDialog.Header>
+			<div class="keys-create-field" data-test="profile-pwd-otp">
+				<InputOtp
+					bind:value={pwdOtpCode}
+					length={6}
+					type="numeric"
+					required
+					clearable
+					aria-label={msg('sensitiveTotpLabel')}
+				/>
+			</div>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{msg('pwdOtpCancel')}</AlertDialog.Cancel>
+				<AlertDialog.Action
+					color="primary"
+					disabled={!/^\d{6}$/.test(pwdOtpCode) || pwdOtpSubmitting}
+					onselect={handlePwdOtpConfirm}
+				>
+					{msg('pwdOtpConfirm')}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
 
 	<!-- Batch 11 (yêu cầu 6): 2FA authenticator app (TOTP) -->
 	<section class="passkey-section" data-test="profile-totp-section">
@@ -1568,6 +1654,7 @@
 				disabled={apiKeysCreating}
 				onclick={() => {
 					newKeyName = '';
+					keyCreateOtpCode = '';
 					showCreateModal = true;
 				}}
 			>
@@ -1793,17 +1880,17 @@
 				data-test="profile-apikey-name"
 			/>
 		</div>
-		<!-- Batch 16: mã 2FA khi tài khoản đã bật TOTP (server guard keys/create) -->
+		<!-- Batch 17: mã 2FA khi tài khoản đã bật TOTP (server guard keys/create) —
+		     InputOtp thay Input, state riêng keyCreateOtpCode -->
 		{#if totpSetup?.enabled}
-			<div class="keys-create-field">
-				<Input
-					type="text"
-					inputmode="numeric"
-					maxLength={6}
-					autocomplete="one-time-code"
-					bind:value={sensitiveTotpCode}
-					placeholder={msg('totpCodePlaceholder')}
-					data-test="profile-apikey-totp"
+			<div class="keys-create-field" data-test="profile-apikey-totp">
+				<InputOtp
+					bind:value={keyCreateOtpCode}
+					length={6}
+					type="numeric"
+					required
+					clearable
+					aria-label={msg('sensitiveTotpLabel')}
 				/>
 			</div>
 		{/if}
@@ -1811,7 +1898,7 @@
 			<AlertDialog.Cancel>{msg('apiKeysCancel')}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				color="primary"
-				disabled={!newKeyName.trim() || apiKeysCreating || (totpSetup?.enabled === true && !/^\d{6}$/.test(sensitiveTotpCode))}
+				disabled={!newKeyName.trim() || apiKeysCreating || (totpSetup?.enabled === true && !/^\d{6}$/.test(keyCreateOtpCode))}
 				onselect={submitCreateKey}
 			>
 				{apiKeysCreating ? msg('apiKeysCreating') : msg('apiKeysCreate')}
@@ -1847,17 +1934,17 @@
 			<AlertDialog.Title>{msg('apiKeysRevokeConfirmTitle')}</AlertDialog.Title>
 			<AlertDialog.Description>{revokeTarget?.name} — {msg('apiKeysRevokeConfirmBody')}</AlertDialog.Description>
 		</AlertDialog.Header>
-		<!-- Batch 16: mã 2FA khi tài khoản đã bật TOTP (server guard keys/revoke) -->
+		<!-- Batch 17: mã 2FA khi tài khoản đã bật TOTP (server guard keys/revoke) —
+		     InputOtp thay Input, state riêng keyRevokeOtpCode -->
 		{#if totpSetup?.enabled}
-			<div class="keys-create-field">
-				<Input
-					type="text"
-					inputmode="numeric"
-					maxLength={6}
-					autocomplete="one-time-code"
-					bind:value={sensitiveTotpCode}
-					placeholder={msg('totpCodePlaceholder')}
-					data-test="profile-apikey-revoke-totp"
+			<div class="keys-create-field" data-test="profile-apikey-revoke-totp">
+				<InputOtp
+					bind:value={keyRevokeOtpCode}
+					length={6}
+					type="numeric"
+					required
+					clearable
+					aria-label={msg('sensitiveTotpLabel')}
 				/>
 			</div>
 		{/if}
@@ -1865,7 +1952,7 @@
 			<AlertDialog.Cancel>{msg('apiKeysCancel')}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				color="danger"
-				disabled={totpSetup?.enabled === true && !/^\d{6}$/.test(sensitiveTotpCode)}
+				disabled={totpSetup?.enabled === true && !/^\d{6}$/.test(keyRevokeOtpCode)}
 				onclick={handleRevoke}>{msg('apiKeysRevoke')}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
@@ -1884,9 +1971,13 @@
 	</AlertDialog.Content>
 </AlertDialog>
 
-<!-- Batch 11 (yêu cầu 1): modal xem chi tiết ảnh avatar -->
+<!-- Batch 11 (yêu cầu 1): modal xem chi tiết ảnh avatar.
+     Batch 17: class 'avatar-view-fullscreen' vào props.class → overlay
+     (AlertDialog props.class KHÔNG vào .alert-dialog-box) — CSS mobile nhắm
+     `.avatar-view-fullscreen .alert-dialog-box` (overlay full màn → box full
+     theo overlay, không cần dvh — iOS-safe). -->
 <AlertDialog bind:open={avatarViewOpen}>
-	<AlertDialog.Content>
+	<AlertDialog.Content class="avatar-view-fullscreen">
 		<AlertDialog.Header>
 			<AlertDialog.Title>{msg('avatarViewTitle')}</AlertDialog.Title>
 		</AlertDialog.Header>
@@ -1895,6 +1986,23 @@
 				<img src={avatarUrl} alt={msg('avatarViewTitle')} />
 			{/if}
 		</div>
+		<!-- Batch 17: nút đóng riêng góc phải trên (mobile ẩn footer Cancel —
+		     nút này là lối thoát duy nhất). Absolute trong .alert-dialog-box. -->
+		<button
+			type="button"
+			class="avatar-view-close"
+			aria-label={msg('avatarViewClose')}
+			onclick={() => (avatarViewOpen = false)}
+		>
+			<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<path
+					d="M6 6l12 12M18 6L6 18"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+				/>
+			</svg>
+		</button>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{msg('avatarViewClose')}</AlertDialog.Cancel>
 		</AlertDialog.Footer>
@@ -2385,6 +2493,82 @@
 			max-height: 70dvh;
 			border-radius: 0.75rem;
 			object-fit: contain;
+		}
+	}
+
+	/* Batch 17: nút đóng riêng góc phải trên của box (nằm trong .alert-dialog-box
+	   qua render children — scoped key cần :global vì box do Content.svelte render). */
+	:global(.alert-dialog-box) .avatar-view-close {
+		position: absolute;
+		top: 0.6rem;
+		right: 0.6rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		padding: 0;
+		border: none;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--foreground-500);
+		cursor: pointer;
+		transition:
+			background-color 150ms ease,
+			color 150ms ease;
+
+		&:hover {
+			background: var(--default-100, var(--default-200));
+			color: var(--foreground);
+		}
+
+		svg {
+			width: 1.25rem;
+			height: 1.25rem;
+			display: block;
+		}
+	}
+
+	/* Batch 17: box avatar modal cần position:relative để nút ✕ neo đúng góc box
+	   (box mặc định position tĩnh — absolute sẽ trôi lên overlay). Chỉ áp cho
+	   overlay avatar-view-fullscreen — không đụng alert-dialog khác.
+	   SPECIFICITY (0,3,0): rule scoped của AlertDialog Content
+	   `.alert-dialog-overlay.svelte-X .alert-dialog-box` = (0,3,0) — selector 2-class
+	   ở dưới thua nên phải thêm .alert-dialog-overlay vào chuỗi để hoà (0,3,0),
+       cùng specificity → thứ tự file thắng (profile page CSS load SAU component). */
+	:global(.alert-dialog-overlay.avatar-view-fullscreen .alert-dialog-box) {
+		position: relative;
+	}
+
+	/* Batch 17: mobile fullscreen — class 'avatar-view-fullscreen' nằm TRÊN OVERLAY
+	   (AlertDialog props.class vào overlay). Overlay đã fixed inset:0 → box full
+	   theo overlay 100%/100% — KHÔNG dùng dvh/:has() (iOS ≤15.3 chết).
+	   Footer Cancel ẩn mobile (nút ✕ đã đủ). */
+	@media (max-width: 640px) and (pointer: coarse) {
+		:global(.alert-dialog-overlay.avatar-view-fullscreen) {
+			padding: 0;
+		}
+
+		:global(.alert-dialog-overlay.avatar-view-fullscreen .alert-dialog-box) {
+			width: 100%;
+			max-width: none;
+			height: 100%;
+			border-radius: 0;
+		}
+
+		:global(.avatar-view-fullscreen) :global(.alert-dialog-footer) {
+			display: none;
+		}
+
+		:global(.avatar-view-fullscreen) .avatar-view-body {
+			flex: 1;
+			min-height: 0;
+
+			img {
+				max-height: none;
+				width: 100%;
+				height: 100%;
+			}
 		}
 	}
 

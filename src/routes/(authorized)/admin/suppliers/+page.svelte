@@ -4,7 +4,7 @@
 	import { Button, DataTable, Pagination, AlertDialog, Badge, Spinner } from '$components/element';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { Modal } from '$components/modal';
-	import { EmailInput, ImageUpload, Input, Label, PhoneInput, Select, Switch, TextField, Textarea, AddressInput } from '$components/form';
+	import { EmailInput, ImageUpload, Input, Label, PhoneInput, Select, Switch, TextField, Textarea, AddressInput, Description } from '$components/form';
 	import { Icon } from '$components/element/icon';
 	import { iconify } from '$assets/icons/iconify';
 	import type { Size } from '$components/interface';
@@ -190,6 +190,8 @@
 			name: { vi: 'Tên nhà cung cấp', en: 'Supplier name' },
 			nameChecking: { vi: 'đang kiểm tra…', en: 'checking…' },
 			nameTaken: { vi: 'Tên đã tồn tại', en: 'Name already exists' },
+			// Batch 17: Description xanh dưới input khi name qua check + không trùng
+			nameAvailable: { vi: 'Tên có thể sử dụng', en: 'Name is available' },
 			contact: { vi: 'Người liên hệ (tuỳ chọn)', en: 'Contact person (optional)' },
 			address: { vi: 'Địa chỉ (tuỳ chọn)', en: 'Address (optional)' },
 			addressPlaceholder: { vi: 'Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành...', en: 'House number, street, ward, district, province...' },
@@ -690,6 +692,9 @@
 	// prefill) — server là nguồn sự thật.
 	let supplierNameTaken = $state(false);
 	let supplierNameChecking = $state(false);
+	// Batch 17: name đã qua check (có kết quả) → Input/Description đổi màu
+	// success/error; reset khi name đổi (scheduleNameCheck/checkSupplierNameNow).
+	let supplierNameChecked = $state(false);
 	let nameCheckTimer: ReturnType<typeof setTimeout> | undefined;
 	// Batch 16 (m13579-3): tên GỐC của row đang sửa — quay về đúng tên gốc thì
 	// không gọi API check (name = chính nó, không phải trùng). Create = ''.
@@ -699,6 +704,7 @@
 		const name = str(supplierForm.name).trim();
 		if (!name || !encryptionKeys) {
 			supplierNameTaken = false;
+			supplierNameChecked = false;
 			return;
 		}
 		// Batch 16: về đúng giá trị gốc (kể cả trim) → coi như không trùng,
@@ -706,6 +712,7 @@
 		if (name === supplierOriginalName.trim()) {
 			supplierNameTaken = false;
 			supplierNameChecking = false;
+			supplierNameChecked = true;
 			return;
 		}
 		supplierNameChecking = true;
@@ -725,12 +732,15 @@
 			if (response.ok) {
 				const data = response.data as { exists?: boolean } | undefined;
 				supplierNameTaken = !!data?.exists;
+				supplierNameChecked = true;
 			} else {
 				// API lỗi → không chặn submit (chỉ mất check, server không có unique)
 				supplierNameTaken = false;
+				supplierNameChecked = false;
 			}
 		} catch {
 			supplierNameTaken = false;
+			supplierNameChecked = false;
 		} finally {
 			supplierNameChecking = false;
 		}
@@ -742,15 +752,18 @@
 		if (!name) {
 			supplierNameTaken = false;
 			supplierNameChecking = false;
+			supplierNameChecked = false;
 			return;
 		}
 		// Batch 16: về đúng tên gốc → bỏ qua check luôn (không bật checking)
 		if (name === supplierOriginalName.trim()) {
 			supplierNameTaken = false;
 			supplierNameChecking = false;
+			supplierNameChecked = true;
 			return;
 		}
 		supplierNameChecking = true;
+		supplierNameChecked = false;
 		nameCheckTimer = setTimeout(() => {
 			void checkSupplierNameNow();
 		}, 400);
@@ -894,6 +907,14 @@
 	function attemptCloseStepModal() {
 		const closeBtn = document.querySelector<HTMLButtonElement>('.address-step__close');
 		closeBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+	}
+
+	// Batch 17: tap 'Nhà cung cấp' trên breadcrumb step modal → đóng TẤT CẢ
+	// (step TRƯỚC rồi form modal — dirty-guard hiện nếu form dirty, không bị
+	// step modal đè). Step đóng trượt vẫn tiếp tục attemptClose.
+	function closeAllFromStep() {
+		attemptCloseStepModal();
+		closeGuard.attemptClose();
 	}
 
 	// ── Bulk selection (yêu cầu 2: STT hover → checkbox, copy/delete hàng loạt) ──
@@ -1066,6 +1087,14 @@
 		const kw = (searchQuery ?? '').trim();
 		if (kw) recordSearchKeyword(PREFS_KEY, kw);
 	}
+
+	// Batch 17: popover suggest lọc theo từ đang gõ — chỉ hiện keyword chứa
+	// chuỗi search hiện tại (case-insensitive); search rỗng → hiện tất cả.
+	const recentKeywordsFiltered = $derived.by(() => {
+		const q = (searchQuery ?? '').trim().toLowerCase();
+		const all = getSearchKeywords(PREFS_KEY);
+		return q ? all.filter((k) => k.toLowerCase().includes(q)) : all;
+	});
 
 	function mergeIconClasses(
 		styles: ReadonlyArray<string | undefined> | undefined,
@@ -2183,6 +2212,7 @@
 			clearTimeout(nameCheckTimer);
 			supplierNameTaken = false;
 			supplierNameChecking = false;
+			supplierNameChecked = false;
 			return;
 		}
 		void supplierForm.name;
@@ -2386,10 +2416,10 @@
 									</Input>
 								{/if}
 								<!-- yêu cầu 6: ĐÃ BỎ nút clear riêng — Input component có sẵn clear button -->
-								{#if suggestOpen && getSearchKeywords(PREFS_KEY).length > 0}
+								{#if suggestOpen && recentKeywordsFiltered.length > 0}
 									<div class="suggest-popover" role="listbox">
 										<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
-										{#each getSearchKeywords(PREFS_KEY) as kw (kw)}
+										{#each recentKeywordsFiltered as kw (kw)}
 											<button
 												type="button"
 												class="suggest-item"
@@ -2693,11 +2723,11 @@
 							disabled={supplierSubmitting}
 							onclick={() => closeGuard.attemptClose()}
 						>
-							{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
+							{pageContents.title[lang]}
 						</button>
 					{:else}
 						<span class="supplier-modal-title__label">
-							{supplierEditMode === 'edit' ? pageContents.supplierModal.titleEdit[lang] : pageContents.supplierModal.title[lang]}
+							{pageContents.title[lang]}
 						</span>
 					{/if}
 					{#if supplierEditMode === 'edit' && supplierForm.name}
@@ -2734,11 +2764,21 @@
 										bind:value={supplierForm.name}
 										disabled={supplierSubmitting}
 										loading={supplierNameChecking}
-										class={supplierNameTaken ? 'supplier-name-taken' : undefined}
+										color={supplierNameChecked ? (supplierNameTaken ? 'error' : 'success') : undefined}
+										class={supplierNameTaken ? 'supplier-name-taken' : (supplierNameChecked && !supplierNameChecking ? 'supplier-name-available' : undefined)}
 										data-test="supplier-form-name"
 									/>
 									<Icon class="field-icon" icon={iconify['storefront-outline-rounded']} />
 								</div>
+								{#if str(supplierForm.name).trim()}
+									{#if supplierNameChecking}
+										<Description persistent class="form-hint">{pageContents.supplierModal.nameChecking[lang]}</Description>
+									{:else if supplierNameTaken}
+										<Description persistent color="error" class="form-hint error-hint">{pageContents.supplierModal.nameTaken[lang]}</Description>
+									{:else if supplierNameChecked}
+										<Description persistent color="success" class="form-hint success-hint">{pageContents.supplierModal.nameAvailable[lang]}</Description>
+									{/if}
+								{/if}
 							</TextField>
 							</div>
 						<TextField name="supplier-contact">
@@ -2884,7 +2924,7 @@
 									disabled={supplierSubmitting}
 									breadcrumbHome={pageContents.title[lang] ?? 'Suppliers'}
 									breadcrumbName={supplierForm.name || null}
-									onBreadcrumbHomeTap={attemptCloseStepModal}
+									onBreadcrumbHomeTap={closeAllFromStep}
 								/>
 							</div>
 						{/each}
@@ -4862,6 +4902,53 @@
 	[data-field='supplier-name'] :global(.supplier-name-taken.input-root),
 	[data-field='supplier-name'] :global(.supplier-name-taken.input-root:focus-within) {
 		border-color: var(--error, hsl(356.95 95.9% 57.72%)) !important;
+	}
+
+	/* Batch 17: viền xanh khi name qua check + không trùng (mirror viền đỏ) */
+	[data-field='supplier-name'] :global(.supplier-name-available.input-root),
+	[data-field='supplier-name'] :global(.supplier-name-available.input-root:focus-within) {
+		border-color: var(--success, #22c55e) !important;
+	}
+
+	/* Batch 17: Description trạng thái check name — copy từ register
+	   (src/routes/(unauthorized)/register/+page.svelte:1314-1338). :global vì
+	   class nằm trong Description component (props.class qua styleSynced). */
+	:global(.supplier-modal-root .form-hint) {
+		font-size: 0.75rem !important;
+		color: var(--foreground-400, #71717a) !important;
+		margin-top: 0.25rem !important;
+		transition: all 0.3s ease;
+		opacity: 0.8;
+	}
+
+	:global(.supplier-modal-root .error-hint) {
+		color: var(--error, hsl(356.95 95.9% 57.72%)) !important;
+		opacity: 1;
+		animation: supplier-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+	}
+
+	:global(.supplier-modal-root .success-hint) {
+		color: var(--success, #22c55e) !important;
+		opacity: 1;
+	}
+
+	@keyframes supplier-shake {
+		10%,
+		90% {
+			transform: translate3d(-1px, 0, 0);
+		}
+		20%,
+		80% {
+			transform: translate3d(2px, 0, 0);
+		}
+		30%,
+		70% {
+			transform: translate3d(-4px, 0, 0);
+		}
+		40%,
+		60% {
+			transform: translate3d(4px, 0, 0);
+		}
 	}
 
 	/* Batch 11 (5e): field passive — thông tin created/updated ở cuối form */

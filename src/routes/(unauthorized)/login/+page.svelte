@@ -9,6 +9,7 @@
 		FieldMessages,
 		Form,
 		Input,
+		InputOtp,
 		Label,
 		TextField
 	} from '$components/form';
@@ -377,11 +378,14 @@ $effect(() => {
 				const redirectTo = page.url.searchParams.get('redirect') ?? '/';
 				await goto(redirectTo);
 			} else {
+				// Batch 17: sai mã → reset OTP để user nhập lại (InputOtp tự clear ô)
+				totpCode = '';
 				totpError =
 					(response.message ? (response.message[lang] ?? response.message.en) : undefined) ??
 					pageContents.responseFail[lang];
 			}
 		} catch (e) {
+			totpCode = '';
 			totpError = e instanceof Error ? e.message : String(e);
 		} finally {
 			totpLoading = false;
@@ -565,24 +569,19 @@ $effect(() => {
 		<Form onSubmit={handleTotpVerify}>
 			<TextField name="totp-code" required>
 				<Label>{pageContents.totpCode[lang] ?? 'Verification code'}</Label>
-				<div class="auth-input-wrapper">
-					<Input
-						type="text"
+				<!-- Batch 17: InputOtp thay Input — 6 ô riêng, bind compact string.
+				     data-test đặt trên wrapper (InputOtp không forward data-test).
+				     Icon lock bỏ: absolute left đè ô đầu OTP (6 ô đã tự diễn giải). -->
+				<div class="auth-input-wrapper" data-test="login-totp-code">
+					<InputOtp
 						bind:value={totpCode}
-						placeholder={{ vi: 'Nhập mã 6 số', en: 'Enter 6-digit code' }}
-						inputmode="numeric"
-						maxLength={6}
-						autocomplete="one-time-code"
-						class="auth-input totp-input"
-						data-test="login-totp-code"
+						length={6}
+						type="numeric"
+						required
+						clearable
+						aria-label={pageContents.totpCode[lang] ?? 'Verification code'}
+						class="totp-otp"
 					/>
-					<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-						<path
-							fill-rule="evenodd"
-							d="M10 1a4 4 0 00-4 4v1H5a2 2 0 00-2 2v8a2 2 0 002 2h10a2 2 0 002-2V8a2 2 0 00-2-2h-1V5a4 4 0 00-4-4zm-2.5 5V5a2.5 2.5 0 115 0v1h-5z"
-							clip-rule="evenodd"
-						/>
-					</svg>
 				</div>
 			</TextField>
 
@@ -802,23 +801,31 @@ $effect(() => {
 		}
 	}
 
-	/* Batch 16: bước 2 TOTP — mã 6 số hiển thị dạng khoảng cách, font to nhẹ
-	   (dễ đọc), letter-spacing tách ký tự như OTP thông dụng. */
-	:global(.totp-input) :global(.input-highlight-wrapper) {
-		letter-spacing: 0.5em;
-		font-size: 1.05rem;
-		font-weight: 600;
+	/* Batch 17: bước 2 TOTP — InputOtp thay Input. Đồng bộ diện mạo với
+	   .auth-input: nền/border token hệ thống (dark/light OK), ô co giãn theo
+	   chiều rộng (6 ô + gap ≤ container mobile), letter-spacing không còn cần
+	   (mỗi ô 1 ký tự). Viết phẳng — KHÔNG dvh/:has() (iOS ≤15.3). */
+	:global(.totp-otp) {
+		display: flex;
+		width: 100%;
+		max-width: 100%;
+		box-sizing: border-box;
 	}
-	/* Mobile: placeholder dài + letter-spacing tràn đè counter 0/6 (ui-checker bắt)
-	   → mobile giảm letter-spacing + rút gọn placeholder bằng font-size nhỏ hơn. */
-	@media (max-width: 480px) {
-		:global(.totp-input) :global(.input-highlight-wrapper) {
-			letter-spacing: 0.3em;
-			font-size: 1rem;
-		}
-		:global(.totp-input) :global(.input-max-length) {
-			display: none;
-		}
+
+	:global(.totp-otp .otp-box) {
+		flex: 1 1 0;
+		min-width: 0;
+		height: 2.75rem;
+		min-height: 2.75rem;
+		background: var(--default-100, var(--default-200));
+		border-color: var(--default-300);
+		color: var(--foreground);
+		font-size: 1.05rem;
+		text-align: center;
+	}
+
+	:global(.totp-otp .otp-box.filled) {
+		background: var(--default-100, var(--default-200));
 	}
 
 	.login-options {
