@@ -28,12 +28,15 @@ export interface AddressInputProps {
 	/** Batch 16 (mục 8): breadcrumb 3 cấp trong header step modal (mobile) — chỉ
 	 *  render khi breadcrumbHome có giá trị (trang khác không truyền → không đổi gì) */
 	breadcrumbHome?: string | null;
-	/** Phần 2 — tên bản ghi (vd tên supplier), tap cũng gọi onBreadcrumbHomeTap */
+	/** Phần 2 — tên bản ghi (vd tên supplier) / nhãn hành động (vd 'Create') */
 	breadcrumbName?: string | null;
 	/** Phần 3 — mặc định i18n 'Địa chỉ'/'Address' khi null và breadcrumbHome có giá trị */
 	breadcrumbCurrent?: string | null;
-	/** Tap phần 1/2 → callback (trang suppliers: đóng step modal quay lại form) */
+	/** Tap phần 1 (home) → callback (trang suppliers: đóng TẤT CẢ modal về datatable) */
 	onBreadcrumbHomeTap?: () => void;
+	/** Batch 17: tap phần 2 (name/create) → callback riêng (mặc định dùng
+	 *  onBreadcrumbHomeTap — trang chỉ cần quay lại form thì không cần truyền) */
+	onBreadcrumbNameTap?: () => void;
 }
 
 export type { InputProps };

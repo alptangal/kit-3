@@ -2924,10 +2924,11 @@
 										}}
 									>✕</button>
 								</div>
-								<!-- Batch 16 (mục 8): breadcrumb 3 cấp trên step modal mobile —
-								     tap Suppliers/tên → đóng step modal về form (liền mạch).
-								     Comment để NGOÀI tag: comment HTML trong tag = lỗi cú pháp
-								     Svelte "Expected token >". -->
+								<!-- Batch 16 (mục 8): breadcrumb 3 cấp trên step modal mobile.
+								     Batch 17 (yêu cầu 3d): Suppliers › Create/Tên › Địa chỉ —
+								     tap Suppliers → đóng TẤT CẢ về datatable; tap Create/Tên →
+								     chỉ đóng step modal về form. Comment để NGOÀI tag: comment
+								     HTML trong tag = lỗi cú pháp Svelte "Expected token >". -->
 								<AddressInput
 									bind:value={entry.address}
 									bind:breakdown={supplierAddressBreakdowns[addrIndex]}
@@ -2935,8 +2936,9 @@
 									placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
 									disabled={supplierSubmitting}
 									breadcrumbHome={pageContents.title[lang] ?? 'Suppliers'}
-									breadcrumbName={supplierForm.name || null}
+									breadcrumbName={supplierEditMode === 'edit' ? (supplierForm.name || null) : pageContents.supplierModal.submit[lang]}
 									onBreadcrumbHomeTap={closeAllFromStep}
+									onBreadcrumbNameTap={attemptCloseStepModal}
 								/>
 							</div>
 						{/each}

@@ -29,7 +29,8 @@
 		breadcrumbHome = null as string | null,
 		breadcrumbName = null as string | null,
 		breadcrumbCurrent = null as string | null,
-		onBreadcrumbHomeTap
+		onBreadcrumbHomeTap,
+		onBreadcrumbNameTap
 	}: AddressInputProps = $props();
 
 	// Hệ ĐVHC đang chọn: 'old' (63 tỉnh) | 'new' (34 tỉnh) — chỉ có ý nghĩa khi newBreakdown được bind
@@ -809,13 +810,19 @@
 				<nav class="address-step__crumbs" aria-label="Cấp địa giới">
 					{#if breadcrumbHome}
 						<!-- Batch 16 (mục 8): breadcrumb trang từ props cha — phần 1 (home) +
-						     phần 2 (name) DEACTIVE, tap → onBreadcrumbHomeTap (suppliers:
-						     đóng step modal quay lại form). Phần 3 = breadcrumbCurrent
-						     (mặc định i18n 'Địa chỉ') ACTIVE. stepCrumbs nối tiếp sau. -->
+						     phần 2 (name). Batch 17: home tap → onBreadcrumbHomeTap (suppliers:
+						     đóng TẤT CẢ về datatable); name tap → onBreadcrumbNameTap (mặc định
+						     onBreadcrumbHomeTap — trang muốn quay về form thì truyền riêng).
+						     Phần 3 = breadcrumbCurrent (mặc định i18n 'Địa chỉ') ACTIVE.
+						     stepCrumbs nối tiếp sau. -->
 						<button type="button" class="address-step__crumb" onclick={onBreadcrumbHomeTap}>{breadcrumbHome}</button>
 						<span class="address-step__crumb-sep" aria-hidden="true">›</span>
 						{#if breadcrumbName}
-							<button type="button" class="address-step__crumb" onclick={onBreadcrumbHomeTap}>{breadcrumbName}</button>
+							<button
+								type="button"
+								class="address-step__crumb"
+								onclick={onBreadcrumbNameTap ?? onBreadcrumbHomeTap}
+							>{breadcrumbName}</button>
 							<span class="address-step__crumb-sep" aria-hidden="true">›</span>
 						{/if}
 						<span class="address-step__crumb address-step__crumb--current">{breadcrumbCurrent ?? tr('address')}</span>
