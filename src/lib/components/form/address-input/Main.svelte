@@ -13,6 +13,7 @@
 	// Tái sử dụng: Input (text), Select (tỉnh/huyện/ward) — import trực tiếp (tránh circular barrel)
 	import Input from '../input/Main.svelte';
 	import Select from '../select/Main.svelte';
+	import { Modal } from '$components/modal';
 	import { client } from '$store/basic.svelte';
 	import type { AddressInputProps, AddressBreakdown, NewAddressBreakdown } from './_interface';
 	import type { SelectConfigs } from '../select/_interface';
@@ -597,14 +598,8 @@
 		}
 	}
 
-	// Key arrow selection trong step picker — vẫn giữ tinh thần keyboard của Select
-	// (mobile chính là touch, nhưng desktop nhỏ vẫn dùng được)
-	function onStepKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			stepOpen = false;
-		}
-	}
+	// Batch 19: ESC + backdrop + nút ✕ do Modal component xử lý (isDimissable
+	// + onClose) — bỏ onStepKeydown cũ (div fixed tự handle Escape).
 
 </script>
 
@@ -788,23 +783,32 @@
 	{/if}
 </div>
 
-<!-- ── Fullscreen STEP modal (batch14, mobile) — 1 Modal, nội dung slide theo cấp ── -->
+<!-- ── Fullscreen STEP modal (batch14, mobile) — Batch 19: PORTAL qua Modal component
+     (size-full, như Select fullscreen batch12) — trước đây div fixed inline trong
+     modal-body-root: iOS 15.1 vẽ position:fixed trong scroll container SAI vị trí
+     (backdrop không phủ, panel chìm xuống đáy, hit-test lệch) → user nhìn thấy
+     modal create bên dưới + không thấy breadcrumb. Modal portal ra ngoài root
+     Container → fixed theo viewport thật. ── -->
 {#if selectFullscreen && stepOpen}
-	<div
-		class="address-step"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Chọn địa giới hành chính"
-		tabindex="-1"
-		onkeydown={onStepKeydown}
+	<Modal
+		size="full"
+		variant="opaque"
+		transitionType="none"
+		// KHÔNG autoFocus: fullscreen chỉ chạy mobile — focus trap nhắm search input
+		// → iOS 15 bật keyboard ngay khi mở (bẫy batch 12). User tự tap ô search.
+		autoFocus={false}
+		onClose={() => (stepOpen = false)}
+		bind:display={stepOpen}
 	>
-		<!-- backdrop: đóng modal — a11y: Esc qua onkeydown trên dialog + nút ✕ header -->
-		<div class="address-step__backdrop" aria-hidden="true" onclick={() => (stepOpen = false)}></div>
-		<div class="address-step__panel">
-			<header class="address-step__header">
-				{#if stepLevel > 0}
-					<button type="button" class="address-step__back" aria-label="Quay lại" onclick={() => stepBack(stepLevel - 1)}>
-						<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+		<Modal.Container>
+			<Modal.Container.Header
+				class="address-step__header-root"
+				actionButtons={{ close: { display: false } }}
+			>
+				<div class="address-step__header">
+					{#if stepLevel > 0}
+						<button type="button" class="address-step__back" aria-label="Quay lại" onclick={() => stepBack(stepLevel - 1)}>
+							<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
 					</button>
 				{/if}
 				<nav class="address-step__crumbs" aria-label="Cấp địa giới">
@@ -839,38 +843,42 @@
 						{/if}
 					{/each}
 				</nav>
-				<button type="button" class="address-step__close" aria-label="Đóng" onclick={() => (stepOpen = false)}>
 					<!-- Batch 16 (mục 8): icon ✕ bọc span riêng để trang cha querySelector
 					     (.address-step__close-icon) bấm hộ khi tap breadcrumb cha — dùng
 					     dispatchEvent MouseEvent (click() bị Playwright intercept timeout,
-					     memory suppliers-batch4). -->
-					<span class="address-step__close-icon" aria-hidden="true">✕</span>
-				</button>
-			</header>
-			<!-- Batch 15 (m12278-11): hàng tóm tắt ĐÃ CHỌN nằm trên search field —
-			     chuỗi tỉnh › huyện › xã của các cấp có giá trị; tap 1 cấp → quay lại
-			     cấp đó (stepBack) để chọn lại. -->
-			{#if stepSelectedChain.length > 0}
-				<nav class="address-step__selected" aria-label="Đã chọn">
-					{#each stepSelectedChain as sel, si (sel.level)}
-						{#if si > 0}<span class="address-step__selected-sep" aria-hidden="true">›</span>{/if}
-						<button type="button" class="address-step__selected-item" onclick={() => stepBack(sel.level)}>
-							{sel.label}
-						</button>
-					{/each}
-				</nav>
-			{/if}
-			<div class="address-step__search">
-				<input
-					type="text"
-					bind:value={stepSearch}
-					placeholder="Tìm kiếm..."
-					enterkeyhint="search"
-				/>
-				{#if stepSearch}
-					<button type="button" class="address-step__search-clear" aria-label="Xoá tìm kiếm" onclick={() => (stepSearch = '')}>✕</button>
+					     memory suppliers-batch4). Batch 19: giữ ✕ custom (framework ✕ màu
+					     error outline không hợp ngữ cảnh picker) — tắt nút ✕ framework qua
+					     actionButtons.close.display=false. -->
+					<button type="button" class="address-step__close" aria-label="Đóng" onclick={() => (stepOpen = false)}>
+						<span class="address-step__close-icon" aria-hidden="true">✕</span>
+					</button>
+				</div>
+			</Modal.Container.Header>
+			<Modal.Container.Body class="address-step__body">
+				<!-- Batch 15 (m12278-11): hàng tóm tắt ĐÃ CHỌN nằm trên search field —
+				     chuỗi tỉnh › huyện › xã của các cấp có giá trị; tap 1 cấp → quay lại
+				     cấp đó (stepBack) để chọn lại. -->
+				{#if stepSelectedChain.length > 0}
+					<nav class="address-step__selected" aria-label="Đã chọn">
+						{#each stepSelectedChain as sel, si (sel.level)}
+							{#if si > 0}<span class="address-step__selected-sep" aria-hidden="true">›</span>{/if}
+							<button type="button" class="address-step__selected-item" onclick={() => stepBack(sel.level)}>
+								{sel.label}
+							</button>
+						{/each}
+					</nav>
 				{/if}
-			</div>
+				<div class="address-step__search">
+					<input
+						type="text"
+						bind:value={stepSearch}
+						placeholder="Tìm kiếm..."
+						enterkeyhint="search"
+					/>
+					{#if stepSearch}
+						<button type="button" class="address-step__search-clear" aria-label="Xoá tìm kiếm" onclick={() => (stepSearch = '')}>✕</button>
+					{/if}
+				</div>
 			<!-- Track slide: 2 lớp nội dung (cũ + mới) xếp chồng theo hướng stepDir -->
 			<div class="address-step__list" role="listbox" aria-label="Danh sách địa giới">
 				{#if stepLevel === 0}
@@ -923,8 +931,9 @@
 					{/if}
 				{/if}
 			</div>
-		</div>
-	</div>
+			</Modal.Container.Body>
+		</Modal.Container>
+	</Modal>
 {/if}
 
 <style lang="scss">
@@ -1066,257 +1075,231 @@
 		}
 	}
 
-	.address-step {
-		position: fixed;
-		inset: 0;
-		z-index: 10000;
+	/* Batch 19: step modal PORTAL qua Modal component — các class con KHÔNG còn
+	   lồng trong cha .address-step (root div đã bỏ) → flatten CSS. Scoped
+	   selector `.address-step .address-step__header` sẽ chết (không match) —
+	   mỗi class tự đứng độc lập. Header nằm trong .modal-header-root (framework
+	   negative-margin full-width), Body mang class address-step__body. */
 
-		&__backdrop {
-			position: absolute;
-			inset: 0;
-			background: rgba(0, 0, 0, 0.45);
-			animation: address-step-fade 0.15s ease;
+	/* Header row (back + crumbs + ✕) — con của Modal.Container.Header:
+	   flex full-width, framework Header đang justify-between → con tự quản. */
+	.address-step__header {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		flex: 1;
+		min-width: 0;
+		min-height: 2.5rem;
+	}
+
+	.address-step__back,
+	.address-step__close {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		padding: 0;
+		border: none;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground, inherit);
+		cursor: pointer;
+		transition: background 0.15s ease;
+
+		&:hover {
+			background: var(--accent, hsl(0 0% 96%));
 		}
+	}
 
-		/* Panel fullscreen phủ hết màn hình — bên trong chia header/search/list,
-		   list scroll riêng (100dvh cho iOS URL bar). */
-		&__panel {
-			position: absolute;
-			inset: 0;
-			display: flex;
-			flex-direction: column;
-			background: var(--background, #fff);
-			animation: address-step-panel-in 0.2s ease;
+	/* ✕ bọc span (batch 16) — kích thước theo nút, giữ stroke-like glyph */
+	.address-step__close-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25em;
+		height: 1.25em;
+		font-size: 1em;
+		line-height: 1;
+	}
+
+	.address-step__crumbs {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		flex: 1;
+		min-width: 0;
+		overflow-x: auto;
+		white-space: nowrap;
+		scrollbar-width: none;
+
+		&::-webkit-scrollbar {
+			display: none;
 		}
+	}
 
-		&__header {
-			display: flex;
-			align-items: center;
-			gap: 0.375rem;
-			min-height: 3rem;
-			padding: 0.5rem 0.625rem;
-			border-bottom: 1px solid var(--border, var(--default-200, #e5e7eb));
-		}
+	.address-step__crumb {
+		/* Batch 16 (mục 8): min-width:0 + ellipsis để từng phần co được trong flex
+		   khi breadcrumb 3 cấp (home › name › current › step) chật header;
+		   phần cuối (--current) co trước (flex-shrink 2). */
+		min-width: 0;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--foreground-500, var(--foreground));
+		background: none;
+		border: none;
+		padding: 0.125rem 0.25rem;
+		border-radius: 0.375rem;
+		cursor: pointer;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 9rem;
 
-		&__back,
-		&__close {
-			flex: none;
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			width: 2rem;
-			height: 2rem;
-			padding: 0;
-			border: none;
-			border-radius: 0.5rem;
-			background: transparent;
+		&--current {
 			color: var(--foreground, inherit);
-			cursor: pointer;
-			transition: background 0.15s ease;
-
-			&:hover {
-				background: var(--accent, hsl(0 0% 96%));
-			}
+			font-weight: 600;
+			cursor: default;
+			flex-shrink: 2;
 		}
+	}
 
-		/* ✕ bọc span (batch 16) — kích thước theo nút, giữ stroke-like glyph */
-		&__close-icon {
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			width: 1.25em;
-			height: 1.25em;
-			font-size: 1em;
-			line-height: 1;
+	.address-step__crumb-sep {
+		color: var(--foreground-400, hsl(0 0% 62%));
+	}
+
+	/* Batch 15 (m12278-11): hàng tóm tắt đã chọn trên search — chips nhỏ
+	   bọc giá trị, tap quay lại cấp đó. */
+	.address-step__selected {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		padding: 0.375rem 0.625rem;
+		border-bottom: 1px solid var(--border, var(--default-200, #e5e7eb));
+	}
+
+	.address-step__selected-item {
+		display: inline-flex;
+		align-items: center;
+		max-width: 100%;
+		padding: 0.125rem 0.5rem;
+		border: none;
+		border-radius: 0.375rem;
+		/* AA trên --primary-soft: chữ --primary-800 (6.31:1) thay --primary (2.82:1) */
+		background: var(--primary-soft);
+		color: var(--primary-800, hsl(227.1 75.74% 41.14%));
+		font-size: 0.8125rem;
+		font-weight: 500;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		@media (prefers-color-scheme: dark) {
+			background: hsl(212 92% 20%);
+			color: hsl(212 92% 70%);
 		}
+	}
 
-		&__crumbs {
-			display: flex;
-			align-items: center;
-			gap: 0.25rem;
-			flex: 1;
-			min-width: 0;
-			overflow-x: auto;
-			white-space: nowrap;
-			scrollbar-width: none;
+	.address-step__selected-sep {
+		color: var(--foreground-400, hsl(0 0% 62%));
+	}
 
-			&::-webkit-scrollbar {
-				display: none;
-			}
-		}
+	.address-step__search {
+		position: relative;
+		padding: 0.5rem 0.625rem;
+		border-bottom: 1px solid var(--border, var(--default-200, #e5e7eb));
 
-		&__crumb {
-			/* Batch 16 (mục 8): min-width:0 + ellipsis để từng phần co được trong flex
-			   khi breadcrumb 3 cấp (home › name › current › step) chật header;
-			   phần cuối (--current) co trước (flex-shrink 2). */
-			min-width: 0;
-			font-size: 0.875rem;
-			font-weight: 500;
-			color: var(--foreground-500, var(--foreground));
-			background: none;
-			border: none;
-			padding: 0.125rem 0.25rem;
-			border-radius: 0.375rem;
-			cursor: pointer;
-			white-space: nowrap;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			max-width: 9rem;
-
-			&--current {
-				color: var(--foreground, inherit);
-				font-weight: 600;
-				cursor: default;
-				flex-shrink: 2;
-			}
-		}
-
-		&__crumb-sep {
-			color: var(--foreground-400, hsl(0 0% 62%));
-		}
-
-		/* Batch 15 (m12278-11): hàng tóm tắt đã chọn trên search — chips nhỏ
-		   bọc giá trị, tap quay lại cấp đó. */
-		&__selected {
-			display: flex;
-			align-items: center;
-			flex-wrap: wrap;
-			gap: 0.25rem;
-			padding: 0.375rem 0.625rem;
-			border-bottom: 1px solid var(--border, var(--default-200, #e5e7eb));
-		}
-
-		&__selected-item {
-			display: inline-flex;
-			align-items: center;
-			max-width: 100%;
-			padding: 0.125rem 0.5rem;
-			border: none;
-			border-radius: 0.375rem;
-			/* AA trên --primary-soft: chữ --primary-800 (6.31:1) thay --primary (2.82:1) */
-			background: var(--primary-soft);
-			color: var(--primary-800, hsl(227.1 75.74% 41.14%));
-			font-size: 0.8125rem;
-			font-weight: 500;
-			white-space: nowrap;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			cursor: pointer;
-
-			@media (prefers-color-scheme: dark) {
-				background: hsl(212 92% 20%);
-				color: hsl(212 92% 70%);
-			}
-		}
-
-		&__selected-sep {
-			color: var(--foreground-400, hsl(0 0% 62%));
-		}
-
-		&__search {
-			position: relative;
-			padding: 0.5rem 0.625rem;
-			border-bottom: 1px solid var(--border, var(--default-200, #e5e7eb));
-
-			input {
-				width: 100%;
-				min-height: 2.25rem;
-				padding: 0.375rem 0.625rem;
-				border: 1px solid var(--border, var(--default-300, #d1d5db));
-				border-radius: 0.5rem;
-				background: var(--background, #fff);
-				color: var(--foreground, inherit);
-				font-size: 0.875rem;
-				outline: none;
-
-				&:focus {
-					border-color: var(--primary);
-				}
-			}
-		}
-
-		&__search-clear {
-			position: absolute;
-			right: 1rem;
-			top: 50%;
-			transform: translateY(-50%);
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			width: 1.25rem;
-			height: 1.25rem;
-			padding: 0;
-			border: none;
-			border-radius: 9999px;
-			background: var(--default-200, hsl(0 0% 92%));
-			color: var(--foreground-500, inherit);
-			font-size: 0.625rem;
-			cursor: pointer;
-		}
-
-		&__list {
-			flex: 1 1 auto;
-			min-height: 0;
-			overflow-y: auto;
-			-webkit-overflow-scrolling: touch;
-			padding: 0.25rem 0.375rem 1rem;
-		}
-
-		&__option {
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			gap: 0.5rem;
+		input {
 			width: 100%;
-			padding: 0.625rem 0.625rem;
-			border: none;
+			min-height: 2.25rem;
+			padding: 0.375rem 0.625rem;
+			border: 1px solid var(--border, var(--default-300, #d1d5db));
 			border-radius: 0.5rem;
-			background: transparent;
+			background: var(--background, #fff);
 			color: var(--foreground, inherit);
 			font-size: 0.875rem;
-			text-align: left;
-			cursor: pointer;
-			transition: background 0.12s ease;
+			outline: none;
 
-			&:active {
-				background: var(--accent, hsl(0 0% 96%));
+			&:focus {
+				border-color: var(--primary);
 			}
-
-			&[aria-selected='true'] {
-				color: var(--primary, hsl(212 92% 45%));
-				font-weight: 600;
-			}
-		}
-
-		&__check {
-			flex: none;
-		}
-
-		&__empty {
-			padding: 1.5rem 0.625rem;
-			text-align: center;
-			font-size: 0.8125rem;
-			color: var(--foreground-400, hsl(0 0% 62%));
 		}
 	}
 
-	@keyframes address-step-fade {
-		from {
-			opacity: 0;
+	.address-step__search-clear {
+		position: absolute;
+		right: 1rem;
+		top: 50%;
+		transform: translateY(-50%);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		padding: 0;
+		border: none;
+		border-radius: 9999px;
+		background: var(--default-200, hsl(0 0% 92%));
+		color: var(--foreground-500, inherit);
+		font-size: 0.625rem;
+		cursor: pointer;
+	}
+
+	/* Body của Modal (address-step__body): cột flex chiếm hết chiều cao —
+	   selected + search cố định trên, list scroll nội bộ (pattern
+	   .select-fullscreen-body batch 12). BẪY batch12: class nằm trên element
+	   render bởi Modal.Container.Body (component khác) → scoped selector bị
+	   prune ("Unused CSS selector") → :global() bắt buộc. */
+	:global(.address-step__body) {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.address-step__list {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+		padding: 0.25rem 0.375rem 1rem;
+	}
+
+	.address-step__option {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.625rem 0.625rem;
+		border: none;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground, inherit);
+		font-size: 0.875rem;
+		text-align: left;
+		cursor: pointer;
+		transition: background 0.12s ease;
+
+		&:active {
+			background: var(--accent, hsl(0 0% 96%));
 		}
-		to {
-			opacity: 1;
+
+		&[aria-selected='true'] {
+			color: var(--primary, hsl(212 92% 45%));
+			font-weight: 600;
 		}
 	}
 
-	@keyframes address-step-panel-in {
-		from {
-			opacity: 0;
-			transform: translateX(calc(var(--step-dir, 1) * 1.5rem));
-		}
-		to {
-			opacity: 1;
-			transform: translateX(0);
-		}
+	.address-step__check {
+		flex: none;
+	}
+
+	.address-step__empty {
+		padding: 1.5rem 0.625rem;
+		text-align: center;
+		font-size: 0.8125rem;
+		color: var(--foreground-400, hsl(0 0% 62%));
 	}
 </style>
