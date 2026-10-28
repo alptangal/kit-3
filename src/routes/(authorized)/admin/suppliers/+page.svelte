@@ -2733,6 +2733,12 @@
 					{#if supplierEditMode === 'edit' && supplierForm.name}
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 						<span class="supplier-modal-title__name supplier-modal-title__name--active">{supplierForm.name}</span>
+					{:else if supplierEditMode !== 'edit'}
+						<!-- Batch 17b: create — crumb theo cấu trúc Suppliers › Create -->
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">
+							{pageContents.supplierModal.submit[lang]}
+						</span>
 					{/if}
 				</div>
 			</Modal.Container.Header>
@@ -2829,6 +2835,9 @@
 								>✕</button>
 								{#if (phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2}
 									<span class="field-row-dup-msg">{pageContents.supplierModal.dupPhone[lang]}</span>
+								{:else if str(phone).trim() && !PHONE_RE.test(str(phone).trim())}
+									<!-- Batch 17b: message validate inline như login/register -->
+									<span class="field-row-dup-msg">{pageContents.form.invalidPhone[lang]}</span>
 								{/if}
 							</div>
 						{/each}
@@ -2866,6 +2875,9 @@
 								>✕</button>
 								{#if (emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2}
 									<span class="field-row-dup-msg">{pageContents.supplierModal.dupEmail[lang]}</span>
+								{:else if str(email).trim() && !EMAIL_RE.test(str(email).trim())}
+									<!-- Batch 17b: message validate inline như login/register -->
+									<span class="field-row-dup-msg">{pageContents.form.invalidEmail[lang]}</span>
 								{/if}
 							</div>
 						{/each}
