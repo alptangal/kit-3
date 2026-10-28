@@ -36,3 +36,4 @@ playwright-report/
 test-results/
 tests/_ui-shots/*.png
 ios-safari-remote-debug-kit-main copy/*
+.vercel
