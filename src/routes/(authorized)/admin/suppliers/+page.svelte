@@ -243,6 +243,8 @@
 			statusActive: { vi: 'Đang hoạt động', en: 'Active' },
 			statusInactive: { vi: 'Ngừng hoạt động', en: 'Inactive' },
 			submit: { vi: 'Tạo', en: 'Create' },
+			// Batch 18: nút more khi item breadcrumb tràn bị ẩn vào popover
+			crumbMore: { vi: 'Xem đường dẫn', en: 'Show path' },
 			save: { vi: 'Lưu thay đổi', en: 'Save changes' },
 			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' },
 			// Batch 11: field passive metadata (cuối form, edit mode)
@@ -620,6 +622,11 @@
 
 	// ── Modal tạo/sửa nhà cung cấp ──
 	let supplierModalDisplay = $state(false);
+	// Batch 18: mobile breadcrumb tràn → item "Suppliers" (cấp cao nhất) ẩn vào
+	// popover sau nút more (ưu tiên giữ item cấp thấp nhất theo yêu cầu user)
+	let crumbTitleEl = $state<HTMLElement | null>(null);
+	let suppliersCrumbHidden = $state(false);
+	let crumbMoreOpen = $state(false);
 	let supplierSubmitting = $state(false);
 	let supplierError = $state<string | undefined>(undefined);
 	// Ref Modal.Container.Body (element DOM) — dùng cho scroll-to-invalid khi submit
@@ -892,6 +899,67 @@
 		}
 	});
 
+	// Batch 18: đo tràn breadcrumb title modal (mobile) — container co bởi
+	// min-width:0 nên scrollWidth > clientWidth = có item bị ép. Ẩn item CAO
+	// NHẤT (Suppliers) vào popover trước; hàng còn [more][›][name] — nếu vẫn
+	// tràn thì ellipsis trên name xử lý (đã có). Chỉ reset khi đang ẩn + tick
+	// (DOM flush về [Suppliers][›][name]) trước đo — reset vô điều kiện gây
+	// ping-pong RO vô hạn. Effect KHÔNG đọc suppliersCrumbHidden qua deps.
+	async function measureCrumbOverflow() {
+		if (!isMobile || !crumbTitleEl) return;
+		if (suppliersCrumbHidden) {
+			suppliersCrumbHidden = false;
+			await tick();
+		}
+		// Batch 18 (review P1): title.scrollWidth === clientWidth LUÔN vì các item
+		// con (__crumb/__name) có min-width:0 + overflow:hidden nuốt hết độ chênh
+		// (probe tĩnh xác minh: title 343/343, name 543/274). Đo trên item CUỐI
+		// (name active) — bị ellipsis cắt = đang tràn.
+		const activeEl = crumbTitleEl.querySelector('.supplier-modal-title__name--active');
+		const crumbEl = crumbTitleEl.querySelector('.supplier-modal-title__crumb');
+		const overflowEl = activeEl ?? crumbEl;
+		suppliersCrumbHidden = !!overflowEl && overflowEl.scrollWidth > overflowEl.clientWidth + 1;
+	}
+
+	$effect(() => {
+		// deps: modal mở (element mount mới) / name/editMode/isMobile đổi →
+		// DOM render lại → đo sau 1 frame. KHÔNG đọc suppliersCrumbHidden (loop).
+		void supplierModalDisplay;
+		void crumbTitleEl;
+		void supplierForm.name;
+		void supplierEditMode;
+		void isMobile;
+		const raf = requestAnimationFrame(measureCrumbOverflow);
+		// Batch 14 lesson: viewport/rotate đổi không trigger effect → ResizeObserver
+		const ro = new ResizeObserver(() => requestAnimationFrame(measureCrumbOverflow));
+		if (crumbTitleEl) ro.observe(crumbTitleEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+
+	$effect(() => {
+		// modal đóng → reset popover (đo tự hết hiệu lực vì element unmount)
+		if (!supplierModalDisplay) {
+			suppliersCrumbHidden = false;
+			crumbMoreOpen = false;
+		}
+	});
+
+	$effect(() => {
+		// Batch 18 (review P3): outside-click đóng popover — dùng mousedown như
+		// Select click-outside, vì các nút trong form (vd image-upload row-btn)
+		// gọi stopPropagation() trên click → event không bubble tới document.
+		if (!crumbMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (crumbTitleEl && t && crumbTitleEl.contains(t)) return; // tap more/item → tự xử
+			crumbMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
 	// Deep-link (batch 11, 5f): gỡ ?supplier= khỏi URL giữ nguyên query khác
 	function cleanSupplierParam() {
 		if (page.url.searchParams.has('supplier')) {
@@ -2697,38 +2765,54 @@
 			<Modal.Container.Header
 				actionButtons={{ close: { display: !isMobile } }}
 			>
-				<div class="supplier-modal-title">
-					<!-- Batch 15 (m12278-10): edit mode mobile BỎ chevron back —
-					     breadcrumb Suppliers › supplier_name đã đủ nghĩa quay lại
-					     datatable; chỉ create mới giữ back. Label hiển thị dạng
-					     breadcrumb "Suppliers › Tên" (dấu › phân tách). -->
-					<!-- Batch 16 (m13579-2): mobile — label là breadcrumb item
-					     DEACTIVE nhưng TAP ĐƯỢC (quay lại datatable qua
-					     attemptClose, dirty-guard vẫn chặn); name = item ACTIVE. -->
-					{#if isMobile && supplierEditMode !== 'edit'}
+				<div class="supplier-modal-title" bind:this={crumbTitleEl}>
+					<!-- Batch 18: bỏ chevron back (lãng phí không gian — breadcrumb
+					     Suppliers › tên đã đủ nghĩa quay lại). Mobile breadcrumb tràn →
+					     item Suppliers (cấp cao nhất) ẩn vào popover sau nút more, ưu
+					     tiên giữ item cấp thấp nhất (name/active). -->
+					{#if isMobile && suppliersCrumbHidden}
 						<button
 							type="button"
-							class="supplier-modal-back"
-							aria-label={pageContents.modals.cancel[lang]}
+							class="supplier-modal-title__more"
+							data-test="supplier-crumb-more"
+							aria-label={pageContents.supplierModal.crumbMore[lang]}
+							aria-expanded={crumbMoreOpen}
 							disabled={supplierSubmitting}
-							onclick={() => closeGuard.attemptClose()}
+							onclick={() => (crumbMoreOpen = !crumbMoreOpen)}
 						>
-							<Icon icon={iconify['chevron-left-rounded']} size="md" />
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
 						</button>
+						{#if crumbMoreOpen}
+							<div class="supplier-crumb-popover" role="menu">
+								<button
+									type="button"
+									class="supplier-crumb-popover__item"
+									disabled={supplierSubmitting}
+									onclick={() => {
+										crumbMoreOpen = false;
+										closeGuard.attemptClose();
+									}}
+								>
+									{pageContents.title[lang]}
+								</button>
+							</div>
+						{/if}
 					{/if}
-					{#if isMobile}
-						<button
-							type="button"
-							class="supplier-modal-title__label supplier-modal-title__crumb"
-							disabled={supplierSubmitting}
-							onclick={() => closeGuard.attemptClose()}
-						>
-							{pageContents.title[lang]}
-						</button>
-					{:else}
-						<span class="supplier-modal-title__label">
-							{pageContents.title[lang]}
-						</span>
+					{#if !isMobile || !suppliersCrumbHidden}
+						{#if isMobile}
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
+								disabled={supplierSubmitting}
+								onclick={() => closeGuard.attemptClose()}
+							>
+								{pageContents.title[lang]}
+							</button>
+						{:else}
+							<span class="supplier-modal-title__label">
+								{pageContents.title[lang]}
+							</span>
+						{/if}
 					{/if}
 					{#if supplierEditMode === 'edit' && supplierForm.name}
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
@@ -4790,6 +4874,12 @@
 			padding-block: 0.5rem;
 			justify-content: flex-start;
 		}
+		/* Batch 18: title chiếm đủ width header (clientWidth cố định, không theo
+		   content) — toggle ẩn item breadcrumb không đổi kích thước container →
+		   ResizeObserver không fire lại vô hạn (ping-pong). */
+		.supplier-modal-title {
+			flex: 1 1 auto;
+		}
 	}
 
 	/* Batch 11 (5c): title modal đồng bộ tên supplier — label + tên với ellipsis
@@ -4799,24 +4889,79 @@
 		align-items: center;
 		gap: 0.5rem;
 		min-width: 0;
+		/* Batch 18: mốc định vị popover tràn breadcrumb */
+		position: relative;
+		/* Batch 18 (review P3): tạo stacking context z3 để popover con thắng
+		   .field-icon (z2 thăng lên context modal-container-root; header chỉ z1). */
+		z-index: 3;
 	}
 
-	.supplier-modal-back {
+	/* Batch 18: nút more — hiện khi item breadcrumb bị ẩn vào popover (mobile) */
+	.supplier-modal-title__more {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		width: 2rem;
 		height: 2rem;
-		margin-left: -0.375rem;
+		margin-left: -0.25rem;
 		border: 0;
 		border-radius: 0.5rem;
 		background: transparent;
-		color: var(--foreground);
+		color: var(--foreground-500);
 		cursor: pointer;
 		flex-shrink: 0;
 
 		&:hover {
 			background: hsl(0 0% 0% / 0.06);
+		}
+
+		&:disabled {
+			cursor: default;
+			opacity: 0.5;
+		}
+	}
+
+	/* Batch 18: popover item breadcrumb bị ẩn — cấu trúc breadcrumb trục Y */
+	.supplier-crumb-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 10rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		/* Batch 18 (review P3): token đúng là --box-shadow-lg (variables.scss:570),
+		   --shadow-lg không tồn tại — fallback luôn chạy, mất --shadow-color theme. */
+		box-shadow: var(--box-shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+	}
+
+	.supplier-crumb-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		/* Batch 18 (review P3): --foreground-500 light = 4.41:1 fail sát AA 4.5
+		   (text 16px/500); --foreground-600 = 7.0:1 PASS. */
+		color: var(--foreground-600);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+
+		&:disabled {
+			cursor: default;
 		}
 	}
 
