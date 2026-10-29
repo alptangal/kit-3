@@ -251,6 +251,31 @@
 			passiveCreatedAt: { vi: 'Tạo lúc', en: 'Created' },
 			passiveUpdatedAt: { vi: 'Cập nhật lần cuối', en: 'Last updated' }
 		},
+		// Batch 20 (A4): more-menu footer form modal — history / delete / analytics
+		more: {
+			label: { vi: 'Tuỳ chọn khác', en: 'More options' },
+			history: { vi: 'Lịch sử', en: 'History' },
+			delete: { vi: 'Xoá nhà cung cấp', en: 'Delete supplier' },
+			analytics: { vi: 'Phân tích nhập hàng', en: 'Purchase analytics' },
+			deleteTitle: { vi: 'Xoá nhà cung cấp?', en: 'Delete supplier?' },
+			deleteDesc: {
+				vi: 'Nhà cung cấp này sẽ bị xoá vĩnh viễn khỏi hệ thống.',
+				en: 'This supplier will be permanently removed.'
+			},
+			deleteConfirm: { vi: 'Xoá', en: 'Delete' },
+			deleted: { vi: 'Đã xoá nhà cung cấp', en: 'Supplier deleted' },
+			analyticsTitle: { vi: 'Thống kê nhập hàng', en: 'Purchase statistics' },
+			analyticsLoading: { vi: 'Đang tải thống kê…', en: 'Loading statistics…' },
+			analyticsEmpty: { vi: 'Chưa có đơn nhập nào được ghi nhận', en: 'No purchase orders recorded yet' },
+			analyticsOrderCount: { vi: 'Số đơn đã nhập', en: 'Orders received' },
+			analyticsTotalQuantity: { vi: 'Tổng lượng hàng', en: 'Total quantity' },
+			analyticsTotalValue: { vi: 'Tổng giá trị', en: 'Total value' },
+			analyticsMonthly: { vi: 'Theo tháng', en: 'By month' },
+			analyticsColPeriod: { vi: 'Tháng', en: 'Period' },
+			analyticsColOrders: { vi: 'Đơn', en: 'Orders' },
+			analyticsColQty: { vi: 'Lượng', en: 'Quantity' },
+			analyticsColValue: { vi: 'Giá trị', en: 'Value' }
+		},
 		history: {
 			viewHistory: { vi: 'Lịch sử', en: 'History' }
 		},
@@ -337,7 +362,10 @@
 			poFailed: { vi: 'Tạo đơn mua không thành công', en: 'Failed to create purchase order' },
 			statusUpdated: { vi: 'Đã cập nhật trạng thái', en: 'Status updated' },
 			statusFailed: { vi: 'Cập nhật trạng thái không thành công', en: 'Failed to update status' },
-			requestFailed: { vi: 'Đã xảy ra lỗi không xác định', en: 'Unexpected error occurred' }
+			requestFailed: { vi: 'Đã xảy ra lỗi không xác định', en: 'Unexpected error occurred' },
+			// Batch 20 (A4): xoá 1 NCC từ more-menu footer form modal
+			supplierDeleted: { vi: 'Đã xoá nhà cung cấp', en: 'Supplier deleted' },
+			supplierDeleteFailed: { vi: 'Xoá nhà cung cấp không thành công', en: 'Failed to delete supplier' }
 		},
 		dirty: {
 			title: { vi: 'Bỏ thay đổi?', en: 'Discard changes?' },
@@ -705,7 +733,9 @@
 	let nameCheckTimer: ReturnType<typeof setTimeout> | undefined;
 	// Batch 16 (m13579-3): tên GỐC của row đang sửa — quay về đúng tên gốc thì
 	// không gọi API check (name = chính nó, không phải trùng). Create = ''.
-	let supplierOriginalName = '';
+	// Cố ý non-reactive (snapshot original, chỉ đọc trong handler) — Batch 20
+	// thêm so sánh trong markup nên cần $state.
+	let supplierOriginalName = $state('');
 
 	async function checkSupplierNameNow() {
 		const name = str(supplierForm.name).trim();
@@ -830,6 +860,86 @@
 	function openHistoryFromFooter() {
 		if (!historySupplierRow) return;
 		openHistoryModal(historySupplierRow);
+	}
+
+	// ── Batch 20 (A4): more-menu footer — item hành động ──
+	function moreOpenHistory() {
+		supplierMoreOpen = false;
+		openHistoryFromFooter();
+	}
+
+	function moreOpenDelete() {
+		supplierMoreOpen = false;
+		supplierDeleteDisplay = true;
+	}
+
+	// Phân tích: gọi API analytics/query type=supplier-summary (pattern
+	// callAnalytics trang analytics — fetchSecure tự mã hoá, body là OBJECT).
+	async function loadSupplierSummary() {
+		if (!encryptionKeys || !supplierEditId || supplierAnalyticsLoading) return;
+		supplierAnalyticsLoading = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/analytics/query',
+				{ method: 'POST', body: { type: 'supplier-summary', supplierId: supplierEditId } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				supplierAnalyticsData = response.data as {
+					orderCount: number;
+					totalQuantity: number;
+					totalValue: number;
+					monthly: Array<{ period: string; orderCount: number; quantity: number; value: number }>;
+				};
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.requestFailed), 'error');
+				supplierAnalyticsDisplay = false;
+			}
+		} catch (err) {
+			showToast(pageContents.toasts.requestFailed[lang], 'error');
+			supplierAnalyticsDisplay = false;
+			if (import.meta.env.DEV) console.error('[admin/suppliers] supplier summary failed:', err);
+		} finally {
+			supplierAnalyticsLoading = false;
+		}
+	}
+
+	function moreOpenAnalytics() {
+		supplierMoreOpen = false;
+		supplierAnalyticsDisplay = true;
+		supplierAnalyticsData = undefined;
+		void loadSupplierSummary();
+	}
+
+	// Xoá 1 NCC từ more-menu — TÁI SỬ DỤNG endpoint bulk-delete {ids:[id]}
+	// (pattern bulkDeleteSelected). Sau xoá: toast + đóng modal edit (NCC đã
+	// xoá không còn gì để edit) + refresh list.
+	async function deleteSupplierFromMore() {
+		if (!encryptionKeys || supplierDeleting || !supplierEditId) return;
+		supplierDeleting = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/suppliers/bulk-delete',
+				{ method: 'POST', body: { ids: [supplierEditId] } },
+				encryptionKeys
+			);
+			supplierDeleting = false;
+			if (response.ok) {
+				showToast(pageContents.toasts.supplierDeleted[lang], 'success');
+				supplierDeleteDisplay = false;
+				supplierAnalyticsDisplay = false;
+				supplierModalDisplay = false;
+				cleanSupplierParam();
+				closeGuard.markClean();
+				await loadSuppliers();
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.supplierDeleteFailed), 'error');
+			}
+		} catch (err) {
+			supplierDeleting = false;
+			showToast(pageContents.toasts.supplierDeleteFailed[lang], 'error');
+			if (import.meta.env.DEV) console.error('[admin/suppliers] delete supplier failed:', err);
+		}
 	}
 
 	async function loadHistory(opts?: { keepOnFail?: boolean }) {
@@ -960,6 +1070,32 @@
 		document.addEventListener('mousedown', onDocClick);
 		return () => document.removeEventListener('mousedown', onDocClick);
 	});
+
+	$effect(() => {
+		// Batch 20 (A4): outside-click đóng more-menu footer — cùng cơ chế
+		// mousedown (nút form stopPropagation click). Guard contains: tap nút
+		// more / item menu → handler riêng xử lý, không đóng tại đây.
+		if (!supplierMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (supplierMoreEl && t && supplierMoreEl.contains(t)) return;
+			supplierMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
+
+	$effect(() => {
+		// Batch 20 (A4): modal đóng → reset more-menu + panel analytics
+		// (element unmount, đo tự hết hiệu lực — chỉ cần reset state).
+		if (!supplierModalDisplay) {
+			supplierMoreOpen = false;
+			supplierDeleteDisplay = false;
+			supplierAnalyticsDisplay = false;
+			supplierAnalyticsData = undefined;
+			supplierAnalyticsLoading = false;
+		}
+	});
 	// Deep-link (batch 11, 5f): gỡ ?supplier= khỏi URL giữ nguyên query khác
 	function cleanSupplierParam() {
 		if (page.url.searchParams.has('supplier')) {
@@ -993,6 +1129,24 @@
 	let selectAllBusy = $state(false);
 	let bulkDeleteDisplay = $state(false);
 	let bulkDeleting = $state(false);
+
+	// ── Batch 20 (A4): more-menu footer form modal — thay nút history bằng
+	// icon more mở popover (history / delete / analytics). Pattern Batch 18:
+	// mousedown outside-click + guard contains (nút form stopPropagation click).
+	let supplierMoreOpen = $state(false);
+	let supplierMoreEl = $state<HTMLElement | null>(null);
+	// Xoá 1 NCC từ more-menu: confirm AlertDialog → POST bulk-delete {ids:[id]}
+	let supplierDeleteDisplay = $state(false);
+	let supplierDeleting = $state(false);
+	// Panel phân tích: dữ liệu API type=supplier-summary
+	let supplierAnalyticsDisplay = $state(false);
+	let supplierAnalyticsLoading = $state(false);
+	let supplierAnalyticsData = $state<{
+		orderCount: number;
+		totalQuantity: number;
+		totalValue: number;
+		monthly: Array<{ period: string; orderCount: number; quantity: number; value: number }>;
+	} | undefined>(undefined);
 
 	// Select-all đa trang: fetch TẤT CẢ suppliers khớp filter hiện tại (page 1,
 	// pageSize = total) rồi gán ids — mirror body loadSuppliers.
@@ -1525,6 +1679,11 @@
 		supplierEditMode = 'create';
 		supplierEditId = null;
 		supplierOriginalName = '';
+		// Batch 20 (A5): reset trạng thái check name — tránh badge/hint thừa
+		// từ lần mở modal trước (state sống ngoài vòng đời modal).
+		supplierNameTaken = false;
+		supplierNameChecking = false;
+		supplierNameChecked = false;
 		supplierPassive = null;
 		// Draft create có dữ liệu → resume; rỗng → form sạch
 		const raw = readDraftPref(DRAFT_FORM_KEY);
@@ -1607,6 +1766,14 @@
 		supplierEditMode = 'edit';
 		supplierEditId = r._id ?? null;
 		supplierOriginalName = r.name ?? '';
+		// Batch 20 (A5): reset 3 state check name TRƯỚC khi render — fix lỗi
+		// mở detail NCC (chưa thao tác gì) vẫn hiện badge "Tên đã tồn tại" /
+		// "đang kiểm tra" từ lần thao tác trước (state sống ngoài vòng đời
+		// modal). $effect theo dõi name sẽ schedule check lại ngay sau đó;
+		// nếu name === original → checked=true (xanh) không bật checking.
+		supplierNameTaken = false;
+		supplierNameChecking = false;
+		supplierNameChecked = false;
 		// Deep-link (5f): giữ ?supplier=<id> trên URL để chia sẻ link đúng NCC
 		if (r._id && page.url.searchParams.get('supplier') !== r._id) {
 			page.url.searchParams.set('supplier', r._id);
@@ -1672,7 +1839,27 @@
 	// Batch14 (m11713): address entry "hợp lệ" = đã chọn địa giới (tỉnh hệ cũ
 	// hoặc hệ mới) — điều kiện để bật nút "+ Add address" và validate submit.
 	// Entry chỉ có text địa chỉ chi tiết mà không có tỉnh vẫn tính CHƯA hợp lệ.
+	// Batch 20 (A7): entry "có nội dung" = text địa chỉ OR đã chọn địa giới bất
+	// kỳ (cũ/mới) — entry RỖNG HOÀN TOÀN không chặn nút add (user cần thêm
+	// dòng mới; entry rỗng được prune lúc submit). Định nghĩa invalid MỚI:
+	// đã có nội dung mà chưa chọn tỉnh — đúng ý user "field item invalid thì
+	// không cho thêm mới", tránh khoá cứng vì entry trắng.
+	function addressEntryHasContent(index: number): boolean {
+		const a = supplierForm.addresses[index];
+		const bd = supplierAddressBreakdowns[index];
+		const nbd = supplierNewAddressBreakdowns[index];
+		return (
+			str(a?.address).trim() !== '' ||
+			str(bd?.province).trim() !== '' ||
+			str(bd?.district).trim() !== '' ||
+			str(bd?.ward).trim() !== '' ||
+			str(nbd?.province).trim() !== '' ||
+			str(nbd?.ward).trim() !== ''
+		);
+	}
+
 	function addressEntryInvalid(index: number): boolean {
+		if (!addressEntryHasContent(index)) return false;
 		const bd = supplierAddressBreakdowns[index];
 		const nbd = supplierNewAddressBreakdowns[index];
 		return !str(bd?.province).trim() && !str(nbd?.province).trim();
@@ -1788,7 +1975,9 @@
 		if (t.emails.some((e) => str(e).trim() && !EMAIL_RE.test(str(e).trim()))) return pageContents.form.invalidEmail[lang];
 		// Batch14 (m11713): address có text nhưng chưa chọn tỉnh (cũ/mới) → chưa hợp lệ.
 		// Entry rỗng hoàn toàn thì bỏ qua (được prune lúc submit).
-		if (t.addresses.some((a, i) => str(a.address).trim() && addressEntryInvalid(i))) return pageContents.form.invalidAddress[lang];
+		// Batch 20 (A7): hợp nhất điều kiện qua addressEntryInvalid (đã gồm
+		// has-content) — giữ hành vi cũ: entry có text mà thiếu địa giới = lỗi.
+		if (t.addresses.some((_a, i) => addressEntryInvalid(i))) return pageContents.form.invalidAddress[lang];
 		for (const f of SOCIAL_FIELDS) {
 			if (t[f].some((v) => socialEntryInvalid(f, v))) {
 				return pageContents.form[`invalid${f[0].toUpperCase()}${f.slice(1)}` as keyof typeof pageContents.form][lang];
@@ -2865,7 +3054,9 @@
 										<Description persistent class="form-hint">{pageContents.supplierModal.nameChecking[lang]}</Description>
 									{:else if supplierNameTaken}
 										<Description persistent color="error" class="form-hint error-hint">{pageContents.supplierModal.nameTaken[lang]}</Description>
-									{:else if supplierNameChecked}
+									{:else if supplierNameChecked && str(supplierForm.name).trim() !== supplierOriginalName.trim()}
+										<!-- Batch 20: ẩn hint xanh khi name === original (mở detail chưa
+										     thao tác → không hiện message validation nào; viền xanh giữ) -->
 										<Description persistent color="success" class="form-hint success-hint">{pageContents.supplierModal.nameAvailable[lang]}</Description>
 									{/if}
 								{/if}
@@ -3026,10 +3217,11 @@
 								/>
 							</div>
 						{/each}
+						<!-- Batch 20 (A7): chặn add khi BẤT KỲ entry có-nội-dung-mà-thiếu-tỉnh (some toàn block) -->
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting || (supplierForm.addresses.length > 0 && addressEntryInvalid(supplierForm.addresses.length - 1))}
+							disabled={supplierSubmitting || supplierForm.addresses.some((_a, i) => addressEntryInvalid(i))}
 							onclick={() => {
 								// Batch10 (m06635-5b): flushSync + focus trong gesture.
 								flushSync(() => {
@@ -3171,18 +3363,58 @@
 					</div>
 			</Modal.Container.Body>
 			<Modal.Container.Footer>
-				<!-- History chỉ ở edit mode — nhóm riêng cách Save/Cancel khoảng trống -->
+				<!-- Batch 20 (A4): thay nút History bằng icon more mở popover
+					(history / delete / analytics). Chỉ edit mode — nhóm riêng cách
+					Save/Cancel khoảng trống. Bọc trong div relative làm anchor +
+					guard outside-click (supplierMoreEl.contains). -->
 				{#if supplierEditMode === 'edit'}
-					<Button
-						color="default"
-						variant="ghost"
-						size="sm"
-						disabled={supplierSubmitting}
-						onclick={openHistoryFromFooter}
-						data-test="suppliers-history-btn"
-					>
-						{pageContents.history.viewHistory[lang]}
-					</Button>
+					<div class="supplier-more-wrap" bind:this={supplierMoreEl}>
+						<button
+							type="button"
+							class="supplier-more-btn"
+							data-test="suppliers-more-btn"
+							aria-label={pageContents.more.label[lang]}
+							aria-expanded={supplierMoreOpen}
+							disabled={supplierSubmitting}
+							onclick={() => (supplierMoreOpen = !supplierMoreOpen)}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</button>
+						{#if supplierMoreOpen}
+							<div class="supplier-more-popover" role="menu">
+								<button
+									type="button"
+									class="supplier-more-popover__item"
+									role="menuitem"
+									disabled={supplierSubmitting}
+									onclick={moreOpenHistory}
+									data-test="suppliers-more-history"
+								>
+									{pageContents.more.history[lang]}
+								</button>
+								<button
+									type="button"
+									class="supplier-more-popover__item supplier-more-popover__item--danger"
+									role="menuitem"
+									disabled={supplierSubmitting}
+									onclick={moreOpenDelete}
+									data-test="suppliers-more-delete"
+								>
+									{pageContents.more.delete[lang]}
+								</button>
+								<button
+									type="button"
+									class="supplier-more-popover__item"
+									role="menuitem"
+									disabled={supplierSubmitting}
+									onclick={moreOpenAnalytics}
+									data-test="suppliers-more-analytics"
+								>
+									{pageContents.more.analytics[lang]}
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/if}
 				<span class="supplier-footer-spacer"></span>
 				<!-- create/save = success. Batch10 (m06635-5c): disable khi form invalid
@@ -3396,6 +3628,95 @@
 			</Modal.Container.Body>
 		</Modal.Container>
 	</Modal>
+{/if}
+
+<!-- ── Batch 20 (A4): panel phân tích nhập hàng theo NCC (more-menu) ── -->
+{#if supplierAnalyticsDisplay}
+	<Modal bind:display={supplierAnalyticsDisplay} size="sm">
+		<Modal.Container>
+			<Modal.Container.Header>
+				{pageContents.more.analyticsTitle[lang]}{historySupplierRow?.name ? ` — ${historySupplierRow.name}` : ''}
+			</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if supplierAnalyticsLoading}
+					<div class="history-state">{pageContents.more.analyticsLoading[lang]}</div>
+				{:else if !supplierAnalyticsData || supplierAnalyticsData.orderCount === 0}
+					<div class="history-state">{pageContents.more.analyticsEmpty[lang]}</div>
+				{:else}
+					<div class="supplier-analytics" data-test="suppliers-analytics-panel">
+						<div class="supplier-analytics__totals">
+							<div class="supplier-analytics__stat">
+								<span class="supplier-analytics__stat-value">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(supplierAnalyticsData.orderCount)}</span>
+								<span class="supplier-analytics__stat-label">{pageContents.more.analyticsOrderCount[lang]}</span>
+							</div>
+							<div class="supplier-analytics__stat">
+								<span class="supplier-analytics__stat-value">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(supplierAnalyticsData.totalQuantity)}</span>
+								<span class="supplier-analytics__stat-label">{pageContents.more.analyticsTotalQuantity[lang]}</span>
+							</div>
+							<div class="supplier-analytics__stat">
+								<span class="supplier-analytics__stat-value">{formatMoney(supplierAnalyticsData.totalValue)}</span>
+								<span class="supplier-analytics__stat-label">{pageContents.more.analyticsTotalValue[lang]}</span>
+							</div>
+						</div>
+						{#if supplierAnalyticsData.monthly.length > 0}
+							<div class="supplier-analytics__monthly">
+								<div class="supplier-analytics__monthly-title">{pageContents.more.analyticsMonthly[lang]}</div>
+								<table class="supplier-analytics__table">
+									<thead>
+										<tr>
+											<th>{pageContents.more.analyticsColPeriod[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColOrders[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColQty[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColValue[lang]}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each supplierAnalyticsData.monthly as m (m.period)}
+											<tr>
+												<td>{m.period}</td>
+												<td class="num">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(m.orderCount)}</td>
+												<td class="num">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(m.quantity)}</td>
+												<td class="num">{formatMoney(m.value)}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</Modal.Container.Body>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+<!-- ── Batch 20 (A4): AlertDialog confirm xoá 1 NCC từ more-menu ── -->
+{#if supplierDeleteDisplay}
+	<AlertDialog
+		bind:open={supplierDeleteDisplay}
+		title={pageContents.more.deleteTitle[lang]}
+		description={pageContents.more.deleteDesc[lang]}
+	>
+		<AlertDialog.Content>
+			<AlertDialog.Header variant="danger">
+				<AlertDialog.Title>{pageContents.more.deleteTitle[lang]}</AlertDialog.Title>
+				<AlertDialog.Description>{pageContents.more.deleteDesc[lang]}</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+				<AlertDialog.Action
+					color="danger"
+					disabled={supplierDeleting}
+					onselect={() => {
+						void deleteSupplierFromMore();
+					}}
+					data-test="suppliers-more-delete-confirm"
+				>
+					{pageContents.more.deleteConfirm[lang]}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
 {/if}
 
 <!-- ── AlertDialog confirm khôi phục entry ── -->
@@ -5144,5 +5465,189 @@
 
 	.supplier-passive__sep {
 		color: var(--foreground-300);
+	}
+
+	/* ── Batch 20 (A6): loading supplier name không đè clear button ──
+	   NGUỒN BUG: props.loading={supplierNameChecking} chỉ tạo class 'loading'
+	   trên .input-root (Input Main.svelte:109) → overlay spinner ::after
+	   (_styles.scss:437, absolute right) vẽ ĐÈ lên .input-group-actions chứa
+	   clear button (vẫn render vì configs.loading chỉ do validation internal
+	   set). Fix trong phạm vi trang: khi .loading → ẨN clear button (spinner
+	   overlay là đủ feedback), không sửa component chung. */
+	[data-field='supplier-name'] :global(.input-root.loading .input-group-actions) {
+		visibility: hidden;
+	}
+
+	/* Thêm animate: pulse opacity cho cả input-root khi checking (spinner
+	   input-spin 0.7s đã có từ _styles.scss — bổ sung nhịp thở dễ thấy). */
+	@keyframes supplier-name-loading-pulse {
+		0%,
+		100% {
+			opacity: 0.75;
+		}
+		50% {
+			opacity: 0.45;
+		}
+	}
+
+	[data-field='supplier-name'] :global(.input-root.loading) {
+		animation: supplier-name-loading-pulse 1.2s ease-in-out infinite;
+	}
+
+	/* ── Batch 20 (A4): more-menu footer form modal ── */
+	.supplier-more-wrap {
+		position: relative;
+	}
+
+	.supplier-more-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		padding: 0;
+		border: 0;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground-600);
+		cursor: pointer;
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: hsl(0 0% 0% / 0.06);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	.supplier-more-popover {
+		position: absolute;
+		bottom: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 11rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		/* Token đúng là --box-shadow-lg (--shadow-lg không tồn tại — Batch 18) */
+		box-shadow: var(--box-shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+	}
+
+	.supplier-more-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		/* --foreground-600 AA 7.0:1 (--foreground-500 light 4.41:1 fail sát) */
+		color: var(--foreground-600);
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	.supplier-more-popover__item--danger {
+		color: var(--error, hsl(356.95 95.9% 57.72%));
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--error-50, hsl(356.95 95.9% 57.72% / 0.08));
+		}
+	}
+
+	/* ── Batch 20 (A4): panel phân tích nhập hàng ── */
+	.supplier-analytics {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.supplier-analytics__totals {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+
+	.supplier-analytics__stat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		padding: 0.5rem 0.6rem;
+		border: 1px solid var(--default-300, hsl(0 0% 88%));
+		border-radius: 0.625rem;
+		background: var(--default-50, hsl(0 0% 98%));
+		min-width: 0;
+	}
+
+	.supplier-analytics__stat-value {
+		/* Giá trị động dài (tiền tệ) — ellipsis nguyên tắc toàn hệ thống */
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-weight: 600;
+		font-size: 0.9375rem;
+		color: var(--foreground);
+	}
+
+	.supplier-analytics__stat-label {
+		font-size: 0.75rem;
+		color: var(--foreground-600);
+	}
+
+	.supplier-analytics__monthly-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--foreground);
+		margin-bottom: 0.35rem;
+	}
+
+	.supplier-analytics__table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8125rem;
+
+		th,
+		td {
+			padding: 0.3rem 0.45rem;
+			border-bottom: 1px solid var(--default-200, hsl(0 0% 92%));
+			text-align: left;
+			color: var(--foreground-600);
+		}
+
+		th {
+			font-weight: 600;
+			color: var(--foreground);
+		}
+
+		th.num,
+		td.num {
+			text-align: right;
+			font-variant-numeric: tabular-nums;
+		}
+
+		tbody tr:last-child td {
+			border-bottom: 0;
+		}
 	}
 </style>

@@ -113,8 +113,9 @@ export const POST: RequestHandler = async (event) => {
 					userAgent: event.request.headers.get('user-agent') ?? ''
 				});
 				if (created.success) {
+					// Path / — đồng bộ với login (hooks đọc được ở mọi request)
 					event.cookies.set('refreshToken', refreshTokenValue, {
-						path: '/api/auth/refresh',
+						path: '/',
 						httpOnly: true,
 						sameSite: 'strict',
 						secure: !dev,

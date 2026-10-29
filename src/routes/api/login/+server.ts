@@ -205,9 +205,11 @@ export const POST: RequestHandler = async ({ request, getClientAddress, cookies 
 					userAgent: request.headers.get('user-agent') ?? ''
 				});
 				if (created.success) {
-					// Cookie riêng path /api/auth/refresh — chỉ gửi khi client gọi refresh
+					// Cookie path / — hooks cần ĐỌC được refreshToken ở MỌI request để
+					// khôi phục session SSR khi session cookie hết hạn (path cũ
+					// /api/auth/refresh khiến hooks không thấy cookie ở /admin/*).
 					cookies.set('refreshToken', refreshTokenValue, {
-						path: '/api/auth/refresh',
+						path: '/',
 						httpOnly: true,
 						sameSite: 'strict',
 						secure: !dev,

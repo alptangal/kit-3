@@ -17,7 +17,10 @@ export const POST: RequestHandler = async ({ cookies }) => {
 		}
 	}
 
-	// Xoá cả 2 cookie — path phải khớp lúc set để browser xoá đúng
+	// Xoá cả 2 cookie — path phải khớp lúc set để browser xoá đúng.
+	// refreshToken xoá CẢ HAI path: path / (mới) lẫn /api/auth/refresh (cũ —
+	// cookie phiên bản trước có thể còn dính trong browser user).
+	cookies.delete('refreshToken', { path: '/' });
 	cookies.delete('refreshToken', { path: '/api/auth/refresh' });
 	cookies.delete('session', { path: '/' });
 

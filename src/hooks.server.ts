@@ -3,7 +3,9 @@ import type { MetaUser } from '$interfaces/basic';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { systemVault, initSystemVault } from '$store/initSystemVault';
 import { initApp } from '$store/init-app';
-import { verifyAccessToken } from '$lib/server/jwt';
+import { verifyAccessToken, signAccessToken } from '$lib/server/jwt';
+import { findRefreshToken, buildSessionFromUserId } from '$lib/server/db';
+import { dev } from '$app/environment';
 import { resolveLang, localize } from '$lib/server/i18n';
 import { getClientIp } from '$lib/server/rate-limit';
 import { cbData } from '$modules/couchbase/clients';
@@ -114,6 +116,66 @@ async function getUserFromToken(token: string): Promise<MetaUser | undefined> {
 	}
 }
 
+// ── Khôi phục session SSR từ refresh token (batch session-fix) ──
+// Session cookie hết hạn (1 ngày khi không remember) nhưng refresh token còn hạn
+// 30 ngày → trước đây user bị đá ra login dù chưa logout. Giờ: khi verify session
+// FAIL, nếu còn refreshToken (path /, httpOnly) hợp lệ trong DB thì dựng lại
+// session mới. Chỉ chạy khi session verify fail (hiếm) — KHÔNG chạy mỗi request.
+async function rebuildSessionFromRefresh(event: RequestEvent): Promise<MetaUser | undefined> {
+	try {
+		const refreshTokenValue = event.cookies.get('refreshToken');
+		if (!refreshTokenValue) return undefined;
+
+		// findRefreshToken tự so hash + check isRevoked + expiresAt (ISO string, so
+		// ISO-vs-ISO bên trong) — trả success=false nếu revoked/hết hạn.
+		const stored = await findRefreshToken(refreshTokenValue);
+		if (!stored.success || !stored.data) return undefined;
+
+		const fields = await buildSessionFromUserId(stored.data.userId);
+		if (!fields) return undefined;
+
+		// Payload GIỐNG login — luôn 30 ngày vì đã qua mốc refresh
+		const now = Math.floor(Date.now() / 1000);
+		const sessionToken = await signAccessToken({
+			sub: stored.data.userId,
+			username: fields.username,
+			roleId: fields.roleId,
+			statusId: fields.statusId,
+			iat: now,
+			exp: now + 30 * 86400
+		});
+		event.cookies.set('session', sessionToken, {
+			path: '/',
+			httpOnly: true,
+			sameSite: 'lax',
+			secure: !dev,
+			maxAge: 30 * 86400
+		});
+
+		return {
+			firstName: fields.username,
+			lastName: '',
+			dob: '',
+			region: 'South-Eastern Asia',
+			country: 'VN',
+			gender: 'Male',
+			phone: '',
+			email: '',
+			username: fields.username,
+			password: '',
+			role: fields.roleId.includes('owner') ? 'admin' : fields.roleId.includes('manager') ? 'staff' : 'customer',
+			userId: stored.data.userId,
+			roleId: fields.roleId,
+			roleName: fields.roleName,
+			avatarUrl: fields.avatarUrl
+		};
+	} catch (e) {
+		// Lỗi DB/sign không được crash request — rơi về flow chưa login như cũ
+		console.error('[hooks.server] rebuildSessionFromRefresh failed:', e);
+		return undefined;
+	}
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	// Ensure initialization completes before handling requests
 	await ensureInitialized();
@@ -126,6 +188,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	const token = event.cookies.get('session');
 	event.locals.user = token ? await getUserFromToken(token) : undefined;
+
+	// Session verify fail (thiếu/hết hạn) NHƯNG refresh token còn hạn → khôi phục
+	// session thay vì redirect login (batch session-fix)
+	if (!event.locals.user) {
+		event.locals.user = await rebuildSessionFromRefresh(event);
+	}
 
 	const { pathname } = event.url;
 

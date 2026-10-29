@@ -1,5 +1,5 @@
 // src/routes/api/admin/analytics/query/+server.ts
-// POST { type: 'cost-trend' | 'supplier-comparison' | 'purchase-volume' | 'stock-trend' | 'price-trend', ...params }
+// POST { type: 'cost-trend' | 'supplier-comparison' | 'purchase-volume' | 'stock-trend' | 'price-trend' | 'supplier-summary', ...params }
 // 1 route duy nhất cho toàn bộ thống kê — switch theo type gọi AnalyticsService.
 
 import type { RequestHandler } from './$types';
@@ -12,7 +12,7 @@ import {
 } from '$lib/server/admin/api';
 import { AnalyticsService } from '$lib/server/db/analytics';
 
-const VALID_TYPES = ['cost-trend', 'supplier-comparison', 'purchase-volume', 'stock-trend', 'price-trend'] as const;
+const VALID_TYPES = ['cost-trend', 'supplier-comparison', 'purchase-volume', 'stock-trend', 'price-trend', 'supplier-summary'] as const;
 type AnalyticsType = (typeof VALID_TYPES)[number];
 
 export const POST: RequestHandler = async (event) => {
@@ -23,6 +23,7 @@ export const POST: RequestHandler = async (event) => {
 			type: string;
 			variantId?: string;
 			branchId?: string;
+			supplierId?: string;
 			from?: string;
 			to?: string;
 			groupBy?: string;
@@ -56,7 +57,9 @@ export const POST: RequestHandler = async (event) => {
 			ReturnType<typeof AnalyticsService.supplierPriceComparison>
 		> | Awaited<ReturnType<typeof AnalyticsService.purchaseVolumeTrend>> | Awaited<
 			ReturnType<typeof AnalyticsService.stockTrend>
-		> | Awaited<ReturnType<typeof AnalyticsService.priceTrend>>;
+		> | Awaited<ReturnType<typeof AnalyticsService.priceTrend>> | Awaited<
+			ReturnType<typeof AnalyticsService.supplierSummary>
+		>;
 
 		switch (type as AnalyticsType) {
 			case 'cost-trend':
@@ -73,6 +76,13 @@ export const POST: RequestHandler = async (event) => {
 				break;
 			case 'price-trend':
 				result = await AnalyticsService.priceTrend(actor, params);
+				break;
+			case 'supplier-summary':
+				result = await AnalyticsService.supplierSummary(actor, {
+					supplierId: params.supplierId ?? '',
+					from: params.from,
+					to: params.to
+				});
 				break;
 			default:
 				return respond({ ok: false, message: { vi: 'Loại thống kê không hợp lệ', en: 'Invalid analytics type' } });

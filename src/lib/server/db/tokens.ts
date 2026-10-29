@@ -6,6 +6,11 @@ import { systemVault } from '$store/initSystemVault';
 import type { TranslateContent } from '$interfaces/basic';
 
 const cbRefreshTokens = cbData('refresh_tokens');
+const cbUsers = cbData('users');
+const cbRoles = cbData('name_roles');
+// Check canLogin khi dựng lại session từ refresh token — user bị suspend/khoá
+// (canLogin=false) không được giữ session qua cơ chế khôi phục này.
+const cbUserStatus = cbData('user_status');
 
 // ============================================================
 // Mã hoá deviceName/deviceType (copy pattern social.ts/cameras.ts:
@@ -292,6 +297,62 @@ export async function revokeRefreshToken(tokenValue: string, reason: string = 'm
 	} catch (e) {
 		console.error('[revokeRefreshToken] error:', e);
 		return { success: false, messages: { vi: 'Lỗi thu hồi token', en: 'Error revoking token' } as TranslateContent };
+	}
+}
+
+/**
+ * Rebuild session fields từ userId (documentKey users) — dùng chung bởi
+ * hooks.server.ts (khôi phục session SSR từ refresh token khi session cookie
+ * hết hạn) và /api/auth/refresh (cấp lại session cookie khi rotate).
+ * Trả về payload chuẩn của signAccessToken + roleName/avatarUrl để dựng MetaUser.
+ */
+export async function buildSessionFromUserId(
+	userId: string
+): Promise<{ username: string; roleId: string; statusId: string; roleName?: string; avatarUrl?: string } | undefined> {
+	try {
+		const userRes = await cbUsers.document.get({ documentKey: userId });
+		if (!userRes.ok || !userRes.data) return undefined;
+		const doc = userRes.data as {
+			firstname?: string;
+			roleId?: string;
+			statusId?: string;
+			avatarUrl?: string;
+			deletedAt?: string;
+		};
+		if (!doc.firstname || !doc.roleId) return undefined;
+		// hardening: soft-delete → không dựng session (canLogin hiện đã chặn,
+		// nhưng Users.delete giữ deletedAt + status suspended — phòng thủ chiều sâu)
+		if (doc.deletedAt) return undefined;
+
+		// canLogin=false (suspend/khoá) → không dựng session (đồng bộ logic login)
+		try {
+			const statusRes = await cbUserStatus.document.get({ documentKey: doc.statusId ?? 'status-active' });
+			const canLogin = statusRes.ok && statusRes.data
+				? Boolean((statusRes.data as { canLogin?: boolean }).canLogin)
+				: false;
+			if (!canLogin) return undefined;
+		} catch {
+			return undefined; // không đọc được status → an toàn là từ chối
+		}
+
+		let roleName: string | undefined;
+		try {
+			const roleRes = await cbRoles.document.get({ documentKey: doc.roleId });
+			if (roleRes.ok && roleRes.data) roleName = (roleRes.data as { name?: string }).name ?? undefined;
+		} catch {
+			roleName = undefined; // fallback không khoá user vì lỗi tạm thời
+		}
+
+		return {
+			username: doc.firstname,
+			roleId: doc.roleId,
+			statusId: doc.statusId ?? 'status-active',
+			roleName: roleName ?? doc.roleId,
+			avatarUrl: doc.avatarUrl
+		};
+	} catch (e) {
+		console.error('[buildSessionFromUserId] error:', e);
+		return undefined;
 	}
 }
 

@@ -58,8 +58,26 @@ const analyticsMessages = {
 	priceHistoryEmpty: {
 		vi: 'Chưa có lịch sử giá bán — lịch sử được ghi tự động mỗi khi cập nhật giá variant',
 		en: 'No price history yet — history is recorded automatically each time a variant price is updated'
+	} as TranslateContent,
+	supplierIdRequired: {
+		vi: 'Thiếu nhà cung cấp cần thống kê',
+		en: 'Supplier is required for this analytics query'
 	} as TranslateContent
 } as const;
+
+/** Kết quả tổng quan nhập hàng theo NCC (batch 20 — more-menu analytics). */
+export interface SupplierSummaryResult {
+	success: boolean;
+	messages?: TranslateContent;
+	/** Số đơn nhập đã nhận của NCC. */
+	orderCount: number;
+	/** Tổng lượng hàng đã nhập (tổng quantity các item). */
+	totalQuantity: number;
+	/** Tổng giá trị nhập (Σ quantity × unitCost). */
+	totalValue: number;
+	/** Breakdown theo tháng (cũ → mới). */
+	monthly: Array<{ period: string; orderCount: number; quantity: number; value: number }>;
+}
 
 export type StatsGroupBy = 'day' | 'week' | 'month';
 export type TrendDirection = 'up' | 'down' | 'flat';
@@ -904,5 +922,92 @@ export class AnalyticsService {
 			}));
 
 		return { success: true, points, forecast: forecastOf(points.map((p) => p.avg ?? 0)) };
+	}
+
+	/**
+	 * Batch 20 (A4): tổng quan nhập hàng theo NCC — số đơn, lượng hàng, giá trị
+	 * + breakdown theo tháng (12 kỳ gần nhất). Aggregate JS sau fetch (pattern
+	 * supplierPriceComparison) — không phụ thuộc index mới.
+	 */
+	static async supplierSummary(
+		actor: ActorContext,
+		options: { supplierId: string; from?: string; to?: string }
+	): Promise<SupplierSummaryResult> {
+		const empty: SupplierSummaryResult = { success: true, orderCount: 0, totalQuantity: 0, totalValue: 0, monthly: [] };
+		const denied = await this.requirePermission(actor, 'analytics:read');
+		if (denied) return { ...empty, success: false, messages: denied.messages };
+		if (!options.supplierId) return { ...empty, success: false, messages: analyticsMessages.supplierIdRequired };
+		if ((options.from && !isValidDateStr(options.from)) || (options.to && !isValidDateStr(options.to))) {
+			return { ...empty, success: false, messages: analyticsMessages.invalidRange };
+		}
+
+		// Scope own_branch như supplierPriceComparison — non-owner chỉ thấy PO chi nhánh mình.
+		const conditions: string[] = [`status = 'received'`];
+		const args: (string | number)[] = [];
+		conditions.push(`supplierId = $${args.length + 1}`);
+		args.push(options.supplierId);
+		if (actor.roleName !== 'owner') {
+			const scope = await PermissionChecker.getScope(actor.roleName, 'analytics:read');
+			if (scope === 'own_branch') {
+				if (!actor.branchId) return { ...empty, success: false, messages: analyticsMessages.permissionDenied };
+				conditions.push(`branchId = $${args.length + 1}`);
+				args.push(actor.branchId);
+			}
+		}
+		buildRangeFilter(conditions, args, 'receivedAt', options.from, options.to);
+		const where = `WHERE ${conditions.join(' AND ')}`;
+
+		const res = await cbPurchaseOrders.document.query({
+			statement: `SELECT META().id AS _id, branchId, items, receivedAt, createdAt FROM ${purchaseOrdersKeyspace} ${where} LIMIT 1000`,
+			args,
+			readonly: true
+		});
+		if (!res.ok) return { ...empty, success: false, messages: analyticsMessages.queryFailed };
+
+		// period → aggregate (JS sau fetch — an toàn với index hiện có)
+		const byMonth = new Map<string, { orderCount: number; quantity: number; value: number }>();
+		let orderCount = 0;
+		let totalQuantity = 0;
+		let totalValue = 0;
+		for (const po of (res.data?.results ?? []) as PODoc[]) {
+			const items = po.items ?? [];
+			if (items.length === 0) continue; // PO rỗng không tính là đơn nhập
+			let poQty = 0;
+			let poValue = 0;
+			for (const item of items) {
+				const qty = typeof item.quantity === 'number' ? item.quantity : 0;
+				const cost = typeof item.unitCost === 'number' ? item.unitCost : 0;
+				poQty += qty;
+				poValue += qty * cost;
+			}
+			orderCount += 1;
+			totalQuantity += poQty;
+			totalValue += poValue;
+			const at = po.receivedAt ?? po.createdAt ?? '';
+			const period = at ? periodOf(at, 'month') : 'unknown';
+			const agg = byMonth.get(period) ?? { orderCount: 0, quantity: 0, value: 0 };
+			agg.orderCount += 1;
+			agg.quantity += poQty;
+			agg.value += poValue;
+			byMonth.set(period, agg);
+		}
+
+		const monthly = [...byMonth.entries()]
+			.sort(([a], [b]) => (a < b ? -1 : 1))
+			.slice(-12) // 12 kỳ gần nhất
+			.map(([period, agg]) => ({
+				period,
+				orderCount: agg.orderCount,
+				quantity: Math.round(agg.quantity * 100) / 100,
+				value: Math.round(agg.value * 100) / 100
+			}));
+
+		return {
+			success: true,
+			orderCount,
+			totalQuantity: Math.round(totalQuantity * 100) / 100,
+			totalValue: Math.round(totalValue * 100) / 100,
+			monthly
+		};
 	}
 }

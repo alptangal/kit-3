@@ -1,10 +1,11 @@
 // src/routes/api/auth/refresh/+server.ts
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
-import { findRefreshToken, rotateRefreshToken, revokeRefreshToken } from '$lib/server/db';
+import { findRefreshToken, rotateRefreshToken, revokeRefreshToken, buildSessionFromUserId } from '$lib/server/db';
 import { getClientIp } from '$lib/server/rate-limit';
 import { verifyDpopProofNoBinding } from '$lib/server/dpop';
 import { signAccessToken } from '$lib/server/jwt';
+import { dev } from '$app/environment';
 
 export const POST: RequestHandler = async (event) => {
 	const { request, url, cookies } = event;
@@ -28,7 +29,8 @@ export const POST: RequestHandler = async (event) => {
 	const stored = await findRefreshToken(refreshTokenValue);
 	if (!stored.success || !stored.data) {
 		// Token không tồn tại / đã bị dùng rồi (đã rotate) / đã revoke — có thể là replay
-		// → xoá luôn cookie phía client
+		// → xoá luôn cookie phía client (cả path cũ /api/auth/refresh để dọn cookie phiên bản trước)
+		cookies.delete('refreshToken', { path: '/' });
 		cookies.delete('refreshToken', { path: '/api/auth/refresh' });
 		return json({ error: 'Invalid refresh token' }, { status: 401 });
 	}
@@ -37,6 +39,7 @@ export const POST: RequestHandler = async (event) => {
 	const now = Math.floor(Date.now() / 1000);
 	if (new Date(storedToken.expiresAt).getTime() / 1000 < now) {
 		await revokeRefreshToken(refreshTokenValue);
+		cookies.delete('refreshToken', { path: '/' });
 		cookies.delete('refreshToken', { path: '/api/auth/refresh' });
 		return json({ error: 'Refresh token expired' }, { status: 401 });
 	}
@@ -65,6 +68,7 @@ export const POST: RequestHandler = async (event) => {
 	if (jkt !== storedToken.jkt) {
 		// Revoke NGAY để chặn cả 2 phía (kẻ tấn công lẫn user gốc) — buộc login lại
 		await revokeRefreshToken(refreshTokenValue);
+		cookies.delete('refreshToken', { path: '/' });
 		cookies.delete('refreshToken', { path: '/api/auth/refresh' });
 		return json({ error: 'Key mismatch — token has been revoked' }, { status: 401 });
 	}
@@ -98,9 +102,37 @@ export const POST: RequestHandler = async (event) => {
 		httpOnly: true,
 		secure: true,
 		sameSite: 'strict',
-		path: '/api/auth/refresh',
+		// Path / — đồng bộ với login: hooks đọc được refreshToken ở mọi request
+		// để khôi phục session SSR khi session cookie hết hạn.
+		path: '/',
 		maxAge: 30 * 86400
 	});
+
+	// Cấp lại session cookie (path /, 30 ngày) — phòng khi session cookie hết hạn
+	// nhưng refresh token còn hạn: client gọi refresh là đủ, không cần login lại.
+	try {
+		const fields = await buildSessionFromUserId(storedToken.userId);
+		if (fields) {
+			const sessionToken = await signAccessToken({
+				sub: storedToken.userId,
+				username: fields.username,
+				roleId: fields.roleId,
+				statusId: fields.statusId,
+				iat: now,
+				exp: now + 30 * 86400
+			});
+			cookies.set('session', sessionToken, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'lax',
+				secure: !dev,
+				maxAge: 30 * 86400
+			});
+		}
+	} catch (e) {
+		// Không chặn refresh — access token vẫn đã được cấp phía trên
+		console.error('[POST /api/auth/refresh] reissue session failed:', e);
+	}
 
 	return json({ accessToken });
 };
