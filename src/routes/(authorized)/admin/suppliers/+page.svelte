@@ -216,6 +216,10 @@
 			// Batch10 (m06635-6c): cảnh báo text khi phone/email trùng trong danh sách
 			dupPhone: { vi: 'Số điện thoại đã tồn tại trong danh sách', en: 'This phone number already exists in the list' },
 			dupEmail: { vi: 'Email đã tồn tại trong danh sách', en: 'This email already exists in the list' },
+			// Batch 22 (m00193-2): aria-label deep action passive field
+			callAction: { vi: 'Gọi', en: 'Call' },
+			emailAction: { vi: 'Gửi email', en: 'Send email' },
+			mapAction: { vi: 'Mở Google Maps', en: 'Open Google Maps' },
 			social: { vi: 'Mạng xã hội', en: 'Social networks' },
 			zalo: { vi: 'Zalo', en: 'Zalo' },
 			zaloPlaceholder: { vi: 'Số Zalo hoặc link zalo.me/...', en: 'Zalo number or zalo.me/... link' },
@@ -1871,6 +1875,33 @@
 		return !str(bd?.province).trim() && !str(nbd?.province).trim();
 	}
 
+	// Batch 22 (m00193-2): entry đủ điều kiện deep-action Maps? — CẦN address
+	// text không rỗng VÀ có tỉnh (hệ cũ hoặc mới). Không yêu cầu đủ 3 cấp:
+	// Maps search vẫn chạy với tỉnh + address.
+	function addressEntryActionable(index: number): boolean {
+		const a = supplierForm.addresses[index];
+		if (!a || !str(a.address).trim()) return false;
+		const bd = supplierAddressBreakdowns[index];
+		const nbd = supplierNewAddressBreakdowns[index];
+		return !!str(bd?.province).trim() || !!str(nbd?.province).trim();
+	}
+
+	// Batch 22: URL Google Maps cho entry — query = [label, address, ward,
+	// district, province] bỏ phần rỗng, join ', ' rồi encodeURIComponent.
+	function addressMapsUrl(index: number): string {
+		const a = supplierForm.addresses[index];
+		const bd = supplierAddressBreakdowns[index];
+		const nbd = supplierNewAddressBreakdowns[index];
+		const parts = [
+			str(a?.label).trim(),
+			str(a?.address).trim(),
+			str(bd?.ward).trim(),
+			str(bd?.district).trim(),
+			str(bd?.province).trim() || str(nbd?.province).trim()
+		].filter(Boolean);
+		return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts.join(', '))}`;
+	}
+
 	// Social giá trị từ server: doc cũ = string đơn, doc mới = mảng → chuẩn hoá
 	// thành mảng string sạch (dùng cho prefill edit + validate + payload).
 	function toSocialArray(v: unknown): string[] {
@@ -3140,7 +3171,16 @@
 									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting}
 										color={str(phone).trim() && !PHONE_RE.test(str(phone).trim()) ? 'error' : undefined}
 									/>
-									<Icon class="field-icon" icon={iconify['call-outline-rounded']} />
+									{#if str(phone).trim() && PHONE_RE.test(str(phone).trim()) && (phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) < 2}
+										<!-- Batch 22 (m00193-2): item hợp lệ → passive field — icon
+										     thành <a> deep-action GỌI NGAY (tel:). Item rỗng/invalid →
+										     icon tĩnh như cũ. -->
+										<a class="field-icon field-icon--action" href={`tel:${str(phone).replace(/[^\d+]/g, '')}`} aria-label={`${pageContents.supplierModal.callAction[lang]} ${str(phone).trim()}`} tabindex={-1}>
+											<Icon icon={iconify['call-outline-rounded']} />
+										</a>
+									{:else}
+										<Icon class="field-icon" icon={iconify['call-outline-rounded']} />
+									{/if}
 								</div>
 								<button
 									type="button"
@@ -3159,10 +3199,16 @@
 								{/if}
 							</div>
 						{/each}
+						<!-- Batch 22 (m00193-2): gate CHẶT — MỌI item hiện có phải
+						     non-empty + regex-pass mới cho thêm (kể cả item giữa). -->
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting || supplierForm.phones.some((p) => (p ?? '').trim() !== '' && !PHONE_RE.test((p ?? '').trim()))}
+							disabled={supplierSubmitting ||
+								supplierForm.phones.some((p) => {
+									const v = (p ?? '').trim();
+									return !v || !PHONE_RE.test(v) || (phoneDupCounts.get(v.toLowerCase()) ?? 0) >= 2;
+								})}
 							onclick={() => {
 								// Batch10 (m06635-5b): flushSync mount row + focus TRONG gesture
 								// (iOS Safari chỉ mở keyboard khi focus trong user gesture).
@@ -3182,7 +3228,15 @@
 									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting}
 										color={str(email).trim() && !EMAIL_RE.test(str(email).trim()) ? 'error' : undefined}
 									/>
-									<Icon class="field-icon" icon={iconify['mail-outline-rounded']} />
+									{#if str(email).trim() && EMAIL_RE.test(str(email).trim()) && (emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) < 2}
+										<!-- Batch 22: passive field — icon thành <a> GỬI EMAIL NGAY
+										     (mailto:). Item rỗng/invalid → icon tĩnh. -->
+										<a class="field-icon field-icon--action" href={`mailto:${str(email).trim()}`} aria-label={`${pageContents.supplierModal.emailAction[lang]} ${str(email).trim()}`} tabindex={-1}>
+											<Icon icon={iconify['mail-outline-rounded']} />
+										</a>
+									{:else}
+										<Icon class="field-icon" icon={iconify['mail-outline-rounded']} />
+									{/if}
 								</div>
 								<button
 									type="button"
@@ -3201,10 +3255,15 @@
 								{/if}
 							</div>
 						{/each}
+						<!-- Batch 22: gate CHẶT như phones — MỌI email non-empty + hợp lệ. -->
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting || supplierForm.emails.some((e) => (e ?? '').trim() !== '' && !EMAIL_RE.test((e ?? '').trim()))}
+							disabled={supplierSubmitting ||
+								supplierForm.emails.some((e) => {
+									const v = (e ?? '').trim();
+									return !v || !EMAIL_RE.test(v) || (emailDupCounts.get(v.toLowerCase()) ?? 0) >= 2;
+								})}
 							onclick={() => {
 								// Batch10 (m06635-5b): flushSync + focus trong gesture.
 								flushSync(() => {
@@ -3230,7 +3289,23 @@
 											disabled={supplierSubmitting}
 											size="sm"
 										/>
-										<Icon class="field-icon" icon={iconify['map-pin-outline-rounded']} />
+										{#if addressEntryActionable(addrIndex)}
+											<!-- Batch 22 (m00193-2): entry có địa chỉ + tỉnh → passive
+											     field — icon thành <a target="_blank"> MỞ GOOGLE MAPS
+											     (search query = label + address + chuỗi địa giới). -->
+											<a
+												class="field-icon field-icon--action"
+												href={addressMapsUrl(addrIndex)}
+												target="_blank"
+												rel="noopener noreferrer"
+												aria-label={pageContents.supplierModal.mapAction[lang]}
+												tabindex={-1}
+											>
+												<Icon icon={iconify['map-pin-outline-rounded']} />
+											</a>
+										{:else}
+											<Icon class="field-icon" icon={iconify['map-pin-outline-rounded']} />
+										{/if}
 									</div>
 									<button
 										type="button"
@@ -3268,11 +3343,17 @@
 								{/if}
 							</div>
 						{/each}
-						<!-- Batch 20 (A7): chặn add khi BẤT KỲ entry có-nội-dung-mà-thiếu-tỉnh (some toàn block) -->
+						<!-- Batch 20 (A7) + Batch 22 (m00193-2): chặn add khi BẤT KỲ
+						     entry hiện có: thiếu tỉnh (Batch 20) HOẶC address rỗng
+						     (Batch 22 — gate chặt: mọi item phải có giá trị hợp lệ,
+						     không trống thì mới cho thêm item mới). Entry vừa thêm
+						     còn rỗng → chưa thêm được entry thứ hai cho tới khi điền. -->
 						<button
 							type="button"
 							class="field-add"
-							disabled={supplierSubmitting || supplierForm.addresses.some((_a, i) => addressEntryInvalid(i))}
+							disabled={supplierSubmitting ||
+								(supplierForm.addresses.length > 0 &&
+									supplierForm.addresses.some((_a, i) => addressEntryInvalid(i) || !str(supplierForm.addresses[i].address).trim()))}
 							onclick={() => {
 								// Batch10 (m06635-5b): flushSync + focus trong gesture.
 								flushSync(() => {
@@ -3420,17 +3501,21 @@
 					guard outside-click (supplierMoreEl.contains). -->
 				{#if supplierEditMode === 'edit'}
 					<div class="supplier-more-wrap" bind:this={supplierMoreEl}>
-						<button
-							type="button"
-							class="supplier-more-btn"
-							data-test="suppliers-more-btn"
+						<!-- Batch 22 (m00193-3): dùng lại component Button (variant ghost +
+						     aspect-square) — đồng bộ hệ style với Save/Cancel cùng footer,
+						     thay button raw .supplier-more-btn riêng lẻ. -->
+						<Button
+							variant="ghost"
+							color="default"
+							aspect-square
 							aria-label={pageContents.more.label[lang]}
 							aria-expanded={supplierMoreOpen}
 							disabled={supplierSubmitting}
+							data-test="suppliers-more-btn"
 							onclick={() => (supplierMoreOpen = !supplierMoreOpen)}
 						>
 							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
-						</button>
+						</Button>
 						{#if supplierMoreOpen}
 							<div class="supplier-more-popover" role="menu">
 								<button
@@ -4596,6 +4681,45 @@
 		:global(.input-root) :global(.input-highlight-wrapper) {
 			padding-left: 2.5rem !important;
 		}
+
+		/* ── Batch 22 (m00193-2): passive field deep-action — icon bọc <a>
+		   class .field-icon--action: item hợp lệ → màu primary + cursor pointer
+		   + hit-area đủ touch 2.25rem; giữ absolute trái đúng chỗ icon tĩnh. ── */
+		:global(a.field-icon--action) {
+			position: absolute;
+			left: 0.875rem;
+			top: 50%;
+			transform: translateY(-50%);
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 1.125rem;
+			color: var(--primary);
+			cursor: pointer;
+			z-index: 3;
+			transition: color 0.2s;
+			/* BẮT BUỘC: .field-icon (icon tĩnh) có pointer-events:none — anchor
+			   mang CẢ 2 class nên thừa hưởng, click xuyên qua dù z-index 3.
+			   Không reset → Playwright click TimeoutError, hit test rơi vào
+			   .input-highlight-wrapper. */
+			pointer-events: auto;
+
+			/* Hit-area cảm ứng: icon chỉ 16px (Audit m00440 chuẩn 44px).
+			   inset -0.75rem → vùng bấm ~40px, dừng trước text input
+			   (wrapper padding-left 2.5rem = 40px) để không cướp focus. */
+			&::after {
+				content: '';
+				position: absolute;
+				inset: -0.75rem;
+				border-radius: 9999px;
+			}
+
+			@media (hover: hover) and (pointer: fine) {
+				&:hover {
+					color: var(--primary-600, var(--primary));
+				}
+			}
+		}
 	}
 
 	/* Line vertical trục x giữa (batch6): cột dọc nối các item qua tâm,
@@ -5553,33 +5677,11 @@
 		animation: supplier-name-loading-pulse 1.2s ease-in-out infinite;
 	}
 
-	/* ── Batch 20 (A4): more-menu footer form modal ── */
+	/* ── Batch 20 (A4): more-menu footer form modal.
+	   Batch 22 (m00193-3): nút mở giờ là component Button (ghost +
+	   aspect-square) — CSS .supplier-more-btn raw ĐÃ XOÁ. ── */
 	.supplier-more-wrap {
 		position: relative;
-	}
-
-	.supplier-more-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 2rem;
-		height: 2rem;
-		padding: 0;
-		border: 0;
-		border-radius: 0.5rem;
-		background: transparent;
-		color: var(--foreground-600);
-		cursor: pointer;
-
-		&:hover:not(:disabled),
-		&:focus-visible {
-			background: hsl(0 0% 0% / 0.06);
-		}
-
-		&:disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
-		}
 	}
 
 	.supplier-more-popover {

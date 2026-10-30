@@ -482,35 +482,6 @@
 		return q ? src.filter((o) => norm(o.label).includes(q)) : src;
 	});
 
-	// Tiêu đề từng cấp + breadcrumb quay lại (cấp đã chọn trước đó).
-	// Batch 16 (mục 9): placeholder 'Chọn X' tích hợp thẳng vào crumbs (không tạo
-	// mảng song song) — cấp chưa có giá trị → label = 'Chọn tỉnh/quận/phường'
-	// (ACTIVE: hiển thị như cấp hiện tại, tap vô hiệu qua guard stepBack), cấp đã
-	// chọn → label = tên (tap → stepBack về cấp đó).
-	const stepCrumbs = $derived.by(() => {
-		const isNew = geoMode === 'new' && dualMode;
-		const crumbs: { level: number; label: string; hasValue: boolean }[] = [];
-		const prov = isNew ? newBreakdown?.province : breakdown.province;
-		// Cấp 0 (tỉnh): chưa chọn → placeholder 'Chọn tỉnh/thành phố'
-		crumbs.push({ level: 0, label: prov || tr('selectProvince'), hasValue: !!prov });
-		if (prov) {
-			if (isNew) {
-				// Hệ mới 2 cấp: tỉnh → xã
-				if (newBreakdown?.ward) crumbs.push({ level: 1, label: newBreakdown.ward, hasValue: true });
-				else if (stepLevel >= 1) crumbs.push({ level: 1, label: tr('selectWard'), hasValue: false });
-			} else {
-				// Hệ cũ 3 cấp: tỉnh → huyện → xã
-				if (breakdown.district) crumbs.push({ level: 1, label: breakdown.district, hasValue: true });
-				else if (stepLevel >= 1) crumbs.push({ level: 1, label: tr('selectDistrict'), hasValue: false });
-				if (breakdown.district) {
-					if (breakdown.ward) crumbs.push({ level: 2, label: breakdown.ward, hasValue: true });
-					else if (stepLevel >= 2) crumbs.push({ level: 2, label: tr('selectWard'), hasValue: false });
-				}
-			}
-		}
-		return crumbs;
-	});
-
 	function openStepPicker(level: number) {
 		stepLevel = level;
 		stepDir = 1;
@@ -630,12 +601,10 @@
 			if (breadcrumbName) crumbs.push({ level: -2, label: breadcrumbName, kind: 'page-name' });
 			crumbs.push({ level: -1, label: breadcrumbCurrent ?? tr('address'), kind: 'page-current' });
 		}
-		// 2) các nấc step ĐÃ CÓ GIÁ TRỊ — stepCrumbs đã tăng dần theo cấp, lọc
-		//    hasValue; mọi mục đều level <= stepLevel (cấp current đã chọn → nằm
-		//    CUỐI, tap stepBack guard từ chối tự quay chính nó)
-		for (const c of stepCrumbs) {
-			if (c.hasValue) crumbs.push({ level: c.level, label: c.label, kind: 'step' });
-		}
+		// 2) Batch 22: KHÔNG render các nấc step (tỉnh/huyện/phường) trên header
+		//    nav — title dừng ở nấc 'Địa chỉ' (yêu cầu user m00193-1). Nấc step
+		//    vẫn hiển thị ở path row (nav.address-step__path DƯỚI search field);
+		//    stepBack vẫn dùng ở đó + popover more chỉ gom các nấc page-*.
 		return crumbs;
 	});
 	// Phần hiển thị trên nav + phần bị gom vào popover (từ ĐẦU mảng)
@@ -932,11 +901,9 @@
 				actionButtons={{ close: { display: false } }}
 			>
 				<div class="address-step__header">
-					{#if stepLevel > 0}
-						<button type="button" class="address-step__back" aria-label="Quay lại" onclick={() => stepBack(stepLevel - 1)}>
-							<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-					</button>
-				{/if}
+					<!-- Batch 22: BỎ nút back chevron ở title modal (yêu cầu user
+					     m00193-1) — quay lại cấp đã chọn qua path row (nav
+					     .address-step__path dưới search field). -->
 					<!-- Batch 21: SLOT MORE CỐ ĐỊNH 2rem đứng TRƯỚC nav (trái) — gom từ
 					     ĐẦU mảng (Suppliers trước tiên), giữ nấc GẦN (cuối hàng). Luôn
 					     render (visibility khi ẩn) chống RO ping-pong: mount/unmount
@@ -1278,7 +1245,8 @@
 		position: relative;
 	}
 
-	.address-step__back,
+	/* Batch 22: .address-step__back đã BỎ khỏi UI (title modal không còn nút
+	   back chevron — quay lại cấp qua path row). Chỉ còn .address-step__close. */
 	.address-step__close {
 		flex: none;
 		display: inline-flex;
