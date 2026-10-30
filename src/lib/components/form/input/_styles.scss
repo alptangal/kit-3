@@ -404,16 +404,27 @@
 				height: 100%;
 				max-height: 100%;
 			}
-			/* Nút icon vuông (clear/copy có aspect-square): min-width 2.75rem phía
-			   trên PHÁ ratio (width 2.75rem > height input) → không còn hình vuông
-			   trên mobile. Trả ratio 1/1: width auto theo height, hit-area mở bằng
-			   padding-inline + margin âm bù (không đổi layout). */
+			/* Nút icon vuông (clear/copy/paste có aspect-square): aspect-ratio
+			   KHÔNG đáng tin trên Safari 15.1 khi height là percent-stretch trong
+			   flex item (đo thật iPhone: 32x22 — aspect-ratio có trong computed
+			   style nhưng không apply). Vuông tường minh: height giữ 100% group
+			   (= --min-height input trừ padding-block group 2x0.25rem) → width
+			   tính từ CÙNG công thức: calc(var(--min-height) - 0.5rem). --min-height
+			   cascade từ .input-root size-* nên tự đúng theo xs/sm/md. Hit-area mở
+			   bằng ::after inset âm (overflow:hidden của Button clip pseudo-child
+			   → mở visible; nút icon mobile không tooltip nên không mất gì). */
 			:global(.button-root.aspect-square) {
 				min-width: 0;
-				width: auto;
-				aspect-ratio: 1 / 1;
-				padding-inline: 0.35rem;
-				margin-inline: -0.35rem;
+				overflow: visible;
+				width: calc(var(--min-height, 2.5rem) - 0.5rem);
+				padding-inline: 0;
+				margin-inline: 0;
+				justify-content: center;
+				&::after {
+					content: '';
+					position: absolute;
+					inset: -0.5rem;
+				}
 			}
 		}
 	}

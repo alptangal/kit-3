@@ -192,6 +192,8 @@
 			nameTaken: { vi: 'Tên đã tồn tại', en: 'Name already exists' },
 			// Batch 17: Description xanh dưới input khi name qua check + không trùng
 			nameAvailable: { vi: 'Tên có thể sử dụng', en: 'Name is available' },
+			// Batch 21: name rỗng khi submit → Description error chuẩn component
+			nameRequired: { vi: 'Vui lòng nhập tên nhà cung cấp', en: 'Supplier name is required' },
 			contact: { vi: 'Người liên hệ (tuỳ chọn)', en: 'Contact person (optional)' },
 			address: { vi: 'Địa chỉ (tuỳ chọn)', en: 'Address (optional)' },
 			addressPlaceholder: { vi: 'Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành...', en: 'House number, street, ward, district, province...' },
@@ -657,6 +659,8 @@
 	let crumbMoreOpen = $state(false);
 	let supplierSubmitting = $state(false);
 	let supplierError = $state<string | undefined>(undefined);
+	// Batch 21: submit-attempt fail → render viền đỏ + message error chuẩn component trên các field
+	let supplierSubmitAttempted = $state(false);
 	// Ref Modal.Container.Body (element DOM) — dùng cho scroll-to-invalid khi submit
 	let supplierModalBodyEl = $state<HTMLElement | undefined>(undefined);
 	// 'create' | 'edit' — cùng 1 form; edit prefill từ row + Lưu qua /suppliers/update
@@ -1735,6 +1739,7 @@
 			ward: a.newWard ?? ''
 		}));
 		supplierError = undefined;
+		supplierSubmitAttempted = false;
 		supplierModalDisplay = true;
 		void seedImagesAfterMount();
 		if (resumed) showToast(pageContents.toasts.draftRestored[lang], 'success');
@@ -1818,6 +1823,7 @@
 			ward: a.newWard ?? ''
 		}));
 		supplierError = undefined;
+		supplierSubmitAttempted = false;
 		supplierModalDisplay = true;
 		void seedImagesAfterMount();
 		// Batch 16 (m13579-5): baseline Save-gate chụp CÙNG thời điểm markClean
@@ -2138,6 +2144,9 @@
 		if (supplierSubmitting || !encryptionKeys) return;
 		const validationError = validateSupplierForm();
 		if (validationError) {
+			// Batch 21: attempt fail → bật lớp visual error (viền đỏ + message) trên các field
+			supplierAttemptBaseline = supplierValidationSnapshot();
+			supplierSubmitAttempted = true;
 			supplierError = validationError;
 			// Scroll tới field invalid đầu tiên để user can thiệp (yêu cầu 4f)
 			const key = (Object.keys(FIELD_SELECTORS) as (keyof typeof FIELD_SELECTORS)[]).find((k) =>
@@ -2147,6 +2156,7 @@
 			return;
 		}
 		supplierError = undefined;
+		supplierSubmitAttempted = false;
 		supplierSubmitting = true;
 		try {
 			// DEFER images: upload các file local chờ tải lên TRƯỚC khi build payload
@@ -2477,6 +2487,33 @@
 		void supplierEditId;
 		scheduleNameCheck();
 		return () => clearTimeout(nameCheckTimer);
+	});
+
+	// ── Batch 21: snapshot các field liên quan validation — dùng làm baseline
+	// lúc submit-attempt fail; effect dưới so sánh để biết user ĐÃ SỬA chưa.
+	// Gồm breakdowns (addressEntryInvalid đọc province từ breakdown state).
+	function supplierValidationSnapshot(): string {
+		const f = supplierForm;
+		return JSON.stringify([
+			f.name,
+			f.phones,
+			f.emails,
+			f.addresses.map((a) => [a.label, a.address, a.province, a.district, a.newProvince, a.newWard]),
+			f.zalo, f.telegram, f.discord, f.facebook, f.instagram, f.website,
+			supplierAddressBreakdowns,
+			supplierNewAddressBreakdowns
+		]);
+	}
+	let supplierAttemptBaseline = '';
+
+	// ── Batch 21: user sửa field sau submit-attempt fail → tắt lớp visual error
+	// (viền đỏ/message) để không "kẹt" lỗi đã sửa. KHÔNG reset ngay khi attempted
+	// bật true (effect re-run vì attempted là dep → phải qua baseline so sánh,
+	// form chưa đổi thì giữ visual).
+	$effect(() => {
+		if (!supplierSubmitAttempted) return;
+		const current = supplierValidationSnapshot();
+		if (current !== supplierAttemptBaseline) supplierSubmitAttempted = false;
 	});
 </script>
 
@@ -3043,13 +3080,17 @@
 										bind:value={supplierForm.name}
 										disabled={supplierSubmitting}
 										loading={supplierNameChecking}
-										color={supplierNameChecked ? (supplierNameTaken ? 'error' : 'success') : undefined}
+										color={supplierSubmitAttempted && !str(supplierForm.name).trim() ? 'error'
+											: (supplierNameChecked ? (supplierNameTaken ? 'error' : 'success') : undefined)}
 										class={supplierNameTaken ? 'supplier-name-taken' : (supplierNameChecked && !supplierNameChecking ? 'supplier-name-available' : undefined)}
 										data-test="supplier-form-name"
 									/>
 									<Icon class="field-icon" icon={iconify['storefront-outline-rounded']} />
 								</div>
-								{#if str(supplierForm.name).trim()}
+								{#if supplierSubmitAttempted && !str(supplierForm.name).trim()}
+									<!-- Batch 21: name rỗng khi submit → Description error chuẩn component -->
+									<Description persistent color="error" class="form-hint error-hint">{pageContents.supplierModal.nameRequired[lang]}</Description>
+								{:else if str(supplierForm.name).trim()}
 									{#if supplierNameChecking}
 										<Description persistent class="form-hint">{pageContents.supplierModal.nameChecking[lang]}</Description>
 									{:else if supplierNameTaken}
@@ -3096,7 +3137,9 @@
 							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2}>
 								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="solid" color={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
 								<div class="field-icon-wrap">
-									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting} />
+									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting}
+										color={str(phone).trim() && !PHONE_RE.test(str(phone).trim()) ? 'error' : undefined}
+									/>
 									<Icon class="field-icon" icon={iconify['call-outline-rounded']} />
 								</div>
 								<button
@@ -3136,7 +3179,9 @@
 							<div class="field-row" class:field-row--dup={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2}>
 								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="solid" color={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
 								<div class="field-icon-wrap">
-									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting} />
+									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting}
+										color={str(email).trim() && !EMAIL_RE.test(str(email).trim()) ? 'error' : undefined}
+									/>
 									<Icon class="field-icon" icon={iconify['mail-outline-rounded']} />
 								</div>
 								<button
@@ -3215,6 +3260,12 @@
 									onBreadcrumbHomeTap={closeAllFromStep}
 									onBreadcrumbNameTap={attemptCloseStepModal}
 								/>
+								{#if supplierSubmitAttempted && addressEntryInvalid(addrIndex)}
+									<!-- Batch 21: AddressInput KHÔNG có prop color → message inline
+									     per-entry theo pattern .field-row-dup-msg (absolute top:100%,
+									     cha .address-entry có position:relative) -->
+									<span class="field-row-dup-msg">{pageContents.form.invalidAddress[lang]}</span>
+								{/if}
 							</div>
 						{/each}
 						<!-- Batch 20 (A7): chặn add khi BẤT KỲ entry có-nội-dung-mà-thiếu-tỉnh (some toàn block) -->
@@ -4868,6 +4919,14 @@
 		font-size: 0.72rem;
 		color: var(--error);
 		pointer-events: none;
+	}
+
+	/* Batch 21: message invalid trong .address-entry — absolute top:100% đè entry
+	   kế tiếp (margin-top chỉ 0.55rem) → chuyển static, chảy trong entry. */
+	.address-entry .field-row-dup-msg {
+		position: static;
+		margin-top: -0.15rem;
+		padding-left: 0.3rem;
 	}
 
 	.form-dup-banner {

@@ -601,86 +601,84 @@
 		}
 	}
 
-	// ── Batch 20: breadcrumb header ĐẢO ƯU TIÊN — nấc GẦN NHẤT (current step)
-	// hiển thị TRƯỚC đầy đủ, các nấc cấp cao hơn theo sau ellipse khi chật; hết
-	// width → các nấc ở CUỐI hàng (cấp cao nhất: province → name → home) gom vào
-	// popover qua nút more (tap item → quay lại nấc đó). Pattern batch 18
+	// ── Batch 21: breadcrumb header thứ tự CÂY root→lá (trái→phải) — [trang cha:
+	// home → name → current-label] › [nấc ĐÃ CHỌN: tỉnh → huyện → phường]; cấp
+	// đang chọn CHƯA có giá trị → không có nấc. Hết width → gom từ ĐẦU hàng
+	// (Suppliers trước tiên) vào popover qua nút more (tap item → quay lại nấc
+	// đó), giữ nấc GẦN (cuối hàng). Pattern batch 18
 	// suppliers (measureCrumbOverflow): ResizeObserver + tick; outside-click
 	// MOUSEDOWN (nút form stopPropagation() trên click). BẪY chống RO ping-pong:
 	// more button nằm trong SLOT CỐ ĐỊNH 2rem luôn render (visibility khi ẩn)
 	// → mount/unmount popover-state không đổi nav clientWidth → measure hội tụ.
 	let stepCrumbNavEl = $state<HTMLElement | null>(null);
 	let crumbMoreOpen = $state(false);
-	// Số nấc BỊ GOM (từ CUỐI mảng hiển thị — cấp cao nhất trước) — 0 = không more
+	// Số nấc BỊ GOM (từ ĐẦU mảng hiển thị — Suppliers trước tiên) — 0 = không more
 	let crumbOverflow = $state(0);
 
-	// Chuỗi hiển thị đảo ưu tiên: [current step] → [nấc ĐÃ QUA: gần→xa] →
-	// [breadcrumb trang cha: current-label → name → home]. level: số ≥ 0 = cấp
-	// step (tap stepBack); -1 page-current (span); -2 name; -3 home (tap handler
-	// trang cha). kind điều khiển cách render/tap.
-	type HeaderCrumb = { level: number; label: string; kind: 'current' | 'step' | 'page-current' | 'page-name' | 'page-home' };
+	// Chuỗi hiển thị thứ tự cây root→lá: [page-home → page-name → page-current]
+	// › [stepCrumbs ĐÃ CÓ GIÁ TRỊ (tăng dần: tỉnh → huyện → phường)]. Cấp đang
+	// chọn chưa có giá trị → stepCrumbs không chứa nó → không render nấc nào
+	// (yêu cầu batch 21: bỏ nấc 'Select province/district/ward'). level: số ≥ 0
+	// = cấp step (tap stepBack); -1 page-current (span); -2 name; -3 home (tap
+	// handler trang cha). kind điều khiển cách render/tap.
+	type HeaderCrumb = { level: number; label: string; kind: 'step' | 'page-current' | 'page-name' | 'page-home' };
 	const headerCrumbs = $derived.by(() => {
 		const crumbs: HeaderCrumb[] = [];
-		// 1) current step ĐẦU — label 'Select province/district/ward' hoặc tên nấc
-		//    đã có giá trị (từ stepCrumbs mục level === stepLevel)
-		const current = stepCrumbs.find((c) => c.level === stepLevel);
-		crumbs.push({
-			level: stepLevel,
-			label: current?.label ?? tr(stepLevel === 0 ? 'selectProvince' : stepLevel === 1 ? (geoMode === 'new' && dualMode ? 'selectWard' : 'selectDistrict') : 'selectWard'),
-			kind: 'current'
-		});
-		// 2) các nấc ĐÃ QUA (cấp cao hơn current) — đảo stepCrumbs (cao→thấp thành
-		//    gần→xa); mọi mục đều level < stepLevel → guard stepBack hợp lệ
-		for (const c of [...stepCrumbs].reverse()) {
-			if (c.level === stepLevel) continue;
-			crumbs.push({ level: c.level, label: c.label, kind: 'step' });
-		}
-		// 3) breadcrumb trang cha (XA NHẤT, cuối hàng): 'Địa chỉ' → name → home
+		// 1) breadcrumb trang cha (root, ĐẦU mảng): home → name → 'Địa chỉ'
 		if (breadcrumbHome) {
-			crumbs.push({ level: -1, label: breadcrumbCurrent ?? tr('address'), kind: 'page-current' });
-			if (breadcrumbName) crumbs.push({ level: -2, label: breadcrumbName, kind: 'page-name' });
 			crumbs.push({ level: -3, label: breadcrumbHome, kind: 'page-home' });
+			if (breadcrumbName) crumbs.push({ level: -2, label: breadcrumbName, kind: 'page-name' });
+			crumbs.push({ level: -1, label: breadcrumbCurrent ?? tr('address'), kind: 'page-current' });
+		}
+		// 2) các nấc step ĐÃ CÓ GIÁ TRỊ — stepCrumbs đã tăng dần theo cấp, lọc
+		//    hasValue; mọi mục đều level <= stepLevel (cấp current đã chọn → nằm
+		//    CUỐI, tap stepBack guard từ chối tự quay chính nó)
+		for (const c of stepCrumbs) {
+			if (c.hasValue) crumbs.push({ level: c.level, label: c.label, kind: 'step' });
 		}
 		return crumbs;
 	});
-	// Phần hiển thị trên nav + phần bị gom vào popover (cuối mảng)
-	const crumbVisible = $derived(headerCrumbs.slice(0, headerCrumbs.length - crumbOverflow));
-	const crumbHidden = $derived(headerCrumbs.slice(headerCrumbs.length - crumbOverflow));
-	// current step thành nấc cuối cùng còn lại → cho phép co/ellipsis chính nó
+	// Phần hiển thị trên nav + phần bị gom vào popover (từ ĐẦU mảng)
+	const crumbVisible = $derived(headerCrumbs.slice(crumbOverflow));
+	const crumbHidden = $derived(headerCrumbs.slice(0, crumbOverflow));
+	// nấc CUỐI (gần nhất) thành nấc duy nhất còn lại → cho phép co/ellipsis chính nó
 	const crumbSolo = $derived(headerCrumbs.length > 1 && crumbOverflow >= headerCrumbs.length - 1);
 
 	// Đo overflow TRÊN ITEM CUỐI (bẫy batch 18: item con min-width:0 + ellipsis
 	// "nuốt hết" squeeze → nav.scrollWidth === clientWidth vĩnh viễn, phải đo
-	// scrollWidth trên chính item bị cắt). Nấc current (--current) flex-shrink:0
-	// không bao giờ cắt; nấc cao hơn bị cắt = "phần còn lại width không đủ chứa"
-	// theo yêu cầu user → gom vào popover.
+	// scrollWidth trên chính item bị cắt). Batch 21: nấc cuối là nấc GẦN (span
+	// --current shrink:0 không bao giờ cắt) → điều kiện tràn = BẤT KỲ item con
+	// nào bị cắt; nấc xa hơn bị cắt = "phần còn lại width không đủ chứa" theo
+	// yêu cầu user → gom vào popover.
 	async function measureStepCrumbOverflow() {
 		const nav = stepCrumbNavEl;
 		if (!nav || !stepOpen) {
 			if (crumbOverflow !== 0) crumbOverflow = 0;
 			return;
 		}
-		// Con cuối của nav luôn là ITEM (sep render kèm item đi trước nó trong
-		// cùng bước each) → lastElementChild là nấc xa nhất còn hiển thị.
-		const lastTruncated = () => {
-			const last = nav.lastElementChild as HTMLElement | null;
-			return !!last && last.scrollWidth > last.clientWidth + 1;
+		// Bất kỳ item con nào scrollWidth > clientWidth+1 = đang bị cắt
+		const anyTruncated = () => {
+			for (const el of nav.children) {
+				const item = el as HTMLElement;
+				if (item.scrollWidth > item.clientWidth + 1) return true;
+			}
+			return false;
 		};
 		let guard = 0;
-		// Gom dần các nấc CUỐI hàng (cấp cao nhất trước) tới khi nấc xa nhất còn
-		// hiển thị vừa (không cắt) hoặc chỉ còn current.
-		while (lastTruncated() && crumbOverflow < headerCrumbs.length - 1 && guard < 8) {
+		// Gom dần các nấc ĐẦU hàng (xa nhất: home trước) tới khi không còn item
+		// bị cắt hoặc chỉ còn 1 nấc cuối.
+		while (anyTruncated() && crumbOverflow < headerCrumbs.length - 1 && guard < 8) {
 			crumbOverflow += 1;
 			guard += 1;
 			await tick();
 		}
-		// Dư chỗ (rotate/đóng keyboard) → thử trả lại nấc đã gom; item cuối cắt
+		// Dư chỗ (rotate/đóng keyboard) → thử trả lại nấc đã gom; vẫn cắt
 		// lại → hoàn tác và dừng.
 		while (crumbOverflow > 0 && guard < 16) {
 			crumbOverflow -= 1;
 			guard += 1;
 			await tick();
-			if (lastTruncated()) {
+			if (anyTruncated()) {
 				crumbOverflow += 1;
 				break;
 			}
@@ -939,11 +937,12 @@
 							<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
 					</button>
 				{/if}
-					<!-- Batch 20: SLOT MORE CỐ ĐỊNH 2rem — luôn render (visibility khi
-					     ẩn) chống RO ping-pong: mount/unmount more-button khi
-					     crumbOverflow đổi sẽ làm nav đổi width → measure không hội tụ.
-					     Popover nằm trong header đã portal — z-index thắng trong
-					     stacking context của header (CSS .address-step__more). -->
+					<!-- Batch 21: SLOT MORE CỐ ĐỊNH 2rem đứng TRƯỚC nav (trái) — gom từ
+					     ĐẦU mảng (Suppliers trước tiên), giữ nấc GẦN (cuối hàng). Luôn
+					     render (visibility khi ẩn) chống RO ping-pong: mount/unmount
+					     more-button khi crumbOverflow đổi sẽ làm nav đổi width → measure
+					     không hội tụ. Popover nằm trong header đã portal — z-index thắng
+					     trong stacking context của header (CSS .address-step__more). -->
 					<div class="address-step__more-wrap">
 						<button
 							type="button"
@@ -966,9 +965,9 @@
 										role="menuitem"
 										onclick={() => {
 											crumbMoreOpen = false;
-											// 'step' → về cấp đã qua (guard stepBack hợp lệ vì
-											// mọi nấc popover đều level < stepLevel); page-*
-											// → handler trang cha tương ứng.
+											// 'step' → về cấp đã qua (guard stepBack từ chối tự
+											// quay chính nấc current); page-* → handler trang
+											// cha tương ứng.
 											if (hid.kind === 'step') stepBack(hid.level);
 											else if (hid.kind === 'page-home') onBreadcrumbHomeTap?.();
 											else if (hid.kind === 'page-name') (onBreadcrumbNameTap ?? onBreadcrumbHomeTap)?.();
@@ -980,12 +979,12 @@
 					</div>
 				<nav class="address-step__crumbs" aria-label="Cấp địa giới" bind:this={stepCrumbNavEl}>
 					{#each crumbVisible as crumb, ci (crumb.level)}
-						<!-- Batch 20: ĐẢO ƯU TIÊN — nấc GẦN NHẤT (current step) TRƯỚC đầy
-						     đủ, các nấc cấp cao hơn theo sau ellipse khi chật; nấc sâu nhất
-						     chưa hiển thị được gom popover more (trên). -->
+						<!-- Batch 21: thứ tự CÂY root→lá — trang cha ĐẦU (home → name →
+						     'Địa chỉ'), nấc step đã chọn theo sau (tỉnh → huyện → phường);
+						     nấc xa nhất bị gom popover more (trên). -->
 						{#if ci > 0}<span class="address-step__crumb-sep" aria-hidden="true">›</span>{/if}
-						{#if crumb.kind === 'current' || crumb.kind === 'page-current'}
-							<span class="address-step__crumb address-step__crumb--current" class:address-step__crumb--solo={crumbSolo && crumb.kind === 'current'}>{crumb.label}</span>
+						{#if crumb.kind === 'page-current'}
+							<span class="address-step__crumb address-step__crumb--current" class:address-step__crumb--solo={crumbSolo && crumb.kind === 'page-current'}>{crumb.label}</span>
 						{:else if crumb.kind === 'step'}
 							<button type="button" class="address-step__crumb" onclick={() => stepBack(crumb.level)}>
 								{crumb.label}
@@ -1012,19 +1011,6 @@
 				</div>
 			</Modal.Container.Header>
 			<Modal.Container.Body class="address-step__body">
-				<!-- Batch 15 (m12278-11): hàng tóm tắt ĐÃ CHỌN nằm trên search field —
-				     chuỗi tỉnh › huyện › xã của các cấp có giá trị; tap 1 cấp → quay lại
-				     cấp đó (stepBack) để chọn lại. -->
-				{#if stepSelectedChain.length > 0}
-					<nav class="address-step__selected" aria-label="Đã chọn">
-						{#each stepSelectedChain as sel, si (sel.level)}
-							{#if si > 0}<span class="address-step__selected-sep" aria-hidden="true">›</span>{/if}
-							<button type="button" class="address-step__selected-item" onclick={() => stepBack(sel.level)}>
-								{sel.label}
-							</button>
-						{/each}
-					</nav>
-				{/if}
 				<div class="address-step__search">
 					<input
 						type="text"
@@ -1416,9 +1402,9 @@
 
 	.address-step__crumb {
 		/* Batch 16 (mục 8): min-width:0 + ellipsis để từng phần co được trong flex
-		   khi breadcrumb chật header. Batch 20: đảo ưu tiên — current step đứng
-		   ĐẦU hiển thị ĐẦY ĐỦ (max-width:none, không co); các nấc SAU (cấp cao
-		   hơn) ellipse khi chật; nấc chưa hiển thị được gom popover more. */
+		   khi breadcrumb chật header. Batch 21: thứ tự cây root→lá — nấc CUỐI
+		   (gần nhất: step đã chọn / page-current 'Địa chỉ') đầy đủ, nấc ĐẦU
+		   (trang cha) ellipse khi chật và gom popover more. */
 		min-width: 0;
 		font-size: 0.875rem;
 		font-weight: 500;
@@ -1442,7 +1428,8 @@
 		}
 
 		/* current là nấc CUỐI cùng còn lại (mọi nấc khác đã gom popover) → cho
-		   phép co/ellipsis chính nó để không tràn nav. */
+		   phép co/ellipsis chính nó để không tràn nav. (Batch 21: áp cho
+		   page-current 'Địa chỉ' — nấc step hiện tại không còn nấc riêng.) */
 		&--solo {
 			flex-shrink: 1;
 			min-width: 3rem;
@@ -1450,44 +1437,6 @@
 	}
 
 	.address-step__crumb-sep {
-		color: var(--foreground-400, hsl(0 0% 62%));
-	}
-
-	/* Batch 15 (m12278-11): hàng tóm tắt đã chọn trên search — chips nhỏ
-	   bọc giá trị, tap quay lại cấp đó. */
-	.address-step__selected {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.25rem;
-		padding: 0.375rem 0.625rem;
-		border-bottom: 1px solid var(--border, var(--default-200, #e5e7eb));
-	}
-
-	.address-step__selected-item {
-		display: inline-flex;
-		align-items: center;
-		max-width: 100%;
-		padding: 0.125rem 0.5rem;
-		border: none;
-		border-radius: 0.375rem;
-		/* AA trên --primary-soft: chữ --primary-800 (6.31:1) thay --primary (2.82:1) */
-		background: var(--primary-soft);
-		color: var(--primary-800, hsl(227.1 75.74% 41.14%));
-		font-size: 0.8125rem;
-		font-weight: 500;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		cursor: pointer;
-
-		@media (prefers-color-scheme: dark) {
-			background: hsl(212 92% 20%);
-			color: hsl(212 92% 70%);
-		}
-	}
-
-	.address-step__selected-sep {
 		color: var(--foreground-400, hsl(0 0% 62%));
 	}
 
