@@ -286,6 +286,41 @@
 	onMount(() => () => {
 		if (followRaf) cancelAnimationFrame(followRaf);
 	});
+
+	// ── Trigger chỉ có icon → tự làm ô VUÔNG (width = height) ──
+	// KHÔNG dùng :has() (iOS Safari 15.1 chết) → phát hiện bằng JS rồi gắn class
+	// 'tooltip-icon-trigger' lên trigger; CSS nằm ở tooltip/_styles.scss.
+	const ICON_SELECTOR = 'svg, img, i, .icon';
+
+	// Text hiển thị nằm NGOÀI icon (bỏ qua svg/img/.icon — <title> trong svg không tính).
+	function hasVisibleText(el: HTMLElement): boolean {
+		for (const node of Array.from(el.childNodes)) {
+			if (node.nodeType === Node.TEXT_NODE) {
+				if ((node.textContent ?? '').trim() !== '') return true;
+				continue;
+			}
+			if (node.nodeType !== Node.ELEMENT_NODE) continue;
+			const child = node as HTMLElement;
+			const tag = child.tagName.toLowerCase();
+			if (tag === 'svg' || tag === 'img' || child.classList.contains('icon')) continue;
+			if (hasVisibleText(child)) return true;
+		}
+		return false;
+	}
+
+	// Chỉ có icon: có phần tử icon + KHÔNG có text hiển thị (trigger rỗng → false).
+	function isIconOnlyTrigger(el: HTMLElement): boolean {
+		if (!el.querySelector(ICON_SELECTOR)) return false;
+		return !hasVisibleText(el);
+	}
+
+	onMount(() => {
+		const trigger = configs.ref?.firstElementChild;
+		if (!(trigger instanceof HTMLElement)) return;
+		if (!isIconOnlyTrigger(trigger)) return;
+		trigger.classList.add('tooltip-icon-trigger');
+		return () => trigger.classList.remove('tooltip-icon-trigger');
+	});
 </script>
 
 <svelte:element
@@ -312,6 +347,7 @@
 
 <style lang="scss">
 	@use '$styles/sizes.scss';
+	@use '_styles.scss';
 	.tooltip-root {
 		font-size: var(--font-size);
 		width: fit-content;

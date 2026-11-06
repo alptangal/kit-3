@@ -40,7 +40,8 @@
 			`size-${sizeDerived}`,
 			`color-${colorDerived}`,
 			`variant-${variantDerived}`,
-			removableDerived ? 'removable' : undefined
+			removableDerived ? 'removable' : undefined,
+			props.disabled ? 'disabled' : undefined
 		];
 		return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 	});
@@ -84,6 +85,9 @@
 		get removable() {
 			return removableDerived;
 		},
+		get disabled() {
+			return props.disabled ?? false;
+		},
 		get text() {
 			return textDerived;
 		},
@@ -108,14 +112,17 @@
 			type="button"
 			class="tag-remove"
 			aria-label={configs.removeLabel}
+			disabled={props.disabled || undefined}
 			onmousedown={(e) => e.preventDefault()}
 			onclick={(e) => {
 				e.stopPropagation();
+				if (props.disabled) return;
 				props.onRemove?.(e);
 			}}
 			onkeydown={(e) => {
 				// Chặn key bóng lên document handler (nav/option của Select)
 				e.stopPropagation();
+				if (props.disabled) return;
 				if (e.key === 'Enter' || e.key === ' ') {
 					e.preventDefault();
 					props.onRemove?.(e);

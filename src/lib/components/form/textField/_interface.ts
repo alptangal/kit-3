@@ -2,6 +2,9 @@ import type { BasicConfigs, BasicProps, Size } from '$components/interface';
 import type { DescriptionConfigs } from '../description/_interface';
 import type { InputConfigs } from '../input/_interface';
 import type { LabelConfigs } from '../label/_interface';
+import type { InputDatetimeConfigs } from '../input-datetime/_interface';
+import type { RadioGroupConfigs } from '../radiogroup/_interface';
+import type { TextareaConfigs } from '../textarea/_interface';
 
 export interface TextFieldProps extends BasicProps {
 	loading?: boolean;
@@ -33,6 +36,9 @@ export interface TextFieldConfigs extends BasicConfigs {
 		label?: LabelConfigs;
 		description?: DescriptionConfigs;
 		input?: InputConfigs;
+		radiogroup?: RadioGroupConfigs;
+		datetime?: InputDatetimeConfigs;
+		textarea?: TextareaConfigs;
 	};
 	previousValue?: string;
 	reset: () => void;

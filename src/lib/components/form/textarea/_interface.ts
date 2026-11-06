@@ -58,6 +58,7 @@ export interface TextareaConfigs extends Omit<BasicConfigs, 'status' | 'value'> 
 		isValid?: boolean | 'pending';
 		messages?: Map<string, { content?: TranslateContent; kind: 'valid' | 'invalid' }>;
 	};
+	focus: () => void;
 	reset: () => void;
 }
 

@@ -239,7 +239,7 @@
 			class="pagination-item pagination-prev"
 			class:aspect-square={prevIconOnly}
 			disabled={loading || disabled || safePage <= 1 || singlePage}
-			aria-label="Trang trước"
+			aria-label={getText(undefined, { en: 'Previous page', vi: 'Trang trước' })}
 			onclick={() => goTo(safePage - 1)}
 		>
 			{#if props.prevIcon}
@@ -286,7 +286,7 @@
 			class="pagination-item pagination-next"
 			class:aspect-square={nextIconOnly}
 			disabled={loading || disabled || safePage >= totalPages || singlePage}
-			aria-label="Trang sau"
+			aria-label={getText(undefined, { en: 'Next page', vi: 'Trang sau' })}
 			onclick={() => goTo(safePage + 1)}
 		>
 			{#if props.nextIcon}
@@ -300,7 +300,7 @@
 			class="pagination-item pagination-prev"
 			class:aspect-square={prevIconOnly}
 			disabled={loading || disabled || safePage <= 1 || singlePage}
-			aria-label="Trang trước"
+			aria-label={getText(undefined, { en: 'Previous page', vi: 'Trang trước' })}
 			onclick={() => goTo(safePage - 1)}
 		>
 			{#if props.prevIcon}
@@ -329,7 +329,7 @@
 			class="pagination-item pagination-next"
 			class:aspect-square={nextIconOnly}
 			disabled={loading || disabled || safePage >= totalPages || singlePage}
-			aria-label="Trang sau"
+			aria-label={getText(undefined, { en: 'Next page', vi: 'Trang sau' })}
 			onclick={() => goTo(safePage + 1)}
 		>
 			{#if props.nextIcon}

@@ -28,6 +28,14 @@
 
 	// Clearable case: state riêng (chống shared giữa các case)
 	let clearableValue = $state('');
+
+	// Batch 23: case paste từ clipboard — nút "Dán mã" hiện cạnh nhóm ô.
+	let pasteValue = $state('');
+	function seedPasteClipboard() {
+		// localStorage 'clipboard' là fallback khi navigator.clipboard bị chặn
+		// (iOS Safari cần user gesture, headless không có quyền).
+		localStorage.setItem('clipboard', JSON.stringify({ [Date.now()]: '123456' }));
+	}
 </script>
 
 <div class="page" data-test="input-otp-demo">
@@ -75,6 +83,20 @@
 		<p class="demo-hint">
 			Gõ ít nhất 1 số → nút xóa hiện bên phải các ô; click xóa toàn bộ + focus ô đầu.
 			Toàn bộ rỗng → nút ẩn. Giá trị: <code data-test="otp-clearable-value">{clearableValue || '(trống)'}</code>
+		</p>
+	</section>
+
+	<!-- 3c. Paste từ clipboard (nút "Dán mã" cạnh nhóm ô) -->
+	<section class="demo" data-test="otp-paste">
+		<h2>Clipboard paste (nút "Dán mã")</h2>
+		<InputOtp bind:value={pasteValue} aria-label="Mã OTP dán từ clipboard" />
+		<button class="mini-btn" data-test="otp-paste-seed" onclick={seedPasteClipboard}>
+			Nạp clipboard mẫu "123456"
+		</button>
+		<p class="demo-hint">
+			Nạp clipboard mẫu → focus vào ô OTP → nút "Dán mã" hiện bên phải nhóm ô;
+			click → điền mã + focus ô kế tiếp còn trống.
+			Giá trị: <code data-test="otp-paste-value">{pasteValue || '(trống)'}</code>
 		</p>
 	</section>
 

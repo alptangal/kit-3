@@ -29,6 +29,7 @@ export interface TagConfigs extends BasicConfigs {
 	color: Color;
 	variant: TagVariant;
 	removable: boolean;
+	disabled: boolean;
 	/** Nội dung đã resolve theo ngôn ngữ + truncate. */
 	text: string;
 	removeLabel: string;

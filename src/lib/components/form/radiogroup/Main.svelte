@@ -7,11 +7,13 @@
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { getFormContext } from '../form';
+	import { getTextFieldContext } from '../textField';
 	import { setRadioContext, defaultValidation } from './index';
 	import type { RadioGroupConfigs, RadioGroupProps } from './_interface';
 
 	let { value = $bindable(), children, ...props }: RadioGroupProps = $props();
 	const formContext = getFormContext();
+	const textFieldContext = getTextFieldContext();
 
 	// Giá trị ban đầu (mốc reset + tính status.changed)
 	let _initialValue: string | null = value ?? null;
@@ -59,6 +61,21 @@
 			if (configs.items.get(id)?.disabled) return;
 			_justReset = false;
 			value = id;
+		},
+		// Focus radio đang active (hoặc radio enabled đầu tiên) — Label/TextField gọi.
+		focus() {
+			const id = configs.activeId ?? configs.enabledIds[0];
+			if (id) focusId(id);
+		},
+		// Tap Label/TextField (ngoài các radio item): chọn option enabled kế tiếp
+		// (quay vòng) + focus nó — label tap "advance" thay vì chỉ focus.
+		selectNext() {
+			const enabled = configs.enabledIds;
+			if (!enabled.length) return;
+			const current = value && enabled.includes(value) ? enabled.indexOf(value) : -1;
+			const next = enabled[(current + 1) % enabled.length];
+			configs.select(next);
+			focusId(next);
 		},
 		reset() {
 			// Khôi phục về giá trị ban đầu (khi mount); đặt cờ _justReset TRƯỚC khi
@@ -223,10 +240,20 @@
 		}
 	}
 
+	// ── Đồng bộ trạng thái focus về TextField (Label đổi màu khi focus) ──
+	$effect(() => {
+		if (textFieldContext) textFieldContext.status.focus = configs.status.focus;
+	});
+
 	onMount(() => {
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
 			formContext.childrens.add(configs);
+		}
+		// Đăng ký vào TextField để Label/TextField biết có RadioGroup để focus/select
+		if (textFieldContext) {
+			if (!textFieldContext.children) textFieldContext.children = {};
+			textFieldContext.children.radiogroup = configs;
 		}
 	});
 	onDestroy(() => {

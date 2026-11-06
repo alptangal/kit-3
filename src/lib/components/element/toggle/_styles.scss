@@ -176,9 +176,15 @@ $colorRefs: (
 
 	// ── Disabled (token opacity + not-allowed + pointer-events block) ──
 	&.disabled {
-		--cursor: not-allowed;
 		opacity: var(--disabled-opacity, 0.5);
+		cursor: var(--cursor-disabled, not-allowed);
+		/* Touch (mobile): giữ pointer-events:none — không có cursor, chặn chạm. */
 		pointer-events: none;
+		/* PC: bật lại pointer-events để con trỏ hiện not-allowed khi rê lên
+		   phần tử bị khóa (pointer-events:none xoá cursor trên desktop). */
+		@media (hover: hover) and (pointer: fine) {
+			pointer-events: auto;
+		}
 	}
 
 	// ── Sizes (shadcn sm/default/lg → token min-height hệ thống) ──

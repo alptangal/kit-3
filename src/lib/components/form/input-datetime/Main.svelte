@@ -24,6 +24,7 @@
 	import DatePickerContent from '$components/element/date-picker/Content.svelte';
 	import { daysInMonth, sameDay } from '$components/element/date-picker/_dates';
 	import { getFormContext } from '../form';
+	import { getTextFieldContext } from '../textField';
 	import { setInputDatetimeContext, defaultValidation } from './index';
 	import PickerToggle from './PickerToggle.svelte';
 	import type {
@@ -35,6 +36,7 @@
 
 	let { value = $bindable(), children, ...props }: InputDatetimeProps = $props();
 	const formContext = getFormContext();
+	const textFieldContext = getTextFieldContext();
 
 	// ── Cột ISO nội bộ (index storage): 0=y, 1=m, 2=d, 3=H, 4=M ──
 	// Ô hiển thị theo format (display order) — map ngược qua isoIndex, KHÔNG
@@ -371,6 +373,10 @@
 				for (const id of configs.timeId.values()) clearTimeout(id);
 				configs.timeId.clear();
 			}
+		},
+		// Focus ô nhập đầu tiên — Label/TextField gọi khi tap vào label.
+		focus() {
+			focusBox(0);
 		}
 	});
 	setInputDatetimeContext(configs);
@@ -697,10 +703,20 @@
 		syncValue();
 	});
 
+	// ── Đồng bộ trạng thái focus về TextField (Label đổi màu khi focus) ──
+	$effect(() => {
+		if (textFieldContext) textFieldContext.status.focus = configs.status.focus;
+	});
+
 	onMount(() => {
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
 			formContext.childrens.add(configs);
+		}
+		// Đăng ký vào TextField để Label/TextField biết có InputDatetime để focus
+		if (textFieldContext) {
+			if (!textFieldContext.children) textFieldContext.children = {};
+			textFieldContext.children.datetime = configs;
 		}
 	});
 	onDestroy(() => {

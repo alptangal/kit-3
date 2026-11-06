@@ -57,6 +57,8 @@ export interface RadioGroupConfigs extends Omit<BasicConfigs, 'status' | 'value'
 	loading?: boolean;
 	/** Tab-nav của TextField gọi `focus()` — radio dùng roving tabindex, có thể undefined. */
 	focus?: () => void;
+	/** Tap Label/TextField chọn option enabled kế tiếp (quay vòng) — label tap "advance". */
+	selectNext?: () => void;
 	status: {
 		/** Đã chọn khác so với giá trị ban đầu. */
 		changed?: boolean;

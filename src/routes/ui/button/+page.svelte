@@ -20,7 +20,7 @@
 	{#each sizes as s (s)}
 		<Button size={s} color="primary">size-{s}</Button>
 	{/each}
-	<Button size="sm" icon="material-symbols-light:search" aspect-square data-testid="icon-only-sm" />
+	<Button size="sm" icon="material-symbols-light:search" aspect-square data-test="icon-only-sm" />
 </section>
 
 <section data-testid="tooltip-test">

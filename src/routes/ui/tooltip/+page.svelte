@@ -3,7 +3,8 @@
 	// Demo Tooltip — hover hiện tooltip + state disabled + ma trận size/color/variant
 	// theo hệ thống chung. Cursor: trigger mọc = pointer (button); root disabled =
 	// not-allowed (display:contents → cursor inherit).
-	import { Tooltip } from '$components/element';
+	import { Button, Icon, Tooltip } from '$components/element';
+	import { iconify } from '$assets/icons/iconify';
 
 	// Hệ thống chung (DESIGN_SYSTEM): size 2xs→9xl, color 7 giá trị, variant 4.
 	const SIZES = [
@@ -177,6 +178,40 @@
 			</Tooltip>
 		</div>
 	</section>
+
+	<section class="demo" data-test="tp-icon-trigger">
+		<h2>Trigger chỉ có icon → tự vuông</h2>
+		<p class="demo-hint">
+			Tooltip tự phát hiện trigger CHỈ CÓ ICON (không chữ) và làm nó thành ô VUÔNG
+			(width = height) — không cần truyền <code>aspect-square</code>. Phát hiện bằng JS
+			(KHÔNG dùng <code>:has()</code> vì iOS Safari 15.1 chết).
+		</p>
+		<div class="grid">
+			<Tooltip data-test="tp-icon-trigger-button">
+				<Button
+					icon={iconify['search-rounded']}
+					aria-label="Tìm kiếm"
+					variant="soft"
+					color="default"
+					size="sm"
+					data-test="tp-icon-trigger-button-el"
+				/>
+				<Tooltip.Content>
+					<Tooltip.Arrow />
+					Button chỉ có icon — tự vuông.
+				</Tooltip.Content>
+			</Tooltip>
+			<Tooltip data-test="tp-icon-trigger-native">
+				<button class="demo-icon-btn" aria-label="Thông tin" data-test="tp-icon-trigger-native-el">
+					<Icon icon={iconify['info-i-rounded']} />
+				</button>
+				<Tooltip.Content>
+					<Tooltip.Arrow />
+					button thuần chỉ có icon — tự vuông.
+				</Tooltip.Content>
+			</Tooltip>
+		</div>
+	</section>
 </div>
 
 <style lang="scss">
@@ -246,8 +281,26 @@
 		}
 	}
 
+	.demo-icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: 1px solid var(--border, hsl(240 5.9% 90%));
+		border-radius: 0.375rem;
+		background: var(--content2, hsl(240 4.9% 96%));
+		color: var(--foreground);
+		cursor: pointer;
+
+		&:focus-visible {
+			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
+			outline-offset: 2px;
+		}
+	}
+
 	@media (prefers-color-scheme: dark) {
-		.demo-btn {
+		.demo-btn,
+		.demo-icon-btn {
 			border-color: hsl(240 5.9% 20%);
 		}
 	}

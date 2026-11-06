@@ -540,12 +540,6 @@
 			settingSortDirection = sortDirection;
 		}
 	});
-	// Options sort từ supplierColumns sortable (mirror header sort).
-	const settingSortOptions = $derived(
-		supplierColumns
-			.filter((c) => c.sortable)
-			.map((c) => ({ value: c.id, label: c.label }))
-	);
 	// bind:this Input component → instance { configs } (export { configs } cuối
 	// Input/Main.svelte) — focus() qua instance.configs.focus().
 	let mobileSearchInputInstance = $state<{ configs: { focus: () => void } } | undefined>(undefined);
@@ -1615,6 +1609,13 @@
 		}
 	]);
 
+	// Options sort từ supplierColumns sortable (mirror header sort).
+	const settingSortOptions = $derived(
+		supplierColumns
+			.filter((c) => c.sortable)
+			.map((c) => ({ value: c.id, label: c.label }))
+	);
+
 	const posAny = $derived(pos as unknown as Record<string, unknown>[]);
 	const poColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
 		{
@@ -2188,6 +2189,9 @@
 		}
 		supplierError = undefined;
 		supplierSubmitAttempted = false;
+		// Chốt mode create/update TRƯỚC try → nhánh catch cũng biết cần báo
+		// toast "tạo thất bại" hay "cập nhật thất bại".
+		const isEdit = supplierEditMode === 'edit' && !!supplierEditId;
 		supplierSubmitting = true;
 		try {
 			// DEFER images: upload các file local chờ tải lên TRƯỚC khi build payload
@@ -2205,7 +2209,6 @@
 				const pairs = supplierImageUpload.getUploadPairs();
 				supplierForm.imageFulls = pairs.map((p) => p.original ?? '');
 			}
-			const isEdit = supplierEditMode === 'edit' && !!supplierEditId;
 			const response = await encryption.fetchSecure(
 				isEdit ? '/api/admin/suppliers/update' : '/api/admin/suppliers/create',
 				{
@@ -2229,20 +2232,35 @@
 				// Batch 15 (m12278-6): GIỮ MODAL MỞ cả 2 mode — create: reset form
 				// (sẵn sàng nhập NCC tiếp theo); edit: dữ liệu modal đồng bộ theo
 				// response (user thấy ngay kết quả). Đóng = user bấm ✕/back.
-				const respSupplier = (response.data as { supplier?: Record<string, unknown> } | undefined)?.supplier;
-				if (isEdit && respSupplier) {
-					supplierPassive = {
-						createdBy: (respSupplier.createdBy as string | null) ?? supplierPassive?.createdBy,
-						createdAt: (respSupplier.createdAt as string | null) ?? supplierPassive?.createdAt,
-						updatedBy: (respSupplier.updatedBy as string | null) ?? undefined,
-						updatedAt: (respSupplier.updatedAt as string | null) ?? undefined
-					};
-					// Đồng bộ images/imageFulls theo doc mới (upload URL thật)
-					if (Array.isArray(respSupplier.images)) supplierForm.images = respSupplier.images as string[];
-					if (Array.isArray(respSupplier.imageFulls)) supplierForm.imageFulls = respSupplier.imageFulls as string[];
+				// Batch 23: server trả supplier ở TOP-LEVEL `data` (không phải data.supplier)
+				// → đọc cả 2 shape để không bỏ sót doc mới nhất.
+				const rawData = response.data as
+					| Record<string, unknown>
+					| { supplier?: Record<string, unknown> }
+					| undefined;
+				const respSupplier =
+					(rawData && typeof rawData === 'object' && 'supplier' in rawData
+						? (rawData as { supplier?: Record<string, unknown> }).supplier
+						: undefined) ?? (rawData as Record<string, unknown> | undefined);
+				if (isEdit) {
+					// Batch 23 (m00590): UPDATE giữ nguyên data mới nhất — KHÔNG reset form.
+					// Chỉ đồng bộ metadata/images từ doc server trả về (nếu có).
+					if (respSupplier && typeof respSupplier === 'object') {
+						supplierPassive = {
+							createdBy: (respSupplier.createdBy as string | null) ?? supplierPassive?.createdBy,
+							createdAt: (respSupplier.createdAt as string | null) ?? supplierPassive?.createdAt,
+							updatedBy: (respSupplier.updatedBy as string | null) ?? undefined,
+							updatedAt: (respSupplier.updatedAt as string | null) ?? undefined
+						};
+						// Đồng bộ images/imageFulls theo doc mới (upload URL thật)
+						if (Array.isArray(respSupplier.images)) supplierForm.images = respSupplier.images as string[];
+						if (Array.isArray(respSupplier.imageFulls)) supplierForm.imageFulls = respSupplier.imageFulls as string[];
+					}
 					// Re-seed ImageUpload entries: file pending đã upload xong →
 					// entries trở thành URL (không còn pending).
 					void seedImagesAfterMount();
+					// Baseline = dữ liệu vừa lưu → nút Save tắt cho tới khi user sửa tiếp.
+					supplierEditBaseline = JSON.stringify(supplierForm);
 				} else {
 					// CREATE thành công → reset về form trống (giữ modal mở)
 					supplierForm = emptySupplierForm();
@@ -2253,11 +2271,20 @@
 				}
 				await loadSuppliers();
 			} else {
-				supplierError = resolveServerMessage(response.message, lang, isEdit ? pageContents.toasts.supplierUpdateFailed : pageContents.toasts.supplierFailed);
+				const failMessage = resolveServerMessage(
+					response.message,
+					lang,
+					isEdit ? pageContents.toasts.supplierUpdateFailed : pageContents.toasts.supplierFailed
+				);
+				supplierError = failMessage;
+				// Batch 23 (m00590): toast thông báo trạng thái save (kể cả khi fail).
+				showToast(failMessage, 'error');
 			}
 		} catch (err) {
 			supplierSubmitting = false;
-			supplierError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
+			const failMessage = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
+			supplierError = failMessage;
+			showToast(failMessage, 'error');
 			if (import.meta.env.DEV) console.error('[admin/suppliers] submit supplier failed:', err);
 		}
 	}
@@ -3512,7 +3539,9 @@
 							aria-expanded={supplierMoreOpen}
 							disabled={supplierSubmitting}
 							data-test="suppliers-more-btn"
-							onclick={() => (supplierMoreOpen = !supplierMoreOpen)}
+							onclick={() => {
+									supplierMoreOpen = !supplierMoreOpen;
+								}}
 						>
 							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
 						</Button>
@@ -5650,16 +5679,10 @@
 		color: var(--foreground-300);
 	}
 
-	/* ── Batch 20 (A6): loading supplier name không đè clear button ──
-	   NGUỒN BUG: props.loading={supplierNameChecking} chỉ tạo class 'loading'
-	   trên .input-root (Input Main.svelte:109) → overlay spinner ::after
-	   (_styles.scss:437, absolute right) vẽ ĐÈ lên .input-group-actions chứa
-	   clear button (vẫn render vì configs.loading chỉ do validation internal
-	   set). Fix trong phạm vi trang: khi .loading → ẨN clear button (spinner
-	   overlay là đủ feedback), không sửa component chung. */
-	[data-field='supplier-name'] :global(.input-root.loading .input-group-actions) {
-		visibility: hidden;
-	}
+	/* ── Batch 23: bỏ workaround ẩn .input-group-actions khi loading ──
+	   Batch 20 (A6) ẩn clear button vì spinner overlay ::after của Input ĐÈ lên
+	   action buttons. Batch 23 đã bỏ overlay spinner ở component Input (spinner
+	   nay nằm trong .input-group-actions, SAU clear button) ⇒ KHÔNG cần ẩn nữa. */
 
 	/* Thêm animate: pulse opacity cho cả input-root khi checking (spinner
 	   input-spin 0.7s đã có từ _styles.scss — bổ sung nhịp thở dễ thấy). */

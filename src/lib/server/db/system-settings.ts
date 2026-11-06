@@ -67,6 +67,8 @@ export interface SystemSettingsAppearance {
 export interface SystemSettingsFeatures {
 	/** Autosave bản nháp form theo user (localStorage) + dialog khôi phục khi mở lại. */
 	draftRestore: boolean;
+	/** Tự động lưu bản nháp khi chỉnh sửa dữ liệu trong DataTable (update/detail). */
+	draftAutosave: boolean;
 }
 export interface SystemSettings {
 	general: SystemSettingsGeneral;
@@ -106,7 +108,8 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
 		density: 'comfortable'
 	},
 	features: {
-		draftRestore: true
+		draftRestore: true,
+		draftAutosave: true
 	}
 };
 
@@ -168,6 +171,9 @@ function mergeWithDefaults(patch: SystemSettingsPatch | undefined): SystemSettin
 		if (typeof patch.features.draftRestore === 'boolean') {
 			base.features.draftRestore = patch.features.draftRestore;
 		}
+		if (typeof patch.features.draftAutosave === 'boolean') {
+			base.features.draftAutosave = patch.features.draftAutosave;
+		}
 	}
 	return base;
 }
@@ -179,7 +185,7 @@ export class SystemSettingsService {
 	}
 
 	/**
-	 * Đọc defaults công khai (theme/density/defaultLang/draftRestore) — KHÔNG check quyền.
+	 * Đọc defaults công khai (theme/density/defaultLang/draftRestore/draftAutosave) — KHÔNG check quyền.
 	 * Dùng cho fallback per-user preferences sau login (mọi user đã đăng nhập
 	 * đều cần biết theme/ngôn ngữ mặc định hệ thống; không lộ security/commerce).
 	 */
@@ -188,6 +194,7 @@ export class SystemSettingsService {
 		density: 'comfortable' | 'compact';
 		defaultLang: 'vi' | 'en';
 		draftRestore: boolean;
+		draftAutosave: boolean;
 	}> {
 		try {
 			const res = await cbSystem.document.get({ documentKey: SETTINGS_DOCUMENT_KEY });
@@ -196,7 +203,8 @@ export class SystemSettingsService {
 					theme: DEFAULT_SYSTEM_SETTINGS.appearance.theme,
 					density: DEFAULT_SYSTEM_SETTINGS.appearance.density,
 					defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang,
-					draftRestore: DEFAULT_SYSTEM_SETTINGS.features.draftRestore
+					draftRestore: DEFAULT_SYSTEM_SETTINGS.features.draftRestore,
+					draftAutosave: DEFAULT_SYSTEM_SETTINGS.features.draftAutosave
 				};
 			}
 			const raw = res.data as { settings?: SystemSettingsPatch };
@@ -205,14 +213,16 @@ export class SystemSettingsService {
 				theme: merged.appearance.theme,
 				density: merged.appearance.density,
 				defaultLang: merged.general.defaultLang,
-				draftRestore: merged.features.draftRestore
+				draftRestore: merged.features.draftRestore,
+				draftAutosave: merged.features.draftAutosave
 			};
 		} catch {
 			return {
 				theme: DEFAULT_SYSTEM_SETTINGS.appearance.theme,
 				density: DEFAULT_SYSTEM_SETTINGS.appearance.density,
 				defaultLang: DEFAULT_SYSTEM_SETTINGS.general.defaultLang,
-				draftRestore: DEFAULT_SYSTEM_SETTINGS.features.draftRestore
+				draftRestore: DEFAULT_SYSTEM_SETTINGS.features.draftRestore,
+				draftAutosave: DEFAULT_SYSTEM_SETTINGS.features.draftAutosave
 			};
 		}
 	}

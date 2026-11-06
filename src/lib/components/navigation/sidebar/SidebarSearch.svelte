@@ -20,7 +20,6 @@
 
 	let {
 		placeholder = { en: 'Search menu…', vi: 'Tìm kiếm menu…' },
-		collapseToggle = false,
 		...props
 	}: SidebarSearchProps = $props();
 
@@ -42,15 +41,6 @@
 	$effect(() => {
 		ctx?.setSearchQuery(text);
 	});
-
-	// Batch 12: nút icon thay field khi collapsed — expand + focus field
-	// (field ẩn display:none → đợi frame sau khi class gỡ mới focus được;
-	// bẫy: Input không có bind:el — truy vấn qua wrapper div .sidebar-search).
-	let rootEl: HTMLDivElement | undefined = $state(undefined);
-	const handleCollapseToggle = () => {
-		ctx?.setCollapsed(false);
-		setTimeout(() => rootEl?.querySelector<HTMLInputElement>('input')?.focus(), 80);
-	};
 </script>
 
 <!-- leading: icon search (Icon iconify). Snippet TRỰC TIẾP con của component
@@ -62,7 +52,7 @@
 	</span>
 {/snippet}
 
-<div class="sidebar-search" data-test="sidebar-search" bind:this={rootEl} {...restAttrs}>
+<div class="sidebar-search" data-test="sidebar-search" {...restAttrs}>
 	<Input
 		type="text"
 		size="sm"
@@ -71,20 +61,6 @@
 		autocomplete="off"
 		leading={searchLeading}
 	/>
-	{#if collapseToggle}
-		<button
-			type="button"
-			class="sidebar-search__toggle"
-			aria-label={typeof placeholder === 'string' ? placeholder : placeholder[lang] ?? placeholder.en ?? 'Search'}
-			title={typeof placeholder === 'string' ? placeholder : placeholder[lang] ?? placeholder.en ?? 'Search'}
-			onclick={handleCollapseToggle}
-			data-test="sidebar-search-toggle"
-		>
-			<span class="sidebar-search-icon" aria-hidden="true">
-				<Icon icon="lucide:search" />
-			</span>
-		</button>
-	{/if}
 </div>
 
 <style lang="scss">

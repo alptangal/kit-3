@@ -362,12 +362,10 @@
 
 		<Sidebar.Content>
 			<!-- Tìm kiếm menu (filter + auto-expand group theo query — P2).
-			     Batch 12: rail 56px ẨN field (rule _styles.scss) → Sidebar.Search
-			     tự hiện nút icon thay thế (collapseToggle), bấm mở rộng + focus. -->
+			     Batch 23: bỏ nút icon search thừa nằm dưới field (collapseToggle). -->
 			<div class="admin-sidebar-search">
 				<Sidebar.Search
 					placeholder={lang === 'vi' ? 'Tìm trong menu…' : 'Search menu…'}
-					collapseToggle
 					data-test="admin-sidebar-search"
 				/>
 			</div>

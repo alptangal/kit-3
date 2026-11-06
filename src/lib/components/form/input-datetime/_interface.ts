@@ -78,4 +78,6 @@ export interface InputDatetimeConfigs extends Omit<BasicConfigs, 'status' | 'val
 		messages?: Map<string, { content?: TranslateContent; kind: 'valid' | 'invalid' }>;
 	};
 	reset: () => void;
+	/** Focus ô nhập đầu tiên — Label/TextField gọi khi tap vào label. */
+	focus?: () => void;
 }

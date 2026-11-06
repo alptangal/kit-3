@@ -5,6 +5,29 @@
 @use '$styles/sizes.scss';
 
 .pagination-root {
+	--pagination-accent: var(--primary-600);
+
+	&.color-default {
+		--pagination-accent: var(--default-600);
+	}
+	&.color-primary {
+		--pagination-accent: var(--primary-600);
+	}
+	&.color-info {
+		--pagination-accent: var(--primary-600);
+	}
+	&.color-success {
+		--pagination-accent: var(--success-600);
+	}
+	&.color-warning {
+		--pagination-accent: var(--warning-600);
+	}
+	&.color-error {
+		--pagination-accent: var(--danger-600);
+	}
+	&.color-secondary {
+		--pagination-accent: var(--secondary-600);
+	}
 	display: inline-flex;
 	align-items: center;
 	gap: 0.25rem;
@@ -64,7 +87,7 @@
 
 		&.active {
 			/* AA: --primary-500 chỉ 3.71 light → -600 (5.26 light / 8.68 dark) */
-			background: var(--primary-600);
+			background: var(--pagination-accent);
 			color: var(--background);
 		}
 
@@ -144,7 +167,7 @@
 
 		.counter-current {
 			/* AA: --primary 3.71 light → -600 (tự đảo dark 8.68) */
-			color: var(--primary-600);
+			color: var(--pagination-accent);
 			font-weight: 600;
 		}
 

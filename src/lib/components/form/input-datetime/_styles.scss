@@ -202,7 +202,14 @@
 	// ── Disabled (native :disabled chặn input — opacity + không cho tương tác) ──
 	&.disabled {
 		opacity: var(--disabled-opacity, 0.6);
+		cursor: var(--cursor-disabled, not-allowed);
+		/* Touch (mobile): giữ pointer-events:none — không có cursor, chặn chạm. */
 		pointer-events: none;
+		/* PC: bật lại pointer-events để con trỏ hiện not-allowed khi rê lên
+		   phần tử bị khóa (pointer-events:none xoá cursor trên desktop). */
+		@media (hover: hover) and (pointer: fine) {
+			pointer-events: auto;
+		}
 	}
 
 	// ── Reduced motion (tắt transition) ──

@@ -1601,6 +1601,21 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 		}
 	});
 
+	/**
+	 * Số action button đang hiện trong .input-group-actions → padding-right của input
+	 * động theo (clear luôn là con đầu tiên = sát mép phải).
+	 */
+	const inputActionPaddingDerived = $derived.by(() => {
+		let count = 0;
+		if (value && configs.actionButtons.clear.display) count++;
+		if (configs.loading || props.loading) count++;
+		if (value && configs.actionButtons.copy.display) count++;
+		if (!value && client.browser?.clipboard?.size && configs.actionButtons.paste.display) count++;
+		if (configs.type == 'password') count++;
+		if (count <= 0) return undefined;
+		return `padding-right: calc(var(--padding, 1rem) / 2 + ${count} * 1.75rem)`;
+	});
+
 	function onFocus() {
 		// if (!configs.status.focus) configs.status.focus = true;
 		requestAnimationFrame(() => {
@@ -4025,8 +4040,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 					...( configs.input[configs.type == 'password' || configs.type == 'email' || configs.type == 'phone' ? configs.type : 'text'].style ?? []),
 					highlightSegmentsDerived && configs.type !== 'password' ? 'input-transparent-text' : '',
 											'bg-transparent outline-none border-none w-full',
-						((configs.actionButtons.clear.display && value) || configs.actionButtons.copy.display || configs.type == 'password') ? 'pr-10' : ''
 				]}
+				style={inputActionPaddingDerived}
 				placeholder={placeholderDerived}
 				autocomplete={props.autocomplete ?? 'off' as FullAutoFill}
 				inputmode={inputModeDerived}
@@ -4047,69 +4062,61 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	{/if}
 
 	<div class="input-group-actions">
-		{#if value}
-			<!-- Clear button - FIRST priority when value exists -->
-			{#if configs.actionButtons.clear.display}
-				{#if configs.loading}
-					<div class="input-loading-indicator p-1!" aria-live="polite" aria-label="Validating...">
-						<svg class="spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
-							<path
-								d="M12 2C12 2 12 4 12 4"
-								stroke="currentColor"
-								stroke-width="3"
-								stroke-linecap="round"
-								stroke-dasharray="12 24"
-								stroke-dashoffset="0"
-							>
-								<animateTransform
-									attributeName="transform"
-									type="rotate"
-									from="0 12 12"
-									to="360 12 12"
-									dur="1s"
-									repeatCount="indefinite"
-								/>
-							</path>
-						</svg>
-					</div>
-				{:else}
-					<Button
-						bind:this={configs.actionButtons.clear.component}
-						icon={iconify['close-rounded']}
-						size="xs"
-						aspect-square
-						events={configs.actionButtons.clear.event}
-						class="input-clear p-1!"
-						color="error"
-						variant="ghost"
-						aria-label="Xóa nội dung"
-					/>
-				{/if}
-			{/if}
+		{#if value && configs.actionButtons.clear.display}
+			<!-- Clear button - LUÔN ưu tiên đứng đầu tiên tính từ cạnh phải sang trái -->
+			<Button
+				bind:this={configs.actionButtons.clear.component}
+				icon={iconify['close-rounded']}
+				size="xs"
+				aspect-square
+				events={configs.actionButtons.clear.event}
+				class="input-clear p-1!"
+				color="error"
+				variant="ghost"
+				aria-label="Xóa nội dung"
+			/>
+		{/if}
 
+		{#if configs.loading || props.loading}
+			<!-- Loading spinner - animate bằng CSS (nằm sau clear button) -->
+			<div class="input-loading-indicator p-1!" aria-live="polite" aria-label="Đang xử lý...">
+				<svg class="spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+					<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+					<path
+					d="M12 2C12 2 12 4 12 4"
+					stroke="currentColor"
+					stroke-width="3"
+					stroke-linecap="round"
+					stroke-dasharray="12 24"
+					stroke-dashoffset="0"
+					/>
+				</svg>
+			</div>
+		{/if}
+
+		{#if value && configs.actionButtons.copy.display}
 			<!-- Copy button when value exists -->
-			{#if configs.actionButtons.copy.display}
-				<Button
-					icon={configs.actionButtons.copy.status.copied
-						? iconify['check-rounded']
-						: iconify['content-copy-outline-rounded']}
-					class="input-copy p-1!"
-					size="xs"
-					aspect-square
-					color="success"
-					events={configs.actionButtons.copy.event}
-					aria-label="Sao chép nội dung"
-					disabled={configs.actionButtons.copy.status.copied ||
-						value ==
-							client.browser?.clipboard?.get(
-								[...(client.browser?.clipboard?.keys() ?? [])].sort(
-									(timeA, timeB) => timeB - timeA
-								)[0]
-							)}
-				/>
-			{/if}
-		{:else if !value && client.browser?.clipboard?.size && configs.actionButtons.paste.display}
+			<Button
+				icon={configs.actionButtons.copy.status.copied
+					? iconify['check-rounded']
+					: iconify['content-copy-outline-rounded']}
+				class="input-copy p-1!"
+				size="xs"
+				aspect-square
+				color="success"
+				events={configs.actionButtons.copy.event}
+				aria-label="Sao chép nội dung"
+				disabled={configs.actionButtons.copy.status.copied ||
+					value ==
+						client.browser?.clipboard?.get(
+							[...(client.browser?.clipboard?.keys() ?? [])].sort(
+								(timeA, timeB) => timeB - timeA
+							)[0]
+						)}
+			/>
+		{/if}
+
+		{#if !value && client.browser?.clipboard?.size && configs.actionButtons.paste.display}
 			<!-- Paste button when no value and clipboard available -->
 			<Button
 				icon={configs.actionButtons.copy.status.copied

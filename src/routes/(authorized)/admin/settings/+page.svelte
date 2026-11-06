@@ -22,7 +22,7 @@
 		commerce: { currency: string; taxRatePercent: number; lowStockThreshold: number };
 		appearance: { theme: string; density: string };
 		/** B9 draft-store: bật/tắt autosave bản nháp form toàn app. */
-		features: { draftRestore: boolean };
+		features: { draftRestore: boolean; draftAutosave: boolean };
 	}
 	interface SystemAuditRow {
 		userId?: string;
@@ -72,7 +72,7 @@
 		security: { sessionTimeoutMinutes: 30, maxLoginAttempts: 5, passwordMinLength: 8 },
 		commerce: { currency: 'VND', taxRatePercent: 10, lowStockThreshold: 10 },
 		appearance: { theme: 'system', density: 'comfortable' },
-		features: { draftRestore: true }
+		features: { draftRestore: true, draftAutosave: true }
 	};
 
 	let settings = $state<SystemSettings>(DEFAULT_SETTINGS);
@@ -98,7 +98,15 @@
 		const draft = readDraft<SystemSettings>(currentUserId(), SETTINGS_DRAFT_FORM_KEY);
 		if (draft) {
 			// Merge từng group để tránh thiếu field khi schema đổi giữa các phiên.
-			settings = { ...settings, ...draft };
+			// features merge riêng để không mất key mới (draft cũ chỉ có draftRestore).
+			settings = {
+				...settings,
+				...draft,
+				features: {
+					draftRestore: draft.features?.draftRestore ?? settings.features.draftRestore,
+					draftAutosave: draft.features?.draftAutosave ?? settings.features.draftAutosave
+				}
+			};
 		}
 	}
 
@@ -183,6 +191,10 @@
 		draftRestore: {
 			vi: 'Tự lưu bản nháp form',
 			en: 'Autosave form drafts'
+		} as TranslateContent,
+		draftAutosave: {
+			vi: 'Tự lưu bản nháp khi sửa dữ liệu bảng',
+			en: 'Autosave table row drafts'
 		} as TranslateContent,
 		currency: { vi: 'Tiền tệ', en: 'Currency' } as TranslateContent,
 		taxRate: { vi: 'Thuế suất (%)', en: 'Tax rate (%)' } as TranslateContent,
@@ -337,7 +349,10 @@
 					// Guard features default (server bản cũ chưa có group này).
 					const loaded = {
 						...data.settings,
-						features: data.settings.features ?? { draftRestore: true }
+						features: {
+							draftRestore: data.settings.features?.draftRestore ?? true,
+							draftAutosave: data.settings.features?.draftAutosave ?? true
+						}
 					};
 					// Gán object mới (không mutate) — draft copy qua $state deep
 					settings = { ...loaded };
@@ -782,6 +797,15 @@
 						disabled={!canEdit}
 						aria-label={t.draftRestore[lang]}
 						data-test="switch-draft-restore"
+					/>
+				</div>
+				<div class="form-field">
+					<span class="form-label">{t.draftAutosave[lang]}</span>
+					<Switch
+						bind:checked={settings.features.draftAutosave}
+						disabled={!canEdit}
+						aria-label={t.draftAutosave[lang]}
+						data-test="switch-draft-autosave"
 					/>
 				</div>
 			</div>

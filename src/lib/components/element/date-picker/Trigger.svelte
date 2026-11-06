@@ -147,7 +147,13 @@
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
 			cursor: var(--cursor-disabled);
+			/* Touch (mobile): giữ pointer-events:none — chặn chạm. */
 			pointer-events: none;
+			/* PC: bật lại pointer-events để con trỏ hiện not-allowed
+			   (native <button disabled> vẫn chặn click). */
+			@media (hover: hover) and (pointer: fine) {
+				pointer-events: auto;
+			}
 		}
 
 		// mobile: font ≥ 1rem cho size nhỏ chặn iOS auto-zoom

@@ -9,6 +9,7 @@
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { getFormContext } from '../form';
+	import { getTextFieldContext } from '../textField';
 	import { setTextareaContext, defaultValidation } from './index';
 	import type { TextareaConfigs, TextareaProps } from './_interface';
 	import type { ValidationFull } from '../input/_interface';
@@ -16,6 +17,7 @@
 
 	let { value = $bindable(), children, ...props }: TextareaProps = $props();
 	const formContext = getFormContext();
+	const textFieldContext = getTextFieldContext();
 
 	// Mốc ban đầu (mốc reset + tính status.changed)
 	let _initialValue: string = value ?? '';
@@ -26,6 +28,11 @@
 		if (props.name) return props.name;
 		return `textarea-${Math.random().toString(36).slice(2, 10)}`;
 	})();
+
+	// Native name/id — liên kết <Label for="field-..."> của TextField
+	const textareaId = $derived(
+		props.id ?? (textFieldContext?.name ? `field-${textFieldContext.name}` : undefined)
+	);
 
 	// Native textarea ref
 	let textareaRef: HTMLTextAreaElement | undefined;
@@ -40,7 +47,9 @@
 
 	let configs: TextareaConfigs = $state({
 		value: '',
-		name: stableName,
+		get name() {
+			return props.name ?? textFieldContext?.name ?? stableName;
+		},
 		get loading() {
 			// Form loading indicator: true khi validation đang 'pending'
 			return configs.validation.isValid === 'pending';
@@ -130,6 +139,9 @@
 			},
 			messages: new SvelteMap()
 		},
+		focus() {
+			textareaRef?.focus();
+		},
 		reset() {
 			// Đặt _justReset TRƯỚC khi đổi value để validation effect không trigger
 			_justReset = true;
@@ -150,6 +162,13 @@
 		if (configs.value !== v) {
 			configs.value = v;
 		}
+	});
+
+	// Đồng bộ ngược lên TextField (Label đọc value/focus qua context)
+	$effect(() => {
+		if (!textFieldContext) return;
+		textFieldContext.setValue?.(value ?? "");
+		textFieldContext.status.focus = configs.status.focus;
 	});
 
 	// ── Validation pipeline (mirror checkbox/radiogroup) ──
@@ -241,6 +260,10 @@
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
 			formContext.childrens.add(configs);
 		}
+		if (textFieldContext) {
+			if (!textFieldContext.children) textFieldContext.children = {};
+			textFieldContext.children.textarea = configs;
+		}
 	});
 	onDestroy(() => {
 		if (configs.timeId) {
@@ -261,7 +284,8 @@
 		readonly={configs.readOnly ? true : undefined}
 		aria-invalid={configs.validation.isValid === false ? 'true' : undefined}
 		aria-label={props['aria-label']}
-		id={props.id}
+		name={configs.name}
+		id={textareaId}
 		onfocus={handleFocus}
 		onblur={handleBlur}
 	></textarea>

@@ -66,7 +66,7 @@
 
 	// ── Native switch button (a11y: role=switch + aria-checked, Space/Enter native) ──
 	.switch-switch {
-		--cursor: pointer;
+		--cursor: var(--cursor-interactive, pointer);
 		position: relative;
 		flex: none;
 		width: var(--switch-track-width);
@@ -75,7 +75,11 @@
 		padding: 0;
 		border: 0;
 		background: transparent;
-		cursor: var(--cursor, pointer);
+		cursor: var(--cursor, var(--cursor-interactive, pointer));
+		// native disabled → con trỏ not-allowed (PC)
+		&:disabled {
+			cursor: var(--cursor-disabled, not-allowed);
+		}
 		// focus ring chuẩn CONTRACT §6 (native button :focus-visible)
 		&:focus-visible:not(:disabled) {
 			outline: 2px solid var(--color-indigo-500);
@@ -180,9 +184,19 @@
 
 	// ── Disabled (token opacity + not-allowed + pointer-events block) ──
 	&.disabled {
-		--cursor: not-allowed;
 		opacity: var(--disabled-opacity, 0.5);
+		cursor: var(--cursor-disabled, not-allowed);
+		/* Touch (mobile): giữ pointer-events:none — không có cursor, chặn chạm. */
 		pointer-events: none;
+		/* PC: bật lại pointer-events để con trỏ hiện not-allowed khi rê lên
+		   phần tử bị khóa (pointer-events:none xoá cursor trên desktop). */
+		@media (hover: hover) and (pointer: fine) {
+			pointer-events: auto;
+		}
+		// Label (click → toggle) cũng hiện not-allowed
+		.switch-label {
+			cursor: var(--cursor-disabled, not-allowed);
+		}
 	}
 
 	// ── Loading (opacity giảm — block qua button disabled attr) ──

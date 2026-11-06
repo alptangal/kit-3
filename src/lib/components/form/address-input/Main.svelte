@@ -373,6 +373,7 @@
 	}
 
 	function applySuggestion() {
+		if (disabled) return;
 		if (!suggestion) return;
 		breakdown = { ...suggestion };
 		suggestion = null;
@@ -708,7 +709,12 @@
 		/>
 	</div>
 	{#if suggestion}
-		<button type="button" class="address-input__suggestion" onclick={applySuggestion}>
+		<button
+			type="button"
+			class="address-input__suggestion"
+			disabled={disabled}
+			onclick={applySuggestion}
+		>
 			<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<path d="M20 6L9 17l-5-5"></path>
 			</svg>
@@ -1097,7 +1103,13 @@
 
 		&--disabled {
 			opacity: 0.6;
+			cursor: var(--cursor-disabled, not-allowed);
+			/* Touch (mobile): giữ pointer-events:none — chặn chạm. */
 			pointer-events: none;
+			/* PC: bật lại pointer-events để con trỏ hiện not-allowed. */
+			@media (hover: hover) and (pointer: fine) {
+				pointer-events: auto;
+			}
 		}
 	}
 
@@ -1128,7 +1140,10 @@
 		text-align: left;
 		transition: background 0.15s ease;
 
-		&:hover {
+		&:disabled {
+			cursor: var(--cursor-disabled, not-allowed);
+		}
+		&:hover:not(:disabled) {
 			background: color-mix(in oklab, var(--primary) 14%, transparent);
 		}
 	}
@@ -1151,6 +1166,10 @@
 		color: var(--foreground-500, var(--foreground));
 		cursor: pointer;
 		transition: background 0.15s ease, color 0.15s ease;
+
+		&:disabled {
+			cursor: var(--cursor-disabled, not-allowed);
+		}
 
 		&--active {
 			background: var(--background);
@@ -1215,7 +1234,13 @@
 
 		&--disabled {
 			opacity: 0.6;
+			cursor: var(--cursor-disabled, not-allowed);
+			/* Touch (mobile): giữ pointer-events:none — chặn chạm. */
 			pointer-events: none;
+			/* PC: bật lại pointer-events để con trỏ hiện not-allowed. */
+			@media (hover: hover) and (pointer: fine) {
+				pointer-events: auto;
+			}
 		}
 
 		svg {

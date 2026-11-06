@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { styleSynced } from '$modules';
+	import { handleEvents } from '$modules/_attachments';
 	import { client } from '$store/basic.svelte';
 	import { getCheckboxContext } from '../checkbox';
 	import { getTextFieldContext } from '../textField';
@@ -18,14 +19,39 @@
 			(selectContext?.name ? `field-${selectContext.name}` : undefined)
 	);
 
+	// ── Batch 23: label dùng style "color hover" khi field đang focus hoặc đã
+	// có dữ liệu (thay vì CHỈ kích hoạt khi hover chuột) ──
+	// hasValue: field cha (TextField) đang có dữ liệu — gồm cả RadioGroup và
+	// InputDatetime đăng ký ngược vào children (value nằm ở child, không nằm
+	// ở configs.value của TextField).
+	const hasValue = $derived.by(() => {
+		const field = textFieldContext;
+		if (!field) return false;
+		if ((field.value ?? '') !== '') return true;
+		const radiogroup = field.children?.radiogroup;
+		if (radiogroup && radiogroup.value) return true;
+		const datetime = field.children?.datetime;
+		if (datetime && (datetime.value ?? '') !== '') return true;
+		const textarea = field.children?.textarea;
+		if (textarea && (textarea.value ?? '') !== '') return true;
+		return false;
+	});
+	// isFocused: input/radio/datetime trong cùng field đang được focus
+	const isFocused = $derived(!!textFieldContext?.status?.focus);
+	// Áp style hover của theme (--color đậm hơn) khi focus hoặc có giá trị
+	const hoverActive = $derived(isFocused || hasValue);
+
 	let configs: LabelConfigs = $state({
 		get style() {
 			// has-value: field cha (TextField) đang có dữ liệu — CSS phân biệt label
 			// của field có data vs field trống (yêu cầu batch 3 #input).
-			const hasValue = (textFieldContext?.value ?? '') !== '';
+			// hover: áp style "color hover" của theme khi field đang focus HOẶC đã
+			// có giá trị (Batch 23) — trước đây chỉ kích hoạt khi hover chuột.
 			const defaultStyles: (string | undefined)[] = [
 				'label-root',
 				hasValue ? 'has-value' : undefined,
+				hoverActive ? 'hover' : undefined,
+				textFieldContext?.disabled ? 'disabled' : undefined,
 				`size-${this.size}`,
 				`color-${this.color}`
 			];
@@ -113,10 +139,12 @@
 		color: var(--color);
 
 		/* has-value: field cha có dữ liệu → label đậm hơn 1 nấc để phân biệt
-		   (yêu cầu batch 3 #input — áp dụng cả label). */
+		   (yêu cầu batch 3 #input — áp dụng cả label).
+		   Màu chữ để theme điều khiển qua --color để style "color hover"
+		   (Batch 23) áp dụng được cả khi focus lẫn khi field đã có giá trị
+		   (kể cả màu success/error của validation). */
 		&.has-value {
 			font-weight: 600;
-			color: var(--foreground, hsl(0 0% 9%));
 		}
 	}
 </style>

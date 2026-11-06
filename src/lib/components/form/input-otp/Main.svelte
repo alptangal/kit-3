@@ -235,6 +235,8 @@
 		configs.status.focus = true;
 		// User tương tác → bật validation lại (nếu đang _justReset)
 		_justReset = false;
+		// Batch 23: đọc clipboard khi focus để bật nút "Dán mã"
+		void refreshClipboardState();
 	}
 
 	function handleBlur() {
@@ -326,6 +328,66 @@
 
 	// Paste: dán chuỗi dài → phân tán vào các ô (bắt đầu ô đang focus, hoặc
 	// đầu nếu focus ngoài bounds — probe paste vào ô đầu)
+	// Batch 23: hỗ trợ paste từ clipboard hệ thống.
+	// clipboardAvailable = true khi clipboard có chuỗi hợp lệ (không rỗng,
+	// sau filterChar còn <= length ký tự) ⇒ hiện nút "Dán mã" cạnh nhóm ô.
+	let clipboardAvailable = $state(false);
+	let clipboardText = $state('');
+
+	// Đọc clipboard: navigator.clipboard.readText() (cần quyền, Safari/iOS
+	// chỉ cho sau user gesture) → fallback localStorage 'clipboard' (pattern
+	// đã dùng ở handleBoxPaste / handleRootCopy cho headless + fallback).
+	async function readClipboardText(): Promise<string> {
+		try {
+			if (navigator.clipboard?.readText) {
+				const text = await navigator.clipboard.readText();
+				if (text) return text;
+			}
+		} catch {
+			// Permission denied / không hỗ trợ → fallback bên dưới
+		}
+		try {
+			const raw = localStorage.getItem('clipboard');
+			if (raw) {
+				const entries = Object.entries(JSON.parse(raw));
+				const last = entries[entries.length - 1]?.[1];
+				if (typeof last === 'string') return last;
+			}
+		} catch {
+			return '';
+		}
+		return '';
+	}
+
+	// Kiểm tra clipboard có dùng được không → bật/tắt nút "Dán mã".
+	async function refreshClipboardState() {
+		if (configs.disabled) {
+			clipboardAvailable = false;
+			clipboardText = '';
+			return;
+		}
+		const text = await readClipboardText();
+		const cleaned = filterChar(text).slice(0, length);
+		clipboardText = cleaned;
+		clipboardAvailable = cleaned.length > 0;
+	}
+
+	// Click nút "Dán mã": điền từ ô đầu, sync value, focus ô kế tiếp còn trống.
+	async function handlePasteClick() {
+		if (configs.disabled) return;
+		let text = clipboardText;
+		if (!text) {
+			text = filterChar(await readClipboardText()).slice(0, length);
+		}
+		const cleaned = filterChar(text).slice(0, length);
+		if (!cleaned) return;
+		for (let k = 0; k < cleaned.length; k++) {
+			boxes[k] = cleaned[k];
+		}
+		syncValue();
+		const firstEmpty = cleaned.length < length ? cleaned.length : length - 1;
+		focusBox(firstEmpty);
+	}
 	function handleBoxPaste(i: number, e: ClipboardEvent) {
 		e.preventDefault();
 		let text = e.clipboardData?.getData('text') ?? '';
@@ -409,6 +471,8 @@
 	}
 
 	onMount(() => {
+		// Batch 23: kiểm tra clipboard ngay khi mount (nút "Dán mã")
+		void refreshClipboardState();
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();
 			formContext.childrens.add(configs);
@@ -452,6 +516,29 @@
 			onpaste={(e) => handleBoxPaste(i, e)}
 		/>
 	{/each}
+	{#if clipboardAvailable && !hasValue && !configs.disabled}
+		<button
+			type="button"
+			class="otp-paste"
+			aria-label="Dán mã"
+			title="Dán mã từ clipboard"
+			onclick={handlePasteClick}
+		>
+			<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<path
+					d="M9 4h6a1 1 0 0 1 1 1v1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2V5a1 1 0 0 1 1-1Z"
+					stroke="currentColor"
+					stroke-width="1.6"
+					stroke-linejoin="round"
+				/>
+				<path
+					d="M9 4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2H9V4Z"
+					fill="currentColor"
+					stroke="none"
+				/>
+			</svg>
+		</button>
+	{/if}
 	{#if configs.clearable && hasValue && !configs.disabled}
 		<button
 			type="button"

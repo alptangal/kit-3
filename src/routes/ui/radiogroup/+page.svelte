@@ -1,7 +1,7 @@
 <!-- src/routes/ui/radiogroup/+page.svelte -->
 <script lang="ts">
 	import { Button } from '$components/element';
-	import { FieldMessages, Form, Input, RadioGroup, RadioItem, TextField } from '$components/form';
+	import { FieldMessages, Form, Input, Label, RadioGroup, RadioItem, TextField } from '$components/form';
 	import type { Color, Size } from '$components/interface';
 
 	// ── State (probe locate qua data-test + .radiogroup-root con trực tiếp) ──
@@ -33,6 +33,8 @@
 	);
 	let colorValue = $state<string | null>(null);
 	let planValue = $state<string | null>(null);
+	// Batch 23: TextField + Label + RadioGroup — tap label → focus/chọn radio
+	let labelPlanValue = $state<string | null>(null);
 	let disabledValue = $state<string | null>('plan-sm');
 	let requiredValue = $state<string | null>(null);
 
@@ -161,6 +163,22 @@
 		</Form>
 		<p class="demo-hint">
 			Nút Submit disabled tới khi: đã chọn plan + email đúng định dạng.
+		</p>
+	</section>
+
+	<!-- Batch 23: TextField + Label + RadioGroup (tap label → focus/chọn radio) -->
+	<section class="demo" data-test="rg-label">
+		<h2>TextField + Label + RadioGroup (tap label → chọn radio)</h2>
+		<TextField name="rg-label-plan">
+			<Label>Chọn gói</Label>
+			<RadioGroup name="rg-label-plan" bind:value={labelPlanValue} aria-label="Gói">
+				<RadioItem id="free" label="Miễn phí" />
+				<RadioItem id="pro" label="Pro" />
+			</RadioGroup>
+		</TextField>
+		<p class="demo-hint">
+			Tap vào chữ "Chọn gói" → focus radio đang chọn (hoặc radio đầu tiên) + label đổi màu
+			khi focus. Đang chọn: <code data-test="rg-label-value">{labelPlanValue ?? 'chưa có'}</code>
 		</p>
 	</section>
 

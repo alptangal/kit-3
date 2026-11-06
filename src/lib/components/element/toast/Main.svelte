@@ -167,6 +167,7 @@
 
 <style lang="scss">
 	@use '$styles/sizes.scss';
+	@use '_styles.scss';
 	.toast-root {
 		/* Nổi trên sticky stack admin (pagination/filters 390, header 400) nhưng
 		   dưới sidebar overlay 999 + modal 10000 + tooltip 10500. position:fixed
@@ -207,9 +208,6 @@
 		   nửa trong nút lồi vào ~20px đè chữ cuối nếu không chừa chỗ (ui-checker bắt).
 		   :global bắt buộc — .toast-close do Button (Close/Main.svelte) render, nếu scoped
 		   thì Svelte prune rule khỏi bundle ("unused selector"). */
-		&:has(:global(.toast-close)) {
-			padding-right: calc(var(--padding) + 1.25rem);
-		}
 		cursor: var(--cursor);
 		backdrop-filter: blur(10px);
 		border-radius: var(--border-radius);
@@ -217,15 +215,13 @@
 		height: fit-content;
 		padding-inline: var(--padding);
 		padding-block: calc(var(--padding) / 4);
-		background: var(--background);
-		color: var(--foreground);
 		/* Elevation: --shadow-color không được define trong theme hiện tại → token
 		   --box-shadow-md resolve 'none' (toast trắng nền trắng vô hình trừ text).
 		   Dùng literal (pattern tooltip Content — ĐẠT ui-checker) + border lộ viền. */
 		box-shadow:
 			0 4px 12px rgba(0, 0, 0, 0.18),
 			0 2px 4px rgba(0, 0, 0, 0.1);
-		border: 1px solid var(--border-color, var(--border, rgba(0, 0, 0, 0.08)));
+		border: 1px solid var(--toast-border-color, var(--border-color, var(--border, rgba(0, 0, 0, 0.08))));
 		/* Hover-expand group: transition transform (không top/right/bottom/left — px nhảy).
 		   CSS transition hoạt động cùng WAAPI fly transition (Svelte 5) vì fly chỉ chạy
 		   intro lúc mount rồi abort — sau đó inline transform thay đổi được transition mượt. */

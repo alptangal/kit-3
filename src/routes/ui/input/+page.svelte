@@ -7,6 +7,14 @@
 	let phoneValue = $state('');
 	let numberValue = $state('');
 	let textValue = $state('');
+	// Batch 23: demo action buttons (clear luôn đứng đầu) + loading spinner animate
+	let clearTextValue = $state('Nội dung đã nhập');
+	let loadingValue = $state('');
+	let loadingOn = $state(true);
+	function toggleLoading() {
+		loadingOn = !loadingOn;
+	}
+
 	// ── type='currency' ──
 	let currencyVnd = $state('');
 	let currencyUsd = $state('');
@@ -180,6 +188,29 @@
 		<div data-test="input-text">
 			<Input type="text" bind:value={textValue} placeholder="text tự do" />
 		</div>
+	</section>
+
+	<!-- Batch 23: nút clear luôn đứng đầu (mục 4b) + spinner loading animate (mục 4a) -->
+	<section class="demo" data-test="if-actions">
+		<h2>actionButtons.clear + loading (spinner animate)</h2>
+		<div data-test="if-actions-clear">
+			<Input
+				type="text"
+				bind:value={clearTextValue}
+				actionButtons={{ clear: { display: true } }}
+				placeholder="gõ để hiện nút xóa"
+			/>
+		</div>
+		<div data-test="if-actions-loading">
+			<Input type="text" bind:value={loadingValue} loading={loadingOn} placeholder="đang xử lý" />
+		</div>
+		<Button type="button" data-test="if-loading-toggle" onclick={toggleLoading}>
+			{loadingOn ? 'Tắt loading' : 'Bật loading'}
+		</Button>
+		<p class="demo-hint">
+			Nút xóa luôn nằm đầu tiên tính từ phải sang trái (trước spinner/copy/paste).
+			Loading → spinner xoay liên tục bên cạnh input.
+		</p>
 	</section>
 
 	<!-- ──────────────── type='file' ──────────────── -->

@@ -130,3 +130,21 @@ $colorRefs: (
 // Reduced motion: KHÔNG khai báo @media ở đây — rule transition của component
 // (Content/Arrow Main.svelte, sau @use) thắng cùng specificity (rule sau) →
 // @media ở file bị import trước sẽ chết. Component tự lồng @media sau transition.
+
+// ── Trigger chỉ có icon → ô VUÔNG (width = height) ──
+// Class 'tooltip-icon-trigger' được JS gắn trong tooltip/Main.svelte
+// (KHÔNG dùng :has() vì iOS Safari 15.1 chết).
+// Giá trị lấy theo pattern .aspect-square của button/_styles.scss.
+:global(.tooltip-icon-trigger) {
+	display: inline-flex !important;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	aspect-ratio: 1 / 1;
+	padding-inline: 0 !important;
+	min-width: 0 !important;
+	width: var(--min-height, 2.5rem) !important;
+	height: var(--min-height, 2.5rem) !important;
+	max-width: 100%;
+	flex-shrink: 0;
+}

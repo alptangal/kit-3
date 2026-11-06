@@ -1,0 +1,37 @@
+@use '$styles/theme-mixins' as *;
+
+// Toast dung bang mau raw nen/ vien theo tung color prop (semantic token dao scale theo theme).
+$colorRefs: ('default': 'gray', 'secondary': 'cyan', 'success': 'green', 'info': 'sky', 'warning': 'amber', 'error': 'red', 'primary': 'indigo');
+
+.toast-root {
+	--toast-background: var(--background);
+	--toast-color: var(--foreground);
+	--toast-border-color: var(--border-color, var(--border, rgba(0, 0, 0, 0.08)));
+
+	background: var(--toast-background);
+	color: var(--toast-color);
+
+	@each $color, $ref in $colorRefs {
+		&.color-#{$color} {
+			@if $color == 'default' {
+				--toast-background: var(--background);
+				--toast-color: var(--foreground);
+				--toast-border-color: var(--border-color, var(--border, rgba(0, 0, 0, 0.08)));
+
+				@include theme-dark {
+					--toast-background: rgba(82, 82, 91, 0.28);
+				}
+			} @else {
+				--toast-background: var(--color-#{$ref}-50);
+				--toast-color: var(--color-#{$ref}-800);
+				--toast-border-color: var(--color-#{$ref}-200);
+
+				@include theme-dark {
+					--toast-background: var(--color-#{$ref}-950);
+					--toast-color: var(--color-#{$ref}-200);
+					--toast-border-color: var(--color-#{$ref}-800);
+				}
+			}
+		}
+	}
+}

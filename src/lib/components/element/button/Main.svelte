@@ -194,6 +194,8 @@
 	function handleNavigationClick(e: MouseEvent | PointerEvent) {
 		if (!props.to) return;
 		if (!browser) return;
+		// Disabled/loading: chặn navigation (thẻ <a> không có native disabled)
+		if (disabledDerived || loadingDerived) return;
 
 		// Chỉ xử lý left click, không có modifier keys
 		const mouseEvent = e as MouseEvent;

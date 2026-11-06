@@ -69,7 +69,13 @@
 
 		&.disabled {
 			opacity: var(--disabled-opacity, 0.5);
+			cursor: var(--cursor-disabled, not-allowed);
+			/* Touch (mobile): giữ pointer-events:none — chặn chạm. */
 			pointer-events: none;
+			/* PC: bật lại pointer-events để con trỏ hiện not-allowed. */
+			@media (hover: hover) and (pointer: fine) {
+				pointer-events: auto;
+			}
 		}
 	}
 </style>

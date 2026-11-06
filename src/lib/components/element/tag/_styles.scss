@@ -37,7 +37,14 @@ $colorRefs: (
 
 	&.disabled {
 		opacity: var(--disabled-opacity, 0.5);
+		cursor: var(--cursor-disabled, not-allowed);
+		/* Touch (mobile): giữ pointer-events:none — không có cursor, chặn chạm. */
 		pointer-events: none;
+		/* PC: bật lại pointer-events để con trỏ hiện not-allowed khi rê lên
+		   phần tử bị khóa (pointer-events:none xoá cursor trên desktop). */
+		@media (hover: hover) and (pointer: fine) {
+			pointer-events: auto;
+		}
 	}
 
 	/* ── Size map (chip gọn trong trigger select) ── */
@@ -156,7 +163,10 @@ $colorRefs: (
 		opacity: 0.7;
 		cursor: pointer;
 		transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
-		&:hover {
+		&:disabled {
+			cursor: var(--cursor-disabled, not-allowed);
+		}
+		&:hover:not(:disabled) {
 			opacity: 1;
 			color: var(--error);
 			@media (prefers-color-scheme: dark) {

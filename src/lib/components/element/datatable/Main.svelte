@@ -11,13 +11,26 @@
 	// A11y (CONTRACT §6): table + caption, th scope="col" + aria-sort,
 	// search input aria-label, pagination prev/next aria-label.
 	import { SvelteSet } from 'svelte/reactivity';
+	// Alias 'pageState' (không phải 'page') — DataTable đã có prop 'page' (phân trang).
+	import { page as pageState } from '$app/state';
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
 	import { queryMatchesText, matchSegments, type TextSegment } from '$modules/highlight';
+	import {
+		readDraft,
+		saveDraft,
+		writeDraftNow,
+		clearDraft,
+		cancelPendingDraft
+	} from '$modules/draft-store';
 	import { client } from '$store/basic.svelte';
 	import { setDataTableContext } from './_context';
 	import { AlertDialog } from '../alert-dialog/index.ts';
 	import { Modal } from '../../modal/index.ts';
+	// Dialog khôi phục bản nháp (dùng chung, route-level) — import TRỰC TIẾP file
+	// (không qua barrel $components/element) để tránh circular import
+	// (barrel export DataTable → datatable/Main.svelte).
+	import DraftRestoreDialog from '../../../../routes/(authorized)/_DraftRestoreDialog.svelte';
 	// KHÔNG import DatePicker trong Main (cell/modal detail dùng native
 	// input[type=date] — panel composite bị clip trong overflow:hidden);
 	// Body import trực tiếp file (tránh circular barrel).
@@ -329,6 +342,36 @@
 	let detailFocusColumn: string | undefined = $state(undefined);
 	// Values đang sửa trong modal (theo columnId, coerce khi commit).
 	let detailValues: Record<string, string | boolean> = $state({});
+
+	// ── B9 draft autosave (modal row detail) ──
+	// Bật/tắt theo system settings (page.data.system.draftAutosave) + user đã login.
+	const draftAutosaveEnabled: boolean = $derived(
+		(pageState.data as { system?: { draftAutosave?: boolean } })?.system?.draftAutosave === true
+	);
+	const draftUserId: string = $derived(
+		(pageState.data as { user?: { userId?: string } })?.user?.userId ?? ''
+	);
+	// tableKey định danh bảng — KHÔNG thêm prop mới, dùng name/data-test có sẵn.
+	const draftTableKey: string = $derived(
+		props.name ?? props['data-test'] ?? columns[0]?.id ?? 'default'
+	);
+	const draftLang: 'vi' | 'en' = $derived(client.browser?.language === 'vi' ? 'vi' : 'en');
+	// Key draft của form đang mở (datatable:{tableKey}:{rowId}).
+	let draftFormKey: string | undefined = $state(undefined);
+	// Key + row đang chờ user chọn khôi phục / bỏ nháp trong dialog.
+	let pendingDraftFormKey: string | undefined = $state(undefined);
+	let pendingDraftRowId: string | undefined = $state(undefined);
+	// Cột cần focus khi mở modal (giữ từ lần click đầu tiên).
+	let pendingDraftFocusColumn: string | undefined = $state(undefined);
+	// Dialog khôi phục bản nháp đang mở.
+	let draftRestoreDisplay: boolean = $state(false);
+	// Baseline = giá trị GỐC của dòng trong bảng — so để biết user đã sửa.
+	let detailBaseline: Record<string, string | boolean> = $state({});
+	// armed: bỏ qua lần effect đầu (mở modal vừa set values → chưa phải thay đổi).
+	let draftAutosaveArmed = false;
+	// Session token (non-reactive) — đánh dấu phiên mở modal hiện tại.
+	// Dùng để tránh clearDraft xoá nháp mới khi callback async resolve muộn.
+	let draftSessionId = 0;
 
 	// row id theo getRowId (default: index)
 	const idOf = (row: Record<string, unknown>, index: number): string =>
@@ -1027,17 +1070,13 @@
 	};
 
 	// ── ROW DETAIL MODAL (wave 8) — click row/cell → Modal chi tiết ──
-	const openRowDetail = (rowId: string, focusColumn?: string): void => {
-		const found = findRowById(rowId);
-		if (!found) return;
-		detailRowId = rowId;
-		detailFocusColumn = focusColumn;
-		// Values khởi tạo theo columns (string — coerce khi commit; boolean editor
-		// giữ boolean thật).
+	// Values khởi tạo theo columns (string — coerce khi commit; boolean editor
+	// giữ boolean thật).
+	const buildDetailValues = (row: Record<string, unknown>): Record<string, string | boolean> => {
 		const values: Record<string, string | boolean> = {};
 		for (const col of columns) {
 			if (col.status || col.render) continue;
-			const v = getCellValue(found.row, col);
+			const v = getCellValue(row, col);
 			if (getEditorType(col, v) === 'boolean') {
 				values[col.id] = Boolean(v);
 			} else if (v instanceof Date) {
@@ -1050,12 +1089,128 @@
 				values[col.id] = v == null ? '' : String(v);
 			}
 		}
+		return values;
+	};
+
+	// Key draft của 1 dòng — datatable:{tableKey}:{rowId}.
+	const draftKeyFor = (rowId: string): string => `datatable:${draftTableKey}:${rowId}`;
+
+	// Chuẩn hoá value để so sánh (boolean true/false vs string).
+	const normalizeDetailValue = (value: string | boolean | undefined): string =>
+		value === undefined ? '' : typeof value === 'boolean' ? (value ? '1' : '0') : value;
+
+	// 2 bảng values có giống hệt nhau không (so sánh theo key, chuẩn hoá boolean).
+	const sameDetailValues = (
+		a: Record<string, string | boolean>,
+		b: Record<string, string | boolean>
+	): boolean => {
+		const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+		for (const key of keys) {
+			if (normalizeDetailValue(a[key]) !== normalizeDetailValue(b[key])) return false;
+		}
+		return true;
+	};
+
+	// User đã sửa gì so với dữ liệu gốc của dòng hay chưa?
+	const isDetailDirty = (): boolean => !sameDetailValues(detailValues, detailBaseline);
+
+	// Mở modal detail — dùng chung cho mở thường + sau khi chọn trong dialog nháp.
+	const showDetailModal = (
+		rowId: string,
+		focusColumn: string | undefined,
+		values: Record<string, string | boolean>
+	): void => {
+		const found = findRowById(rowId);
+		if (!found) return;
+		detailRowId = rowId;
+		detailFocusColumn = focusColumn;
 		detailValues = values;
+		// Baseline = dữ liệu GỐC của dòng (không phải draft) → so để biết user đã sửa.
+		// Clone riêng: tránh dùng CHUNG object với detailValues (sửa 1 chỗ làm mất diff).
+		detailBaseline = { ...buildDetailValues(found.row) };
+		draftFormKey =
+			draftAutosaveEnabled && draftUserId && rowDetailCfg.editable ? draftKeyFor(rowId) : undefined;
 		// Đóng cell/row editor đang mở (chỉ 1 chế độ edit tại 1 thời điểm).
 		editCell = undefined;
 		rowEdit = undefined;
+		// Bỏ qua lần effect đầu (mở modal vừa set values → chưa phải thay đổi).
+		draftAutosaveArmed = false;
+		// Phiên mới → callback async của phiên cũ không được xoá nháp của phiên này.
+		draftSessionId += 1;
 		detailOpen = true;
 		onRowDetail?.(found.row as never, rowId);
+	};
+
+	// Có bản nháp của dòng này không? Nếu có → mở dialog khôi phục TRƯỚC modal
+	// (AlertDialog z-index 10002 phủ Modal → mở modal trước sẽ kẹt focus trap).
+	const maybeRestoreDraft = (rowId: string, focusColumn?: string): boolean => {
+		// Chỉ chế độ update/detail có ô sửa mới autosave được (modal chỉ xem → không có gì để nháp).
+		if (!draftAutosaveEnabled || !draftUserId || !rowDetailCfg.editable) return false;
+		const key = draftKeyFor(rowId);
+		const draft = readDraft<Record<string, string | boolean>>(draftUserId, key);
+		if (!draft || Object.keys(draft).length === 0) {
+			// Không có nháp → dọn trạng thái chờ (user có thể đã đóng dialog bằng ESC).
+			pendingDraftFormKey = undefined;
+			pendingDraftRowId = undefined;
+			pendingDraftFocusColumn = undefined;
+			return false;
+		}
+		pendingDraftFormKey = key;
+		pendingDraftRowId = rowId;
+		pendingDraftFocusColumn = focusColumn;
+		draftRestoreDisplay = true;
+		return true;
+	};
+
+	// Khôi phục nháp — nạp giá trị draft vào modal (ghi đè phần draft có).
+	const applyDraftRestore = (): void => {
+		const key = pendingDraftFormKey;
+		const rowId = pendingDraftRowId;
+		const focusColumn = pendingDraftFocusColumn;
+		pendingDraftFormKey = undefined;
+		pendingDraftRowId = undefined;
+		pendingDraftFocusColumn = undefined;
+		if (!key || !rowId || !draftUserId) return;
+		const found = findRowById(rowId);
+		if (!found) return;
+		const base = buildDetailValues(found.row);
+		const draft = readDraft<Record<string, string | boolean>>(draftUserId, key);
+		const merged: Record<string, string | boolean> = { ...base };
+		if (draft) {
+			for (const [colId, value] of Object.entries(draft)) {
+				// Bỏ qua key không còn trong dữ liệu gốc (cột đã bị xoá khỏi bảng).
+				if (!(colId in base)) continue;
+				if (typeof value === 'string' || typeof value === 'boolean') merged[colId] = value;
+			}
+		}
+		// Nháp cũ (giống hệt dữ liệu gốc) → không có gì để khôi phục → xoá luôn,
+		// tránh hỏi khôi phục lặp lại mỗi lần mở dòng này.
+		if (sameDetailValues(merged, base)) clearDraft(draftUserId, key);
+		// Baseline vẫn là dữ liệu GỐC → nháp vừa khôi phục được xem là "đã sửa" (không bị xoá nhầm).
+		showDetailModal(rowId, focusColumn, merged);
+	};
+
+	// Bỏ nháp — xoá draft + mở modal với dữ liệu gốc của dòng.
+	const discardDraft = (): void => {
+		const key = pendingDraftFormKey;
+		const rowId = pendingDraftRowId;
+		const focusColumn = pendingDraftFocusColumn;
+		pendingDraftFormKey = undefined;
+		pendingDraftRowId = undefined;
+		pendingDraftFocusColumn = undefined;
+		if (!key || !rowId) return;
+		if (draftUserId) clearDraft(draftUserId, key);
+		const found = findRowById(rowId);
+		if (!found) return;
+		showDetailModal(rowId, focusColumn, buildDetailValues(found.row));
+	};
+
+	const openRowDetail = (rowId: string, focusColumn?: string): void => {
+		const found = findRowById(rowId);
+		if (!found) return;
+		// Có nháp → tạm dừng, chờ user chọn khôi phục / bỏ nháp.
+		if (maybeRestoreDraft(rowId, focusColumn)) return;
+		showDetailModal(rowId, focusColumn, buildDetailValues(found.row));
 	};
 
 	const closeRowDetail = (commit: boolean): void => {
@@ -1063,6 +1218,12 @@
 			detailOpen = false;
 			return;
 		}
+		// Key draft của dòng đang đóng (để xoá/ghi nháp theo nhánh Save/Cancel).
+		const closingKey = draftFormKey;
+		const closingRowId = detailRowId;
+		// Phiên đang đóng — callback async resolve muộn không được xoá nháp của phiên mới.
+		const closingSession = draftSessionId;
+		let commitResult: void | Promise<void> = undefined;
 		if (commit && rowDetailCfg.editable) {
 			const found = findRowById(detailRowId);
 			if (found) {
@@ -1096,13 +1257,58 @@
 				}
 				// onRowUpdate chỉ khi có ít nhất 1 field đổi (flag ghi trong loop —
 				// old sau khi ghi là giá trị mới → so luôn false).
-				if (anyChanged) onRowUpdate?.(found.row as never, detailRowId);
+				if (anyChanged) commitResult = onRowUpdate?.(found.row as never, closingRowId);
 			}
 		}
+		// ── Draft autosave: Save → xoá nháp; Cancel → giữ nháp (ghi ngay) ──
+		if (closingKey && draftAutosaveEnabled && draftUserId) {
+			if (commit) {
+				// Save → xoá bản nháp sau khi commit thành công.
+				// Callback async báo lỗi → GIỮ nháp (user còn cần dữ liệu để thử lại).
+				const clear = (): void => {
+					// Đã mở phiên khác cho cùng dòng → không xoá nháp mới đang viết.
+					if (closingSession !== draftSessionId) return;
+					clearDraft(draftUserId, closingKey);
+				};
+				// commitResult: void | Promise<void> → nếu có promise thì đợi resolve mới xoá nháp.
+				if (commitResult) {
+					void commitResult.then(clear, (err: unknown) => {
+						if (import.meta.env.DEV) console.error('[datatable] commit row detail lỗi:', err);
+					});
+				} else {
+					clear();
+				}
+			} else if (isDetailDirty()) {
+				// Cancel → GIỮ nháp — ghi ngay (debounce 500ms có thể chưa flush).
+				writeDraftNow(draftUserId, closingKey, { ...detailValues });
+			}
+		}
+		draftFormKey = undefined;
+		detailBaseline = {};
 		detailRowId = undefined;
 		detailFocusColumn = undefined;
 		detailOpen = false;
 	};
+
+	// ── DRAFT AUTOSAVE — mỗi lần values đổi → ghi nháp (debounce 500ms) ──
+	$effect(() => {
+		// JSON.stringify để track DEEP (đọc object không track thuộc tính).
+		void JSON.stringify(detailValues);
+		if (!detailOpen || !detailRowId || !draftFormKey) return;
+		if (!draftAutosaveEnabled || !draftUserId) return;
+		// Bỏ qua lần chạy đầu (mở modal vừa set values → chưa phải thay đổi).
+		if (!draftAutosaveArmed) {
+			draftAutosaveArmed = true;
+			return;
+		}
+		// Chỉ ghi khi user đã sửa so với dữ liệu gốc của dòng.
+		if (!isDetailDirty()) {
+			// User hoàn tác về giá trị gốc → huỷ timer đang treo (tránh ghi nháp cũ).
+			cancelPendingDraft(draftUserId, draftFormKey);
+			return;
+		}
+		saveDraft(draftUserId, draftFormKey, { ...detailValues });
+	});
 
 	// ── LAZY LOAD ──
 	const hasMoreLazy: boolean = $derived(lazyHasMoreProp ?? hasMoreLazyState ?? true);
@@ -1866,6 +2072,14 @@
 			</AlertDialog.Content>
 		</AlertDialog>
 	{/if}
+
+	<!-- Dialog khôi phục bản nháp (mở TRƯỚC modal detail — AlertDialog z-index cao hơn Modal) -->
+	<DraftRestoreDialog
+		bind:display={draftRestoreDisplay}
+		onRestore={applyDraftRestore}
+		onDiscard={discardDraft}
+		lang={draftLang}
+	/>
 
 	{#if rowDetailDerived && detailOpen && detailRowId}
 		{@const detailRow = findRowById(detailRowId)}

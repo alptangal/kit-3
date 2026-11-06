@@ -20,7 +20,7 @@
 			return styleSynced({ defaultStyles, propStyles: props.class }, props.overwriteDefaultStyles);
 		},
 		get color() {
-			return props.color ?? 'default';
+			return props.color ?? toastContext?.color ?? 'default';
 		},
 		get size() {
 			if (props.size) return props.size;

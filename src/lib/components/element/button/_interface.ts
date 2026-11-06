@@ -57,6 +57,7 @@ export interface ButtonProps extends Omit<BasicProps, 'class'> {
 	tooltip?: string;
 	'aria-label'?: string;
 	'aria-pressed'?: boolean | 'true' | 'false';
+	'aria-expanded'?: boolean | 'true' | 'false';
 	shortcut?: string | string[];
 	ripple?: boolean;
 	confirmText?: string;
