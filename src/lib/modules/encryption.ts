@@ -409,11 +409,39 @@ const fetchSecure = async (
 		// giữ fallback 'en'
 	}
 
-	const res = await fetch(url, {
-		method: options.method ?? 'POST',
-		headers: { 'content-type': 'application/json', 'Accept-Language': lang },
-		body: JSON.stringify(encryptedBody)
-	});
+	// Timeout + retry: mạng yếu / iOS Safari có thể treo request ~22s không phản hồi.
+	// Retry CHỈ khi fetch THROW (network error / timeout), KHÔNG retry với 4xx/5xx.
+	const FETCH_TIMEOUT_MS = 15000;
+	const FETCH_RETRY_DELAYS = [400, 1200];
+	let res: Response | undefined;
+	let lastError: unknown;
+	for (let attempt = 0; attempt <= FETCH_RETRY_DELAYS.length; attempt++) {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+		try {
+			res = await fetch(url, {
+				method: options.method ?? 'POST',
+				headers: { 'content-type': 'application/json', 'Accept-Language': lang },
+				body: JSON.stringify(encryptedBody),
+				signal: controller.signal
+			});
+			lastError = undefined;
+			break;
+		} catch (e) {
+			lastError = e;
+			if (attempt < FETCH_RETRY_DELAYS.length) {
+				await new Promise((resolve) => setTimeout(resolve, FETCH_RETRY_DELAYS[attempt]));
+				continue;
+			}
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+	if (!res) {
+		throw lastError instanceof Error
+			? lastError
+			: new Error('fetchSecure: network request failed');
+	}
 
 	let decryptedPayload: any = null;
 	try {

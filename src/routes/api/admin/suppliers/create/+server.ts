@@ -12,6 +12,9 @@ import { SupplierService } from '$lib/server/db/suppliers';
 export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
 
+	let secureResponder:
+		| ((payload: Parameters<typeof respondEncrypted>[1], status?: number) => Promise<Response>)
+		| undefined;
 	try {
 		const read = await readAdminRequest<{
 			name: string;
@@ -42,6 +45,7 @@ export const POST: RequestHandler = async (event) => {
 
 		const respond = (payload: Parameters<typeof respondEncrypted>[1], status = 200) =>
 			respondEncrypted(publicKeyB64, payload, lang, status);
+		secureResponder = respond;
 
 		const actor = await getActorContext(locals);
 		if (!actor) {
@@ -105,6 +109,12 @@ export const POST: RequestHandler = async (event) => {
 		});
 	} catch (e) {
 		console.error('[POST /api/admin/suppliers/create]', e);
-		return json({ message: e instanceof Error ? e.message : String(e), ok: false }, { status: 500 });
+		if (secureResponder) {
+			return secureResponder(
+				{ ok: false, message: { vi: 'Tạo nhà cung cấp thất bại. Vui lòng thử lại.', en: 'Failed to create supplier. Please try again.' } },
+				500
+			);
+		}
+		return json({ message: { vi: 'Tạo nhà cung cấp thất bại. Vui lòng thử lại.', en: 'Failed to create supplier. Please try again.' }, ok: false }, { status: 500 });
 	}
 };
