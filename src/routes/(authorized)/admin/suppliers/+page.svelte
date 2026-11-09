@@ -255,7 +255,8 @@
 			duplicateWarn: { vi: 'Có giá trị trùng lặp', en: 'Duplicate value' },
 			// Batch 11: field passive metadata (cuối form, edit mode)
 			passiveCreatedAt: { vi: 'Tạo lúc', en: 'Created' },
-			passiveUpdatedAt: { vi: 'Cập nhật lần cuối', en: 'Last updated' }
+			passiveUpdatedAt: { vi: 'Cập nhật lần cuối', en: 'Last updated' },
+			passiveHint: { vi: 'Nhấn đúp để sửa', en: 'Double-tap to edit' },
 		},
 		// Batch 20 (A4): more-menu footer form modal — history / delete / analytics
 		more: {
@@ -859,6 +860,36 @@
 	// Field passive (batch 11): metadata created/updated hiển thị cuối form modal —
 	// chỉ edit mode có dữ liệu (create chưa có gì để hiển thị).
 	let supplierPassive = $state<{ createdBy?: string; createdAt?: string; updatedBy?: string; updatedAt?: string } | null>(null);
+
+	// Batch 24 mục 1: passive field — field hợp lệ bị khoá; đúp chạm trong 300ms unlock + focus, chạm đơn mở deep action
+	let supplierFieldUnlocked = $state<Record<string, boolean>>({});
+	const supplierTapTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	function resetSupplierPassiveFields() {
+		for (const t of supplierTapTimers.values()) clearTimeout(t);
+		supplierTapTimers.clear();
+		supplierFieldUnlocked = {};
+	}
+	function openSupplierDeepAction(kind: 'phone' | 'email' | 'address', index: number) {
+		const anchor = document.querySelector<HTMLAnchorElement>('[data-action-anchor="' + kind + '-' + index + '"]');
+		anchor?.click();
+	}
+	function handleSupplierPassiveTap(e: MouseEvent, kind: 'phone' | 'email' | 'address', index: number) {
+		if (supplierSubmitting) return;
+		const key = kind + '-' + index;
+		const pending = supplierTapTimers.get(key);
+		if (pending) {
+			clearTimeout(pending);
+			supplierTapTimers.delete(key);
+			supplierFieldUnlocked[key] = true;
+			const wrap = (e.currentTarget as HTMLElement | null)?.closest('.field-icon-wrap, .address-passive-wrap');
+			setTimeout(() => { const el = wrap?.querySelector('input, textarea') as HTMLElement | null; el?.focus(); }, 0);
+			return;
+		}
+		supplierTapTimers.set(key, setTimeout(() => {
+			supplierTapTimers.delete(key);
+			openSupplierDeepAction(kind, index);
+		}, 300));
+	}
 	function openHistoryFromFooter() {
 		if (!historySupplierRow) return;
 		openHistoryModal(historySupplierRow);
@@ -931,6 +962,7 @@
 				supplierDeleteDisplay = false;
 				supplierAnalyticsDisplay = false;
 				supplierModalDisplay = false;
+				resetSupplierPassiveFields();
 				cleanSupplierParam();
 				closeGuard.markClean();
 				await loadSuppliers();
@@ -1004,6 +1036,7 @@
 		openConfirm: () => (dirtyCloseDisplay = true),
 		close: () => {
 			supplierModalDisplay = false;
+			resetSupplierPassiveFields();
 			dirtyCloseDisplay = false;
 			// Deep-link (5f): đóng modal → gỡ ?supplier khỏi URL (share link
 			// chỉ hợp khi modal đang mở)
@@ -1846,6 +1879,16 @@
 	const FACEBOOK_RE = /^https?:\/\/(www\.)?(facebook\.com|fb\.com)\/\S+$/i;
 	const INSTAGRAM_RE = /^@[A-Za-z0-9._]{1,30}$|^https?:\/\/(www\.)?instagram\.com\/\S+$/i;
 	const WEBSITE_RE = /^https?:\/\/\S+\.\S+$/i;
+
+	// Batch 24 mục 1: field hợp lệ + không trùng ⇒ passive (disabled) cho tới khi đúp chạm unlock
+	function supplierPhoneValid(index: number): boolean {
+		const phone = str(supplierForm.phones[index]).trim();
+		return !!phone && PHONE_RE.test(phone) && (phoneDupCounts.get(phone.toLowerCase()) ?? 0) < 2;
+	}
+	function supplierEmailValid(index: number): boolean {
+		const email = str(supplierForm.emails[index]).trim();
+		return !!email && EMAIL_RE.test(email) && (emailDupCounts.get(email.toLowerCase()) ?? 0) < 2;
+	}
 
 	// Batch14 (m11713): address entry "hợp lệ" = đã chọn địa giới (tỉnh hệ cũ
 	// hoặc hệ mới) — điều kiện để bật nút "+ Add address" và validate submit.
@@ -3195,18 +3238,21 @@
 							<div class="field-row" class:field-row--dup={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2}>
 								<Badge class="field-row-stt" label={String(phoneIndex + 1)} size="xs" variant="solid" color={(phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-phone-stt-${phoneIndex}`} />
 								<div class="field-icon-wrap">
-									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting}
+									<PhoneInput bind:value={supplierForm.phones[phoneIndex]} placeholder={pageContents.supplierModal.phonePlaceholder[lang]} disabled={supplierSubmitting || (supplierPhoneValid(phoneIndex) && !supplierFieldUnlocked['phone-' + phoneIndex])}
 										color={str(phone).trim() && !PHONE_RE.test(str(phone).trim()) ? 'error' : undefined}
 									/>
 									{#if str(phone).trim() && PHONE_RE.test(str(phone).trim()) && (phoneDupCounts.get(str(phone).trim().toLowerCase()) ?? 0) < 2}
 										<!-- Batch 22 (m00193-2): item hợp lệ → passive field — icon
 										     thành <a> deep-action GỌI NGAY (tel:). Item rỗng/invalid →
 										     icon tĩnh như cũ. -->
-										<a class="field-icon field-icon--action" href={`tel:${str(phone).replace(/[^\d+]/g, '')}`} aria-label={`${pageContents.supplierModal.callAction[lang]} ${str(phone).trim()}`} tabindex={-1}>
+										<a class="field-icon field-icon--action" href={`tel:${str(phone).replace(/[^\d+]/g, '')}`} aria-label={`${pageContents.supplierModal.callAction[lang]} ${str(phone).trim()}`} tabindex={-1} data-action-anchor={'phone-' + phoneIndex}>
 											<Icon icon={iconify['call-outline-rounded']} />
 										</a>
 									{:else}
 										<Icon class="field-icon" icon={iconify['call-outline-rounded']} />
+									{/if}
+									{#if supplierPhoneValid(phoneIndex) && !supplierFieldUnlocked['phone-' + phoneIndex]}
+										<button type="button" class="field-passive-hit" title={pageContents.supplierModal.passiveHint[lang]} aria-label={pageContents.supplierModal.passiveHint[lang]} onclick={(e) => handleSupplierPassiveTap(e, 'phone', phoneIndex)}></button>
 									{/if}
 								</div>
 								<button
@@ -3252,17 +3298,20 @@
 							<div class="field-row" class:field-row--dup={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2}>
 								<Badge class="field-row-stt" label={String(emailIndex + 1)} size="xs" variant="solid" color={(emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) >= 2 ? 'error' : 'primary'} data-test={`supplier-email-stt-${emailIndex}`} />
 								<div class="field-icon-wrap">
-									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting}
+									<EmailInput bind:value={supplierForm.emails[emailIndex]} placeholder={pageContents.supplierModal.emailPlaceholder[lang]} disabled={supplierSubmitting || (supplierEmailValid(emailIndex) && !supplierFieldUnlocked['email-' + emailIndex])}
 										color={str(email).trim() && !EMAIL_RE.test(str(email).trim()) ? 'error' : undefined}
 									/>
 									{#if str(email).trim() && EMAIL_RE.test(str(email).trim()) && (emailDupCounts.get(str(email).trim().toLowerCase()) ?? 0) < 2}
 										<!-- Batch 22: passive field — icon thành <a> GỬI EMAIL NGAY
 										     (mailto:). Item rỗng/invalid → icon tĩnh. -->
-										<a class="field-icon field-icon--action" href={`mailto:${str(email).trim()}`} aria-label={`${pageContents.supplierModal.emailAction[lang]} ${str(email).trim()}`} tabindex={-1}>
+										<a class="field-icon field-icon--action" href={`mailto:${str(email).trim()}`} aria-label={`${pageContents.supplierModal.emailAction[lang]} ${str(email).trim()}`} tabindex={-1} data-action-anchor={'email-' + emailIndex}>
 											<Icon icon={iconify['mail-outline-rounded']} />
 										</a>
 									{:else}
 										<Icon class="field-icon" icon={iconify['mail-outline-rounded']} />
+									{/if}
+									{#if supplierEmailValid(emailIndex) && !supplierFieldUnlocked['email-' + emailIndex]}
+										<button type="button" class="field-passive-hit" title={pageContents.supplierModal.passiveHint[lang]} aria-label={pageContents.supplierModal.passiveHint[lang]} onclick={(e) => handleSupplierPassiveTap(e, 'email', emailIndex)}></button>
 									{/if}
 								</div>
 								<button
@@ -3326,7 +3375,7 @@
 												target="_blank"
 												rel="noopener noreferrer"
 												aria-label={pageContents.supplierModal.mapAction[lang]}
-												tabindex={-1}
+												tabindex={-1} data-action-anchor={'address-' + addrIndex}
 											>
 												<Icon icon={iconify['map-pin-outline-rounded']} />
 											</a>
@@ -3351,17 +3400,22 @@
 								     tap Suppliers → đóng TẤT CẢ về datatable; tap Create/Tên →
 								     chỉ đóng step modal về form. Comment để NGOÀI tag: comment
 								     HTML trong tag = lỗi cú pháp Svelte "Expected token >". -->
+								<div class="address-passive-wrap">
 								<AddressInput
 									bind:value={entry.address}
 									bind:breakdown={supplierAddressBreakdowns[addrIndex]}
 									bind:newBreakdown={supplierNewAddressBreakdowns[addrIndex]}
 									placeholder={pageContents.supplierModal.addressPlaceholder[lang]}
-									disabled={supplierSubmitting}
+									disabled={supplierSubmitting || (addressEntryActionable(addrIndex) && !supplierFieldUnlocked['address-' + addrIndex])}
 									breadcrumbHome={pageContents.title[lang] ?? 'Suppliers'}
 									breadcrumbName={supplierEditMode === 'edit' ? (supplierForm.name || null) : pageContents.supplierModal.submit[lang]}
 									onBreadcrumbHomeTap={closeAllFromStep}
 									onBreadcrumbNameTap={attemptCloseStepModal}
 								/>
+								{#if addressEntryActionable(addrIndex) && !supplierFieldUnlocked['address-' + addrIndex]}
+									<button type="button" class="field-passive-hit" title={pageContents.supplierModal.passiveHint[lang]} aria-label={pageContents.supplierModal.passiveHint[lang]} onclick={(e) => handleSupplierPassiveTap(e, 'address', addrIndex)}></button>
+								{/if}
+								</div>
 								{#if supplierSubmitAttempted && addressEntryInvalid(addrIndex)}
 									<!-- Batch 21: AddressInput KHÔNG có prop color → message inline
 									     per-entry theo pattern .field-row-dup-msg (absolute top:100%,
@@ -4751,6 +4805,10 @@
 		}
 	}
 
+	/* Batch 24 mục 1: passive-hit overlay đè lên field bị khoá (input disabled không phát click) */
+	.field-passive-hit { position: absolute; inset: 0; z-index: 4; background: transparent; border: 0; padding: 0; touch-action: manipulation; cursor: pointer; }
+	.address-passive-wrap { position: relative; }
+
 	/* Line vertical trục x giữa (batch6): cột dọc nối các item qua tâm,
 	   đặt ::before bên trái mỗi row trừ row đầu — nằm giữa gap 2 item. */
 	.form-items-block > .field-row + .field-row::before {
@@ -5351,28 +5409,6 @@
 		/* FAB fixed góc phải đè "Rows: 20" (page-size) khi cuộn — chừa chỗ phải */
 		.admin-pagination {
 			padding-right: 4.75rem;
-		}
-	}
-
-	/* ── Bridge inset (pattern purchases): layout .admin-inset đọc :has() từ page
-	   để co padding-bottom + header khi page chạm đáy (at-bottom) ── */
-	:global(.admin-inset:has(.admin-page--fullheight)) .admin-page--fullheight {
-		@media (max-width: 767px) {
-			padding-bottom: 4.5rem;
-		}
-	}
-
-	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) .admin-page--fullheight {
-		@media (max-width: 767px) {
-			padding-bottom: 0;
-		}
-	}
-
-	/* Mobile chạm đáy: inset-header (breadcrumb) zero padding (yêu cầu 2 —
-	   breadcrumb co hết cỡ khi cuộn đáy, trả lại khi rời đáy) */
-	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) :global(.admin-inset-header) {
-		@media (max-width: 767px) {
-			padding: 0;
 		}
 	}
 

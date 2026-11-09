@@ -235,7 +235,9 @@
 		configs.status.focus = true;
 		// User tương tác → bật validation lại (nếu đang _justReset)
 		_justReset = false;
-		// Batch 23: đọc clipboard khi focus để bật nút "Dán mã"
+		// Batch 24: chỉ peek clipboard (không hỏi quyền) để bật nút "Dán mã"
+		// — gọi navigator.clipboard.readText() khi focus sẽ khiến iOS Safari
+		// bật paste context menu nên user không nhập được.
 		void refreshClipboardState();
 	}
 
@@ -334,9 +336,11 @@
 	let clipboardAvailable = $state(false);
 	let clipboardText = $state('');
 
-	// Đọc clipboard: navigator.clipboard.readText() (cần quyền, Safari/iOS
-	// chỉ cho sau user gesture) → fallback localStorage 'clipboard' (pattern
-	// đã dùng ở handleBoxPaste / handleRootCopy cho headless + fallback).
+	// Đọc clipboard hệ thống: navigator.clipboard.readText() (Safari/iOS chỉ
+	// cho sau user gesture) → fallback localStorage 'clipboard' (pattern đã dùng
+	// ở handleBoxPaste / handleRootCopy cho headless + fallback).
+	// Batch 24: CHỈ gọi hàm này trong user gesture (click nút "Dán mã") —
+	// gọi tự động khi focus sẽ khiến iOS Safari bật paste context menu.
 	async function readClipboardText(): Promise<string> {
 		try {
 			if (navigator.clipboard?.readText) {
@@ -359,28 +363,61 @@
 		return '';
 	}
 
+	// Peek clipboard KHÔNG hỏi quyền: mirror localStorage trước, sau đó chỉ đọc
+	// navigator.clipboard khi permission 'clipboard-read' đã được cấp sẵn (đọc
+	// im lặng — không bật paste context menu của iOS Safari).
+	async function peekClipboard(): Promise<string> {
+		try {
+			const raw = localStorage.getItem('clipboard');
+			if (raw) {
+				const entries = Object.entries(JSON.parse(raw));
+				const last = entries[entries.length - 1]?.[1];
+				if (typeof last === 'string' && last) return last;
+			}
+		} catch {
+			// mirror hỏng → bỏ qua
+		}
+		try {
+			const perm = await navigator.permissions?.query?.({
+				name: 'clipboard-read' as unknown as PermissionName
+			});
+			if (perm?.state === 'granted' && navigator.clipboard?.readText) {
+				const text = await navigator.clipboard.readText();
+				if (text) return text;
+			}
+		} catch {
+			// permission API không hỗ trợ → không đọc (tránh paste menu)
+		}
+		return '';
+	}
+
 	// Kiểm tra clipboard có dùng được không → bật/tắt nút "Dán mã".
+	// Batch 24: KHÔNG gọi navigator.clipboard.readText() tự động — iOS Safari
+	// bật paste context menu khi focus ô OTP ⇒ user không nhập được.
 	async function refreshClipboardState() {
 		if (configs.disabled) {
 			clipboardAvailable = false;
 			clipboardText = '';
 			return;
 		}
-		const text = await readClipboardText();
-		const cleaned = filterChar(text).slice(0, length);
+		const cleaned = filterChar(await peekClipboard()).slice(0, length);
 		clipboardText = cleaned;
 		clipboardAvailable = cleaned.length > 0;
 	}
 
-	// Click nút "Dán mã": điền từ ô đầu, sync value, focus ô kế tiếp còn trống.
+	// Click nút "Dán mã": đọc clipboard hệ thống (user gesture ⇒ iOS Safari
+	// cho phép), mirror localStorage fallback; điền từ ô đầu, sync value,
+	// focus ô kế tiếp còn trống.
 	async function handlePasteClick() {
 		if (configs.disabled) return;
-		let text = clipboardText;
-		if (!text) {
-			text = filterChar(await readClipboardText()).slice(0, length);
+		const cleaned = filterChar(await readClipboardText()).slice(0, length);
+		if (!cleaned) {
+			// Clipboard không có chuỗi hợp lệ → ẩn nút "Dán mã"
+			clipboardAvailable = false;
+			clipboardText = '';
+			return;
 		}
-		const cleaned = filterChar(text).slice(0, length);
-		if (!cleaned) return;
+		clipboardText = cleaned;
 		for (let k = 0; k < cleaned.length; k++) {
 			boxes[k] = cleaned[k];
 		}
@@ -471,7 +508,8 @@
 	}
 
 	onMount(() => {
-		// Batch 23: kiểm tra clipboard ngay khi mount (nút "Dán mã")
+		// Batch 24: chỉ peek clipboard (không hỏi quyền) ngay khi mount
+		// để bật nút "Dán mã" mà không kích hoạt paste context menu.
 		void refreshClipboardState();
 		if (formContext) {
 			if (!formContext.childrens) formContext.childrens = new SvelteSet();

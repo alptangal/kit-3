@@ -5613,28 +5613,6 @@
 		}
 	}
 
-	/* ── M1: FAB nhóm nút nổi góc phải-dưới (mobile only) ──
-	   padding-bottom cho card view: FAB không che card cuối khi cuộn tới đáy.
-	   at-bottom: bỏ luôn padding-bottom (nội dung sát đáy viewport). */
-	:global(.admin-inset:has(.admin-page--fullheight)) .admin-page--fullheight {
-		@media (max-width: 767px) {
-			padding-bottom: 4.5rem;
-		}
-	}
-
-	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) .admin-page--fullheight {
-		@media (max-width: 767px) {
-			padding-bottom: 0;
-		}
-	}
-
-	/* Mobile chạm đáy: inset-header zero padding (header co lại hết cỡ). */
-	:global(.admin-inset:has(.admin-page--fullheight.at-bottom)) :global(.admin-inset-header) {
-		@media (max-width: 767px) {
-			padding: 0;
-		}
-	}
-
 	.fab-group {
 		position: fixed;
 		right: 1rem;

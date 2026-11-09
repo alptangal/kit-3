@@ -30,6 +30,10 @@
 	// Batch8 mục 1: true khi ĐANG cuộn (scroll event gần đây), dừng 200ms → false —
 	// co padding-block header theo hành động cuộn, không theo vị trí.
 	let scrollActive: boolean = $state(false);
+	// Batch24 mục 2: user cuộn tới đáy trang (ngưỡng 4px, chỉ khi nội dung
+	// thực sự tràn) → CSS xoá khoảng trống header/body (min-height: 0,
+	// mobile zero padding). JS class thay :has() — chết trên iOS Safari 15.1.
+	let atBottom = $state(false);
 
 	$effect(() => {
 		if (typeof document === 'undefined' || !insetEl) return;
@@ -126,6 +130,19 @@
 				if (!fromWrap && scrollEl && !scrollEl.classList.contains('admin-table-wrap')) {
 					isScrolled = scrollEl.scrollTop > 80;
 				}
+				// Batch24 mục 2: chạm đáy (ngưỡng 4px). Guard sh > ch + 4: nội dung
+				// KHÔNG tràn (trang ngắn) → atBottom = false, giữ min-height 60dvh.
+				// Batch24 fix: atBottom theo TARGET của event (element cuộn thật) —
+				// scrollEl capture lúc layout mount, trang con mount SAU (wrap chưa
+				// tràn) → scrollEl stale (root). Capture listener bắt scroll từ wrap:
+				// nếu tính từ scrollEl thì wrap ở đáy không bật at-bottom.
+				const src = t instanceof HTMLElement ? t : scrollEl;
+				if (src) {
+					const sh = src.scrollHeight;
+					const ch = src.clientHeight;
+					const st = src.scrollTop;
+					atBottom = sh > ch + 4 && st + ch >= sh - 4;
+				}
 			});
 		};
 		let scrollEl = findScrollEl();
@@ -136,9 +153,20 @@
 		// cũng được phủ. onScroll tự bỏ qua event từ .admin-table-wrap khi tính
 		// isScrolled (vị trí trang không đổi khi bảng cuộn).
 		window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+		// Batch24 mục 2: sync atBottom ngay khi mount / effect re-run (đổi trang
+		// không sót atBottom=true cũ; trang ngắn → false).
+		onScroll();
+		// Nội dung/viewport đổi kích thước (load more, filter, xoay máy) → re-check
+		// atBottom. Observe chính scroll container (box đổi khi trang mới mount).
+		let atBottomRo: ResizeObserver | undefined;
+		if (scrollEl) {
+			atBottomRo = new ResizeObserver(() => onScroll());
+			atBottomRo.observe(scrollEl);
+		}
 		return () => {
 			scrollEl?.removeEventListener('scroll', onScroll);
 			window.removeEventListener('scroll', onScroll, { capture: true });
+			atBottomRo?.disconnect();
 			if (raf) cancelAnimationFrame(raf);
 			clearTimeout(scrollActiveTimer);
 		};
@@ -813,6 +841,8 @@
 			class="admin-inset"
 			// Batch 11 (yêu cầu 2): rule cuộn co/ẩn CHỈ mobile — PC giữ bố cục tĩnh
 			class:is-scrolled={isScrolled && isMobileLayout}
+			// Batch24 mục 2: chạm đáy → zero min-height body + padding (mobile)
+			class:at-bottom={atBottom}
 			bind:this={insetEl}
 		>
 			<div
@@ -1201,5 +1231,30 @@
 	.admin-inset:has(:global(.admin-page--fullheight)) .admin-inset-body {
 		flex: 1;
 		min-height: 0;
+	}
+
+	/* ══ Batch24 mục 2: xoá khoảng trống header/body khi chạm đáy ══
+	   JS class .at-bottom do layout tự phát hiện (KHÔNG :has() — chết trên
+	   iOS Safari ≤15.3). min-height 60dvh chỉ để footer không dính sát khi
+	   nội dung ngắn; đã cuộn tới đáy → khoảng trống không còn ý nghĩa.
+	   Mobile: base 4.5rem (đệm FAB) TRƯỚC, at-bottom 0 SAU (same
+	   specificity — last wins). BẪY scoped: class trang từ component con
+	   phải :global() cả modifier. */
+	.admin-inset.at-bottom .admin-inset-body {
+		min-height: 0;
+	}
+
+	@media (max-width: 767px) {
+		.admin-inset :global(.admin-page--fullheight) {
+			padding-bottom: 4.5rem;
+		}
+
+		.admin-inset.at-bottom :global(.admin-page--fullheight) {
+			padding-bottom: 0;
+		}
+
+		.admin-inset.at-bottom .admin-inset-header {
+			padding-block: 0;
+		}
 	}
 </style>
