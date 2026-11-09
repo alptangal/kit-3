@@ -2513,21 +2513,13 @@
 	onMount(() => {
 		// Safari ≤15.3: scroll fallback — root Container (div.w-full.h-full.overflow-auto
 		// ở +layout.svelte) là scroll container thật, window không bắn scroll event.
-		// Gắn listener lên cả window + root container; tìm qua walk-up từ wrapEl.
-		let scrollHost: HTMLElement | null = null;
-		if (wrapEl) {
-			let el: HTMLElement | undefined | null = wrapEl.parentElement;
-			while (el && el !== document.body) {
-				const ov = getComputedStyle(el).overflowY;
-				if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight + 4) { scrollHost = el; break; }
-				el = el.parentElement;
-			}
-		}
-		window.addEventListener('scroll', onWindowScroll, { passive: true });
-		scrollHost?.addEventListener('scroll', onWindowScroll, { passive: true });
+		// Batch 25 fix: scroll event KHÔNG bubble → window listener không thấy scroll
+		// của root Container; scrollHost walk-up lúc mount cũng miss vì trang còn
+		// ngắn (chưa scrollable). Dùng capture trên document — bắt scroll của MỌI
+		// element bất kể mount lúc nào, không cần re-find.
+		document.addEventListener('scroll', onWindowScroll, { capture: true, passive: true });
 		return () => {
-			window.removeEventListener('scroll', onWindowScroll);
-			scrollHost?.removeEventListener('scroll', onWindowScroll);
+			document.removeEventListener('scroll', onWindowScroll, { capture: true });
 		};
 	});
 	onMount(async () => {
@@ -5410,6 +5402,27 @@
 		.admin-pagination {
 			padding-right: 4.75rem;
 		}
+	}
+
+	/* Batch 25 (yêu cầu 2): pagination LUÔN cố định sát đáy viewport mobile —
+	   footer tách khỏi flow trang (height table thay đổi theo data khiến
+	   pagination di chuyển). Fixed bottom + background để che nội dung cuộn
+	   phía sau; FAB bottom đẩy xuống dưới pagination (z-index FAB 400 > 300).
+	   CHỈ mobile (max-width: 767px) — desktop giữ footer trong flow. */
+	@media (max-width: 767px) {
+		.admin-page--fullheight .admin-pagination {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 300;
+			padding: 0.5rem 0.75rem 0.75rem;
+			padding-right: 4.75rem; /* chừa chỗ FAB phải (giữ rule cũ) */
+			background: var(--background);
+			border-top: 1px solid var(--default-300);
+		}
+		/* FAB giữ bottom 7.25rem (116px > pagination 2 hàng ~101px) —
+		   hạ 4.25rem sẽ đè lên thanh pagination khi FAB hiện lại giữa trang */
 	}
 
 	/* ── Mobile FULL-SIZE modal (batch7 yêu cầu 1): modal form NCC chiếm trọn
