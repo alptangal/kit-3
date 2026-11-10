@@ -1011,6 +1011,24 @@
 		/* B5: mobile sticky top + shrink khi cuộn (is-scrolled qua scroll listener).
 		   z-500: dưới sidebar overlay (999) — đúng khi sidebar mobile mở. */
 		@media (max-width: 767px) {
+
+			/* Batch 26.1: lấp dải hở nhìn xuyên giữa header và tab-strip khi cuộn
+			   (iPhone Safari 15.1 — :has() chết → fullheight chết → trang cuộn ở
+			   root; dải separator 1px + padding-top 12px của trang giữa 2 khối
+			   trắng không có nền → row trôi qua lộ rõ. ::after kéo nền header xuống
+			   16px che dải hở, đi theo mọi trạng thái co/giãn của header — không phụ
+			   thuộc ResizeObserver/transition. pointer-events:none để tap xuyên qua
+			   tới tab-strip. Chỉ mobile — desktop sticky đã kín (header z-500 đè). */
+			&::after {
+				content: '';
+				position: absolute;
+				top: 100%;
+				left: 0;
+				right: 0;
+				height: 16px;
+				background: var(--background, #fff);
+				pointer-events: none;
+			}
 			position: sticky;
 			top: 0;
 			z-index: 500;
