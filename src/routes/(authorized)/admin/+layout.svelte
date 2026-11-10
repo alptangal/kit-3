@@ -32,31 +32,60 @@
 	// mobile zero padding). JS class thay :has() — chết trên iOS Safari 15.1.
 	let atBottom = $state(false);
 
+	// Batch 26.2: setVars tách khỏi $effect để tái sử dụng — ResizeObserver trên
+	// Safari 15.1 KHÔNG bắn khi .admin-inset-header co qua class transition
+	// (padding-block 200ms) → --admin-tab-top stale 60px trong khi header thực
+	// 47.2/36px → tab-strip ghim thấp hơn header, ::after 16px không đủ che
+	// (khe nhìn xuyên). $effect theo dõi isScrolled gọi setVars sau khi
+	// transition 200ms kết thúc → var khớp chiều cao final mọi trình duyệt.
+	const setInsetVars = () => {
+		const inset = insetEl;
+		const headerEl = insetHeaderEl;
+		const h = headerEl?.getBoundingClientRect().height ?? 0;
+		// .admin-filters nằm trong body (page con) — đo khi đã render.
+		const filtersEl = inset?.querySelector<HTMLElement>('.admin-filters');
+		const f = filtersEl?.getBoundingClientRect().height ?? 0;
+		// .admin-header (header trang con) — cho stack sticky desktop.
+		const pageHeaderEl = inset?.querySelector<HTMLElement>('.admin-header');
+		const p = pageHeaderEl?.getBoundingClientRect().height ?? 0;
+		if (!inset) return;
+		inset.style.setProperty('--admin-header-h', `${Math.round(h)}px`);
+		// Batch9: tab-strip trang con (suppliers) sticky phải ghim DƯỚI header —
+		// không dùng --admin-header-h vì trang fullheight zero-hoá var này cho
+		// DataTable sticky (shadow inheritance) → var riêng không bị đè.
+		inset.style.setProperty('--admin-tab-top', `${Math.round(h)}px`);
+		inset.style.setProperty('--admin-filters-h', `${Math.round(f)}px`);
+		inset.style.setProperty('--admin-page-header-h', `${Math.round(p)}px`);
+	};
+
+	// Batch 26.2: isScrolled đổi → rAF loop ~350ms gọi setInsetVars MỖI FRAME:
+	// RO Safari 15.1 không bắn khi header co qua transition 200ms, đo 1 lần lúc
+	// 250ms vẫn lệch giữa transition → bám liên tục đến khi transition xong thì
+	// dừng (var khớp chiều cao final + mọi giá trị trung gian, không flash).
+	let setVarsTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		// đọc isScrolled → dependency; isScrolled false khi chưa mount → bỏ.
+		void isScrolled;
+		if (typeof document === 'undefined' || !insetEl) return;
+		clearTimeout(setVarsTimer);
+		const t0 = performance.now();
+		const tick = () => {
+			setInsetVars();
+			if (performance.now() - t0 < 350) setVarsTimer = setTimeout(() => requestAnimationFrame(tick), 0);
+		};
+		requestAnimationFrame(tick);
+		return () => clearTimeout(setVarsTimer);
+	});
+
 	$effect(() => {
 		if (typeof document === 'undefined' || !insetEl) return;
 		const inset = insetEl;
 		const headerEl = insetHeaderEl;
-		const setVars = () => {
-			const h = headerEl?.getBoundingClientRect().height ?? 0;
-			// .admin-filters nằm trong body (page con) — đo khi đã render.
-			const filtersEl = inset.querySelector<HTMLElement>('.admin-filters');
-			const f = filtersEl?.getBoundingClientRect().height ?? 0;
-			// .admin-header (header trang con) — cho stack sticky desktop.
-			const pageHeaderEl = inset.querySelector<HTMLElement>('.admin-header');
-			const p = pageHeaderEl?.getBoundingClientRect().height ?? 0;
-			inset.style.setProperty('--admin-header-h', `${Math.round(h)}px`);
-			// Batch9: tab-strip trang con (suppliers) sticky phải ghim DƯỚI header —
-			// không dùng --admin-header-h vì trang fullheight zero-hoá var này cho
-			// DataTable sticky (shadow inheritance) → var riêng không bị đè.
-			inset.style.setProperty('--admin-tab-top', `${Math.round(h)}px`);
-			inset.style.setProperty('--admin-filters-h', `${Math.round(f)}px`);
-			inset.style.setProperty('--admin-page-header-h', `${Math.round(p)}px`);
-		};
-		setVars();
-		const ro = new ResizeObserver(setVars);
+		setInsetVars();
+		const ro = new ResizeObserver(setInsetVars);
 		ro.observe(headerEl ?? inset);
 		// MutationObserver: page con mount/unmount (SvelteKit navigate) → đo lại.
-		const mo = new MutationObserver(setVars);
+		const mo = new MutationObserver(setInsetVars);
 		mo.observe(inset, { childList: true, subtree: true });
 		// ResizeObserver .admin-header (page con) — height đổi khi is-scrolled
 		// shrink (subtitle collapse) → theo sát để sticky offset đúng. Re-attach
@@ -67,7 +96,7 @@
 			const ph = inset.querySelector<HTMLElement>('.admin-header');
 			if (ph && ph !== pageRoEl) {
 				pageRo?.disconnect();
-				pageRo = new ResizeObserver(setVars);
+				pageRo = new ResizeObserver(setInsetVars);
 				pageRo.observe(ph);
 				pageRoEl = ph;
 			}
@@ -1012,20 +1041,20 @@
 		   z-500: dưới sidebar overlay (999) — đúng khi sidebar mobile mở. */
 		@media (max-width: 767px) {
 
-			/* Batch 26.1: lấp dải hở nhìn xuyên giữa header và tab-strip khi cuộn
+			/* Batch 26.1: lấp đường chỉ separator giữa header và tab-strip khi cuộn
 			   (iPhone Safari 15.1 — :has() chết → fullheight chết → trang cuộn ở
-			   root; dải separator 1px + padding-top 12px của trang giữa 2 khối
-			   trắng không có nền → row trôi qua lộ rõ. ::after kéo nền header xuống
-			   16px che dải hở, đi theo mọi trạng thái co/giãn của header — không phụ
-			   thuộc ResizeObserver/transition. pointer-events:none để tap xuyên qua
-			   tới tab-strip. Chỉ mobile — desktop sticky đã kín (header z-500 đè). */
+			   root). ::after kéo nền header xuống 4px che đúng đường chỉ 1px —
+			   Batch 26.2 đã đẩy --admin-tab-top bám transition bằng rAF loop nên
+			   strip ghim sát đáy header, không còn dải hở cần 16px (16px cũ đè lên
+			   đỉnh chữ tab). pointer-events:none để tap xuyên tới tab-strip. Chỉ
+			   mobile — desktop sticky đã kín (header z-500 đè). */
 			&::after {
 				content: '';
 				position: absolute;
 				top: 100%;
 				left: 0;
 				right: 0;
-				height: 16px;
+				height: 4px;
 				background: var(--background, #fff);
 				pointer-events: none;
 			}

@@ -637,7 +637,14 @@
 			const top = sc ? sc.scrollTop : window.scrollY;
 			const viewH = sc ? sc.clientHeight : window.innerHeight;
 			const totalH = sc ? sc.scrollHeight : document.documentElement.scrollHeight;
-			markScrollActive(top, totalH - viewH);
+			// Batch 26.2 (m02698): đường ROOT-scroll (iOS ≤15.3 — :has() chết → wrap
+			// không tự cuộn, trang cuộn ở root Container) KHÔNG kích hoạt bộ
+			// ẩn-đang-cuộn (tab-strip/tools/pagination/FAB): nó được thiết kế cho
+			// TABLE-scroll (Safari ≥15.4). Trên 15.1 cả trang cuộn → tab switch ẩn
+			// theo mọi cú vuốt = "mất tab switch" (user xác nhận 15.8.2 — đường
+			// wrap — hành vi đúng). Reset cứng đề phòng scrollActive kẹt khi wrap
+			// đổi khả năng cuộn giữa chừng.
+			scrollActive = false;
 			tableScrolled = top > 8;
 			wrapAtBottom = top + viewH >= totalH - 4;
 			if (wrapAtBottom && !paginationPopped) {
