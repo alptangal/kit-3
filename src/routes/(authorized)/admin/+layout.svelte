@@ -27,9 +27,6 @@
 	let insetHeaderEl: HTMLDivElement | undefined = $state(undefined);
 	let insetEl: HTMLDivElement | undefined = $state(undefined);
 	let isScrolled: boolean = $state(false);
-	// Batch8 mục 1: true khi ĐANG cuộn (scroll event gần đây), dừng 200ms → false —
-	// co padding-block header theo hành động cuộn, không theo vị trí.
-	let scrollActive: boolean = $state(false);
 	// Batch24 mục 2: user cuộn tới đáy trang (ngưỡng 4px, chỉ khi nội dung
 	// thực sự tràn) → CSS xoá khoảng trống header/body (min-height: 0,
 	// mobile zero padding). JS class thay :has() — chết trên iOS Safari 15.1.
@@ -104,7 +101,7 @@
 			while (cur && cur !== document.body) {
 				// Batch8: phải kèm điều kiện scrollable — element overflow:auto KHÔNG
 				// cuộn được (vd root Container khi nội dung vừa màn) nhận scroll event
-				// từ element khác → listener gắn nhầm chỗ, scrollActive không bắn.
+				// từ element khác → listener gắn nhầm chỗ, isScrolled không cập nhật.
 				const ov = getComputedStyle(cur).overflowY;
 				if ((ov === 'auto' || ov === 'scroll') && cur.scrollHeight > cur.clientHeight + 4) return cur;
 				cur = cur.parentElement;
@@ -112,16 +109,10 @@
 			return document.scrollingElement as HTMLElement | undefined;
 		};
 		let raf = 0;
-		// Batch8 mục 1: scroll-ACTIVE theo HÀNH ĐỘNG — đang cuộn co padding-block
-		// header, dừng 200ms trả lại như ban đầu (kể cả ở giữa trang).
-		let scrollActiveTimer: ReturnType<typeof setTimeout>;
 		const onScroll = (event?: Event) => {
 			if (raf) return;
 			raf = requestAnimationFrame(() => {
 				raf = 0;
-				scrollActive = true;
-				clearTimeout(scrollActiveTimer);
-				scrollActiveTimer = setTimeout(() => (scrollActive = false), 200);
 				// Batch9: event có thể từ .admin-table-wrap (bảng tự cuộn) — vị trí
 				// TRANG không đổi khi bảng cuộn → isScrolled header chỉ tính từ
 				// scroll container trang (root Container/window), không từ wrap.
@@ -168,7 +159,6 @@
 			window.removeEventListener('scroll', onScroll, { capture: true });
 			atBottomRo?.disconnect();
 			if (raf) cancelAnimationFrame(raf);
-			clearTimeout(scrollActiveTimer);
 		};
 	});
 
@@ -848,8 +838,6 @@
 			<div
 				class="admin-inset-header"
 				class:is-scrolled={isScrolled && isMobileLayout}
-				class:scroll-active={scrollActive && isMobileLayout}
-				class:scroll-hidden={scrollActive && isMobileLayout}
 				bind:this={insetHeaderEl}
 			>
 				<!-- Mobile: nút mở sidebar (aside offcanvas ẩn → trigger trong
@@ -1007,10 +995,9 @@
 			transition: padding 200ms ease, box-shadow 200ms ease;
 
 			/* Batch 11 (yêu cầu 2): co padding khi cuộn CHỈ mobile — PC giữ
-			   padding tĩnh (is-scrolled/scroll-active không set trên PC). */
+			   padding tĩnh (is-scrolled không set trên PC). */
 
-			&.is-scrolled,
-			&.scroll-active {
+			&.is-scrolled {
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}
 		}
@@ -1029,8 +1016,7 @@
 			z-index: 500;
 			transition: padding 200ms ease, box-shadow 200ms ease;
 
-			&.is-scrolled,
-			&.scroll-active {
+			&.is-scrolled {
 				padding-block: 0.35rem;
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}
@@ -1188,21 +1174,9 @@
 		}
 	}
 
-	/* Batch8 (user m05611): BỎ cơ chế ẩn header cuộn sâu — breadcrumb phải
-	   luôn hiển thị. Batch9 (user m05696): ĐANG cuộn (scroll-active) → ẨN
-	   breadcrumb tạm thời (tăng rows hiển thị), DỪNG cuộn 200ms → trả lại.
-	   Chỉ áp mobile — desktop giữ sticky stack luôn thấy.
-	   Batch9b (m06345): display:none CO flow height → khi trả lại nội dung
-	   dưới đáy bị đẩy/xô (row cuối che mất không với tới được). Đổi OPACITY:
-	   giữ nguyên khối trong flow (height không đổi) → không xô layout, chỉ
-	   mờ dần trong lúc cuộn. pointer-events none chặn thao tác nhầm. */
-	@media (max-width: 767px) {
-		.admin-inset-header.scroll-hidden {
-			opacity: 0;
-			pointer-events: none;
-			transition: opacity 150ms ease;
-		}
-	}
+	/* Batch26 (m01559): BỎ HẲN cơ chế ẩn breadcrumb khi cuộn (scroll-hidden/scroll-active — Batch9 m05696):
+	   opacity 0↔1 theo tick 200ms gây chớp nháy vùng breadcrumb trên iOS 15.1 (WebKit cũ transition kém).
+	   Breadcrumb LUÔN hiển thị (Batch8 m05611); header vẫn co theo vị trí cuộn (is-scrolled). */
 
 	.admin-inset-body {
 		/* Padding do .admin-page trên từng trang đảm nhiệm (chuẩn 1.5rem,
