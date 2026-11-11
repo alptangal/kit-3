@@ -129,7 +129,10 @@
 	const tooltipCtx = getTooltipCtx();
 	// ARIA linkage (WCAG 4.1.2): content có id cố định, trigger nhận aria-describedby
 	// khi tooltip hiển thị — cleanup xoá attribute khi effect re-run/unmount.
-	const contentId = `tooltip-content-${crypto.randomUUID()}`;
+	// iOS 15.1 không có crypto.randomUUID — fallback như toast/index.ts
+	const contentId = `tooltip-content-${
+		typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).slice(2)
+	}`;
 	$effect(() => {
 		const trigger = tooltipCtx?.ref;
 		if (!(trigger instanceof HTMLElement)) return;
