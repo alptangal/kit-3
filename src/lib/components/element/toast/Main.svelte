@@ -169,12 +169,14 @@
 	@use '$styles/sizes.scss';
 	@use '_styles.scss';
 	.toast-root {
-		/* Nổi trên sticky stack admin (pagination/filters 390, header 400) nhưng
-		   dưới sidebar overlay 999 + modal 10000 + tooltip 10500. position:fixed
-		   neo viewport: admin/demo cuộn bằng Container nội bộ (body không cuộn)
-		   nên absolute-on-body sẽ trôi theo document khi cuộn. */
+		/* Nổi trên MỌI overlay: sticky admin (pagination/filters 390, header 400),
+		   sidebar 999-1001, modal 10000/10001, AlertDialog 10002, tooltip 10500.
+		   Toast là feedback ngắn hạn toàn cục — phải luôn đọc được ngay cả khi modal
+		   mở (báo created/updated/deleted). position:fixed neo viewport: admin/demo
+		   cuộn bằng Container nội bộ (body không cuộn) nên absolute-on-body sẽ trôi
+		   theo document khi cuộn. */
 		position: fixed;
-		z-index: 900;
+		z-index: 10501;
 		&[data-position='bottom'],
 		&[data-position='top'] {
 			transform: translateX(-50%);

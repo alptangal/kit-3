@@ -15,6 +15,7 @@
 	import { page as pageState } from '$app/state';
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
+	import type { MouseEvents } from '$components/interface';
 	import { queryMatchesText, matchSegments, type TextSegment } from '$modules/highlight';
 	import {
 		readDraft,
@@ -37,6 +38,9 @@
 	import Head from './Head.svelte';
 	import Body from './Body.svelte';
 	import Pagination from './Pagination.svelte';
+	// Card-mode checkbox badge (Batch 28): cùng Checkbox Body đang dùng — import
+	// trực tiếp file (không qua barrel) như Body để tránh circular import.
+	import Checkbox from '$components/form/checkbox/Main.svelte';
 	import type {
 		DataTableColumn,
 		DataTableConfigs,
@@ -561,6 +565,27 @@
 		if (mobileTapModeDerived === 'none') return;
 		handleRowClick(row, index);
 	};
+
+	// Card-mode checkbox badge (Batch 28): cùng shape events với Body.rowCheckEvents —
+	// click/space/enter toggle chọn. onCardTap đã guard selector
+	// `input, button, a, [role="checkbox"], [data-no-tap]` nên tap vào badge KHÔNG
+	// bắn onRowClick (không mở modal edit).
+	const cardCheckEvents = (rowId: string) => [
+		{
+			events: {
+				click: () => toggleRow(rowId),
+				// Signature đúng EventCompact (MouseEvents là interface object) —
+				// giống Body.rowCheckEvents:167.
+				keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => {
+					const key = (e as KeyboardEvent | undefined)?.key;
+					if (key === ' ' || key === 'Enter') {
+						e?.preventDefault();
+						toggleRow(rowId);
+					}
+				}
+			}
+		}
+	];
 
 	// Text hiển thị cell card (render tùy + Date yyyy-mm-dd giờ địa phương).
 	const cellTextOf = (
@@ -1964,6 +1989,7 @@
 					<div
 						class="datatable-card"
 						class:alt={striped && ri % 2 === 1}
+						class:selected={selectableDerived && isSelected(rowId)}
 						data-row-id={rowId}
 						role="button"
 						tabindex="0"
@@ -1975,6 +2001,20 @@
 							}
 						}}
 					>
+						{#if selectableDerived}
+							<!-- Batch 28: badge checkbox góc trên-trái — edit/delete multiple trên
+							     mobile card view. Badge absolute, đặt TRƯỚC mọi field; tap badge do
+							     onCardTap guard [role=checkbox] nên không mở modal edit. -->
+							<span class="datatable-card-check" data-no-tap>
+								<Checkbox
+									checked={isSelected(rowId)}
+									size={resolvedSize}
+									color="primary"
+									aria-label={configs.rowSelectText.replace('{index}', String(indexOffsetDerived + ri + 1))}
+									events={cardCheckEvents(rowId)}
+								/>
+							</span>
+						{/if}
 						{#if titleCol}
 							{@const value = getCellValue(row, titleCol)}
 							{@const status = titleCol.status ? titleCol.status(value, row) : undefined}
@@ -2347,6 +2387,10 @@
 		border: 1px solid var(--content3, hsl(240 5.88% 90%));
 		border-radius: 0.5rem;
 		cursor: var(--cursor-interactive);
+		/* Batch 28: anchor cho badge checkbox .datatable-card-check (absolute
+		   góc trên-trái) — card gốc không cần biết badge có render hay không,
+		   padding-left chỉ áp khi badge tồn tại (rule .has-card-check dưới). */
+		position: relative;
 
 		&.alt {
 			background: color-mix(in srgb, var(--content2, hsl(240 4.76% 95.88%)) 45%, transparent);
@@ -2356,6 +2400,39 @@
 			outline: 2px solid var(--color-indigo-500, hsl(241 100% 68.6%));
 			outline-offset: 2px;
 		}
+
+		/* Batch 28: trạng thái đang chọn — viền primary + nền tint nhẹ (cùng
+		   ngôn ngữ .datatable-row.selected của table mode). */
+		&.selected {
+			border-color: var(--color-indigo-500, hsl(241 100% 68.6%));
+			background: color-mix(in srgb, var(--color-indigo-500, hsl(241 100% 68.6%)) 6%, var(--content1, #fff));
+		}
+	}
+
+	/* Batch 28: badge checkbox góc trên-trái của card (edit/delete multiple trên
+	   mobile). Chỉ chiếm chỗ khi badge thật sự render — anchor qua class con
+	   .datatable-card-check .input-root (Checkbox render .input-root). */
+	.datatable-card-check {
+		position: absolute;
+		top: 0.5rem;
+		left: 0.5rem;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		/* hit-target chạm ≥ 2.5rem quanh checkbox nhỏ */
+		min-width: 2.5rem;
+		min-height: 2.5rem;
+		margin: -0.5rem;
+		cursor: var(--cursor-interactive);
+	}
+
+	/* Card có badge → chừa lề trái cho nội dung (title/field không chui dưới badge).
+	   .datatable-card-check + .datatable-card-title = badge là con đầu, title ngay sau
+	   (tránh :has() — iOS 15.1). */
+	.datatable-card-check + .datatable-card-title,
+	.datatable-card-check ~ .datatable-card-field {
+		margin-left: 2.25rem;
 	}
 
 	.datatable-card-title {
