@@ -396,7 +396,8 @@
 			selected: { vi: 'Đã chọn {count}', en: '{count} selected' },
 			// Batch 28b: chọn hết các dòng khớp filter (fetch tất cả qua API) —
 			// chỉ hiện khi >2 dòng đã chọn và chưa chọn hết.
-			selectAll: { vi: 'Chọn tất cả', en: 'Select all' }
+			selectAll: { vi: 'Chọn tất cả', en: 'Select all' },
+			uncheckAll: { vi: 'Bỏ chọn tất cả', en: 'Uncheck all' }
 		},
 		suggest: {
 			title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' }
@@ -1234,9 +1235,15 @@
 		allFilteredSelected = false;
 	}
 
-	// Bulk count hiển thị: khi select-all toàn bộ kết quả filter → hiện TOTAL
-	// (fetch ids bị thiếu 1 số row → count thật lệch; user chốt hiển thị total).
-	const bulkDisplayCount = $derived(allFilteredSelected && suppliersTotal > selectedIds.length ? suppliersTotal : selectedIds.length);
+	// Batch 28c: count = số id THẬT đã chọn — select-all fetch ĐỦ toàn bộ ids
+	// nên selectedIds.length luôn khớp số row chọn (deselect 1 row → count giảm ngay).
+	const bulkDisplayCount = $derived(selectedIds.length);
+
+	// Batch 28c: user deselect bớt row sau select-all → drop flag để nút
+	// Uncheck all đổi về Select all (effect tự chặn nên không loop).
+	$effect(() => {
+		if (allFilteredSelected && selectedIds.length < suppliersTotal) allFilteredSelected = false;
+	});
 
 	// ── Modal tạo PO ──
 	let poModalDisplay = $state(false);
@@ -2732,12 +2739,19 @@
 							storm + mất từ khoá). Bulk-bar GIỮ khi có selection. -->
 						{#if selectedIds.length > 0}
 							<!-- bulk-bar khi chọn ≥1 row -->
+							<div class="bulk-row" data-test="suppliers-bulk-row">
 							<div class="bulk-bar" data-test="suppliers-bulk-bar">
 								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(bulkDisplayCount))}</span>
-								{#if selectedIds.length > 2 && !allFilteredSelected}
-									<!-- Batch 28b: chọn nhiều dòng (>2) → offer chọn hết các dòng khớp filter
-									   (fetch toàn bộ qua onSelectAllFiltered). Ẩn khi đã chọn hết.
+								{#if allFilteredSelected}
+									<!-- Batch 28c: đã chọn hết kết quả filter → đổi thành Uncheck all
+									   (clear sync local — không cần loading/spinner). -->
+									<Button color="default" variant="soft" size="sm" onClick={clearSuppliersSelection} data-test="suppliers-bulk-uncheck-all">
+										{pageContents.bulk.uncheckAll[lang]}
+									</Button>
+									<!-- Batch 28b: chưa chọn hết + >2 dòng → offer chọn hết các dòng khớp
+									   filter (fetch toàn bộ qua onSelectAllFiltered).
 									   busy guard: selectAllBusy → nút loading/spinner. -->
+								{:else if selectedIds.length > 2}
 									<Button color="default" variant="soft" size="sm" loading={selectAllBusy} onClick={selectAllFilteredSuppliers} data-test="suppliers-bulk-select-all">
 										{pageContents.bulk.selectAll[lang]}
 									</Button>
@@ -2751,6 +2765,7 @@
 								<Button color="default" variant="ghost" size="sm" onClick={clearSuppliersSelection}>
 									<Icon icon={iconify['close-rounded']} size="sm" />
 								</Button>
+							</div>
 							</div>
 						{/if}
 							<div class="admin-search" data-suggest>
@@ -5116,6 +5131,12 @@
 		align-items: center;
 		gap: 0.5rem;
 		flex-wrap: wrap;
+	}
+
+	@media (max-width: 767px) {
+		.bulk-row {
+			flex-basis: 100%;
+		}
 	}
 
 	.bulk-count {

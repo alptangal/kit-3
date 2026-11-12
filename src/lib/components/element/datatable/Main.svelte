@@ -15,7 +15,6 @@
 	import { page as pageState } from '$app/state';
 	import { styleSynced } from '$modules';
 	import { handleEvents } from '$modules/_attachments';
-	import type { MouseEvents } from '$components/interface';
 	import { queryMatchesText, matchSegments, type TextSegment } from '$modules/highlight';
 	import {
 		readDraft,
@@ -565,27 +564,6 @@
 		if (mobileTapModeDerived === 'none') return;
 		handleRowClick(row, index);
 	};
-
-	// Card-mode checkbox badge (Batch 28): cùng shape events với Body.rowCheckEvents —
-	// click/space/enter toggle chọn. onCardTap đã guard selector
-	// `input, button, a, [role="checkbox"], [data-no-tap]` nên tap vào badge KHÔNG
-	// bắn onRowClick (không mở modal edit).
-	const cardCheckEvents = (rowId: string) => [
-		{
-			events: {
-				click: () => toggleRow(rowId),
-				// Signature đúng EventCompact (MouseEvents là interface object) —
-				// giống Body.rowCheckEvents:167.
-				keydown: (e?: Event | MouseEvents | TouchEvent | KeyboardEvent) => {
-					const key = (e as KeyboardEvent | undefined)?.key;
-					if (key === ' ' || key === 'Enter') {
-						e?.preventDefault();
-						toggleRow(rowId);
-					}
-				}
-			}
-		}
-	];
 
 	// Text hiển thị cell card (render tùy + Date yyyy-mm-dd giờ địa phương).
 	const cellTextOf = (
@@ -2002,17 +1980,30 @@
 						}}
 					>
 						{#if selectableDerived}
-							<!-- Batch 28: badge checkbox góc trên-trái — edit/delete multiple trên
-							     mobile card view. Badge absolute, đặt TRƯỚC mọi field; tap badge do
-							     onCardTap guard [role=checkbox] nên không mở modal edit. -->
-							<span class="datatable-card-check" data-no-tap>
-								<Checkbox
-									checked={isSelected(rowId)}
-									size={resolvedSize}
-									color="primary"
-									aria-label={configs.rowSelectText.replace('{index}', String(indexOffsetDerived + ri + 1))}
-									events={cardCheckEvents(rowId)}
-								/>
+							<!-- Batch 28c: badge STT/checkbox góc trên-trái — chưa chọn hiện #{STT},
+							     đã chọn thành checkbox. Tap vùng badge toggle chọn (onCardTap guard
+							     [data-no-tap] nên không mở modal edit). -->
+							<span
+								class="datatable-card-check"
+								class:checked={isSelected(rowId)}
+								data-no-tap
+								role="checkbox"
+								tabindex="0"
+								aria-checked={isSelected(rowId) ? 'true' : 'false'}
+								aria-label={configs.rowSelectText.replace('{index}', String(indexOffsetDerived + ri + 1))}
+								onclick={() => toggleRow(rowId)}
+								onkeydown={(e) => {
+									if (e.key === ' ' || e.key === 'Enter') {
+										e.preventDefault();
+										toggleRow(rowId);
+									}
+								}}
+							>
+								{#if isSelected(rowId)}
+									<span aria-hidden="true"><Checkbox checked size={resolvedSize} color="primary" /></span>
+								{:else}
+									<span class="datatable-card-index">#{rowIndexText(ri)}</span>
+								{/if}
 							</span>
 						{/if}
 						{#if titleCol}
@@ -2409,7 +2400,7 @@
 		}
 	}
 
-	/* Batch 28: badge checkbox góc trên-trái của card (edit/delete multiple trên
+	/* Batch 28c: badge STT/checkbox góc trên-trái của card (edit/delete multiple trên
 	   mobile). Chỉ chiếm chỗ khi badge thật sự render — anchor qua class con
 	   .datatable-card-check .input-root (Checkbox render .input-root). */
 	.datatable-card-check {
@@ -2425,6 +2416,14 @@
 		min-height: 2.5rem;
 		margin: -0.5rem;
 		cursor: var(--cursor-interactive);
+	}
+
+	/* Batch 28c: STT hiển thị trong badge khi chưa chọn — tabular-nums thẳng cột. */
+	.datatable-card-check .datatable-card-index {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--muted, #71717a);
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* Card có badge → chừa lề trái cho nội dung (title/field không chui dưới badge).
