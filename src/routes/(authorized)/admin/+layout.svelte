@@ -161,7 +161,11 @@
 					const sh = src.scrollHeight;
 					const ch = src.clientHeight;
 					const st = src.scrollTop;
-					atBottom = sh > ch + 4 && st + ch >= sh - 4;
+					// B29 (m06293) hysteresis: pagination mobile về flow (relative) tại đáy
+					// làm scrollHeight tăng ~chiều cao footer (~101px) → điều kiện 4px quay
+					// false → fixed lại → sh giảm → true… flicker vô hạn. Bật tại cách đáy
+					// ≤4px, chỉ tắt khi đã cuộn lên quá 8rem (128px > footer 2 hàng).
+					atBottom = sh > ch + 4 && (atBottom ? st + ch >= sh - 128 : st + ch >= sh - 4);
 				}
 			});
 		};
@@ -1218,6 +1222,14 @@
 			bottom: 0;
 			z-index: 400;
 			background: var(--background, #fff);
+		}
+
+		/* B29 (m06293): đã cuộn tới đáy (class .at-bottom — B24) → pagination về
+		   flow (relative) thay vì dính: fixed/sticky đè row cuối. Rule thắng rule
+		   fixed B25 của trang (3 classes > 2). Desktop giữ sticky (đã trong flow,
+		   không bao giờ che). */
+		.admin-inset.at-bottom :global(.admin-pagination) {
+			position: relative;
 		}
 	}
 
