@@ -393,7 +393,10 @@
 			cancel: { vi: 'Huỷ', en: 'Cancel' },
 			copy: { vi: 'Copy', en: 'Copy' },
 			delete: { vi: 'Xoá', en: 'Delete' },
-			selected: { vi: 'Đã chọn {count}', en: '{count} selected' }
+			selected: { vi: 'Đã chọn {count}', en: '{count} selected' },
+			// Batch 28b: chọn hết các dòng khớp filter (fetch tất cả qua API) —
+			// chỉ hiện khi >2 dòng đã chọn và chưa chọn hết.
+			selectAll: { vi: 'Chọn tất cả', en: 'Select all' }
 		},
 		suggest: {
 			title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' }
@@ -2731,6 +2734,14 @@
 							<!-- bulk-bar khi chọn ≥1 row -->
 							<div class="bulk-bar" data-test="suppliers-bulk-bar">
 								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(bulkDisplayCount))}</span>
+								{#if selectedIds.length > 2 && !allFilteredSelected}
+									<!-- Batch 28b: chọn nhiều dòng (>2) → offer chọn hết các dòng khớp filter
+									   (fetch toàn bộ qua onSelectAllFiltered). Ẩn khi đã chọn hết.
+									   busy guard: selectAllBusy → nút loading/spinner. -->
+									<Button color="default" variant="soft" size="sm" loading={selectAllBusy} onClick={selectAllFilteredSuppliers} data-test="suppliers-bulk-select-all">
+										{pageContents.bulk.selectAll[lang]}
+									</Button>
+								{/if}
 								<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected}>
 									{pageContents.bulk.copy[lang]}
 								</Button>
