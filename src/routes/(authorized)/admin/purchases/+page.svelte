@@ -4733,7 +4733,7 @@
 	   pagination) — nội dung chiếm tối đa viewport. ── */
 	.admin-page--fullheight.at-bottom {
 		@media (max-width: 767px) {
-			padding: 0;
+			padding-block: 0;
 		}
 	}
 

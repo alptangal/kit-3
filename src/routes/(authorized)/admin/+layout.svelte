@@ -1230,6 +1230,16 @@
 		   không bao giờ che). */
 		.admin-inset.at-bottom :global(.admin-pagination) {
 			position: relative;
+			/* B30 (m06910): giữ nguyên khung giống trạng thái fixed — full-bleed bù
+			   padding inline 0.75rem của .admin-page--fullheight (suppliers giữ
+			   inline khi at-bottom; purchases đổi padding:0 → padding-block:0),
+			   border/padding nội tại giống rule fixed B25 để bố cục Rows/page-controls
+			   không sắp xếp lại khi đổi fixed↔relative. */
+			margin-inline: -0.75rem;
+			padding: 0.5rem 0.75rem 0.75rem;
+			padding-right: 4.75rem;
+			background: var(--background, #fff);
+			border-top: 1px solid var(--default-300);
 		}
 	}
 
