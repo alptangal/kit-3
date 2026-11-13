@@ -2527,6 +2527,34 @@
 	// BẪY TS: onMount async trả `Promise<() => void>` — cleanup trong callback
 	// async KHÔNG hợp lệ (Svelte chỉ đọc return đồng bộ) → tách listener sync
 	// onMount riêng; async init dùng onMount(async) thứ hai không return gì.
+	// B31 (m06998-3): swipe trái/phải đổi tab suppliers ↔ purchase-orders.
+	// Chỉ mobile + gesture ngang rõ (|dx|≥56, |dy|≤32, ≤600ms) để không nuốt scroll dọc
+	// hay tap card; bỏ qua khi bắt đầu trên control (input/select/popover).
+	let pageEl: HTMLElement | undefined;
+	let touchStartX = 0;
+	let touchStartY = 0;
+	let touchStartT = 0;
+	function onTouchStart(e: TouchEvent) {
+		if (!isMobile || e.touches.length !== 1) return;
+		const t = e.target as HTMLElement | null;
+		if (t?.closest?.('input, textarea, select, .suggest-popover, .select-trigger, .mobile-filter-popover')) return;
+		touchStartX = e.touches[0].clientX;
+		touchStartY = e.touches[0].clientY;
+		touchStartT = Date.now();
+	}
+	function onTouchEnd(e: TouchEvent) {
+		if (!isMobile || !touchStartT) return;
+		const t = e.changedTouches[0];
+		if (!t) return;
+		const dx = t.clientX - touchStartX;
+		const dy = t.clientY - touchStartY;
+		const dt = Date.now() - touchStartT;
+		touchStartT = 0;
+		if (dt > 600 || Math.abs(dx) < 56 || Math.abs(dy) > 32) return;
+		if (dx < 0 && activeTab === 'suppliers') switchTab('purchase-orders');
+		else if (dx > 0 && activeTab === 'purchase-orders') switchTab('suppliers');
+	}
+
 	onMount(() => {
 		// Safari ≤15.3: scroll fallback — root Container (div.w-full.h-full.overflow-auto
 		// ở +layout.svelte) là scroll container thật, window không bắn scroll event.
@@ -2535,8 +2563,13 @@
 		// ngắn (chưa scrollable). Dùng capture trên document — bắt scroll của MỌI
 		// element bất kể mount lúc nào, không cần re-find.
 		document.addEventListener('scroll', onWindowScroll, { capture: true, passive: true });
+		// B31: swipe đổi tab — capture để không bị nuốt bởi scroll container con.
+		pageEl?.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+		pageEl?.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
 		return () => {
 			document.removeEventListener('scroll', onWindowScroll, { capture: true });
+			pageEl?.removeEventListener('touchstart', onTouchStart, { capture: true });
+			pageEl?.removeEventListener('touchend', onTouchEnd, { capture: true });
 		};
 	});
 	onMount(async () => {
@@ -2633,6 +2666,7 @@
 
 <section
 	class="admin-page admin-page--fullheight"
+	bind:this={pageEl}
 	class:at-bottom={wrapAtBottom}
 	// Batch 11 (yêu cầu 2): mọi rule scroll/animate/co-padding CHỈ mobile —
 	// PC giữ nguyên bố cục tĩnh (is-scrolled thu gọn chỉ mobile qua CSS @media).
@@ -2737,37 +2771,6 @@
 						<!-- Batch8 mục 2: đang cuộn trên mobile → ẨN row tools (search/filter/create)
 							bằng CSS display:none — KHÔNG {#if} (unmount Input emit undefined → reload
 							storm + mất từ khoá). Bulk-bar GIỮ khi có selection. -->
-						{#if selectedIds.length > 0}
-							<!-- bulk-bar khi chọn ≥1 row -->
-							<div class="bulk-row" data-test="suppliers-bulk-row">
-							<div class="bulk-bar" data-test="suppliers-bulk-bar">
-								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(bulkDisplayCount))}</span>
-								{#if allFilteredSelected}
-									<!-- Batch 28c: đã chọn hết kết quả filter → đổi thành Uncheck all
-									   (clear sync local — không cần loading/spinner). -->
-									<Button color="default" variant="soft" size="sm" onClick={clearSuppliersSelection} data-test="suppliers-bulk-uncheck-all">
-										{pageContents.bulk.uncheckAll[lang]}
-									</Button>
-									<!-- Batch 28b: chưa chọn hết + >2 dòng → offer chọn hết các dòng khớp
-									   filter (fetch toàn bộ qua onSelectAllFiltered).
-									   busy guard: selectAllBusy → nút loading/spinner. -->
-								{:else if selectedIds.length > 2}
-									<Button color="default" variant="soft" size="sm" loading={selectAllBusy} onClick={selectAllFilteredSuppliers} data-test="suppliers-bulk-select-all">
-										{pageContents.bulk.selectAll[lang]}
-									</Button>
-								{/if}
-								<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected}>
-									{pageContents.bulk.copy[lang]}
-								</Button>
-								<Button color="error" variant="soft" size="sm" onClick={() => { bulkDeleteDisplay = true; }} data-test="suppliers-bulk-delete">
-									{pageContents.bulk.delete[lang]}
-								</Button>
-								<Button color="default" variant="ghost" size="sm" onClick={clearSuppliersSelection}>
-									<Icon icon={iconify['close-rounded']} size="sm" />
-								</Button>
-							</div>
-							</div>
-						{/if}
 							<div class="admin-search" data-suggest>
 								{#if isMobile && !mobileSearchOpen}
 									<!-- mobile 2c: search icon → click mở text field (autofocus);
@@ -2906,6 +2909,38 @@
 									</Button>
 								{/if}
 							</div>
+						{#if selectedIds.length > 0}
+							<!-- bulk-bar khi chọn ≥1 row -->
+							<div class="bulk-row" data-test="suppliers-bulk-row">
+							<div class="bulk-bar" data-test="suppliers-bulk-bar">
+								<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(bulkDisplayCount))}</span>
+								{#if allFilteredSelected}
+									<!-- Batch 28c: đã chọn hết kết quả filter → đổi thành Uncheck all
+									   (clear sync local — không cần loading/spinner). -->
+									<Button color="default" variant="soft" size="sm" onClick={clearSuppliersSelection} data-test="suppliers-bulk-uncheck-all">
+										{pageContents.bulk.uncheckAll[lang]}
+									</Button>
+									<!-- Batch 28b: chưa chọn hết + >2 dòng → offer chọn hết các dòng khớp
+									   filter (fetch toàn bộ qua onSelectAllFiltered).
+									   busy guard: selectAllBusy → nút loading/spinner. -->
+								{:else if selectedIds.length > 2}
+									<Button color="default" variant="soft" size="sm" loading={selectAllBusy} onClick={selectAllFilteredSuppliers} data-test="suppliers-bulk-select-all">
+										{pageContents.bulk.selectAll[lang]}
+									</Button>
+								{/if}
+								<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected}>
+									{pageContents.bulk.copy[lang]}
+								</Button>
+								<Button color="error" variant="soft" size="sm" onClick={() => { bulkDeleteDisplay = true; }} data-test="suppliers-bulk-delete">
+									{pageContents.bulk.delete[lang]}
+								</Button>
+								<Button color="default" variant="ghost" size="sm" onClick={clearSuppliersSelection}>
+									<Icon icon={iconify['close-rounded']} size="sm" />
+								</Button>
+							</div>
+							</div>
+						{/if}
+
 					{/snippet}
 					{#snippet actionsContent(row)}
 						{@const supplier = row as unknown as SupplierRow}
@@ -5101,6 +5136,16 @@
 
 		&:hover {
 			background: var(--default-100);
+		}
+	}
+
+	/* B31 (m06998-2): mobile nút create (Button size-sm 2.75rem) KHÔNG bằng
+	   nút icon search/setting (2.25rem) trong cùng group → thu Button về 2.25rem
+	   CHỈ mobile; khi cuộn caption-collapsed co 1.75rem giữ nguyên. */
+	@media (max-width: 767px) {
+		:global(.datatable-caption-tools .admin-actions-group .button-root) {
+			height: 2.25rem;
+			min-height: 2.25rem;
 		}
 	}
 
