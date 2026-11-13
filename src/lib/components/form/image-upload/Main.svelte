@@ -278,6 +278,7 @@
 	// ── DEFER helpers ──
 	/** Có file chờ upload nào không (badge "chưa tải lên" / guard submit). */
 	const hasPending = $derived(deferEntries.some((en) => !!en.file));
+	const hasDeferWantAvatar = $derived(deferEntries.some((en) => !!en.wantAvatar)); // B32 (m07236): có entry đặt avatar chờ submit
 
 	/** Seed entries từ images (edit mode — open modal). Cha gọi qua bind:this. */
 	function seedFromImages(urls: string[]) {
@@ -647,7 +648,9 @@
 		syncFulls,
 		getUploadPairs,
 		/** Có file chờ upload (cảnh báo "chưa tải lên") */
-		hasPending as hasDeferPending
+		hasPending as hasDeferPending,
+		// B32 (m07236): có entry đặt avatar chờ submit
+		hasDeferWantAvatar
 	};
 
 	/** pairs thumb→original theo images hiện tại (gọi SAU uploadPending). */

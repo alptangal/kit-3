@@ -732,6 +732,8 @@
 		syncFulls: (fulls: string[]) => void;
 		getUploadPairs: () => { thumb: string; original?: string }[];
 		hasDeferPending: boolean;
+		// B32 (m07236): có entry đặt avatar chờ submit
+		hasDeferWantAvatar: boolean;
 	} | undefined>(undefined);
 
 	// ── Batch 15 (m12278-7): name check realtime — name = key nghiệp vụ ──
@@ -2163,7 +2165,7 @@
 	// → Save disable (đồng bộ dirty-guard — cả hai cùng chụp 1 thời điểm).
 	const supplierFormInvalid = $derived(!!validateSupplierForm() || hasDuplicates || supplierNameTaken);
 	let supplierEditBaseline = '';
-	const supplierEditDirty = $derived(supplierEditMode !== 'edit' || JSON.stringify(supplierForm) !== supplierEditBaseline);
+	const supplierEditDirty = $derived(supplierEditMode !== 'edit' || JSON.stringify(supplierForm) !== supplierEditBaseline || !!supplierImageUpload?.hasDeferPending || !!supplierImageUpload?.hasDeferWantAvatar); // B32 (m07236): dirty thêm ảnh pending/wantAvatar
 
 	function buildSupplierPayload() {
 		const t = supplierForm;
@@ -3911,10 +3913,26 @@
 
 <!-- ── Batch 20 (A4): panel phân tích nhập hàng theo NCC (more-menu) ── -->
 {#if supplierAnalyticsDisplay}
-	<Modal bind:display={supplierAnalyticsDisplay} size="sm">
+	<Modal bind:display={supplierAnalyticsDisplay} size="sm" class="supplier-analytics-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header>
-				{pageContents.more.analyticsTitle[lang]}{historySupplierRow?.name ? ` — ${historySupplierRow.name}` : ''}
+				{#if isMobile}
+					<div class="supplier-modal-title">
+						<button
+							type="button"
+							class="supplier-modal-title__label supplier-modal-title__crumb"
+							onclick={() => (supplierAnalyticsDisplay = false)}
+						>
+							{pageContents.title[lang]}
+						</button>
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">
+							{historySupplierRow?.name ?? pageContents.more.analyticsTitle[lang]}
+						</span>
+					</div>
+				{:else}
+					{pageContents.more.analyticsTitle[lang]}{historySupplierRow?.name ? ` — ${historySupplierRow.name}` : ''}
+				{/if}
 			</Modal.Container.Header>
 			<Modal.Container.Body>
 				{#if supplierAnalyticsLoading}
@@ -5543,6 +5561,32 @@
 		/* Batch 18: title chiếm đủ width header (clientWidth cố định, không theo
 		   content) — toggle ẩn item breadcrumb không đổi kích thước container →
 		   ResizeObserver không fire lại vô hạn (ping-pong). */
+		.supplier-modal-title {
+			flex: 1 1 auto;
+		}
+	}
+
+	/* B32 (m07236): modal analytics full-size mobile — copy batch7 block với
+	   class riêng .supplier-analytics-modal-root (giữ block .supplier-modal-root
+	   nguyên vẹn; desktop modal vẫn size sm giữa màn hình). */
+	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+		:global(.modal-root.supplier-analytics-modal-root) {
+			padding: 0;
+			align-items: stretch;
+		}
+		:global(.supplier-analytics-modal-root .modal-container-root) {
+			position: fixed;
+			inset: 0;
+			width: 100% !important; /* thắng .size-sm — scoped CSS load sau page CSS */
+			max-width: none;
+			max-height: none;
+			border-radius: 0;
+			margin: 0;
+		}
+		:global(.supplier-analytics-modal-root .modal-header-root) {
+			padding-block: 0.5rem;
+			justify-content: flex-start;
+		}
 		.supplier-modal-title {
 			flex: 1 1 auto;
 		}
