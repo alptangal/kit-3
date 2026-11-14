@@ -3856,7 +3856,20 @@
 							{pageContents.title[lang]}
 						</button>
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-						<span class="supplier-modal-title__name">{historySupplier?.name}</span>
+						<!-- B33.1 (m10792): crumb giữa = quay về modal form detail KHI history mở từ footer
+						     form (historySupplierRow có). Mở thẳng từ list-row (openHistoryModal) thì KHÔNG
+						     có form phía sau ⇒ span tĩnh không bấm được. -->
+						{#if historySupplierRow}
+							<button
+								type="button"
+								class="supplier-modal-title__name supplier-modal-title__crumb"
+								onclick={() => (historyDisplay = false)}
+							>
+								{historySupplier?.name}
+							</button>
+						{:else}
+							<span class="supplier-modal-title__name">{historySupplier?.name}</span>
+						{/if}
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 						<span class="supplier-modal-title__name supplier-modal-title__name--active">
 							{pageContents.historyModal.title[lang]}
@@ -3949,7 +3962,15 @@
 							{pageContents.title[lang]}
 						</button>
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-						<span class="supplier-modal-title__name">{historySupplierRow?.name}</span>
+						<!-- B33.1 (m10792): crumb giữa = quay về modal form detail (form luôn mở phía sau
+						     vì analytics chỉ mở từ footer form). -->
+						<button
+							type="button"
+							class="supplier-modal-title__name supplier-modal-title__crumb"
+							onclick={() => (supplierAnalyticsDisplay = false)}
+						>
+							{historySupplierRow?.name}
+						</button>
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 						<span class="supplier-modal-title__name supplier-modal-title__name--active">
 							{pageContents.more.analyticsTitle[lang]}
