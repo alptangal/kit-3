@@ -4062,7 +4062,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
 	{/if}
 
 	<div class="input-group-actions">
-		{#if value && configs.actionButtons.clear.display}
+			<!-- B33 (m10313): field disabled thì ẩn nút clear — không thể sửa value khi khoá (mirror Select clearButton @679). -->
+		{#if value && clearDisplayDerived && !disabledDerived}
 			<!-- Clear button - LUÔN ưu tiên đứng đầu tiên tính từ cạnh phải sang trái -->
 			<Button
 				bind:this={configs.actionButtons.clear.component}

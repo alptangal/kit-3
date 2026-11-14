@@ -3839,10 +3839,32 @@
 
 <!-- ── Modal lịch sử thay đổi (timeline kiểu git + khôi phục từng entry) ── -->
 {#if historyDisplay}
-	<Modal bind:display={historyDisplay} size="lg">
+	<!-- B33 (m10313): class hook CSS full-size mobile (mirror analytics B32). -->
+	<Modal bind:display={historyDisplay} size="lg" class="supplier-history-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header>
-				{pageContents.historyModal.title[lang]}{historySupplier?.name ? ` — ${historySupplier.name}` : ''}
+				{#if isMobile}
+					<!-- B33 (m10313): breadcrumb 3 cấp Suppliers › Tên NCC › Lịch sử —
+					     tap Suppliers chỉ ĐÓNG history (form phía sau giữ nguyên; history
+					     có thể mở thẳng từ list-row — lúc đó không có form để quay về). -->
+					<div class="supplier-modal-title">
+						<button
+							type="button"
+							class="supplier-modal-title__label supplier-modal-title__crumb"
+							onclick={() => (historyDisplay = false)}
+						>
+							{pageContents.title[lang]}
+						</button>
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name">{historySupplier?.name}</span>
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">
+							{pageContents.historyModal.title[lang]}
+						</span>
+					</div>
+				{:else}
+					{pageContents.historyModal.title[lang]}{historySupplier?.name ? ` — ${historySupplier.name}` : ''}
+				{/if}
 			</Modal.Container.Header>
 			<Modal.Container.Body>
 				{#if historyLoading}
@@ -3917,6 +3939,7 @@
 		<Modal.Container>
 			<Modal.Container.Header>
 				{#if isMobile}
+					<!-- B33 (m10313): breadcrumb 3 cấp Suppliers › Tên NCC › Thống kê (cấu trúc window/modal). -->
 					<div class="supplier-modal-title">
 						<button
 							type="button"
@@ -3926,8 +3949,10 @@
 							{pageContents.title[lang]}
 						</button>
 						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name">{historySupplierRow?.name}</span>
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 						<span class="supplier-modal-title__name supplier-modal-title__name--active">
-							{historySupplierRow?.name ?? pageContents.more.analyticsTitle[lang]}
+							{pageContents.more.analyticsTitle[lang]}
 						</span>
 					</div>
 				{:else}
@@ -5570,20 +5595,23 @@
 	   class riêng .supplier-analytics-modal-root (giữ block .supplier-modal-root
 	   nguyên vẹn; desktop modal vẫn size sm giữa màn hình). */
 	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
-		:global(.modal-root.supplier-analytics-modal-root) {
+		:global(.modal-root.supplier-analytics-modal-root),
+		:global(.modal-root.supplier-history-modal-root) {
 			padding: 0;
 			align-items: stretch;
 		}
-		:global(.supplier-analytics-modal-root .modal-container-root) {
+		:global(.supplier-analytics-modal-root .modal-container-root),
+		:global(.supplier-history-modal-root .modal-container-root) {
 			position: fixed;
 			inset: 0;
-			width: 100% !important; /* thắng .size-sm — scoped CSS load sau page CSS */
+			width: 100% !important; /* thắng .size-sm/.size-lg — scoped CSS load sau page CSS */
 			max-width: none;
 			max-height: none;
 			border-radius: 0;
 			margin: 0;
 		}
-		:global(.supplier-analytics-modal-root .modal-header-root) {
+		:global(.supplier-analytics-modal-root .modal-header-root),
+		:global(.supplier-history-modal-root .modal-header-root) {
 			padding-block: 0.5rem;
 			justify-content: flex-start;
 		}
