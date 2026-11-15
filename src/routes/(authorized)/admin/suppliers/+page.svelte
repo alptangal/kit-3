@@ -746,6 +746,10 @@
 	// Batch 17: name đã qua check (có kết quả) → Input/Description đổi màu
 	// success/error; reset khi name đổi (scheduleNameCheck/checkSupplierNameNow).
 	let supplierNameChecked = $state(false);
+	// B37 (m13545): style success/error chỉ áp sau EVENT validation (blur field
+	// name hoặc submit-attempt) — không tự áp khi mở modal (name === original
+	// từng bật checked=true ngay khi prefill → viền xanh vô lý).
+	let supplierNameTouched = $state(false);
 	let nameCheckTimer: ReturnType<typeof setTimeout> | undefined;
 	// Batch 16 (m13579-3): tên GỐC của row đang sửa — quay về đúng tên gốc thì
 	// không gọi API check (name = chính nó, không phải trùng). Create = ''.
@@ -760,12 +764,11 @@
 			supplierNameChecked = false;
 			return;
 		}
-		// Batch 16: về đúng giá trị gốc (kể cả trim) → coi như không trùng,
-		// bỏ qua API (badge "đang kiểm tra" do scheduleNameCheck bật sẽ tắt ngay).
+		// B37: về đúng giá trị gốc → bỏ qua API, không bật checked (style chờ
+		// event blur/submit). checking bật từ scheduleNameCheck sẽ tắt ở đây.
 		if (name === supplierOriginalName.trim()) {
 			supplierNameTaken = false;
 			supplierNameChecking = false;
-			supplierNameChecked = true;
 			return;
 		}
 		supplierNameChecking = true;
@@ -806,13 +809,14 @@
 			supplierNameTaken = false;
 			supplierNameChecking = false;
 			supplierNameChecked = false;
+			supplierNameTouched = false;
 			return;
 		}
-		// Batch 16: về đúng tên gốc → bỏ qua check luôn (không bật checking)
+		// B37: về đúng tên gốc → bỏ qua API (không trùng), nhưng KHÔNG bật
+		// checked=true nữa — style success chờ event blur/submit của user.
 		if (name === supplierOriginalName.trim()) {
 			supplierNameTaken = false;
 			supplierNameChecking = false;
-			supplierNameChecked = true;
 			return;
 		}
 		supplierNameChecking = true;
@@ -1847,6 +1851,7 @@
 		supplierNameTaken = false;
 		supplierNameChecking = false;
 		supplierNameChecked = false;
+		supplierNameTouched = false;
 		supplierPassive = null;
 		// Draft create có dữ liệu → resume; rỗng → form sạch
 		const raw = readDraftPref(DRAFT_FORM_KEY);
@@ -1938,6 +1943,7 @@
 		supplierNameTaken = false;
 		supplierNameChecking = false;
 		supplierNameChecked = false;
+		supplierNameTouched = false;
 		// Deep-link (5f): giữ ?supplier=<id> trên URL để chia sẻ link đúng NCC
 		if (r._id && page.url.searchParams.get('supplier') !== r._id) {
 			page.url.searchParams.set('supplier', r._id);
@@ -2727,6 +2733,7 @@
 			supplierNameTaken = false;
 			supplierNameChecking = false;
 			supplierNameChecked = false;
+			supplierNameTouched = false;
 			return;
 		}
 		void supplierForm.name;
@@ -3346,9 +3353,10 @@
 										disabled={supplierSubmitting}
 										loading={supplierNameChecking}
 										color={supplierSubmitAttempted && !str(supplierForm.name).trim() ? 'error'
-											: (supplierNameChecked ? (supplierNameTaken ? 'error' : 'success') : undefined)}
-										class={supplierNameTaken ? 'supplier-name-taken' : (supplierNameChecked && !supplierNameChecking ? 'supplier-name-available' : undefined)}
+											: ((supplierNameTouched && supplierNameChecked) ? (supplierNameTaken ? 'error' : 'success') : undefined)}
+										class={supplierNameTaken ? 'supplier-name-taken' : ((supplierNameTouched && supplierNameChecked) && !supplierNameChecking ? 'supplier-name-available' : undefined)}
 										data-test="supplier-form-name"
+										events={[{ events: { blur: { handler() { supplierNameTouched = true; } } } }]}
 									/>
 									<Icon class="field-icon" icon={iconify['storefront-outline-rounded']} />
 								</div>
@@ -3356,11 +3364,11 @@
 									<!-- Batch 21: name rỗng khi submit → Description error chuẩn component -->
 									<Description persistent color="error" class="form-hint error-hint">{pageContents.supplierModal.nameRequired[lang]}</Description>
 								{:else if str(supplierForm.name).trim()}
-									{#if supplierNameChecking}
+									{#if supplierNameTouched && supplierNameChecking}
 										<Description persistent class="form-hint">{pageContents.supplierModal.nameChecking[lang]}</Description>
 									{:else if supplierNameTaken}
 										<Description persistent color="error" class="form-hint error-hint">{pageContents.supplierModal.nameTaken[lang]}</Description>
-									{:else if supplierNameChecked && str(supplierForm.name).trim() !== supplierOriginalName.trim()}
+									{:else if supplierNameTouched && supplierNameChecked && str(supplierForm.name).trim() !== supplierOriginalName.trim()}
 										<!-- Batch 20: ẩn hint xanh khi name === original (mở detail chưa
 										     thao tác → không hiện message validation nào; viền xanh giữ) -->
 										<Description persistent color="success" class="form-hint success-hint">{pageContents.supplierModal.nameAvailable[lang]}</Description>
