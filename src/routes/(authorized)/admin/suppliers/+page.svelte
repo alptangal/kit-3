@@ -505,6 +505,9 @@
 	let suppliersLoadedOnce = $state(false);
 	// Deep-link (batch 11, 5f): ?supplier=<id> mở modal edit đúng NCC — chỉ consume 1 lần/lần load trang.
 	let deepLinkConsumed = $state(false);
+	// B38 (m13838): deep-link modal con — ?modal=history|analytics cạnh ?supplier=
+	// để restore đúng modal sau refresh. Đặt khi mở từ UI, gỡ khi cả 2 modal đóng.
+	let historyParam = $state('');
 
 	let pos = $state<PurchaseOrderRow[]>([]);
 	let posTotal = $state(0);
@@ -918,6 +921,8 @@
 		historyEntries = [];
 		historyDisplay = true;
 		void loadHistory();
+		// B38: ghi ?modal=history để refresh restore lại đúng modal này
+		setModalParam('history');
 	}
 
 	// Footer form modal: nhớ row đang edit để mở history không cần tham số.
@@ -1007,6 +1012,25 @@
 		supplierAnalyticsDisplay = true;
 		supplierAnalyticsData = undefined;
 		void loadSupplierSummary();
+		// B38: ghi ?modal=analytics để refresh restore lại đúng modal này
+		setModalParam('analytics');
+	}
+
+	// B38: helper ghi/gỡ ?modal= trên URL (pattern ?supplier= batch 11 —
+	// replaceState giữ nguyên history entry).
+	function setModalParam(modal: string) {
+		historyParam = modal;
+		if (page.url.searchParams.get('modal') !== modal) {
+			page.url.searchParams.set('modal', modal);
+			history.replaceState(history.state, '', page.url);
+		}
+	}
+	function cleanModalParam() {
+		historyParam = '';
+		if (page.url.searchParams.has('modal')) {
+			page.url.searchParams.delete('modal');
+			history.replaceState(history.state, '', page.url);
+		}
 	}
 
 	// Xoá 1 NCC từ more-menu — TÁI SỬ DỤNG endpoint bulk-delete {ids:[id]}
@@ -1249,9 +1273,17 @@
 			supplierAnalyticsData = undefined;
 			supplierAnalyticsLoading = false;
 		}
+		// B38: cả 2 modal con đã đóng → gỡ ?modal= khỏi URL (param chỉ hợp
+		// khi modal đang mở). historyParam chặn replaceState mỗi lần effect chạy.
+		void historyDisplay;
+		void supplierAnalyticsDisplay;
+		if (!historyDisplay && !supplierAnalyticsDisplay && historyParam) {
+			cleanModalParam();
+		}
 	});
 	// Deep-link (batch 11, 5f): gỡ ?supplier= khỏi URL giữ nguyên query khác
 	function cleanSupplierParam() {
+		cleanModalParam();
 		if (page.url.searchParams.has('supplier')) {
 			page.url.searchParams.delete('supplier');
 			history.replaceState(history.state, '', page.url);
@@ -1626,6 +1658,11 @@
 						if (row) openSupplierEditModal(row as unknown as Record<string, unknown>);
 						// id không còn tồn tại → dọn param tránh mở lại vòng sau
 						else cleanSupplierParam();
+						// B38: restore modal con (history/analytics) sau khi form đã mở —
+						// analytics/history cần supplierEditId/historySupplierRow sẵn sàng.
+						const modalParam = page.url.searchParams.get('modal');
+						if (row && modalParam === 'history') openHistoryFromFooter();
+						else if (row && modalParam === 'analytics') moreOpenAnalytics();
 					}
 				}
 			} else {
