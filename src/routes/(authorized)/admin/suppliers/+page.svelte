@@ -634,6 +634,14 @@
 		return undefined;
 	}
 	function onWindowScroll() {
+		// Batch 39 (m14077): scroll event từ .admin-table-wrap cũng lan lên document
+		// (capture) và gọi hàm này TRƯỚC onTableScroll — 2 hàm dùng CHUNG scrollRaf
+		// nên hàm này chiếm rAF, onTableScroll bị guard return → tableScrolled /
+		// wrapAtBottom / scrollActive KHÔNG bao giờ cập nhật theo table-scroll
+		// (tab-strip/pagination/FAB ẩn-khi-cuộn chết từ Batch 9/25). Guard sớm:
+		// khi wrap tự cuộn được, nhường event cho onTableScroll (listener trên wrap).
+		const wrapNow = wrapEl;
+		if (wrapNow && wrapNow.scrollHeight > wrapNow.clientHeight + 4) return;
 		if (scrollRaf) return;
 		scrollRaf = requestAnimationFrame(() => {
 			scrollRaf = 0;
@@ -644,14 +652,13 @@
 			const top = sc ? sc.scrollTop : window.scrollY;
 			const viewH = sc ? sc.clientHeight : window.innerHeight;
 			const totalH = sc ? sc.scrollHeight : document.documentElement.scrollHeight;
-			// Batch 26.2 (m02698): đường ROOT-scroll (iOS ≤15.3 — :has() chết → wrap
-			// không tự cuộn, trang cuộn ở root Container) KHÔNG kích hoạt bộ
-			// ẩn-đang-cuộn (tab-strip/tools/pagination/FAB): nó được thiết kế cho
-			// TABLE-scroll (Safari ≥15.4). Trên 15.1 cả trang cuộn → tab switch ẩn
-			// theo mọi cú vuốt = "mất tab switch" (user xác nhận 15.8.2 — đường
-			// wrap — hành vi đúng). Reset cứng đề phòng scrollActive kẹt khi wrap
-			// đổi khả năng cuộn giữa chừng.
-			scrollActive = false;
+			// Batch 26.2 (m02698) → Batch39 (m14077): đường ROOT-scroll (iOS ≤15.3 —
+			// :has() chết → wrap không tự cuộn, trang cuộn ở root Container) ĐÃ
+			// kích hoạt bộ ẩn-đang-cuộn (tab-strip/tools/pagination/FAB + breadcrumb
+			// layout B39): markScrollActive có sẵn guard rubber-band iOS + skip
+			// scrollTop không đổi → chỉ cú kéo thật mới ẩn, dừng 200ms trả lại —
+			// không còn "mất tab switch" theo mọi cú vuốt (nguyên nhân B26.2).
+			markScrollActive(top, totalH - viewH);
 			tableScrolled = top > 8;
 			wrapAtBottom = top + viewH >= totalH - 4;
 			if (wrapAtBottom && !paginationPopped) {

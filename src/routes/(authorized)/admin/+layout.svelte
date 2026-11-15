@@ -32,6 +32,16 @@
 	// mobile zero padding). JS class thay :has() — chết trên iOS Safari 15.1.
 	let atBottom = $state(false);
 
+	// Batch39 (m14077): ĐANG cuộn (hành động) → ẩn breadcrumb bar mobile tăng
+	// không gian row — pattern scrollActive trang suppliers (Batch8/9): timer
+	// 200ms trả lại, guard rubber-band iOS + skip event scrollTop không đổi.
+	// Batch26 bỏ ẩn-breadcrumb vì chớp nháy (transition theo tick) — lần này
+	// opacity giữ chỗ trong flow + transition ngắn, tín hiệu từ cùng listener
+	// rAF (không tick riêng) → không tái diễn chớp nháy.
+	let scrollingActive = $state(false);
+	let scrollActiveTimer: ReturnType<typeof setTimeout> | undefined;
+	let lastActiveScrollTop = -1;
+
 	// Batch 26.2: setVars tách khỏi $effect để tái sử dụng — ResizeObserver trên
 	// Safari 15.1 KHÔNG bắn khi .admin-inset-header co qua class transition
 	// (padding-block 200ms) → --admin-tab-top stale 60px trong khi header thực
@@ -150,6 +160,15 @@
 				if (!fromWrap && scrollEl && !scrollEl.classList.contains('admin-table-wrap')) {
 					isScrolled = scrollEl.scrollTop > 80;
 				}
+				// Batch39 (m14077): MỌI cú cuộn (bảng wrap lẫn trang) đều ẩn breadcrumb
+				// 200ms — user cuộn bảng cũng là "đang scroll di chuyển" (yêu cầu gốc);
+				// dừng 200ms → trả lại. markScrollingActive có sẵn guard rubber-band +
+				// skip scrollTop không đổi.
+				{
+					const se = t instanceof HTMLElement ? t : scrollEl;
+					const w = se ?? undefined;
+					if (w) markScrollingActive(w.scrollTop, w.scrollHeight - w.clientHeight);
+				}
 				// Batch24 mục 2: chạm đáy (ngưỡng 4px). Guard sh > ch + 4: nội dung
 				// KHÔNG tràn (trang ngắn) → atBottom = false, giữ min-height 60dvh.
 				// Batch24 fix: atBottom theo TARGET của event (element cuộn thật) —
@@ -169,6 +188,18 @@
 				}
 			});
 		};
+		function markScrollingActive(scrollTop: number, maxScroll: number) {
+			const rubber = scrollTop < 0 || scrollTop > maxScroll;
+			if (!rubber && scrollTop !== lastActiveScrollTop) {
+				scrollingActive = true;
+			}
+			lastActiveScrollTop = scrollTop;
+			clearTimeout(scrollActiveTimer);
+			scrollActiveTimer = setTimeout(() => {
+				scrollingActive = false;
+				lastActiveScrollTop = -1;
+			}, 200);
+		}
 		let scrollEl = findScrollEl();
 		scrollEl?.addEventListener('scroll', onScroll, { passive: true });
 		// Batch9 (m05696): scroll KHÔNG bubble nhưng capture:true trên window bắt
@@ -871,6 +902,9 @@
 			<div
 				class="admin-inset-header"
 				class:is-scrolled={isScrolled && isMobileLayout}
+				// Batch39 (m14077): đang cuộn → ẨN breadcrumb bar (chỉ mobile) tăng
+				// không gian row; dừng 200ms → trả lại (giữ chỗ trong flow).
+				class:is-scrolling={scrollingActive && isMobileLayout}
 				bind:this={insetHeaderEl}
 			>
 				<!-- Mobile: nút mở sidebar (aside offcanvas ẩn → trigger trong
@@ -1070,6 +1104,15 @@
 			&.is-scrolled {
 				padding-block: 0.35rem;
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+			}
+
+			/* Batch39 (m14077): đang cuộn → ẨN breadcrumb bar (mobile) — OPACITY
+			   giữ chỗ trong flow (Batch9b: display:none co flow làm max-scroll
+			   đổi giữa chừng → row cuối che vĩnh viễn). pointer-events:none chặn
+			   tap chìm. Timer 200ms dừng cuộn → trả lại. */
+			&.is-scrolling {
+				opacity: 0;
+				pointer-events: none;
 			}
 		}
 	}
