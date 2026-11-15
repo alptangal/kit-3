@@ -3969,6 +3969,9 @@
 											onclick={() => {
 												hisCrumbMoreOpen = false;
 												historyDisplay = false;
+												// B36 (m13430): tap Suppliers = về datatable — đóng cả form (dirty-guard
+												// hỏi Discard khi dirty) chứ không chỉ history.
+												closeGuard.attemptClose();
 											}}
 										>
 											{pageContents.title[lang]}
@@ -3993,7 +3996,11 @@
 							<button
 								type="button"
 								class="supplier-modal-title__label supplier-modal-title__crumb"
-								onclick={() => (historyDisplay = false)}
+								onclick={() => {
+									// B36 (m13430): về datatable — đóng cả form (dirty-guard).
+									historyDisplay = false;
+									closeGuard.attemptClose();
+								}}
 							>
 								{pageContents.title[lang]}
 							</button>
@@ -4121,6 +4128,9 @@
 											onclick={() => {
 												anaCrumbMoreOpen = false;
 												supplierAnalyticsDisplay = false;
+												// B36 (m13430): tap Suppliers = về datatable — đóng cả form (dirty-guard
+												// hỏi Discard khi dirty) chứ không chỉ analytics.
+												closeGuard.attemptClose();
 											}}
 										>
 											{pageContents.title[lang]}
@@ -4145,7 +4155,11 @@
 							<button
 								type="button"
 								class="supplier-modal-title__label supplier-modal-title__crumb"
-								onclick={() => (supplierAnalyticsDisplay = false)}
+								onclick={() => {
+									// B36 (m13430): về datatable — đóng cả form (dirty-guard).
+									supplierAnalyticsDisplay = false;
+									closeGuard.attemptClose();
+								}}
 							>
 								{pageContents.title[lang]}
 							</button>
