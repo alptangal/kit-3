@@ -3962,7 +3962,7 @@
 							</button>
 							{#if hisCrumbMoreOpen}
 								<div class="supplier-crumb-popover" role="menu">
-									{#if hisCrumbOverflow >= 2}
+									{#if hisCrumbOverflow >= 1}
 										<button
 											type="button"
 											class="supplier-crumb-popover__item"
@@ -3974,7 +3974,7 @@
 											{pageContents.title[lang]}
 										</button>
 									{/if}
-									{#if hisCrumbOverflow >= 2 && historySupplierRow}
+									{#if hisCrumbOverflow >= 2}
 										<button
 											type="button"
 											class="supplier-crumb-popover__item"
@@ -4114,7 +4114,7 @@
 							</button>
 							{#if anaCrumbMoreOpen}
 								<div class="supplier-crumb-popover" role="menu">
-									{#if anaCrumbOverflow >= 2}
+									{#if anaCrumbOverflow >= 1}
 										<button
 											type="button"
 											class="supplier-crumb-popover__item"
@@ -5896,6 +5896,7 @@
 		display: block;
 		width: 100%;
 		padding: 0.45rem 0.6rem;
+		text-align: left; /* B35 (m13229): thống nhất căn trái như address popover */
 		border: 0;
 		border-radius: 0.45rem;
 		background: transparent;
