@@ -854,6 +854,54 @@
 	// Backend: POST /suppliers/history {supplierId} → {entries}; POST /suppliers/restore
 	// {supplierId, historyId} → {supplier}. Entry shape từ suppliers.ts SupplierHistoryEntry.
 	let historyDisplay = $state(false);
+
+	// B34 (m11088): breadcrumb analytics/history dùng cùng cách modal address (Batch 21) —
+	// đo tràn rồi gom TỪNG nấc ĐẦU (Suppliers → tên NCC) vào popover more; còn dư chỗ thì trả
+	// lại. 2 modal không dùng chung state với form (analytics mở KÈM form).
+	let anaCrumbNavEl = $state<HTMLElement | null>(null);
+	let anaCrumbOverflow = $state(0);
+	let anaCrumbMoreOpen = $state(false);
+	let hisCrumbNavEl = $state<HTMLElement | null>(null);
+	let hisCrumbOverflow = $state(0);
+	let hisCrumbMoreOpen = $state(false);
+	async function measureTitleCrumbs(
+		nav: HTMLElement | null,
+		onlyMobile: boolean,
+		getOverflow: () => number,
+		setOverflow: (v: number) => void
+	) {
+		if (!nav || onlyMobile) {
+			if (getOverflow() !== 0) setOverflow(0);
+			return;
+		}
+		// bất kỳ item con scrollWidth > clientWidth+1 = đang bị cắt (như address).
+		// Bỏ qua more-button + popover: popover item nowrap+ellipsis cũng có
+		// scrollWidth > clientWidth nhưng KHÔNG phải nấc breadcrumb trên nav
+		// (address không dính vì popover nằm ngoài nav .address-step__crumbs).
+		const anyTruncated = () => {
+			for (const el of nav.children) {
+				const item = el as HTMLElement;
+				if (item.classList.contains('supplier-modal-title__more') || item.classList.contains('supplier-crumb-popover')) continue;
+				if (item.scrollWidth > item.clientWidth + 1) return true;
+			}
+			return false;
+		};
+		let guard = 0;
+		while (anyTruncated() && guard < 8) {
+			setOverflow(getOverflow() + 1);
+			guard += 1;
+			await tick();
+		}
+		while (getOverflow() > 0 && guard < 16) {
+			setOverflow(getOverflow() - 1);
+			guard += 1;
+			await tick();
+			if (anyTruncated()) {
+				setOverflow(getOverflow() + 1);
+				break;
+			}
+		}
+	}
 	let historyLoading = $state(false);
 	let historyEntries = $state<HistoryEntry[]>([]);
 	let historySupplier: { _id: string; name?: string } | null = $state(null);
@@ -1134,8 +1182,62 @@
 	});
 
 	$effect(() => {
+		// B34: đo tràn breadcrumb analytics/history sau khi modal render (1 frame).
+		void supplierAnalyticsDisplay;
+		void supplierAnalyticsLoading;
+		void historySupplierRow?.name;
+		void isMobile;
+		void lang;
+		const raf = requestAnimationFrame(() => void measureTitleCrumbs(anaCrumbNavEl, !isMobile, () => anaCrumbOverflow, (v) => (anaCrumbOverflow = v)));
+		const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureTitleCrumbs(anaCrumbNavEl, !isMobile, () => anaCrumbOverflow, (v) => (anaCrumbOverflow = v))));
+		if (anaCrumbNavEl) ro.observe(anaCrumbNavEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+
+	$effect(() => {
+		void historyDisplay;
+		void historyLoading;
+		void historySupplier?.name;
+		void isMobile;
+		void lang;
+		const raf = requestAnimationFrame(() => void measureTitleCrumbs(hisCrumbNavEl, !isMobile, () => hisCrumbOverflow, (v) => (hisCrumbOverflow = v)));
+		const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureTitleCrumbs(hisCrumbNavEl, !isMobile, () => hisCrumbOverflow, (v) => (hisCrumbOverflow = v))));
+		if (hisCrumbNavEl) ro.observe(hisCrumbNavEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+
+	$effect(() => {
+		// B34: outside-click đóng popover breadcrumb analytics/history (cơ chế
+		// mousedown như popover form modal — Batch 18 review P3).
+		if (!anaCrumbMoreOpen && !hisCrumbMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (anaCrumbMoreOpen && anaCrumbNavEl && t && anaCrumbNavEl.contains(t)) return;
+			if (hisCrumbMoreOpen && hisCrumbNavEl && t && hisCrumbNavEl.contains(t)) return;
+			anaCrumbMoreOpen = false;
+			hisCrumbMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
+
+	$effect(() => {
 		// Batch 20 (A4): modal đóng → reset more-menu + panel analytics
 		// (element unmount, đo tự hết hiệu lực — chỉ cần reset state).
+		if (!supplierAnalyticsDisplay) {
+			anaCrumbOverflow = 0;
+			anaCrumbMoreOpen = false;
+		}
+		if (!historyDisplay) {
+			hisCrumbOverflow = 0;
+			hisCrumbMoreOpen = false;
+		}
 		if (!supplierModalDisplay) {
 			supplierMoreOpen = false;
 			supplierDeleteDisplay = false;
@@ -3847,30 +3949,75 @@
 					<!-- B33 (m10313): breadcrumb 3 cấp Suppliers › Tên NCC › Lịch sử —
 					     tap Suppliers chỉ ĐÓNG history (form phía sau giữ nguyên; history
 					     có thể mở thẳng từ list-row — lúc đó không có form để quay về). -->
-					<div class="supplier-modal-title">
-						<button
-							type="button"
-							class="supplier-modal-title__label supplier-modal-title__crumb"
-							onclick={() => (historyDisplay = false)}
-						>
-							{pageContents.title[lang]}
-						</button>
-						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-						<!-- B33.1 (m10792): crumb giữa = quay về modal form detail KHI history mở từ footer
-						     form (historySupplierRow có). Mở thẳng từ list-row (openHistoryModal) thì KHÔNG
-						     có form phía sau ⇒ span tĩnh không bấm được. -->
-						{#if historySupplierRow}
+					<div class="supplier-modal-title" bind:this={hisCrumbNavEl}>
+						{#if hisCrumbOverflow > 0}
 							<button
 								type="button"
-								class="supplier-modal-title__name supplier-modal-title__crumb"
+								class="supplier-modal-title__more"
+								aria-label={pageContents.supplierModal.crumbMore[lang]}
+								aria-expanded={hisCrumbMoreOpen}
+								onclick={() => (hisCrumbMoreOpen = !hisCrumbMoreOpen)}
+							>
+								<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+							</button>
+							{#if hisCrumbMoreOpen}
+								<div class="supplier-crumb-popover" role="menu">
+									{#if hisCrumbOverflow >= 2}
+										<button
+											type="button"
+											class="supplier-crumb-popover__item"
+											onclick={() => {
+												hisCrumbMoreOpen = false;
+												historyDisplay = false;
+											}}
+										>
+											{pageContents.title[lang]}
+										</button>
+									{/if}
+									{#if hisCrumbOverflow >= 2 && historySupplierRow}
+										<button
+											type="button"
+											class="supplier-crumb-popover__item"
+											onclick={() => {
+												hisCrumbMoreOpen = false;
+												historyDisplay = false;
+											}}
+										>
+											{historySupplier?.name}
+										</button>
+									{/if}
+								</div>
+							{/if}
+						{/if}
+						{#if hisCrumbOverflow < 1}
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
 								onclick={() => (historyDisplay = false)}
 							>
-								{historySupplier?.name}
+								{pageContents.title[lang]}
 							</button>
-						{:else}
-							<span class="supplier-modal-title__name">{historySupplier?.name}</span>
 						{/if}
-						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						{#if hisCrumbOverflow < 2}
+							<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+							<!-- B33.1 (m10792): crumb giữa = quay về modal form detail KHI history mở từ footer
+							     form (historySupplierRow có). Mở thẳng từ list-row (openHistoryModal) thì KHÔNG
+							     có form phía sau ⇒ span tĩnh không bấm được. -->
+							{#if historySupplierRow}
+								<button
+									type="button"
+									class="supplier-modal-title__name supplier-modal-title__crumb"
+									onclick={() => (historyDisplay = false)}
+								>
+									{historySupplier?.name}
+								</button>
+							{:else}
+								<span class="supplier-modal-title__name">{historySupplier?.name}</span>
+							{/if}
+						{/if}
+						{#if hisCrumbOverflow < 2}
+							<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						{/if}
 						<span class="supplier-modal-title__name supplier-modal-title__name--active">
 							{pageContents.historyModal.title[lang]}
 						</span>
@@ -3952,26 +4099,72 @@
 		<Modal.Container>
 			<Modal.Container.Header>
 				{#if isMobile}
-					<!-- B33 (m10313): breadcrumb 3 cấp Suppliers › Tên NCC › Thống kê (cấu trúc window/modal). -->
-					<div class="supplier-modal-title">
-						<button
-							type="button"
-							class="supplier-modal-title__label supplier-modal-title__crumb"
-							onclick={() => (supplierAnalyticsDisplay = false)}
-						>
-							{pageContents.title[lang]}
-						</button>
-						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-						<!-- B33.1 (m10792): crumb giữa = quay về modal form detail (form luôn mở phía sau
-						     vì analytics chỉ mở từ footer form). -->
-						<button
-							type="button"
-							class="supplier-modal-title__name supplier-modal-title__crumb"
-							onclick={() => (supplierAnalyticsDisplay = false)}
-						>
-							{historySupplierRow?.name}
-						</button>
-						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<!-- B33 (m10313): breadcrumb 3 cấp Suppliers › Tên NCC › Thống kê (cấu trúc window/modal).
+					     B34 (m11088): tràn → gom nấc ĐẦU vào popover more (cách modal address — Batch 21). -->
+					<div class="supplier-modal-title" bind:this={anaCrumbNavEl}>
+						{#if anaCrumbOverflow > 0}
+							<button
+								type="button"
+								class="supplier-modal-title__more"
+								aria-label={pageContents.supplierModal.crumbMore[lang]}
+								aria-expanded={anaCrumbMoreOpen}
+								onclick={() => (anaCrumbMoreOpen = !anaCrumbMoreOpen)}
+							>
+								<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+							</button>
+							{#if anaCrumbMoreOpen}
+								<div class="supplier-crumb-popover" role="menu">
+									{#if anaCrumbOverflow >= 2}
+										<button
+											type="button"
+											class="supplier-crumb-popover__item"
+											onclick={() => {
+												anaCrumbMoreOpen = false;
+												supplierAnalyticsDisplay = false;
+											}}
+										>
+											{pageContents.title[lang]}
+										</button>
+									{/if}
+									{#if anaCrumbOverflow >= 2}
+										<button
+											type="button"
+											class="supplier-crumb-popover__item"
+											onclick={() => {
+												anaCrumbMoreOpen = false;
+												supplierAnalyticsDisplay = false;
+											}}
+										>
+											{historySupplierRow?.name}
+										</button>
+									{/if}
+								</div>
+							{/if}
+						{/if}
+						{#if anaCrumbOverflow < 1}
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
+								onclick={() => (supplierAnalyticsDisplay = false)}
+							>
+								{pageContents.title[lang]}
+							</button>
+						{/if}
+						{#if anaCrumbOverflow < 2}
+							<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+							<!-- B33.1 (m10792): crumb giữa = quay về modal form detail (form luôn mở phía sau
+							     vì analytics chỉ mở từ footer form). -->
+							<button
+								type="button"
+								class="supplier-modal-title__name supplier-modal-title__crumb"
+								onclick={() => (supplierAnalyticsDisplay = false)}
+							>
+								{historySupplierRow?.name}
+							</button>
+						{/if}
+						{#if anaCrumbOverflow < 2}
+							<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						{/if}
 						<span class="supplier-modal-title__name supplier-modal-title__name--active">
 							{pageContents.more.analyticsTitle[lang]}
 						</span>
