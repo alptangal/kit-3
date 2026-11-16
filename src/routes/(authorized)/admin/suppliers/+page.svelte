@@ -4622,7 +4622,9 @@
 		   page shadow). */
 		top: var(--admin-tab-top, 0px);
 		z-index: 20;
-		transition: box-shadow 200ms ease, opacity 150ms ease;
+		// Batch40 (m14876): co về 0 khi đang cuộn — datatable giãn chiếm vùng tab ẩn.
+		max-height: 5rem;
+		transition: box-shadow 200ms ease, opacity 150ms ease, max-height 200ms ease;
 	}
 
 	.tab-item {
@@ -4657,6 +4659,9 @@
 	.tab-strip.is-scrolling {
 		opacity: 0;
 		pointer-events: none;
+		// Batch40: co hẳn chiều cao (trước đây chỉ opacity giữ chỗ).
+		max-height: 0;
+		overflow: hidden;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

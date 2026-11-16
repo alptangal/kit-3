@@ -1099,7 +1099,11 @@
 			position: sticky;
 			top: 0;
 			z-index: 500;
-			transition: padding 200ms ease, box-shadow 200ms ease;
+			// Batch40 (m14876): max-height base cho phép co về 0 khi cuộn (is-scrolling
+			// bên dưới) — datatable giãn chiếm vùng breadcrumb ẩn. 5rem đủ chứa trigger
+			// + breadcrumb 1 dòng; KHÔNG đặt overflow:hidden ở base — cắt popover crumb more.
+			max-height: 5rem;
+			transition: padding 200ms ease, box-shadow 200ms ease, max-height 200ms ease;
 
 			&.is-scrolled {
 				padding-block: 0.35rem;
@@ -1113,6 +1117,12 @@
 			&.is-scrolling {
 				opacity: 0;
 				pointer-events: none;
+				// Batch40: co cả chiều cao (max-height 0) — datatable giãn vào vùng trống;
+				// dừng 200ms trả lại. Tổng co ~81px < hysteresis at-bottom 128px (B29)
+				// → không flicker pagination.
+				max-height: 0;
+				padding-block: 0;
+				overflow: hidden;
 			}
 		}
 	}
