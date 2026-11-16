@@ -164,10 +164,14 @@
 				// 200ms — user cuộn bảng cũng là "đang scroll di chuyển" (yêu cầu gốc);
 				// dừng 200ms → trả lại. markScrollingActive có sẵn guard rubber-band +
 				// skip scrollTop không đổi.
-				{
+				// B41 (m15137): CHỈ bật is-scrolling từ SCROLL EVENT (guard event).
+				// ResizeObserver callback gọi onScroll() KHÔNG event — nếu tính luôn, header
+				// co (B40 max-height 0) → RO bắn lại → markScrollingActive → is-scrolling lại
+				// bật → lặp vô hạn ("layout nhảy loạn xạ" khi load page trên iPhone).
+				if (event) {
+					// target có thể là document (root scroll) → fallback scrollEl.
 					const se = t instanceof HTMLElement ? t : scrollEl;
-					const w = se ?? undefined;
-					if (w) markScrollingActive(w.scrollTop, w.scrollHeight - w.clientHeight);
+					if (se) markScrollingActive(se.scrollTop, se.scrollHeight - se.clientHeight);
 				}
 				// Batch24 mục 2: chạm đáy (ngưỡng 4px). Guard sh > ch + 4: nội dung
 				// KHÔNG tràn (trang ngắn) → atBottom = false, giữ min-height 60dvh.
@@ -190,6 +194,10 @@
 		};
 		function markScrollingActive(scrollTop: number, maxScroll: number) {
 			const rubber = scrollTop < 0 || scrollTop > maxScroll;
+			// B41: KHÔNG reset lastActiveScrollTop về -1 khi timer tắt — nếu reset,
+			// scroll/RO event lặp CÙNG vị trí (rubber-band, resize sau transition)
+			// bị coi là "mới" → is-scrolling bật lại vô hạn. So sánh với lần cuối
+			// bất kể timer; user cuộn thật luôn đổi scrollTop nên vẫn hoạt động.
 			if (!rubber && scrollTop !== lastActiveScrollTop) {
 				scrollingActive = true;
 			}
@@ -197,7 +205,6 @@
 			clearTimeout(scrollActiveTimer);
 			scrollActiveTimer = setTimeout(() => {
 				scrollingActive = false;
-				lastActiveScrollTop = -1;
 			}, 200);
 		}
 		let scrollEl = findScrollEl();
