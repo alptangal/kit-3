@@ -4613,6 +4613,8 @@
 		gap: 0.25rem;
 		border-bottom: 1px solid var(--default-200);
 		background: var(--background);
+		/* B42 (m15333): nền kính mờ khi cuộn — glass color của .is-scrolling */
+		--b42-glass: rgba(255, 255, 255, 0.62);
 		position: sticky;
 		/* Layout cuộn ở root (Safari <15.4 không dvh → fullheight chết): header
 		   breadcrumb sticky top:0 z-500 ĐÈ tab-strip sticky top:0 z-20 khi cả hai
@@ -4624,7 +4626,8 @@
 		z-index: 20;
 		// Batch40 (m14876): co về 0 khi đang cuộn — datatable giãn chiếm vùng tab ẩn.
 		max-height: 5rem;
-		transition: box-shadow 200ms ease, opacity 150ms ease, max-height 200ms ease;
+		transition: box-shadow 200ms ease, opacity 150ms ease, max-height 200ms ease,
+			background 200ms ease, -webkit-backdrop-filter 200ms ease, backdrop-filter 200ms ease;
 	}
 
 	.tab-item {
@@ -4656,12 +4659,29 @@
 	// Batch9b (m06345): display:none co flow → khi trả lại ở đáy, nội dung bị
 	// đẩy xuống (row cuối che vĩnh viễn — max-scroll đổi giữa chừng). Đổi
 	// OPACITY: tab-strip giữ chỗ trong flow, chỉ mờ đi → max-scroll ổn định.
+	/* B42 (m15333): thay cơ chế ẩn-khi-cuộn B40 (opacity 0 + max-height 0) bằng
+	   KÍNH MỜ iOS — giữ nguyên vị trí + chiều cao, nền trong suốt blur lộ row
+	   datatable phía sau. Dừng cuộn → class gỡ, nền đặc trở lại (transition
+	   background + backdrop-filter 200ms trong .tab-strip). -webkit- đặt TRƯỚC
+	   backdrop-filter (Safari 15 chỉ nhận prefix). */
 	.tab-strip.is-scrolling {
-		opacity: 0;
-		pointer-events: none;
-		// Batch40: co hẳn chiều cao (trước đây chỉ opacity giữ chỗ).
-		max-height: 0;
-		overflow: hidden;
+		background: var(--b42-glass, rgba(255, 255, 255, 0.62));
+		-webkit-backdrop-filter: blur(16px) saturate(1.8);
+		backdrop-filter: blur(16px) saturate(1.8);
+	}
+
+	/* B42 (m15333): --b42-glass dark — mirror ĐÚNG cơ chế dark của token
+	   --background (variables.scss): (1) OS dark + chưa ép light qua media
+	   prefers-color-scheme; (2) forced dark :root[data-theme='dark'] khi OS
+	   light (theme toggle). Đặt NGOÀI .tab-strip — selector :global bọc root
+	   để match html attr. */
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) .tab-strip {
+			--b42-glass: rgba(0, 0, 0, 0.62);
+		}
+	}
+	:global(:root[data-theme='dark']) .tab-strip {
+		--b42-glass: rgba(0, 0, 0, 0.62);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

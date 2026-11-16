@@ -1055,6 +1055,8 @@
 		gap: 0.75rem;
 		padding: 0.75rem 1.5rem;
 		background: var(--background, #fff);
+		/* B42 (m15333): nền kính mờ khi cuộn — glass color của .is-scrolling */
+		--b42-glass: rgba(255, 255, 255, 0.62);
 		/* Desktop: sticky breadcrumb bar — user luôn thấy vị trí đang đứng.
 		   1 scroll container duy nhất (.admin-inset body cuộn trong Container
 		   root) → sticky hoạt động mà không tạo scroll lồng. z-500 dưới
@@ -1103,6 +1105,14 @@
 				background: var(--background, #fff);
 				pointer-events: none;
 			}
+
+			/* B42 (m15333): dải 4px phải trong suốt kính cùng header — nếu giữ nền
+			   đục sẽ thành vệt lạ dưới thanh kính mờ khi cuộn. */
+			&.is-scrolling::after {
+				background: transparent;
+				-webkit-backdrop-filter: blur(16px) saturate(1.8);
+				backdrop-filter: blur(16px) saturate(1.8);
+			}
 			position: sticky;
 			top: 0;
 			z-index: 500;
@@ -1110,28 +1120,39 @@
 			// bên dưới) — datatable giãn chiếm vùng breadcrumb ẩn. 5rem đủ chứa trigger
 			// + breadcrumb 1 dòng; KHÔNG đặt overflow:hidden ở base — cắt popover crumb more.
 			max-height: 5rem;
-			transition: padding 200ms ease, box-shadow 200ms ease, max-height 200ms ease;
+			transition: padding 200ms ease, box-shadow 200ms ease, max-height 200ms ease,
+				background 200ms ease, -webkit-backdrop-filter 200ms ease, backdrop-filter 200ms ease;
 
 			&.is-scrolled {
 				padding-block: 0.35rem;
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}
 
-			/* Batch39 (m14077): đang cuộn → ẨN breadcrumb bar (mobile) — OPACITY
-			   giữ chỗ trong flow (Batch9b: display:none co flow làm max-scroll
-			   đổi giữa chừng → row cuối che vĩnh viễn). pointer-events:none chặn
-			   tap chìm. Timer 200ms dừng cuộn → trả lại. */
+			/* B42 (m15333): thay cơ chế ẩn-khi-cuộn B39/B40 (opacity 0 + max-height 0)
+			   bằng KÍNH MỜ iOS — giữ nguyên vị trí + chiều cao, nền trong suốt blur
+			   lộ row datatable phía sau. Dừng cuộn → class gỡ, nền đặc trở lại
+			   (transition background + backdrop-filter 200ms ở trên). -webkit- đặt
+			   TRƯỚC backdrop-filter (Safari 15 chỉ nhận prefix). */
 			&.is-scrolling {
-				opacity: 0;
-				pointer-events: none;
-				// Batch40: co cả chiều cao (max-height 0) — datatable giãn vào vùng trống;
-				// dừng 200ms trả lại. Tổng co ~81px < hysteresis at-bottom 128px (B29)
-				// → không flicker pagination.
-				max-height: 0;
-				padding-block: 0;
-				overflow: hidden;
+				background: var(--b42-glass, rgba(255, 255, 255, 0.62));
+				-webkit-backdrop-filter: blur(16px) saturate(1.8);
+				backdrop-filter: blur(16px) saturate(1.8);
 			}
 		}
+	}
+
+	/* B42 (m15333): --b42-glass dark — mirror ĐÚNG cơ chế dark của token
+	   --background (variables.scss): (1) OS dark + chưa ép light qua media
+	   prefers-color-scheme; (2) forced dark :root[data-theme='dark'] khi OS
+	   light (theme toggle). Đặt NGOÀI .admin-inset-header — media trong scoped
+	   style vẫn resolve đúng, selector :global bọc root để match html attr. */
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) .admin-inset-header {
+			--b42-glass: rgba(0, 0, 0, 0.62);
+		}
+	}
+	:global(:root[data-theme='dark']) .admin-inset-header {
+		--b42-glass: rgba(0, 0, 0, 0.62);
 	}
 
 	/* ── Yêu cầu 10: brand-row chiếm toàn bộ width còn lại của sidebar header
