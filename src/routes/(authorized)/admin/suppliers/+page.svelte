@@ -4596,6 +4596,32 @@
 		}
 	}
 
+	/* B42.2 (m15631): kính mờ cần row CUỘN qua sau thanh — wrap clip tại mép
+	   dưới tab khiến card không bao giờ đi vào vùng header/tab → blur vùng
+	   trống nhìn như nền đặc. Kéo wrap lên phủ sau header+tab, padding bù
+	   giữ nội dung đầu tại chỗ; nền wrap trong suốt (row nền riêng) để kính
+	   nhìn xuyên. Caption/th sticky đẩy xuống đáy tab (top cũ = đỉnh wrap
+	   mới = sau header, bị header z-500 che mất). Tab height 2.4375rem đo
+	   mobile 390px; --admin-tab-top layout đo live (tự co theo header). */
+	@media (max-width: 767px) {
+		.admin-page--fullheight .admin-table-wrap {
+			border: 0;
+			margin-top: calc(-1 * (var(--admin-tab-top, 0px) + 0.75rem + 2.4375rem + 0.75rem));
+			padding-top: calc(var(--admin-tab-top, 0px) + 0.75rem + 2.4375rem + 0.75rem);
+			background: transparent;
+		}
+		/* Caption/th sticky trong wrap (scrollport đỉnh = y 0 viewport) — ghim
+		   NGAY DƯỚI tab (tab đáy = tab-top + tab height khi đã ghim).
+		   Specificity (0,4,0) thắng rule mobile (0,3,0) của DataTable —
+		   :global top-level (0,1,0) THUA rule đó, caption/th ghim y=0 sau kính. */
+		.admin-page--fullheight :global(.datatable-root.datatable-sticky-head .datatable-caption) {
+			top: calc(var(--admin-tab-top, 0px) + 2.4375rem);
+		}
+		.admin-page--fullheight :global(.datatable-root.datatable-sticky-head .datatable-th) {
+			top: calc(var(--admin-tab-top, 0px) + 2.4375rem + var(--datatable-caption-h, 1.75rem));
+		}
+	}
+
 	.admin-table-area {
 		flex: 1;
 		min-height: 0;
