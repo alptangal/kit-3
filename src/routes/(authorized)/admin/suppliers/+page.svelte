@@ -4639,13 +4639,6 @@
 		gap: 0.25rem;
 		border-bottom: 1px solid var(--default-200);
 		background: var(--background);
-		/* B42 (m15333): nền kính mờ khi cuộn — glass color của .is-scrolling */
-		--b42-glass: rgba(255, 255, 255, 0.62);
-		/* B42.1 (m15497): blur ALWAYS-ON base (mirror header layout) — Safari 15
-		   không render blur phải transition từ 'none'; nền đặc alpha 1 che blur,
-		   glass khi cuộn lộ blur ra. */
-		-webkit-backdrop-filter: blur(16px) saturate(1.8);
-		backdrop-filter: blur(16px) saturate(1.8);
 		position: sticky;
 		/* Layout cuộn ở root (Safari <15.4 không dvh → fullheight chết): header
 		   breadcrumb sticky top:0 z-500 ĐÈ tab-strip sticky top:0 z-20 khi cả hai
@@ -4690,28 +4683,12 @@
 	// Batch9b (m06345): display:none co flow → khi trả lại ở đáy, nội dung bị
 	// đẩy xuống (row cuối che vĩnh viễn — max-scroll đổi giữa chừng). Đổi
 	// OPACITY: tab-strip giữ chỗ trong flow, chỉ mờ đi → max-scroll ổn định.
-	/* B42 (m15333): thay cơ chế ẩn-khi-cuộn B40 (opacity 0 + max-height 0) bằng
-	   KÍNH MỜ iOS — giữ nguyên vị trí + chiều cao, nền trong suốt blur lộ row
-	   datatable phía sau. Dừng cuộn → class gỡ, nền đặc trở lại (transition
-	   background + backdrop-filter 200ms trong .tab-strip). -webkit- đặt TRƯỚC
-	   backdrop-filter (Safari 15 chỉ nhận prefix). */
+	/* B42 (m15333) → B42.3 (m16282): thay cơ chế ẩn-khi-cuộn B40 bằng TRONG
+	   SUỐT thuần khi cuộn — giữ nguyên vị trí + chiều cao, không nền không blur,
+	   row datatable lộ trực tiếp phía sau. Dừng cuộn → class gỡ, nền đặc trở
+	   lại (transition background 200ms trong .tab-strip). */
 	.tab-strip.is-scrolling {
-		background: var(--b42-glass, rgba(255, 255, 255, 0.62));
-	}
-
-	/* B42 (m15333): --b42-glass dark — mirror ĐÚNG cơ chế dark của token
-	   --background (variables.scss): (1) OS dark + chưa ép light qua media
-	   prefers-color-scheme; (2) forced dark :root[data-theme='dark'] khi OS
-	   light (theme toggle). Đặt NGOÀI .tab-strip — selector :global bọc root
-	   để match html attr. */
-	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light'])) .tab-strip {
-			/* B42.1 (m15497): dark 0.45 — mirror header layout. */
-			--b42-glass: rgba(0, 0, 0, 0.45);
-		}
-	}
-	:global(:root[data-theme='dark']) .tab-strip {
-		--b42-glass: rgba(0, 0, 0, 0.45);
+		background: transparent;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

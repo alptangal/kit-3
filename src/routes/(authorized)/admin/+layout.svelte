@@ -1055,8 +1055,6 @@
 		gap: 0.75rem;
 		padding: 0.75rem 1.5rem;
 		background: var(--background, #fff);
-		/* B42 (m15333): nền kính mờ khi cuộn — glass color của .is-scrolling */
-		--b42-glass: rgba(255, 255, 255, 0.62);
 		/* Desktop: sticky breadcrumb bar — user luôn thấy vị trí đang đứng.
 		   1 scroll container duy nhất (.admin-inset body cuộn trong Container
 		   root) → sticky hoạt động mà không tạo scroll lồng. z-500 dưới
@@ -1106,18 +1104,12 @@
 				pointer-events: none;
 			}
 
-			/* B42 (m15333): dải 4px phải trong suốt kính cùng header — nếu giữ nền
-			   đục sẽ thành vệt lạ dưới thanh kính mờ khi cuộn. */
+			/* B42 (m15333): dải 4px phải trong suốt cùng header — nếu giữ nền
+			   đục sẽ thành vệt lạ dưới thanh trong suốt khi cuộn. */
 			&.is-scrolling::after {
 				background: transparent;
 			}
-			/* B42.1 (m15497): blur ALWAYS-ON trên base mobile — Safari 15 không render
-			   -webkit-backdrop-filter khi nó phải TRANSITION từ 'none' (transition-list
-			   chứa backdrop-filter từ none không interpolate → WebKit bỏ cả hai).
-			   Blur đặt tĩnh: khi nền đặc (dừng cuộn) alpha 1 blur vô hình; khi cuộn
-			   chỉ đổi background sang glass → blur lộ ra. KHÔNG transition blur nữa. */
-			-webkit-backdrop-filter: blur(16px) saturate(1.8);
-			backdrop-filter: blur(16px) saturate(1.8);
+			/* B42.3 (m16282): bỏ blur — user muốn TRONG SUỐT thuần, không kính mờ. */
 			position: sticky;
 			top: 0;
 			z-index: 500;
@@ -1133,31 +1125,14 @@
 				box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 			}
 
-			/* B42 (m15333): thay cơ chế ẩn-khi-cuộn B39/B40 (opacity 0 + max-height 0)
-			   bằng KÍNH MỜ iOS — giữ nguyên vị trí + chiều cao, nền trong suốt blur
-			   lộ row datatable phía sau. Dừng cuộn → class gỡ, nền đặc trở lại.
-			   B42.1 (m15497): blur chuyển ALWAYS-ON lên base (Safari 15 không render
-			   blur phải transition từ 'none'); .is-scrolling chỉ đổi màu nền. */
+			/* B42 (m15333) → B42.3 (m16282): thay cơ chế ẩn-khi-cuộn B39/B40 bằng
+			   TRONG SUỐT thuần khi cuộn — giữ nguyên vị trí + chiều cao, không nền
+			   không blur, row datatable lộ trực tiếp phía sau. Dừng cuộn → class gỡ,
+			   nền đặc trở lại. */
 			&.is-scrolling {
-				background: var(--b42-glass, rgba(255, 255, 255, 0.62));
+				background: transparent;
 			}
 		}
-	}
-
-	/* B42 (m15333): --b42-glass dark — mirror ĐÚNG cơ chế dark của token
-	   --background (variables.scss): (1) OS dark + chưa ép light qua media
-	   prefers-color-scheme; (2) forced dark :root[data-theme='dark'] khi OS
-	   light (theme toggle). Đặt NGOÀI .admin-inset-header — media trong scoped
-	   style vẫn resolve đúng, selector :global bọc root để match html attr. */
-	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light'])) .admin-inset-header {
-			/* B42.1 (m15497): dark 0.45 — kính đen 0.62 trên card tối nhìn như đen
-			   đặc (nội dung tối không lộ); 0.45 lộ rõ hơn, vẫn đọc được chữ thanh. */
-			--b42-glass: rgba(0, 0, 0, 0.45);
-		}
-	}
-	:global(:root[data-theme='dark']) .admin-inset-header {
-		--b42-glass: rgba(0, 0, 0, 0.45);
 	}
 
 	/* ── Yêu cầu 10: brand-row chiếm toàn bộ width còn lại của sidebar header
