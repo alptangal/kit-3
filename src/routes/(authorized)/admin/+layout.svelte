@@ -1110,9 +1110,14 @@
 			   đục sẽ thành vệt lạ dưới thanh kính mờ khi cuộn. */
 			&.is-scrolling::after {
 				background: transparent;
-				-webkit-backdrop-filter: blur(16px) saturate(1.8);
-				backdrop-filter: blur(16px) saturate(1.8);
 			}
+			/* B42.1 (m15497): blur ALWAYS-ON trên base mobile — Safari 15 không render
+			   -webkit-backdrop-filter khi nó phải TRANSITION từ 'none' (transition-list
+			   chứa backdrop-filter từ none không interpolate → WebKit bỏ cả hai).
+			   Blur đặt tĩnh: khi nền đặc (dừng cuộn) alpha 1 blur vô hình; khi cuộn
+			   chỉ đổi background sang glass → blur lộ ra. KHÔNG transition blur nữa. */
+			-webkit-backdrop-filter: blur(16px) saturate(1.8);
+			backdrop-filter: blur(16px) saturate(1.8);
 			position: sticky;
 			top: 0;
 			z-index: 500;
@@ -1121,7 +1126,7 @@
 			// + breadcrumb 1 dòng; KHÔNG đặt overflow:hidden ở base — cắt popover crumb more.
 			max-height: 5rem;
 			transition: padding 200ms ease, box-shadow 200ms ease, max-height 200ms ease,
-				background 200ms ease, -webkit-backdrop-filter 200ms ease, backdrop-filter 200ms ease;
+				background 200ms ease;
 
 			&.is-scrolled {
 				padding-block: 0.35rem;
@@ -1130,13 +1135,11 @@
 
 			/* B42 (m15333): thay cơ chế ẩn-khi-cuộn B39/B40 (opacity 0 + max-height 0)
 			   bằng KÍNH MỜ iOS — giữ nguyên vị trí + chiều cao, nền trong suốt blur
-			   lộ row datatable phía sau. Dừng cuộn → class gỡ, nền đặc trở lại
-			   (transition background + backdrop-filter 200ms ở trên). -webkit- đặt
-			   TRƯỚC backdrop-filter (Safari 15 chỉ nhận prefix). */
+			   lộ row datatable phía sau. Dừng cuộn → class gỡ, nền đặc trở lại.
+			   B42.1 (m15497): blur chuyển ALWAYS-ON lên base (Safari 15 không render
+			   blur phải transition từ 'none'); .is-scrolling chỉ đổi màu nền. */
 			&.is-scrolling {
 				background: var(--b42-glass, rgba(255, 255, 255, 0.62));
-				-webkit-backdrop-filter: blur(16px) saturate(1.8);
-				backdrop-filter: blur(16px) saturate(1.8);
 			}
 		}
 	}
@@ -1148,11 +1151,13 @@
 	   style vẫn resolve đúng, selector :global bọc root để match html attr. */
 	@media (prefers-color-scheme: dark) {
 		:global(:root:not([data-theme='light'])) .admin-inset-header {
-			--b42-glass: rgba(0, 0, 0, 0.62);
+			/* B42.1 (m15497): dark 0.45 — kính đen 0.62 trên card tối nhìn như đen
+			   đặc (nội dung tối không lộ); 0.45 lộ rõ hơn, vẫn đọc được chữ thanh. */
+			--b42-glass: rgba(0, 0, 0, 0.45);
 		}
 	}
 	:global(:root[data-theme='dark']) .admin-inset-header {
-		--b42-glass: rgba(0, 0, 0, 0.62);
+		--b42-glass: rgba(0, 0, 0, 0.45);
 	}
 
 	/* ── Yêu cầu 10: brand-row chiếm toàn bộ width còn lại của sidebar header

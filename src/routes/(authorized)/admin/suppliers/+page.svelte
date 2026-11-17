@@ -4615,6 +4615,11 @@
 		background: var(--background);
 		/* B42 (m15333): nền kính mờ khi cuộn — glass color của .is-scrolling */
 		--b42-glass: rgba(255, 255, 255, 0.62);
+		/* B42.1 (m15497): blur ALWAYS-ON base (mirror header layout) — Safari 15
+		   không render blur phải transition từ 'none'; nền đặc alpha 1 che blur,
+		   glass khi cuộn lộ blur ra. */
+		-webkit-backdrop-filter: blur(16px) saturate(1.8);
+		backdrop-filter: blur(16px) saturate(1.8);
 		position: sticky;
 		/* Layout cuộn ở root (Safari <15.4 không dvh → fullheight chết): header
 		   breadcrumb sticky top:0 z-500 ĐÈ tab-strip sticky top:0 z-20 khi cả hai
@@ -4627,7 +4632,7 @@
 		// Batch40 (m14876): co về 0 khi đang cuộn — datatable giãn chiếm vùng tab ẩn.
 		max-height: 5rem;
 		transition: box-shadow 200ms ease, opacity 150ms ease, max-height 200ms ease,
-			background 200ms ease, -webkit-backdrop-filter 200ms ease, backdrop-filter 200ms ease;
+			background 200ms ease;
 	}
 
 	.tab-item {
@@ -4666,8 +4671,6 @@
 	   backdrop-filter (Safari 15 chỉ nhận prefix). */
 	.tab-strip.is-scrolling {
 		background: var(--b42-glass, rgba(255, 255, 255, 0.62));
-		-webkit-backdrop-filter: blur(16px) saturate(1.8);
-		backdrop-filter: blur(16px) saturate(1.8);
 	}
 
 	/* B42 (m15333): --b42-glass dark — mirror ĐÚNG cơ chế dark của token
@@ -4677,11 +4680,12 @@
 	   để match html attr. */
 	@media (prefers-color-scheme: dark) {
 		:global(:root:not([data-theme='light'])) .tab-strip {
-			--b42-glass: rgba(0, 0, 0, 0.62);
+			/* B42.1 (m15497): dark 0.45 — mirror header layout. */
+			--b42-glass: rgba(0, 0, 0, 0.45);
 		}
 	}
 	:global(:root[data-theme='dark']) .tab-strip {
-		--b42-glass: rgba(0, 0, 0, 0.62);
+		--b42-glass: rgba(0, 0, 0, 0.45);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
