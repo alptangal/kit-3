@@ -1132,7 +1132,20 @@
 			&.is-scrolling {
 				background: transparent;
 			}
+			/* B42.4 (m16450): user — text vẫn không trong suốt ⇒ ẩn luôn TEXT khi
+			   cuộn; nền giữ transparent B42.3. Transition base → fade 2 chiều.
+			   opacity trên CON (trigger + breadcrumb) — không đụng flow/chỗ ngồi. */
+			/* B42.4 (m16450): comment giữ chỗ — rule thật ở top-level sau khối này. */
 		}
+	}
+	/* B42.4 (m16450): ẩn TEXT breadcrumb khi cuộn — top-level :global() vì con
+	   component (Breadcrumb) mang hash khác, scoped > * không match; !important
+	   thắng transition:all riêng của breadcrumb-root. */
+	:global(.admin-inset-header > *) {
+		transition: opacity 150ms ease;
+	}
+	:global(.admin-inset-header.is-scrolling > *) {
+		opacity: 0 !important;
 	}
 
 	/* ── Yêu cầu 10: brand-row chiếm toàn bộ width còn lại của sidebar header

@@ -4663,7 +4663,7 @@
 		cursor: pointer;
 		border-bottom: 2px solid transparent;
 		margin-bottom: -1px;
-		transition: padding 200ms ease, font-size 200ms ease;
+		transition: padding 200ms ease, font-size 200ms ease, opacity 150ms ease;
 
 		&.active {
 			color: var(--foreground);
@@ -4689,6 +4689,12 @@
 	   lại (transition background 200ms trong .tab-strip). */
 	.tab-strip.is-scrolling {
 		background: transparent;
+	}
+
+	/* B42.4 (m16450): ẩn text tab khi cuộn (opacity 0, 150ms) — nền giữ
+	   transparent B42.3; dừng cuộn → text trở lại. */
+	.tab-strip.is-scrolling .tab-item {
+		opacity: 0;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
