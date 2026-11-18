@@ -51,6 +51,39 @@ $effect(() => {
 	formContext = getFormContext();
 });
 
+// Batch 43 (m17082): trạng thái "vừa paste" cho mục 3 — paste fill hết input → tự submit.
+let pasteDetected = $state(false);
+
+// Batch 43 (m17082) mục 2: server trả requireTotp → bước 2 OTP hiện → tự focus
+// ô OTP đầu (rAF đợi DOM {#if totpStep} render xong). Touch device bỏ qua —
+// bàn phím ảo tự bật làm giật viewport (cùng lý do afterNavigate ở dưới).
+$effect(() => {
+  if (!totpStep || typeof window === 'undefined') return;
+  if (client.browser?.isMobile) return;
+  requestAnimationFrame(() => {
+    const el = document.querySelector<HTMLInputElement>('.totp-otp input.otp-box');
+    if (el && document.activeElement !== el) el.focus();
+  });
+});
+
+// Batch 43 (m17082) mục 3: paste làm 2 input đầy đủ → tự động submit form login
+// (pasteDetected bật bởi event input inputType='insertFromPaste' trên Input).
+$effect(() => {
+  if (!pasteDetected || typeof window === 'undefined') return;
+  const u = !!configs.username.value?.trim();
+  const p = !!configs.password.value;
+  if (u && p && !loading && totpStep === false) {
+    pasteDetected = false;
+    // Batch 43: blur field đang focus QUA setTimeout để ra ngoài effect flush —
+    // blur đồng bộ trong effect khiến blur handler của Input set $state giữa
+    // flush render (state_unsafe_mutation). Blur xong mới submit (cùng queue).
+    setTimeout(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      void handleLogin();
+    }, 0);
+  }
+});
+
 	/** Lưu lần submit trước để ngăn submit trùng lặp */
 	let previousSubmited: undefined | { username: string; password: string; remember?: boolean } =
 		undefined;
@@ -330,6 +363,7 @@ $effect(() => {
 		formError = undefined;
 		previousSubmited = undefined;
 		formSubmitted = false; // Reset submitted flag
+		pasteDetected = false; // Batch 43 (m17082)
 		try {
 			if (typeof localStorage !== 'undefined') localStorage.removeItem(REMEMBER_STORAGE_KEY);
 		} catch {}
@@ -617,6 +651,7 @@ $effect(() => {
 	<Form onSubmit={handleLogin} onReset={handleReset}>
 		<TextField name="username" required>
 			<Label>{pageContents.username[lang] ?? 'Username / Email'}</Label>
+			<!-- Batch 43 (m17082): paste vào input → bật cờ tự submit (mục 3). -->
 			<div class="auth-input-wrapper">
 				<Input
 					type="text"
@@ -627,6 +662,17 @@ $effect(() => {
 					class="auth-input"
 					emailSuggest={true}
 					validation={usernameOrEmailValidation}
+					events={[
+						{
+							events: {
+								input: {
+									handler(e) {
+										if ((e as InputEvent)?.inputType === 'insertFromPaste') pasteDetected = true;
+									}
+								}
+							}
+						}
+					]}
 				/>
 				<!-- Icon đứng SAU <Input> trong DOM: để AuthLayout dùng
 				     general-sibling `~` (không cần `:has()`, Safari 15-safe)
@@ -647,6 +693,7 @@ $effect(() => {
 		<div class="caps-scope" onkeydown={handleCapsKeydown} onfocusout={handleCapsFocusout}>
 			<TextField name="password" required>
 				<Label>{pageContents.password[lang] ?? 'Password'}</Label>
+				<!-- Batch 43 (m17082): Enter khi focus password → blur (mục 1); paste → tự submit (mục 3). -->
 				<div class="auth-input-wrapper">
 					<Input
 						type="password"
@@ -655,6 +702,24 @@ $effect(() => {
 						autocomplete="current-password"
 						class="auth-input"
 						actionButtons={{ showPassword: { display: true } }}
+						events={[
+							{
+								events: {
+									keydown: {
+										handler(e) {
+										if ((e as KeyboardEvent)?.key !== 'Enter') return;
+										// Batch 43: defer blur ra ngoài dispatch — blur đồng bộ giữa render flush gây state_unsafe_mutation
+										setTimeout(() => (document.activeElement as HTMLElement | null)?.blur(), 0);
+										}
+									},
+									input: {
+										handler(e) {
+										if ((e as InputEvent)?.inputType === 'insertFromPaste') pasteDetected = true;
+										}
+									}
+								}
+							}
+						]}
 					/>
 					<svg class="auth-input-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
 						<path
