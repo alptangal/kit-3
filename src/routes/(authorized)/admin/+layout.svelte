@@ -904,6 +904,9 @@
 			class:is-scrolled={isScrolled && isMobileLayout}
 			// Batch24 mục 2: chạm đáy → zero min-height body + padding (mobile)
 			class:at-bottom={atBottom}
+			// B42.5 (divider): separator + divider trong suốt khi đang cuộn —
+			// tín hiệu same scrollingActive của header (chỉ mobile).
+			class:is-scrolling={scrollingActive && isMobileLayout}
 			bind:this={insetEl}
 		>
 			<div
@@ -1218,6 +1221,12 @@
 	   .admin-inset (trong template layout, hash khớp) — ẩn khi cuộn. */
 	.admin-inset :global(.admin-inset-separator) {
 		transition: opacity 200ms ease;
+	}
+	/* B42.5 (divider): separator 1px giữa header/body phải trong suốt khi
+	   đang cuộn (mọi breakpoint — trước đây chỉ desktop is-scrolled ẩn).
+	   Dừng cuộn → opacity về 1. */
+	.admin-inset.is-scrolling :global(.admin-inset-separator) {
+		opacity: 0;
 	}
 
 	@media (min-width: 768px) {

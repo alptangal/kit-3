@@ -4689,6 +4689,9 @@
 	   lại (transition background 200ms trong .tab-strip). */
 	.tab-strip.is-scrolling {
 		background: transparent;
+		/* B42.5 (divider): đường kẻ dưới tab cũng phải trong suốt khi cuộn —
+		   border 1px đặc là "divider X" còn sót user báo. Dừng cuộn → trả lại. */
+		border-bottom-color: transparent;
 	}
 
 	/* B42.4 (m16450): ẩn text tab khi cuộn (opacity 0, 150ms) — nền giữ
