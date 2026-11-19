@@ -66,6 +66,20 @@ $effect(() => {
   });
 });
 
+// Batch 45 (m17794) mục 2: bước 2 OTP — paste/gõ đủ 6 số → tự xác nhận,
+// không cần bấm Verify thủ công. Guard totpLoading chống gọi kép khi value
+// cập nhật nhiều lần; mã sai → handleTotpVerify reset totpCode → effect
+// không tự bắn lại (6 số khác ''). Đầu vào thủ công (gõ từng ô) cũng được
+// submit khi ô cuối vừa điền — đúng kỳ vọng "fill full input".
+$effect(() => {
+  const code = totpCode.trim();
+  if (!totpStep || typeof window === 'undefined') return;
+  if (!/^\d{6}$/.test(code) || totpLoading) return;
+  setTimeout(() => {
+    void handleTotpVerify();
+  }, 0);
+});
+
 // Batch 43 (m17082) mục 3: paste làm 2 input đầy đủ → tự động submit form login
 // (pasteDetected bật bởi event input inputType='insertFromPaste' trên Input).
 $effect(() => {
@@ -708,8 +722,16 @@ $effect(() => {
 									keydown: {
 										handler(e) {
 										if ((e as KeyboardEvent)?.key !== 'Enter') return;
-										// Batch 43: defer blur ra ngoài dispatch — blur đồng bộ giữa render flush gây state_unsafe_mutation
-										setTimeout(() => (document.activeElement as HTMLElement | null)?.blur(), 0);
+										// Batch 45 (m17794) mục 1: Enter ở password → blur + kích hoạt
+										// CLICK nút login (theo yêu cầu — implicit submission không đủ
+										// đáng tin trên một số browser/device). Defer ra ngoài dispatch:
+										// blur đồng bộ giữa render flush gây state_unsafe_mutation (B43).
+										setTimeout(() => {
+											(document.activeElement as HTMLElement | null)?.blur();
+											document
+												.querySelector<HTMLButtonElement>('.auth-btn-submit[type="submit"]')
+												?.click();
+										}, 0);
 										}
 									},
 									input: {
