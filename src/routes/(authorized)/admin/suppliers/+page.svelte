@@ -383,6 +383,16 @@
 			continueEdit: { vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' },
 			discard: { vi: 'Bỏ thay đổi', en: 'Discard' }
 		},
+		// Batch 44 (m17527): hỏi load draft hay form mới khi bấm create + có draft
+		draftPrompt: {
+			title: { vi: 'Có bản nháp chưa lưu', en: 'Unsaved draft found' },
+			desc: {
+				vi: 'Bạn có bản nháp chưa lưu từ lần tạo trước. Tải lại bản nháp hay bắt đầu form mới?',
+				en: 'You have an unsaved draft from a previous session. Load it or start a new form?'
+			},
+			loadDraft: { vi: 'Tải bản nháp', en: 'Load draft' },
+			newForm: { vi: 'Form mới', en: 'New form' }
+		},
 		bulk: {
 			title: { vi: 'Xoá nhà cung cấp đã chọn?', en: 'Delete selected suppliers?' },
 			desc: {
@@ -1127,6 +1137,10 @@
 
 	// ── Dirty-guard (pattern brands: createCloseGuard + AlertDialog) ──
 	let dirtyCloseDisplay = $state(false);
+	// Batch 44 (m17527): prompt hỏi load draft hay form mới. draftPromptSaved
+	// giữ JSON draft chờ quyết định; đóng dialog không chọn → giữ nguyên draft.
+	let draftPromptDisplay = $state(false);
+	let draftPromptSaved = $state<string | undefined>(undefined);
 	const closeGuard = createCloseGuard({
 		form: () => supplierForm,
 		openConfirm: () => (dirtyCloseDisplay = true),
@@ -1886,6 +1900,63 @@
 		};
 	}
 
+	// Batch 44 (m17527): apply JSON draft đã lưu vào form + seed breakdowns.
+	// Tách từ luồng resume cũ của openSupplierModal để prompt Load draft dùng lại.
+	function applyDraftToForm(raw: string): boolean {
+		try {
+			const saved = JSON.parse(raw) as Partial<typeof supplierForm>;
+			if (!saved || typeof saved !== 'object' || !saved.name) return false;
+			// BẪY: mảng từ draft JSON có thể chứa null (Input unmount emit
+			// undefined qua bind → JSON.stringify biến thành null) → x.trim() nổ
+			const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+			const socialArr = (v: unknown) => {
+				// Draft cũ (batch ≤6): social là string đơn → bọc thành mảng 1 phần tử
+				if (typeof v === 'string' && v.trim()) return [v.trim()];
+				return arr(v);
+			};
+			supplierForm = {
+				...emptySupplierForm(),
+				...saved,
+				phones: arr(saved.phones),
+				emails: arr(saved.emails),
+				addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
+				zalo: socialArr(saved.zalo),
+				telegram: socialArr(saved.telegram),
+				discord: socialArr(saved.discord),
+				facebook: socialArr(saved.facebook),
+				instagram: socialArr(saved.instagram),
+				website: socialArr(saved.website),
+				images: arr(saved.images),
+				imageFulls: arr(saved.imageFulls),
+				avatarUrl: saved.avatarUrl ?? '',
+				note: saved.note ?? '',
+				status: saved.status ?? 'active'
+			};
+			supplierAddressBreakdowns = supplierForm.addresses.map((a) => ({
+				province: a.province ?? '',
+				district: a.district ?? '',
+				ward: a.ward
+			}));
+			supplierNewAddressBreakdowns = supplierForm.addresses.map((a) => ({
+				province: a.newProvince ?? '',
+				ward: a.newWard ?? ''
+			}));
+			return true;
+		} catch {
+			clearDraftPref(DRAFT_FORM_KEY);
+			return false;
+		}
+	}
+	function handleDraftPromptLoad() {
+		if (draftPromptSaved && applyDraftToForm(draftPromptSaved)) {
+			showToast(pageContents.toasts.draftRestored[lang], 'success');
+		}
+		draftPromptSaved = undefined;
+	}
+	function handleDraftPromptNew() {
+		clearDraft(); // user chọn form mới → xoá draft, sau không prompt lại
+		draftPromptSaved = undefined;
+	}
 	function openSupplierModal() {
 		supplierEditMode = 'create';
 		supplierEditId = null;
@@ -1897,46 +1968,24 @@
 		supplierNameChecked = false;
 		supplierNameTouched = false;
 		supplierPassive = null;
-		// Draft create có dữ liệu → resume; rỗng → form sạch
+		// Batch 44 (m17527): có draft có dữ liệu → HỎI (prompt) thay vì tự resume.
+		// Chọn Load draft → applyDraftToForm; chọn New form → xoá draft vĩnh viễn;
+		// đóng dialog không chọn → giữ draft, form trống phía sau.
 		const raw = readDraftPref(DRAFT_FORM_KEY);
-		let resumed = false;
+		let hasDraft = false;
 		if (typeof raw === 'string' && raw) {
 			try {
 				const saved = JSON.parse(raw) as Partial<typeof supplierForm>;
-				if (saved && typeof saved === 'object' && saved.name) {
-					// BẪY: mảng từ draft JSON có thể chứa null (Input unmount emit
-					// undefined qua bind → JSON.stringify biến thành null) → x.trim() nổ
-					const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
-					const socialArr = (v: unknown) => {
-						// Draft cũ (batch ≤6): social là string đơn → bọc thành mảng 1 phần tử
-						if (typeof v === 'string' && v.trim()) return [v.trim()];
-						return arr(v);
-					};
-					supplierForm = {
-						...emptySupplierForm(),
-						...saved,
-						phones: arr(saved.phones),
-						emails: arr(saved.emails),
-						addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
-						zalo: socialArr(saved.zalo),
-						telegram: socialArr(saved.telegram),
-						discord: socialArr(saved.discord),
-						facebook: socialArr(saved.facebook),
-						instagram: socialArr(saved.instagram),
-						website: socialArr(saved.website),
-						images: arr(saved.images),
-						imageFulls: arr(saved.imageFulls),
-						avatarUrl: saved.avatarUrl ?? '',
-						note: saved.note ?? '',
-						status: saved.status ?? 'active'
-					};
-					resumed = true;
-				}
+				if (saved && typeof saved === 'object' && saved.name) hasDraft = true;
 			} catch {
 				clearDraftPref(DRAFT_FORM_KEY);
 			}
 		}
-		if (!resumed) supplierForm = emptySupplierForm();
+		if (hasDraft) {
+			draftPromptSaved = raw;
+			draftPromptDisplay = true;
+		}
+		supplierForm = emptySupplierForm();
 		supplierAddressBreakdowns = supplierForm.addresses.map((a) => ({
 			province: a.province ?? '',
 			district: a.district ?? '',
@@ -1950,7 +1999,6 @@
 		supplierSubmitAttempted = false;
 		supplierModalDisplay = true;
 		void seedImagesAfterMount();
-		if (resumed) showToast(pageContents.toasts.draftRestored[lang], 'success');
 		closeGuard.markClean();
 	}
 
@@ -3896,6 +3944,27 @@
 		</AlertDialog.Content>
 	</AlertDialog>
 {/if}
+
+	<!-- ── Batch 44 (m17527): prompt load draft hay form mới khi create ── -->
+	{#if draftPromptDisplay}
+	<AlertDialog bind:open={draftPromptDisplay} title={pageContents.draftPrompt.title[lang]} description={pageContents.draftPrompt.desc[lang]}>
+	<AlertDialog.Content>
+	<AlertDialog.Header variant="info">
+	<AlertDialog.Title>{pageContents.draftPrompt.title[lang]}</AlertDialog.Title>
+	<AlertDialog.Description>{pageContents.draftPrompt.desc[lang]}</AlertDialog.Description>
+	</AlertDialog.Header>
+	<AlertDialog.Footer>
+	<AlertDialog.Cancel onclick={handleDraftPromptLoad}>{pageContents.draftPrompt.loadDraft[lang]}</AlertDialog.Cancel>
+	<AlertDialog.Action
+	color="primary"
+	onselect={handleDraftPromptNew}
+	>
+	{pageContents.draftPrompt.newForm[lang]}
+	</AlertDialog.Action>
+	</AlertDialog.Footer>
+	</AlertDialog.Content>
+	</AlertDialog>
+	{/if}
 
 <!-- ── Batch10 (m06635-3): Setting modal (filter status + sort) — mở từ nút
 	tune header datatable (desktop + mobile) và nút setting FAB. Thay popover
