@@ -17,6 +17,9 @@ export const POST: RequestHandler = async (event) => {
 			branchId?: string;
 			supplierId?: string;
 			status?: string;
+			search?: string;
+			sortField?: string;
+			sortDirection?: string;
 			page?: number;
 			pageSize?: number;
 		}>(event);
@@ -44,6 +47,10 @@ export const POST: RequestHandler = async (event) => {
 			branchId: read.data.branchId,
 			supplierId: read.data.supplierId,
 			status: read.data.status,
+			// B46 (m18161): tab PO suppliers — search + sort server
+			search: read.data.search,
+			sortField: read.data.sortField,
+			sortDirection: read.data.sortDirection,
 			page: read.data.page,
 			pageSize: read.data.pageSize
 		});

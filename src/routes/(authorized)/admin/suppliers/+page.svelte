@@ -365,6 +365,12 @@
 			bulkDeleted: { vi: 'Đã xoá {count} nhà cung cấp', en: 'Deleted {count} suppliers' },
 			bulkDeleteFailed: { vi: 'Xoá hàng loạt không thành công', en: 'Bulk delete failed' },
 			bulkCopied: { vi: 'Đã copy {count} dòng', en: 'Copied {count} rows' },
+
+			// B46 (m18161): bulk xoá đơn mua hàng (chỉ draft/cancelled được xoá)
+			poBulkDeleted: { vi: 'Đã xoá {count} đơn mua hàng', en: 'Deleted {count} purchase orders' },
+			poBulkNone: { vi: 'Không có đơn nào được xoá (chỉ nháp/đã huỷ được xoá)', en: 'No orders deleted (only draft/cancelled can be deleted)' },
+			poBulkPartial: { vi: '{count} đơn không xoá được (chỉ nháp/đã huỷ được xoá)', en: '{count} orders could not be deleted (only draft/cancelled)' },
+			poBulkDeleteFailed: { vi: 'Xoá đơn mua hàng không thành công', en: 'Failed to delete purchase orders' },
 			poCreated: { vi: 'Đã tạo đơn mua hàng', en: 'Purchase order created' },
 			poFailed: { vi: 'Tạo đơn mua không thành công', en: 'Failed to create purchase order' },
 			statusUpdated: { vi: 'Đã cập nhật trạng thái', en: 'Status updated' },
@@ -408,6 +414,16 @@
 			// chỉ hiện khi >2 dòng đã chọn và chưa chọn hết.
 			selectAll: { vi: 'Chọn tất cả', en: 'Select all' },
 			uncheckAll: { vi: 'Bỏ chọn tất cả', en: 'Uncheck all' }
+		},
+		// B46 (m18161): bulk bar + dialog xoá PO
+		poBulk: {
+			title: { vi: 'Xoá đơn mua hàng đã chọn?', en: 'Delete selected purchase orders?' },
+			desc: {
+				vi: 'Chỉ đơn ở trạng thái nháp hoặc đã huỷ được xoá vĩnh viễn.',
+				en: 'Only draft or cancelled orders are permanently removed.'
+			},
+			confirm: { vi: 'Xoá', en: 'Delete' },
+			cancel: { vi: 'Huỷ', en: 'Cancel' }
 		},
 		suggest: {
 			title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' }
@@ -531,6 +547,32 @@
 	let poStatusFilter = $state('');
 	let poBranchFilter = $state('');
 	let poSupplierFilter = $state('');
+
+	// B46 (m18161): tab PO theo chuẩn tab suppliers — search server + suggest,
+	// sort server (setting modal PO), bulk chọn nhiều + copy/delete.
+	let PO_PREFS_KEY = '/admin/suppliers/po';
+	let poSearchQuery = $state<string | undefined>('');
+	let poSearching = $state(false);
+	let poSearchDebounce: ReturnType<typeof setTimeout>;
+	let poSearchArmed = false;
+	let poSuggestOpen = $state(false);
+	let poSearchFocused = $state(false);
+	let poMobileSearchOpen = $state(false);
+	let poMobileSearchInputInstance = $state<{ configs: { focus: () => void } } | undefined>(undefined);
+	let poSortField = $state('');
+	let poSortDirection = $state<'asc' | 'desc'>('desc');
+	let poSettingModalDisplay = $state(false);
+	let poSettingSortField = $state('');
+	let poSettingSortDirection = $state<'asc' | 'desc'>('desc');
+	$effect(() => {
+		if (poSettingModalDisplay) {
+			poSettingSortField = poSortField;
+			poSettingSortDirection = poSortDirection;
+		}
+	});
+	let poSelectedIds = $state<string[]>([]);
+	let poBulkDeleting = $state(false);
+	let poBulkDeleteDisplay = $state(false);
 
 	// ── Search server + sort server (pattern purchases) ──
 	const PREFS_KEY = '/admin/suppliers';
@@ -1516,6 +1558,23 @@
 		}, 300);
 	});
 
+	// B46 (m18161): search debounce PO — cùng pattern suppliers, guard tab PO.
+	$effect(() => {
+		void poSearchQuery;
+		if (activeTab !== 'purchase-orders') return;
+		if (!poSearchArmed) {
+			poSearchArmed = true;
+			return;
+		}
+		clearTimeout(poSearchDebounce);
+		poSearching = true;
+		poSearchDebounce = setTimeout(() => {
+			posPage = 1;
+			currentPagingPage = 1;
+			void loadPOs();
+		}, 300);
+	});
+
 	// BẪY: card mode mobile unmount Input trong caption → emit undefined qua
 	// bind:value. Guard mọi chỗ đọc searchQuery bằng (searchQuery ?? '').
 	function saveSearchKeyword() {
@@ -1711,12 +1770,17 @@
 						pageSize,
 						status: poStatusFilter || undefined,
 						branchId: poBranchFilter || undefined,
-						supplierId: poSupplierFilter || undefined
+						supplierId: poSupplierFilter || undefined,
+						// B46 (m18161): search + sort server cho tab PO
+						search: (poSearchQuery ?? '').trim() || undefined,
+						sortField: poSortField || undefined,
+						sortDirection: poSortField ? poSortDirection : undefined
 					}
 				},
 				encryptionKeys
 			);
 			posLoading = false;
+			poSearching = false;
 			if (response.ok) {
 				const data = response.data as
 					| { items?: PurchaseOrderRow[]; total?: number; page?: number }
@@ -1730,6 +1794,7 @@
 			}
 		} catch (err) {
 			posLoading = false;
+			poSearching = false;
 			posError = resolveServerMessage(undefined, lang, pageContents.states.errorTitlePOs);
 			if (import.meta.env.DEV) console.error('[admin/suppliers] load POs failed:', err);
 		}
@@ -1825,13 +1890,6 @@
 		}
 	]);
 
-	// Options sort từ supplierColumns sortable (mirror header sort).
-	const settingSortOptions = $derived(
-		supplierColumns
-			.filter((c) => c.sortable)
-			.map((c) => ({ value: c.id, label: c.label }))
-	);
-
 	const posAny = $derived(pos as unknown as Record<string, unknown>[]);
 	const poColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
 		{
@@ -1875,6 +1933,21 @@
 			noHighlight: true
 		}
 	]);
+
+
+	// Options sort từ supplierColumns sortable (mirror header sort).
+	const settingSortOptions = $derived(
+		supplierColumns
+			.filter((c) => c.sortable)
+			.map((c) => ({ value: c.id, label: c.label }))
+	);
+
+	// B46 (m18161): sort options PO từ poColumns sortable.
+	const poSortOptions = $derived(
+		poColumns
+			.filter((c) => c.sortable)
+			.map((c) => ({ value: c.id, label: c.label }))
+	);
 
 	// ── Modal tạo/sửa nhà cung cấp ──
 	function emptySupplierForm() {
@@ -2591,6 +2664,78 @@
 		}
 	}
 
+	// ── B46 (m18161): PO search keyword + bulk — mirror suppliers ──
+	function savePOSearchKeyword() {
+		const kw = (poSearchQuery ?? '').trim();
+		if (kw) recordSearchKeyword(PO_PREFS_KEY, kw);
+	}
+
+	const poRecentKeywordsFiltered = $derived.by(() => {
+		const q = (poSearchQuery ?? '').trim().toLowerCase();
+		const all = getSearchKeywords(PO_PREFS_KEY);
+		return q ? all.filter((k) => k.toLowerCase().includes(q)) : all;
+	});
+
+	function clearPOsSelection() {
+		poSelectedIds = [];
+	}
+
+	function poBulkDisplayCount(): number {
+		return poSelectedIds.length;
+	}
+
+	// Bulk copy PO (TSV: header + các cột đang hiển thị — mirror bulkCopySelected).
+	function bulkCopyPOSelected() {
+		const cols = poColumns.filter((c) => c.id !== 'actions' && typeof c.accessor === 'function');
+		const header = cols.map((c) => String(c.label)).join('\t');
+		const rows = pos
+			.filter((p) => p._id && poSelectedIds.includes(p._id))
+			.map((p) => cols.map((c) => String((c.accessor as (row: unknown) => unknown)(p) ?? '')).join('\t'));
+		const tsv = [header, ...rows].join('\n');
+		navigator.clipboard
+			.writeText(tsv)
+			.then(() => showToast(pageContents.toasts.bulkCopied[lang].replace('{count}', String(poSelectedIds.length)), 'success'))
+			.catch(() => showToast(pageContents.toasts.requestFailed[lang], 'error'));
+	}
+
+	// Bulk delete PO qua /api/admin/purchases/bulk action=delete (chỉ
+	// draft/cancelled được xoá — received/ordered trả failed → toast).
+	async function bulkDeletePOsSelected() {
+		if (!encryptionKeys || poBulkDeleting || poSelectedIds.length === 0) return;
+		poBulkDeleting = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/purchases/bulk',
+				{ method: 'POST', body: { ids: poSelectedIds, action: 'delete' } },
+				encryptionKeys
+			);
+			poBulkDeleting = false;
+			if (response.ok) {
+				const data = response.data as { deleted?: string[]; failed?: Array<{ id: string; reason: string }> } | undefined;
+				const deletedCount = data?.deleted?.length ?? 0;
+				const failedCount = data?.failed?.length ?? 0;
+				if (deletedCount > 0) {
+					showToast(pageContents.toasts.poBulkDeleted[lang].replace('{count}', String(deletedCount)), 'success');
+				} else {
+					showToast(pageContents.toasts.poBulkNone[lang], 'error');
+				}
+				if (failedCount > 0 && deletedCount > 0) {
+					// một phần thành công — gợi ý user một số dòng không xoá được
+					showToast(pageContents.toasts.poBulkPartial[lang].replace('{count}', String(failedCount)), 'error');
+				}
+				poBulkDeleteDisplay = false;
+				clearPOsSelection();
+				await loadPOs();
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.poBulkDeleteFailed), 'error');
+			}
+		} catch (err) {
+			poBulkDeleting = false;
+			showToast(pageContents.toasts.poBulkDeleteFailed, 'error');
+			if (import.meta.env.DEV) console.error('[admin/suppliers] bulk delete PO failed:', err);
+		}
+	}
+
 	// ── Modal tạo PO ──
 	function openPOModal() {
 		poForm = { poCode: '', supplierId: '', branchId: '', expectedAt: '', items: [] };
@@ -3170,6 +3315,15 @@
 				<DataTable
 					data={posAny}
 					columns={poColumns}
+					// B46 (m18161): bulk chọn nhiều PO — mirror tab suppliers
+					selectable
+					showIndex
+					indexCheckboxes
+					checkOnRowClick
+					selection={poSelectedIds}
+					selectionTools={false}
+					getRowId={(row) => String((row as PurchaseOrderRow)._id ?? '')}
+					onSelectionChange={(ids) => (poSelectedIds = ids)}
 					pageSize={pageSize}
 					showPagination={false}
 					sortable
@@ -3188,7 +3342,95 @@
 					data-test="purchase-orders-datatable"
 				>
 					{#snippet captionTools()}
-						<!-- yêu cầu 7: filter PO vào caption. Batch 3: Select component thay
+						<!-- B46 (m18161): search + suggest từ khoá PO — mirror tab suppliers.
+						     Mobile: icon mở input; desktop: input inline. -->
+						{#if poMobileSearchOpen}
+							<div class="admin-search" data-suggest>
+								<Input
+									size="sm"
+									bind:value={poSearchQuery}
+									placeholder={pageContents.poTable.searchPlaceholder ? pageContents.poTable.searchPlaceholder[lang] : undefined}
+									bind:this={poMobileSearchInputInstance}
+									events={[{ events: {
+										focus: { handler() { poSearchFocused = true; poSuggestOpen = true; } },
+										blur: { handler() { poSearchFocused = false; poSuggestOpen = false; savePOSearchKeyword(); if (isMobile && !str(poSearchQuery).trim()) poMobileSearchOpen = false; } }
+									} }]}
+								/>
+								{#if poSuggestOpen && poRecentKeywordsFiltered.length > 0}
+									<div class="suggest-popover" data-suggest>
+										<span class="suggest-popover__title">{pageContents.suggest.title[lang]}</span>
+										{#each poRecentKeywordsFiltered as kw (kw)}
+											<button
+												type="button"
+												class="suggest-popover__item"
+												onmousedown={(e) => e.preventDefault()}
+												onclick={() => {
+													poSearchQuery = kw;
+													posPage = 1;
+													currentPagingPage = 1;
+													void loadPOs();
+													poSuggestOpen = false;
+												}}
+											>
+												{kw}
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{:else if isMobile}
+							<button
+								type="button"
+								class="mobile-caption-icon"
+								aria-label={pageContents.actions.search[lang]}
+								data-test="po-mobile-search-open"
+								onclick={() => {
+									flushSync(() => {
+										poMobileSearchOpen = true;
+										poSuggestOpen = true;
+									});
+									poMobileSearchInputInstance?.configs.focus();
+								}}
+							>
+								<Icon icon={iconify['search-rounded']} size="sm" />
+							</button>
+						{:else}
+							<div class="admin-search" data-suggest>
+								<Input
+									size="sm"
+									bind:value={poSearchQuery}
+									placeholder={pageContents.poTable.searchPlaceholder ? pageContents.poTable.searchPlaceholder[lang] : undefined}
+									events={[{ events: {
+										focus: { handler() { poSearchFocused = true; poSuggestOpen = true; } },
+										blur: { handler() { poSearchFocused = false; poSuggestOpen = false; savePOSearchKeyword(); } }
+									} }]}
+								/>
+								{#if poSuggestOpen && poRecentKeywordsFiltered.length > 0}
+									<div class="suggest-popover" data-suggest>
+										<span class="suggest-popover__title">{pageContents.suggest.title[lang]}</span>
+										{#each poRecentKeywordsFiltered as kw (kw)}
+											<button
+												type="button"
+												class="suggest-popover__item"
+												onmousedown={(e) => e.preventDefault()}
+												onclick={() => {
+													poSearchQuery = kw;
+													posPage = 1;
+													currentPagingPage = 1;
+													void loadPOs();
+													poSuggestOpen = false;
+												}}
+											>
+												{kw}
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
+						<!-- B46 (m18161): bulk-bar PO — hiện khi có dòng chọn
+						(mirror bulk-bar suppliers; B31: hàng riêng dưới actions).
+						-->						<!-- yêu cầu 7: filter PO vào caption. Batch 3: Select component thay
 						     select native (tái sử dụng, user chốt thay cả 4 filter). -->
 						<Select
 							class="admin-filter-select"
@@ -3228,6 +3470,24 @@
 								{pageContents.actions.createPO[lang]}
 							</Button>
 						</div>
+
+						<!-- B46 (m18161): bulk-bar PO — hàng riêng (B31) khi có chọn -->
+						{#if poSelectedIds.length > 0}
+							<div class="bulk-row">
+								<div class="bulk-bar" data-test="po-bulk-bar">
+									<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(poBulkDisplayCount()))}</span>
+									<Button color="default" variant="soft" size="sm" onClick={bulkCopyPOSelected}>
+										{pageContents.bulk.copy[lang]}
+									</Button>
+									<Button color="error" variant="soft" size="sm" onClick={() => { poBulkDeleteDisplay = true; }}>
+										{pageContents.bulk.delete[lang]}
+									</Button>
+									<Button color="default" variant="soft" size="sm" onClick={clearPOsSelection} aria-label={pageContents.bulk.cancel[lang]}>
+										<Icon icon={iconify['close-rounded']} size="sm" />
+									</Button>
+								</div>
+							</div>
+						{/if}
 					{/snippet}
 					{#snippet actionsContent(row)}
 						{@const po = row as unknown as PurchaseOrderRow}
@@ -3311,7 +3571,9 @@
 			aria-label={pageContents.filters.allStatuses[lang]}
 			data-test="suppliers-fab-setting"
 			onclick={() => {
-				settingModalDisplay = true;
+				// B46 (m18161): setting FAB mở modal đúng tab (suppliers / purchase orders)
+				if (activeTab === 'suppliers') settingModalDisplay = true;
+				else poSettingModalDisplay = true;
 				scrollActive = false;
 			}}
 		>
@@ -3325,11 +3587,20 @@
 			onclick={() => {
 				// Batch10 (m06635-1): flushSync mount field + focus TRONG gesture
 				// (iOS Safari — keyboard chỉ mở khi focus trong user gesture).
-				flushSync(() => {
-					mobileSearchOpen = true;
-					scrollActive = false;
-				});
-				mobileSearchInputInstance?.configs.focus();
+				// B46 (m18161): tab PO mở search PO riêng.
+				if (activeTab === 'suppliers') {
+					flushSync(() => {
+						mobileSearchOpen = true;
+						scrollActive = false;
+					});
+					mobileSearchInputInstance?.configs.focus();
+				} else {
+					flushSync(() => {
+						poMobileSearchOpen = true;
+						scrollActive = false;
+					});
+					poMobileSearchInputInstance?.configs.focus();
+				}
 			}}
 		>
 			<Icon icon={iconify['search-rounded']} />
@@ -4060,6 +4331,105 @@
 	</Modal>
 {/if}
 
+<!-- B46 (m18161): setting modal PO — sort server (mirror setting modal suppliers, -->
+<!--     nhưng chỉ sort: filter PO đã nằm caption). -->
+<!-- B46 (m18161): setting modal PO — sort server (mirror setting modal -->
+<!--     suppliers: Modal.Container + Select fullscreen, không RadioGroup). -->
+{#if poSettingModalDisplay}
+	<Modal bind:display={poSettingModalDisplay} size="sm">
+		<Modal.Container>
+			<Modal.Container.Header>{pageContents.settings.title[lang]}</Modal.Container.Header>
+			<Modal.Container.Body>
+				<div class="setting-form" data-test="po-setting-modal">
+					<TextField name="po-setting-sort">
+						<Label>{pageContents.settings.sortBy[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poSettingSortField}
+							options={poSortOptions}
+							clearable
+							fullscreen
+							placeholder={pageContents.settings.sortBy[lang]}
+							data-test="po-setting-sort"
+						/>
+					</TextField>
+					<TextField name="po-setting-direction">
+						<Label>{pageContents.settings.sortDirection[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poSettingSortDirection}
+							options={
+								[
+									{ value: 'asc', label: pageContents.settings.asc[lang] },
+									{ value: 'desc', label: pageContents.settings.desc[lang] }
+								]
+							}
+							fullscreen
+							data-test="po-setting-direction"
+						/>
+					</TextField>
+				</div>
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<Button
+					color="secondary"
+					variant="outline"
+					disabled={!poSettingSortField}
+					onClick={() => {
+						poSettingSortField = '';
+						poSettingSortDirection = 'desc';
+					}}
+				>
+					{pageContents.settings.reset[lang]}
+				</Button>
+				<Button
+					color="primary"
+					data-test="po-setting-apply"
+					onClick={() => {
+						poSortField = poSettingSortField;
+						poSortDirection = poSettingSortDirection === 'asc' ? 'asc' : 'desc';
+						poSettingModalDisplay = false;
+						posPage = 1;
+						currentPagingPage = 1;
+						void loadPOs();
+					}}
+				>
+					{pageContents.settings.apply[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+
+
+<!-- B46 (m18161): confirm xoá PO đã chọn (bulk).
+-->						
+{#if poBulkDeleteDisplay}
+	<AlertDialog bind:open={poBulkDeleteDisplay}>
+		<AlertDialog.Content>
+			<AlertDialog.Header variant="danger">
+				<AlertDialog.Title>{pageContents.poBulk.title[lang]}</AlertDialog.Title>
+				<AlertDialog.Description>{pageContents.poBulk.desc[lang]}</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{pageContents.poBulk.cancel[lang]}</AlertDialog.Cancel>
+				<AlertDialog.Action
+					color="danger"
+					disabled={poBulkDeleting}
+					data-test="po-bulk-delete-confirm"
+					onselect={bulkDeletePOsSelected}
+				>
+					{pageContents.poBulk.confirm[lang]}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
+{/if}
+
+
 <!-- ── Modal lịch sử thay đổi (timeline kiểu git + khôi phục từng entry) ── -->
 {#if historyDisplay}
 	<!-- B33 (m10313): class hook CSS full-size mobile (mirror analytics B32). -->
@@ -4440,7 +4810,23 @@
 {#if poModalDisplay}
 	<Modal bind:display={poModalDisplay} size="lg" isDimissable onCloseAttempt={() => poCloseGuard.attemptClose()}>
 		<Modal.Container>
-			<Modal.Container.Header>{pageContents.poModal.title[lang]}</Modal.Container.Header>
+			<Modal.Container.Header>
+				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › Create PO] giống form modal
+				     — tap nấc Suppliers đóng modal về datatable.
+				     LƯU Ý: nấc giữa (tạo PO) dùng span active — modal này tạo/sửa 1 bước -->
+				<div class="supplier-modal-title">
+					<button
+						type="button"
+						class="supplier-modal-title__label supplier-modal-title__crumb"
+						disabled={poSubmitting}
+						onclick={() => poCloseGuard.attemptClose()}
+					>
+						{pageContents.title[lang]}
+					</button>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.poModal.title[lang]}</span>
+				</div>
+			</Modal.Container.Header>
 			<Modal.Container.Body bind:ref={poModalBodyEl}>
 				{#if poError}
 					<div class="form-error-banner" role="alert">{poError}</div>
@@ -4572,7 +4958,25 @@
 {#if statusModalDisplay}
 	<Modal bind:display={statusModalDisplay} size="sm" isDimissable>
 		<Modal.Container>
-			<Modal.Container.Header>{pageContents.statusModal.title[lang]}</Modal.Container.Header>
+			<Modal.Container.Header>
+				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › PO code › Update status].
+				     Tap nấc Suppliers đóng modal về datatable; nấc PO code đóng status modal
+				     về datatable (PO list không có modal chi tiết riêng). -->
+				<div class="supplier-modal-title">
+					<button
+						type="button"
+						class="supplier-modal-title__label supplier-modal-title__crumb"
+						disabled={statusBusy}
+						onclick={() => (statusModalDisplay = false)}
+					>
+						{pageContents.title[lang]}
+					</button>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name">{statusRow?.poCode ?? '—'}</span>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.statusModal.title[lang]}</span>
+				</div>
+			</Modal.Container.Header>
 			<Modal.Container.Body>
 				<p class="modal-intro">
 					<strong>{statusRow?.poCode ?? '—'}</strong>

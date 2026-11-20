@@ -897,6 +897,9 @@ export class SupplierService {
       branchId?: string;
       supplierId?: string;
       status?: string;
+      search?: string;
+      sortField?: string;
+      sortDirection?: string;
       page?: number;
       pageSize?: number;
     } = {}
@@ -934,6 +937,29 @@ export class SupplierService {
       args.push(options.status);
     }
 
+    // B46 (m18161): tab PO trong suppliers — search + sort server.
+    if (options.search?.trim()) {
+      // LIKE case-sensitive + diacritic-sensitive → REGEXP_CONTAINS class dấu
+      // (pattern listPurchases). Tìm theo mã phiếu / ghi chú.
+      const re = buildDiacriticInsensitiveRegex(options.search.trim());
+      args.push(re, re);
+      const u1 = args.length - 1;
+      const u2 = args.length;
+      conditions.push(
+        `(REGEXP_CONTAINS(poCode, $${u1}) OR REGEXP_CONTAINS(note, $${u2}))`
+      );
+    }
+
+    // Sort whitelist (ORDER BY không nhận $n — pattern listPurchases D5).
+    const PO_LIST_SORT_FIELDS: Record<string, string> = {
+      poCode: 'poCode',
+      status: 'status',
+      totalCost: 'totalCost',
+      createdAt: 'createdAt'
+    };
+    const sortField = (options.sortField && PO_LIST_SORT_FIELDS[options.sortField]) || 'createdAt';
+    const sortDirection = options.sortDirection === 'asc' ? 'ASC' : 'DESC';
+
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const selectClause = 'META().id AS _id, ' + PO_ADMIN_SAFE_FIELDS.map((f) => `\`${f}\``).join(', ');
 
@@ -944,7 +970,7 @@ export class SupplierService {
         readonly: true
       }),
       cbPurchaseOrders.document.query({
-        statement: `SELECT ${selectClause} FROM ${purchaseOrdersKeyspace} ${whereClause} LIMIT ${pageSize} OFFSET ${offset}`,
+        statement: `SELECT ${selectClause} FROM ${purchaseOrdersKeyspace} ${whereClause} ORDER BY ${sortField} ${sortDirection} LIMIT ${pageSize} OFFSET ${offset}`,
         args,
         readonly: true
       })
