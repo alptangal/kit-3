@@ -346,12 +346,21 @@
 			addItem: { vi: 'Thêm dòng', en: 'Add item' },
 			removeItem: { vi: 'Bỏ dòng', en: 'Remove' },
 			totalCost: { vi: 'Tổng chi phí (tự tính)', en: 'Total cost (auto)' },
-			submit: { vi: 'Tạo đơn mua', en: 'Create PO' }
+			submit: { vi: 'Tạo đơn mua', en: 'Create PO' },
+			// B47 (m19661): edit mode — nút Save + crumb theo poCode
+			save: { vi: 'Lưu thay đổi', en: 'Save changes' }
 		},
 		statusModal: {
 			title: { vi: 'Cập nhật trạng thái PO', en: 'Update PO status' },
 			status: { vi: 'Trạng thái mới', en: 'New status' },
-			confirm: { vi: 'Cập nhật', en: 'Update' }
+			confirm: { vi: 'Cập nhật', en: 'Update' },
+			// B47 (m19661): xoá PO (chỉ draft/cancelled) từ status modal
+			delete: { vi: 'Xoá đơn', en: 'Delete order' },
+			deleteTitle: { vi: 'Xoá đơn mua hàng?', en: 'Delete purchase order?' },
+			deleteDesc: {
+				vi: 'Đơn mua hàng này sẽ bị xoá vĩnh viễn. Chỉ đơn nháp hoặc đã huỷ được xoá.',
+				en: 'This purchase order will be permanently removed. Only draft or cancelled orders can be deleted.'
+			}
 		},
 		toasts: {
 			supplierCreated: { vi: 'Đã tạo nhà cung cấp', en: 'Supplier created' },
@@ -373,6 +382,9 @@
 			poBulkDeleteFailed: { vi: 'Xoá đơn mua hàng không thành công', en: 'Failed to delete purchase orders' },
 			poCreated: { vi: 'Đã tạo đơn mua hàng', en: 'Purchase order created' },
 			poFailed: { vi: 'Tạo đơn mua không thành công', en: 'Failed to create purchase order' },
+			poUpdated: { vi: 'Đã cập nhật đơn mua hàng', en: 'Purchase order updated' },
+			poUpdateFailed: { vi: 'Cập nhật đơn mua không thành công', en: 'Failed to update purchase order' },
+			poDeleted: { vi: 'Đã xoá đơn mua hàng', en: 'Purchase order deleted' },
 			statusUpdated: { vi: 'Đã cập nhật trạng thái', en: 'Status updated' },
 			statusFailed: { vi: 'Cập nhật trạng thái không thành công', en: 'Failed to update status' },
 			requestFailed: { vi: 'Đã xảy ra lỗi không xác định', en: 'Unexpected error occurred' },
@@ -1452,6 +1464,13 @@
 	let poModalDisplay = $state(false);
 	let poSubmitting = $state(false);
 	let poError = $state<string | undefined>(undefined);
+	// B47 (m19661): edit PO draft — mode + id + row gốc (crumb active)
+	let poEditMode = $state<'create' | 'edit'>('create');
+	let poEditId = $state<string | null>(null);
+	let poOriginalCode = $state('');
+	// B47: xoá 1 PO từ status modal (chỉ draft/cancelled)
+	let poDeleteConfirmDisplay = $state(false);
+	let poDeleteBusy = $state(false);
 	let poForm = $state<{
 		poCode: string;
 		supplierId: string;
@@ -2741,6 +2760,7 @@
 
 	// ── Modal tạo PO ──
 	function openPOModal() {
+		poEditMode = 'create'; // B47 (m19661)
 		poForm = { poCode: '', supplierId: '', branchId: '', expectedAt: '', items: [] };
 		poError = undefined;
 		poModalDisplay = true;
@@ -2758,6 +2778,83 @@
 
 	function removePOItem(index: number) {
 		poForm.items = poForm.items.filter((_, i) => i !== index);
+	}
+
+	// B47 (m19661): sửa PO draft — fetch chi tiết (list không trả items) rồi fill form.
+	// PO đã nhận/huỷ (khác draft) không sửa được → toast lỗi server.
+	async function openPOEditModal(row: PurchaseOrderRow) {
+		if (!row._id || !encryptionKeys) return;
+		poError = undefined;
+		poEditMode = 'edit';
+		poEditId = row._id;
+		poOriginalCode = row.poCode ?? '';
+		poModalDisplay = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/purchase-orders/get',
+				{ method: 'POST', body: { poId: row._id } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const po = (response.data ?? {}) as Record<string, unknown>;
+				poForm = {
+					poCode: (po.poCode as string) ?? '',
+					supplierId: (po.supplierId as string) ?? '',
+					branchId: (po.branchId as string) ?? '',
+					expectedAt: (po.expectedAt as string) ?? '',
+					items: (Array.isArray(po.items) ? po.items : []).map((it: Record<string, unknown>) => ({
+						variantId: (it.variantId as string) ?? '',
+						quantity: Number(it.quantity) || 1,
+						unitCost: Number(it.unitCost) || 0,
+						lotNumber: (it.lotNumber as string) ?? undefined,
+						expiresAt: (it.expiresAt as string) ?? undefined
+					}))
+				};
+			} else {
+				poError = resolveServerMessage(response.message, lang, pageContents.toasts.requestFailed);
+			}
+		} catch (err) {
+			poError = pageContents.toasts.requestFailed[lang];
+			if (import.meta.env.DEV) console.error('[admin/suppliers] fetch PO for edit failed:', err);
+		}
+		void loadVariantOptions();
+		void (async () => {
+			await tick();
+			poCloseGuard.markClean();
+		})();
+	}
+
+	// B47: xoá 1 PO từ status modal — TÁI SỬ DỤNG endpoint bulk {ids:[1]}
+	// (server chỉ cho xoá draft/cancelled — khác → toast poBulkNone).
+	async function deletePOFromStatus() {
+		if (!statusRow?._id || poDeleteBusy || !encryptionKeys) return;
+		poDeleteBusy = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/purchases/bulk',
+				{ method: 'POST', body: { ids: [statusRow._id], action: 'delete' } },
+				encryptionKeys
+			);
+			poDeleteBusy = false;
+			if (response.ok) {
+				const deleted = Number((response.data as { deleted?: number } | undefined)?.deleted ?? 0);
+				showToast(
+					deleted > 0
+						? pageContents.toasts.poDeleted[lang]
+						: pageContents.toasts.poBulkNone[lang],
+					deleted > 0 ? 'success' : 'error'
+				);
+				poDeleteConfirmDisplay = false;
+				statusModalDisplay = false;
+				await loadPOs();
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.poBulkDeleteFailed), 'error');
+			}
+		} catch (err) {
+			poDeleteBusy = false;
+			showToast(pageContents.toasts.poBulkDeleteFailed[lang], 'error');
+			if (import.meta.env.DEV) console.error('[admin/suppliers] delete PO failed:', err);
+		}
 	}
 
 	function validatePOForm(): string | undefined {
@@ -2786,26 +2883,31 @@
 			return;
 		}
 		poError = undefined;
+		// B47 (m19661): chốt mode trước try — catch cũng biết toast create/update.
+		const isEdit = poEditMode === 'edit' && !!poEditId;
 		poSubmitting = true;
 		try {
+			const payload = {
+				poCode: str(poForm.poCode).trim(),
+				supplierId: poForm.supplierId,
+				branchId: poForm.branchId,
+				expectedAt: poForm.expectedAt || undefined,
+				items: poForm.items.map((item) => ({
+					variantId: item.variantId,
+					quantity: Number(item.quantity),
+					unitCost: Number(item.unitCost),
+					lotNumber: str(item.lotNumber).trim() || undefined,
+					expiresAt: item.expiresAt || undefined
+				})),
+				totalCost: poTotalCost
+			};
 			const response = await encryption.fetchSecure(
-				'/api/admin/purchase-orders/create',
+				isEdit ? '/api/admin/purchase-orders/update' : '/api/admin/purchase-orders/create',
 				{
 					method: 'POST',
-					body: {
-						poCode: str(poForm.poCode).trim(),
-						supplierId: poForm.supplierId,
-						branchId: poForm.branchId,
-						expectedAt: poForm.expectedAt || undefined,
-						items: poForm.items.map((item) => ({
-							variantId: item.variantId,
-							quantity: Number(item.quantity),
-							unitCost: Number(item.unitCost),
-							lotNumber: str(item.lotNumber).trim() || undefined,
-							expiresAt: item.expiresAt || undefined
-						})),
-						totalCost: poTotalCost
-					}
+					// B47: edit — patch field PO (server whitelist PO_ADMIN_SAFE_FIELDS,
+					// chỉ draft được sửa — status khác trả poNotReceivable).
+					body: isEdit ? { poId: poEditId, patch: payload } : payload
 				},
 				encryptionKeys
 			);
@@ -2813,20 +2915,20 @@
 			if (response.ok) {
 				showToast(
 					response.message
-						? resolveServerMessage(response.message, lang, pageContents.toasts.poCreated)
-						: pageContents.toasts.poCreated[lang],
+						? resolveServerMessage(response.message, lang, isEdit ? pageContents.toasts.poUpdated : pageContents.toasts.poCreated)
+						: isEdit ? pageContents.toasts.poUpdated[lang] : pageContents.toasts.poCreated[lang],
 					'success'
 				);
 				poModalDisplay = false;
 				poCloseGuard.markClean();
 				await loadPOs();
 			} else {
-				poError = resolveServerMessage(response.message, lang, pageContents.toasts.poFailed);
+				poError = resolveServerMessage(response.message, lang, isEdit ? pageContents.toasts.poUpdateFailed : pageContents.toasts.poFailed);
 			}
 		} catch (err) {
 			poSubmitting = false;
 			poError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
-			if (import.meta.env.DEV) console.error('[admin/suppliers] create PO failed:', err);
+			if (import.meta.env.DEV) console.error('[admin/suppliers] submit PO failed:', err);
 		}
 	}
 
@@ -3327,7 +3429,13 @@
 					// B46.2: card mode mobile + tap card mở modal update-status (action duy nhất của PO)
 					cardFields={poCardFieldIds}
 					mobileTapMode="callback"
-					onRowClick={(row) => openStatusModal(row as unknown as PurchaseOrderRow)}
+					// B47 (m19661): tap card — draft mở modal SỬA (fetch chi tiết),
+					// trạng thái khác mở modal cập nhật trạng thái (mirror suppliers tap = edit)
+					onRowClick={(row) => {
+					const po = row as unknown as PurchaseOrderRow;
+					if (po.status === 'draft') void openPOEditModal(po);
+					else openStatusModal(po);
+				}}
 					selection={poSelectedIds}
 					selectionTools={false}
 					getRowId={(row) => String((row as PurchaseOrderRow)._id ?? '')}
@@ -3443,7 +3551,9 @@
 						<!-- B46 (m18161): bulk-bar PO — hiện khi có dòng chọn
 						(mirror bulk-bar suppliers; B31: hàng riêng dưới actions).
 						-->						<!-- yêu cầu 7: filter PO vào caption. Batch 3: Select component thay
-						     select native (tái sử dụng, user chốt thay cả 4 filter). -->
+						     select native. B47 (m19661): mobile ẨN filter (đã có setting modal
+						     qua nút tune/FAB — đồng bộ tab suppliers). -->
+						{#if !isMobile}
 						<Select
 							class="admin-filter-select"
 							size="sm"
@@ -3474,13 +3584,34 @@
 							placeholder={pageContents.filters.allSuppliers[lang]}
 							onValueChange={() => onFilterChange()}
 						/>
+						{/if}
 						<div class="admin-actions-group">
-							<Button color="default" variant="outline" size="sm" onClick={refresh} aria-label={pageContents.states.retry[lang]}>
+							<!-- B47: tune = SETTING MODAL (filter+sort) đồng bộ suppliers;
+							     refresh vẫn qua pull dữ liệu khi Apply. Mobile: nút icon. -->
+							{#if isMobile}
+							<button
+								type="button"
+								class="mobile-caption-icon"
+								aria-label={pageContents.settings.title[lang]}
+								data-test="po-mobile-filter-btn"
+								onclick={() => (poSettingModalDisplay = true)}
+							>
+								<Icon icon={iconify['tune-rounded']} size="sm" />
+							</button>
+							{:else}
+							<Button color="default" variant="outline" size="sm" onClick={() => { poSettingModalDisplay = true; }} aria-label={pageContents.settings.title[lang]} data-test="po-header-setting-btn">
 								<Icon icon={iconify['tune-rounded']} size="sm" />
 							</Button>
+							{/if}
+							{#if isMobile}
+							<Button color="success" size="sm" onClick={openPOModal} aria-label={pageContents.actions.createPO[lang]} data-test="po-create-btn">
+								<Icon icon={iconify['add-rounded']} size="sm" />
+							</Button>
+							{:else}
 							<Button color="success" size="sm" onClick={openPOModal} data-test="po-create-btn">
 								{pageContents.actions.createPO[lang]}
 							</Button>
+							{/if}
 						</div>
 
 						<!-- B46 (m18161): bulk-bar PO — hàng riêng (B31) khi có chọn -->
@@ -3508,6 +3639,12 @@
 							<Button color="primary" variant="ghost" size="sm" onClick={() => openStatusModal(po)}>
 								{pageContents.actions.updateStatus[lang]}
 							</Button>
+							{#if po.status === 'draft'}
+								<!-- B47 (m19661): sửa PO (chỉ draft — server chặn) -->
+								<Button color="default" variant="ghost" size="sm" onClick={() => openPOEditModal(po)}>
+									{pageContents.actions.edit[lang]}
+								</Button>
+							{/if}
 						</div>
 					{/snippet}
 				</DataTable>
@@ -4353,6 +4490,50 @@
 			<Modal.Container.Header>{pageContents.settings.title[lang]}</Modal.Container.Header>
 			<Modal.Container.Body>
 				<div class="setting-form" data-test="po-setting-modal">
+					<!-- B47 (m19661): filter PO đẩy VÀO setting modal (mobile ẩn select
+					     caption) — mirror setting modal suppliers 3 field. -->
+					<TextField name="po-setting-status">
+						<Label>{pageContents.settings.filterStatus[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poStatusFilter}
+							options={poStatusOptions}
+							searchable
+							clearable
+							fullscreen
+							placeholder={pageContents.filters.allStatuses[lang]}
+							data-test="po-setting-status"
+						/>
+					</TextField>
+					<TextField name="po-setting-branch">
+						<Label>{pageContents.filters.allBranches[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poBranchFilter}
+							options={poBranchOptions}
+							searchable
+							clearable
+							fullscreen
+							placeholder={pageContents.filters.allBranches[lang]}
+							data-test="po-setting-branch"
+						/>
+					</TextField>
+					<TextField name="po-setting-supplier">
+						<Label>{pageContents.filters.allSuppliers[lang]}</Label>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={poSupplierFilter}
+							options={poSupplierOptions}
+							searchable
+							clearable
+							fullscreen
+							placeholder={pageContents.filters.allSuppliers[lang]}
+							data-test="po-setting-supplier"
+						/>
+					</TextField>
 					<TextField name="po-setting-sort">
 						<Label>{pageContents.settings.sortBy[lang]}</Label>
 						<Select
@@ -4388,10 +4569,13 @@
 				<Button
 					color="secondary"
 					variant="outline"
-					disabled={!poSettingSortField}
+					disabled={!poSettingSortField && !poStatusFilter && !poBranchFilter && !poSupplierFilter}
 					onClick={() => {
 						poSettingSortField = '';
 						poSettingSortDirection = 'desc';
+						poStatusFilter = '';
+						poBranchFilter = '';
+						poSupplierFilter = '';
 					}}
 				>
 					{pageContents.settings.reset[lang]}
@@ -4403,6 +4587,16 @@
 						poSortField = poSettingSortField;
 						poSortDirection = poSettingSortDirection === 'asc' ? 'asc' : 'desc';
 						poSettingModalDisplay = false;
+						// B47: persist filter+sort (mirror suppliers setting apply)
+						saveDataTablePrefs(PO_PREFS_KEY, {
+							filters: {
+								status: poStatusFilter || null,
+								branch: poBranchFilter || null,
+								supplier: poSupplierFilter || null
+							},
+							sort: poSortField ? { field: poSortField, direction: poSortDirection } : undefined,
+							cardFields: poCardFieldIds
+						});
 						posPage = 1;
 						currentPagingPage = 1;
 						void loadPOs();
@@ -4822,10 +5016,12 @@
 {#if poModalDisplay}
 	<Modal bind:display={poModalDisplay} size="lg" isDimissable onCloseAttempt={() => poCloseGuard.attemptClose()} class="supplier-modal-root">
 		<Modal.Container>
-			<Modal.Container.Header>
+			<!-- B47 (m19661): ẨN nút ✕ header trên mobile (đồng bộ suppliers form
+			     — chỉ đóng qua crumb/back) -->
+			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
 				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › Create PO] giống form modal
 				     — tap nấc Suppliers đóng modal về datatable.
-				     LƯU Ý: nấc giữa (tạo PO) dùng span active — modal này tạo/sửa 1 bước -->
+				     B47: edit mode — active = poCode (đồng bộ Suppliers › tên NCC) -->
 				<div class="supplier-modal-title">
 					<button
 						type="button"
@@ -4836,7 +5032,9 @@
 						{pageContents.title[lang]}
 					</button>
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.poModal.title[lang]}</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">
+						{poEditMode === 'edit' ? (poOriginalCode || poForm.poCode) : pageContents.poModal.title[lang]}
+					</span>
 				</div>
 			</Modal.Container.Header>
 			<Modal.Container.Body bind:ref={poModalBodyEl}>
@@ -4926,7 +5124,7 @@
 			<Modal.Container.Footer>
 				<!-- create/save = success -->
 				<Button color="success" onClick={submitPO} loading={poSubmitting} disabled={poSubmitting}>
-					{pageContents.poModal.submit[lang]}
+					{poEditMode === 'edit' ? pageContents.poModal.save[lang] : pageContents.poModal.submit[lang]}
 				</Button>
 				<Button
 					color="default"
@@ -4970,7 +5168,8 @@
 {#if statusModalDisplay}
 	<Modal bind:display={statusModalDisplay} size="sm" isDimissable class="supplier-modal-root">
 		<Modal.Container>
-			<Modal.Container.Header>
+			<!-- B47 (m19661): ẨN nút ✕ header trên mobile (đồng bộ suppliers form) -->
+			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
 				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › PO code › Update status].
 				     Tap nấc Suppliers đóng modal về datatable; nấc PO code đóng status modal
 				     về datatable (PO list không có modal chi tiết riêng). -->
@@ -5011,6 +5210,13 @@
 				<Button color="primary" onClick={confirmStatus} loading={statusBusy}>
 					{pageContents.statusModal.confirm[lang]}
 				</Button>
+				{#if statusRow && (statusRow.status === 'draft' || statusRow.status === 'cancelled')}
+					<!-- B47 (m19661): xoá PO (chỉ draft/cancelled — server bulk chặn
+					     received/ordered). Confirm qua AlertDialog riêng. -->
+					<Button color="error" variant="outline" disabled={statusBusy} onClick={() => { poDeleteConfirmDisplay = true; }} data-test="po-delete-btn">
+						{pageContents.statusModal.delete[lang]}
+					</Button>
+				{/if}
 				<Button
 					color="default"
 					variant="ghost"
@@ -5023,6 +5229,31 @@
 			</Modal.Container.Footer>
 		</Modal.Container>
 	</Modal>
+{/if}
+
+<!-- B47 (m19661): confirm xoá 1 PO từ status modal -->
+{#if poDeleteConfirmDisplay}
+	<AlertDialog bind:open={poDeleteConfirmDisplay} title={pageContents.statusModal.deleteTitle[lang]} description={pageContents.statusModal.deleteDesc[lang]}>
+		<AlertDialog.Content>
+			<AlertDialog.Header variant="danger">
+				<AlertDialog.Title>{pageContents.statusModal.deleteTitle[lang]}</AlertDialog.Title>
+				<AlertDialog.Description>{pageContents.statusModal.deleteDesc[lang]}</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{pageContents.poBulk.cancel[lang]}</AlertDialog.Cancel>
+				<AlertDialog.Action
+					color="danger"
+					disabled={poDeleteBusy}
+					data-test="po-delete-confirm"
+					onselect={() => {
+						void deletePOFromStatus();
+					}}
+				>
+					{pageContents.statusModal.delete[lang]}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog>
 {/if}
 
 <style lang="scss">
@@ -5887,7 +6118,8 @@
 		align-items: center;
 
 		@media (max-width: 860px) {
-			grid-template-columns: 1fr 1fr;
+			/* B47 (m19661): minmax(0,1fr) — 1fr không co dưới min-content của input làm hàng Items tràn 390px mobile */
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		}
 	}
 
