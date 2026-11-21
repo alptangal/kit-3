@@ -1542,6 +1542,9 @@
 	// reset page=1 rồi load. Chỉ áp dụng cho tab suppliers.
 	let cardFieldIds = $state<string[]>(['name', 'status', 'contact', 'address']);
 
+	// B46.2 (m19177): card fields tab PO — mirror purchases page (title = code)
+	let poCardFieldIds = $state<string[]>(['code', 'status', 'totalCost', 'expectedAt']);
+
 	$effect(() => {
 		void searchQuery;
 		if (activeTab !== 'suppliers') return;
@@ -3319,7 +3322,12 @@
 					selectable
 					showIndex
 					indexCheckboxes
-					checkOnRowClick
+					// B46.2 (m19177): đồng bộ DataTable PO với tab suppliers — STT cộng offset phân trang server
+					indexOffset={(posPage - 1) * pageSize}
+					// B46.2: card mode mobile + tap card mở modal update-status (action duy nhất của PO)
+					cardFields={poCardFieldIds}
+					mobileTapMode="callback"
+					onRowClick={(row) => openStatusModal(row as unknown as PurchaseOrderRow)}
 					selection={poSelectedIds}
 					selectionTools={false}
 					getRowId={(row) => String((row as PurchaseOrderRow)._id ?? '')}
@@ -3334,11 +3342,15 @@
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptyPOs[lang]}
 					loadingLabel={pageContents.states.loading[lang]}
+					captionDescription={{ vi: 'Tìm kiếm, lọc và quản lý đơn mua hàng', en: 'Search, filter and manage purchase orders' }}
 					caption={{ vi: 'Danh sách đơn mua hàng', en: 'Purchase orders list' }}
 					actionsLabel={{ vi: pageContents.poTable.actions[lang], en: pageContents.poTable.actions[lang] }}
 					stickyHead
-					// Batch 11: co caption khi cuộn CHỈ mobile
-					class={tableScrolled && isMobile ? 'caption-collapsed' : undefined}
+					// Batch 11: co caption khi cuộn CHỈ mobile; B46.2: ẩn tools khi cuộn (B8 mục 2)
+					class={[
+						tableScrolled && isMobile ? 'caption-collapsed' : undefined,
+						scrollActive && isMobile ? 'tools-hidden-mobile' : undefined
+					].filter(Boolean).join(' ') || undefined}
 					data-test="purchase-orders-datatable"
 				>
 					{#snippet captionTools()}
@@ -4808,7 +4820,7 @@
 
 <!-- ── Modal tạo đơn mua hàng (chuẩn chung: TextField/Input + Select + dirty-guard) ── -->
 {#if poModalDisplay}
-	<Modal bind:display={poModalDisplay} size="lg" isDimissable onCloseAttempt={() => poCloseGuard.attemptClose()}>
+	<Modal bind:display={poModalDisplay} size="lg" isDimissable onCloseAttempt={() => poCloseGuard.attemptClose()} class="supplier-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header>
 				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › Create PO] giống form modal
@@ -4956,7 +4968,7 @@
 
 <!-- ── Modal cập nhật trạng thái PO ── -->
 {#if statusModalDisplay}
-	<Modal bind:display={statusModalDisplay} size="sm" isDimissable>
+	<Modal bind:display={statusModalDisplay} size="sm" isDimissable class="supplier-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header>
 				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › PO code › Update status].
