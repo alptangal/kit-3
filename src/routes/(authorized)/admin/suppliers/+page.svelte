@@ -533,7 +533,10 @@
 	}
 
 	// ── Tab + trạng thái danh sách ──
-	let activeTab = $state<'suppliers' | 'purchase-orders'>('suppliers');
+	// B48 (m20355): deep-link ?tab=purchase-orders — refresh giữ đúng tab đang mở
+	let activeTab = $state<'suppliers' | 'purchase-orders'>(
+		page.url.searchParams.get('tab') === 'purchase-orders' ? 'purchase-orders' : 'suppliers'
+	);
 
 	let suppliers = $state<SupplierRow[]>([]);
 	let suppliersTotal = $state(0);
@@ -1825,6 +1828,16 @@
 	function switchTab(tab: 'suppliers' | 'purchase-orders') {
 		if (activeTab === tab) return;
 		activeTab = tab;
+		// B48 (m20355): đồng bộ deep-link ?tab= (gỡ khi về suppliers — URL mặc định sạch)
+		if (tab === 'purchase-orders') {
+			if (page.url.searchParams.get('tab') !== 'purchase-orders') {
+				page.url.searchParams.set('tab', 'purchase-orders');
+				history.replaceState(history.state, '', page.url);
+			}
+		} else if (page.url.searchParams.has('tab')) {
+			page.url.searchParams.delete('tab');
+			history.replaceState(history.state, '', page.url);
+		}
 		// Đồng bộ paginator sang state page của tab mới (không refetch —
 		// refreshPaging đã guard cùng-value)
 		currentPagingPage = tab === 'suppliers' ? suppliersPage : posPage;
@@ -3443,8 +3456,6 @@
 					pageSize={pageSize}
 					showPagination={false}
 					sortable
-					searchable
-					searchPlaceholder={{ vi: 'Tìm đơn mua hàng…', en: 'Search purchase orders…' }}
 					resizable={{ enabled: true, fit: true }}
 					loading={posLoading && !posLoadedOnce}
 					visual={{ striped: true, hoverable: true }}
