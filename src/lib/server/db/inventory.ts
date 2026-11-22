@@ -579,6 +579,41 @@ export class InventoryService {
   // ========== BRANCHES (for inventory context) ==========
 
   /**
+   * B49 (chain B): create a new branch (quick-create from PO form).
+   */
+  static async createBranch(
+    actor: ActorContext,
+    data: { name: string }
+  ): Promise<{ success: false; messages: TranslateContent } | ({ success: true } & { branch: Record<string, unknown> } )> {
+    const scope = await PermissionChecker.getScope(actor.roleName, 'inventory:manage');
+    if (!scope) return { success: false, messages: adminMessages.permissionDenied };
+
+    const name = (data.name ?? '').trim();
+    if (!name) return { success: false, messages: adminMessages.queryFailed };
+
+    const id = `branch_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date().toISOString();
+    const content = {
+      _id: id,
+      name,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const res = await cbBranches.document.create({
+      documentKey: id,
+      content
+    });
+
+    if (!res.ok) {
+      return { success: false, messages: adminMessages.queryFailed };
+    }
+
+    return { success: true, branch: content };
+  }
+
+  /**
    * List all branches (for inventory filtering).
    */
   static async listBranches(

@@ -1431,7 +1431,18 @@
 		aria-haspopup="listbox"
 		aria-expanded={configs.status.open}
 		aria-disabled={configs.disabled}
-		onclick={() => configs.toggleOpen()}
+		onclick={() => {
+			// (B49) prop onTriggerDetail + đã có value + đang đóng → page tự mở modal detail
+			if (props.onTriggerDetail && !configs.status.open) {
+				const v = configs.value;
+				const hasValue = Array.isArray(v) ? v.length > 0 : !!v;
+				if (hasValue) {
+					props.onTriggerDetail();
+					return;
+				}
+			}
+			configs.toggleOpen();
+		}}
 		onfocus={() => configs.focus()}
 		onblur={(e) => {
 			// Fullscreen: Modal chiếm focus (search input bên trong modal portal, ngoài
@@ -1975,7 +1986,27 @@
 			bind:display={fullscreenDisplay}
 		>
 			<Modal.Container>
-				<Modal.Container.Header>{fullscreenTitleDerived}</Modal.Container.Header>
+				<Modal.Container.Header>
+					{#if props.fullscreenCrumbs?.length}
+						{@const crumbs = props.fullscreenCrumbs}
+						<div class="select-fullscreen-crumbs">
+							{#each crumbs as c, i}
+								{#if i > 0}<span class="select-fullscreen-crumbs__name" aria-hidden="true">›</span>{/if}
+								{#if c.kind === "current"}
+									<span class="select-fullscreen-crumbs__name select-fullscreen-crumbs__name--active">{c.label}</span>
+								{:else}
+									<button
+										type="button"
+										class="select-fullscreen-crumbs__label select-fullscreen-crumbs__crumb"
+										onclick={() => props.fullscreenCrumbTap?.(i)}
+									>{c.label}</button>
+								{/if}
+							{/each}
+						</div>
+					{:else}
+						{fullscreenTitleDerived}
+					{/if}
+				</Modal.Container.Header>
 				<Modal.Container.Body class="select-fullscreen-body">
 					{@render selectBody()}
 				</Modal.Container.Body>

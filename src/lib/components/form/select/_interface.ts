@@ -149,6 +149,20 @@ export interface SelectProps extends BasicProps {
 	/** Callback khi bỏ chọn option qua nút × trên chip (trước khi toggle). */
 	onChipRemove?: (value: string) => void;
 
+	// ── (B49) Fullscreen header breadcrumb + tap-trigger-when-selected ──
+	/**
+	 * Khi fullscreen mở, header Modal render breadcrumb các nấc này thay vì
+	 * placeholder. kind "crumb" = button (tap → fullscreenCrumbTap(index)),
+	 * kind "current" = span active. Mặc định undefined → giữ nguyên placeholder.
+	 */
+	fullscreenCrumbs?: Array<{ label: string; kind: "crumb" | "current" }>;
+	/** Gọi khi user tap nấc kind "crumb" thứ index (0-based trong fullscreenCrumbs). */
+	fullscreenCrumbTap?: (index: number) => void;
+	/**
+	 * Khi được truyền VÀ select đang đóng + đã có value: tap trigger KHÔNG mở
+	 * dropdown/fullscreen mà gọi callback này (page tự mở modal detail).
+	 */
+	onTriggerDetail?: () => void;
 	// ── (10) Fullscreen — panel option che toàn bộ viewport khi mở ──
 	/** Khi mở, dropdown thành overlay fixed inset:0 (CSS, không Fullscreen API). */
 	fullscreen?: boolean;

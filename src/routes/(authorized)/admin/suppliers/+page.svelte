@@ -348,7 +348,40 @@
 			totalCost: { vi: 'Tổng chi phí (tự tính)', en: 'Total cost (auto)' },
 			submit: { vi: 'Tạo đơn mua', en: 'Create PO' },
 			// B47 (m19661): edit mode — nút Save + crumb theo poCode
-			save: { vi: 'Lưu thay đổi', en: 'Save changes' }
+			save: { vi: 'Lưu thay đổi', en: 'Save changes' },
+			// B49 (chain B): generate code + quick create + review + share
+			generateCode: { vi: 'Tạo mã tự động', en: 'Auto-generate code' },
+			createNew: { vi: 'Tạo mới "{value}"', en: 'Create new "{value}"' },
+			quickCreateSupplier: { vi: 'Nhà cung cấp mới', en: 'New supplier' },
+			quickCreateBranch: { vi: 'Chi nhánh mới', en: 'New branch' },
+			quickCreateVariant: { vi: 'Sản phẩm mới', en: 'New variant' },
+			quickCreateName: { vi: 'Tên', en: 'Name' },
+			quickCreateSku: { vi: 'Mã SKU', en: 'SKU' },
+			quickCreateDisplayName: { vi: 'Tên hiển thị', en: 'Display name' },
+			quickCreatePrice: { vi: 'Giá (tuỳ chọn)', en: 'Price (optional)' },
+			quickCreatePhone: { vi: 'Số điện thoại (tuỳ chọn)', en: 'Phone (optional)' },
+			quickCreateEmail: { vi: 'Email (tuỳ chọn)', en: 'Email (optional)' },
+			quickCreateProduct: { vi: 'Sản phẩm gốc', en: 'Parent product' },
+			quickCreateProductPlaceholder: { vi: 'Chọn sản phẩm gốc', en: 'Select a parent product' },
+			quickCreate: { vi: 'Tạo', en: 'Create' },
+			duplicateItem: { vi: 'Có sản phẩm bị lặp trong danh sách', en: 'Duplicate item in list' },
+			reviewTitle: { vi: 'Xác nhận tạo đơn', en: 'Confirm purchase order' },
+			reviewTitleEdit: { vi: 'Xác nhận cập nhật', en: 'Confirm update' },
+			reviewSupplier: { vi: 'Nhà cung cấp', en: 'Supplier' },
+			reviewBranch: { vi: 'Chi nhánh', en: 'Branch' },
+			reviewExpectedAt: { vi: 'Ngày dự kiến nhận', en: 'Expected at' },
+			reviewItems: { vi: 'Số mặt hàng', en: 'Items count' },
+			reviewConfirm: { vi: 'Xác nhận', en: 'Confirm' },
+			shareTitle: { vi: 'Chia sẻ đơn hàng', en: 'Share purchase order' },
+			share: { vi: 'Chia sẻ', en: 'Share' },
+			shareDownload: { vi: 'Tải ảnh về', en: 'Download image' },
+			shareClose: { vi: 'Đóng', en: 'Close' },
+			shareAppTitle: { vi: 'ĐƠN ĐẶT HÀNG', en: 'PURCHASE ORDER' },
+			shareSupplier: { vi: 'Nhà cung cấp', en: 'Supplier' },
+			shareBranch: { vi: 'Chi nhánh', en: 'Branch' },
+			shareDate: { vi: 'Ngày nhận', en: 'Expected' },
+			shareItem: { vi: 'Mặt hàng', en: 'Item' },
+			shareQty: { vi: 'SL', en: 'Qty' }
 		},
 		statusModal: {
 			title: { vi: 'Cập nhật trạng thái PO', en: 'Update PO status' },
@@ -1514,6 +1547,53 @@
 	const poVariantModalOptions = $derived(
 		variantOptions.map((v) => ({ value: v._id, label: v.sku ? `${v.sku} — ${v.displayName ?? ''}` : (v.displayName ?? v._id) }))
 	);
+	// B49 (chain B): item CUỐI hợp lệ mới cho phép "Thêm dòng" (list rỗng → enabled).
+	const lastPoItemValid = $derived.by(() => {
+		if (poForm.items.length === 0) return true;
+		const last = poForm.items[poForm.items.length - 1];
+		return !!last.variantId && Number.isFinite(last.quantity) && last.quantity > 0;
+	});
+	// B49 (chain B): 2 dòng trùng variantId → highlight + chặn submit.
+	function poItemDuplicate(index: number): boolean {
+		const cur = poForm.items[index];
+		if (!cur || !cur.variantId) return false;
+		return poForm.items.some((it, i) => i !== index && it.variantId === cur.variantId);
+	}
+
+	// ── B49 (chain B): review trước submit ──
+	let poReviewDisplay = $state(false);
+	// ── B49 (chain B): share ảnh sau khi tạo PO thành công ──
+	let poShareDisplay = $state(false);
+	let poShareData = $state<null | { poCode: string; supplierLabel: string; branchLabel: string; expectedAt: string; items: { label: string; quantity: number }[] }>(null);
+	let poShareBusy = $state(false);
+	// ── B49 (chain B): quick-create từ Select (supplier/branch/variant) ──
+	let quickCreateKind = $state<null | 'supplier' | 'branch' | 'variant'>(null);
+	// target: field đợi giá trị sau khi tạo — 'supplier' | 'branch' | index item (string số)
+	let quickCreateTarget = $state<null | 'supplier' | 'branch' | string>(null);
+	let quickCreateName = $state('');
+	let quickCreatePhone = $state('');
+	let quickCreateEmail = $state('');
+	let quickCreateSku = $state('');
+	let quickCreateDisplayName = $state('');
+	let quickCreatePrice = $state('');
+	let quickCreateProductId = $state('');
+	let quickCreateBusy = $state(false);
+	let quickCreateError = $state<string | undefined>(undefined);
+	let quickCreateProducts = $state<{ _id: string; name?: string }[]>([]);
+	let quickCreateProductsLoaded = $state(false);
+	// B49 (chain B): display riêng cho Modal quick-create (bind:display cần $state).
+	let quickCreateDisplay = $state(false);
+	// B49 (chain B): options product cho quick-create variant.
+	const quickCreateProductOptions = $derived(quickCreateProducts.map((p) => ({ value: p._id, label: p.name ?? p._id })));
+	// B49 (chain B): variant đang xem detail (read-only).
+	const variantDetail = $derived(variantOptions.find((v) => v._id === variantDetailId) ?? null);
+	// B49 (chain B): variant quick-create cần danh sách product — load khi mở modal.
+	$effect(() => {
+		if (quickCreateKind === 'variant') void loadQuickCreateProducts();
+	});
+	// ── B49 (chain B): variant detail read-only ──
+	let variantDetailDisplay = $state(false);
+	let variantDetailId = $state<string | null>(null);
 
 	// ── Modal cập nhật trạng thái PO ──
 	let statusModalDisplay = $state(false);
@@ -2786,11 +2866,173 @@
 	}
 
 	function addPOItem() {
+		// B49 (chain B): unitCost khỏi UI — giữ 0 trong type (server POItem yêu cầu).
 		poForm.items = [...poForm.items, { variantId: '', quantity: 1, unitCost: 0 }];
 	}
 
 	function removePOItem(index: number) {
 		poForm.items = poForm.items.filter((_, i) => i !== index);
+	}
+
+	// ── B49 (chain B): quick-create từ Select khi search không thấy ──
+	function openQuickCreate(kind: 'supplier' | 'branch' | 'variant', value: string, target: 'supplier' | 'branch' | string) {
+		quickCreateKind = kind;
+		quickCreateDisplay = true;
+		quickCreateTarget = target;
+		quickCreateError = undefined;
+		// seed tên đã gõ vào field đầu tiên (name/sku) để user đỡ gõ lại.
+		const seeded = value.trim();
+		quickCreateName = kind === 'supplier' ? seeded : '';
+		quickCreatePhone = '';
+		quickCreateEmail = '';
+		quickCreateSku = kind === 'variant' ? seeded : '';
+		quickCreateDisplayName = '';
+		quickCreatePrice = '';
+		quickCreateProductId = '';
+		quickCreateProductsLoaded = false;
+		quickCreateProducts = [];
+	}
+	function closeQuickCreate() {
+		quickCreateDisplay = false;
+		quickCreateKind = null;
+		quickCreateTarget = null;
+		quickCreateError = undefined;
+	}
+	// Load danh sách product cho quick-create variant (load 1 lần khi mở modal).
+	async function loadQuickCreateProducts() {
+		if (!encryptionKeys || quickCreateProductsLoaded) return;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/products/list',
+				{ method: 'POST', body: { page: 1, pageSize: 100 } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				quickCreateProducts = ((response.data as { items?: { _id: string; name?: string }[] } | undefined)?.items ?? []);
+				quickCreateProductsLoaded = true;
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[admin/suppliers] load quick-create products failed:', err);
+		}
+	}
+	async function submitQuickCreate() {
+		if (quickCreateBusy || !encryptionKeys || !quickCreateKind) return;
+		const kind = quickCreateKind;
+		quickCreateBusy = true;
+		quickCreateError = undefined;
+		try {
+			if (kind === 'supplier') {
+				const name = str(quickCreateName).trim();
+				if (!name) {
+					quickCreateBusy = false;
+					return;
+				}
+				const body: Record<string, unknown> = { name, status: 'active' };
+				if (str(quickCreatePhone).trim()) body.phones = [str(quickCreatePhone).trim()];
+				if (str(quickCreateEmail).trim()) body.emails = [str(quickCreateEmail).trim()];
+				const response = await encryption.fetchSecure(
+					'/api/admin/suppliers/create',
+					{ method: 'POST', body },
+					encryptionKeys
+				);
+				if (!response.ok) {
+					quickCreateError = resolveServerMessage(response.message, lang, pageContents.toasts.supplierFailed);
+					quickCreateBusy = false;
+					return;
+				}
+				const created = (response.data ?? {}) as Record<string, unknown>;
+				const newId = str(created._id);
+				showToast(pageContents.toasts.supplierCreated[lang], 'success');
+				await loadSuppliers();
+				// set giá trị vào field đợi (poForm.supplierId hoặc item variant...).
+				applyQuickCreateTarget('supplier', newId);
+				closeQuickCreate();
+			} else if (kind === 'branch') {
+				const name = str(quickCreateName).trim();
+				if (!name) {
+					quickCreateBusy = false;
+					return;
+				}
+				const response = await encryption.fetchSecure(
+					'/api/admin/inventory/branches/create',
+					{ method: 'POST', body: { name } },
+					encryptionKeys
+				);
+				if (!response.ok) {
+					quickCreateError = resolveServerMessage(response.message, lang, { vi: 'Tạo chi nhánh thất bại', en: 'Failed to create branch' });
+					quickCreateBusy = false;
+					return;
+				}
+				const created = (response.data ?? {}) as Record<string, unknown>;
+				const newId = str(created._id ?? created.branchId ?? created.documentKey);
+				showToast({ vi: 'Đã tạo chi nhánh', en: 'Branch created' }[lang as 'vi' | 'en'], 'success');
+				await loadBranches();
+				applyQuickCreateTarget('branch', newId);
+				closeQuickCreate();
+			} else {
+				// variant — bắt buộc productId + sku + displayName.
+				const sku = str(quickCreateSku).trim();
+				const displayName = str(quickCreateDisplayName).trim();
+				if (!quickCreateProductId || !sku || !displayName) {
+					quickCreateBusy = false;
+					return;
+				}
+				const priceNum = Number(quickCreatePrice);
+				const response = await encryption.fetchSecure(
+					'/api/admin/variants/create',
+					{
+						method: 'POST',
+						body: {
+							productId: quickCreateProductId,
+							sku,
+							displayName,
+							price: Number.isFinite(priceNum) ? priceNum : 0,
+							attributes: {}
+						}
+					},
+					encryptionKeys
+				);
+				if (!response.ok) {
+					quickCreateError = resolveServerMessage(response.message, lang, { vi: 'Tạo sản phẩm thất bại', en: 'Failed to create variant' });
+					quickCreateBusy = false;
+					return;
+				}
+				showToast({ vi: 'Đã tạo sản phẩm', en: 'Variant created' }[lang as 'vi' | 'en'], 'success');
+				// create trả documentKey (không phải _id) → refresh list rồi tìm theo sku.
+				await loadVariantOptions();
+				const found = variantOptions.find((v) => (v.sku ?? '').toUpperCase() === sku.toUpperCase());
+				if (found) applyQuickCreateTarget('variant', found._id);
+				closeQuickCreate();
+			}
+		} catch (err) {
+			quickCreateBusy = false;
+			quickCreateError = { vi: 'Tạo mới thất bại. Vui lòng thử lại.', en: 'Failed to create. Please try again.' }[lang as 'vi' | 'en'];
+			if (import.meta.env.DEV) console.error('[admin/suppliers] quick create failed:', err);
+		}
+	}
+	function applyQuickCreateTarget(kind: 'supplier' | 'branch' | 'variant', id: string) {
+		if (!quickCreateTarget) return;
+		if (kind === 'supplier' && quickCreateTarget === 'supplier') {
+			poForm.supplierId = id;
+		} else if (kind === 'branch' && quickCreateTarget === 'branch') {
+			poForm.branchId = id;
+		} else if (kind === 'variant' && quickCreateTarget !== 'supplier' && quickCreateTarget !== 'branch') {
+			const idx = Number(quickCreateTarget);
+			if (Number.isInteger(idx) && poForm.items[idx]) poForm.items[idx].variantId = id;
+		}
+		quickCreateTarget = null;
+	}
+
+	// ── B49 (chain B): tap giá trị đã chọn → detail (supplier edit / variant read-only) ──
+	function openSelectDetail(kind: 'supplier' | 'variant', value: string) {
+		if (kind === 'supplier') {
+			const row = suppliers.find((s) => s._id === value);
+			if (row) openSupplierEditModal(row as unknown as Record<string, unknown>);
+		} else {
+			if (!variantOptions.some((v) => v._id === value)) return;
+			variantDetailId = value;
+			variantDetailDisplay = true;
+		}
 	}
 
 	// B47 (m19661): sửa PO draft — fetch chi tiết (list không trả items) rồi fill form.
@@ -2876,14 +3118,18 @@
 		if (!poForm.branchId) return pageContents.form.requireBranch[lang];
 		if (poForm.items.length === 0) return pageContents.form.requireItems[lang];
 		for (const item of poForm.items) {
-			if (!item.variantId || !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.unitCost) || item.unitCost < 0) {
+			// B49 (chain B): bỏ unitCost khỏi validate (giá bỏ khỏi form).
+			if (!item.variantId || !Number.isFinite(item.quantity) || item.quantity <= 0) {
 				return pageContents.form.requireItem[lang];
 			}
 		}
+		// B49 (chain B): chặn 2 dòng trùng variantId.
+		if (poForm.items.some((_, i) => poItemDuplicate(i))) return pageContents.poModal.duplicateItem[lang];
 		return undefined;
 	}
 
-	async function submitPO() {
+	// B49 (chain B): nút Save chỉ mở dialog review — validate trước khi mở.
+	function openPOReview() {
 		if (poSubmitting || !encryptionKeys) return;
 		const validationError = validatePOForm();
 		if (validationError) {
@@ -2896,7 +3142,18 @@
 			return;
 		}
 		poError = undefined;
-		// B47 (m19661): chốt mode trước try — catch cũng biết toast create/update.
+		poReviewDisplay = true;
+	}
+
+	async function doSubmitPO() {
+		if (poSubmitting || !encryptionKeys) return;
+		// B49: review đã validate — giữ 1 lần nữa để an toàn (dup có thể vừa xảy ra).
+		const validationError = validatePOForm();
+		if (validationError) {
+			poReviewDisplay = false;
+			poError = validationError;
+			return;
+		}
 		const isEdit = poEditMode === 'edit' && !!poEditId;
 		poSubmitting = true;
 		try {
@@ -2908,7 +3165,8 @@
 				items: poForm.items.map((item) => ({
 					variantId: item.variantId,
 					quantity: Number(item.quantity),
-					unitCost: Number(item.unitCost),
+					// B49 (chain B): unitCost bỏ khỏi form — server type yêu cầu number → gửi 0.
+					unitCost: 0,
 					lotNumber: str(item.lotNumber).trim() || undefined,
 					expiresAt: item.expiresAt || undefined
 				})),
@@ -2932,16 +3190,62 @@
 						: isEdit ? pageContents.toasts.poUpdated[lang] : pageContents.toasts.poCreated[lang],
 					'success'
 				);
+				poReviewDisplay = false;
 				poModalDisplay = false;
 				poCloseGuard.markClean();
+				// B49 (chain B): create thành công → mở modal share ảnh (edit → đóng luôn).
+				if (!isEdit) {
+					poShareData = {
+						poCode: str(poForm.poCode).trim(),
+						supplierLabel: getSupplierLabel(poForm.supplierId),
+						branchLabel: getBranchLabel(poForm.branchId),
+						expectedAt: poForm.expectedAt,
+						items: poForm.items.map((item) => ({ label: getVariantLabel(item.variantId), quantity: Number(item.quantity) || 0 }))
+					};
+					poShareDisplay = true;
+				}
 				await loadPOs();
 			} else {
+				poReviewDisplay = false;
 				poError = resolveServerMessage(response.message, lang, isEdit ? pageContents.toasts.poUpdateFailed : pageContents.toasts.poFailed);
 			}
 		} catch (err) {
 			poSubmitting = false;
+			poReviewDisplay = false;
 			poError = resolveServerMessage(undefined, lang, pageContents.toasts.requestFailed);
 			if (import.meta.env.DEV) console.error('[admin/suppliers] submit PO failed:', err);
+		}
+	}
+
+	// B49 (chain B): render canvas → blob → navigator.share files (iOS 15+) hoặc download.
+	async function sharePoImage(forceDownload = false) {
+		if (poShareBusy || !poShareData) return;
+		poShareBusy = true;
+		try {
+			const el = document.getElementById('po-share-canvas');
+			if (!el) throw new Error('share canvas missing');
+			const { default: html2canvas } = await import('html2canvas');
+			const canvas = await html2canvas(el as HTMLElement, { backgroundColor: '#ffffff', scale: 2 });
+			const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+			poShareBusy = false;
+			if (!blob) return;
+			const fileName = (poShareData.poCode || 'purchase-order') + '.png';
+			const file = new File([blob], fileName, { type: 'image/png' });
+			const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+			if (!forceDownload && typeof nav.share === 'function' && typeof nav.canShare === 'function' && nav.canShare({ files: [file] })) {
+				await nav.share({ files: [file], title: poShareData.poCode });
+			} else {
+				// Fallback download (desktop / share files không khả dụng).
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = fileName;
+				a.click();
+				URL.revokeObjectURL(url);
+			}
+		} catch (err) {
+			poShareBusy = false;
+			if (import.meta.env.DEV) console.error('[admin/suppliers] share PO image failed:', err);
 		}
 	}
 
@@ -5024,6 +5328,22 @@
 {/if}
 
 <!-- ── Modal tạo đơn mua hàng (chuẩn chung: TextField/Input + Select + dirty-guard) ── -->
+{#snippet poCodeTrailing()}
+	<!-- B49 (chain B): nút generate mã PO ngay trong input (trailing snippet của Input) -->
+	<Button
+		type="button"
+		variant="ghost"
+		size="xs"
+		disabled={poSubmitting}
+		aria-label={pageContents.poModal.generateCode[lang]}
+
+		onclick={() => {
+			poForm.poCode = "QN-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
+		}}
+	>
+		<Icon icon={iconify['edit-outline-rounded']} size="xs" />
+	</Button>
+{/snippet}
 {#if poModalDisplay}
 	<Modal bind:display={poModalDisplay} size="lg" isDimissable onCloseAttempt={() => poCloseGuard.attemptClose()} class="supplier-modal-root">
 		<Modal.Container>
@@ -5062,6 +5382,7 @@
 									bind:value={poForm.poCode}
 									disabled={poSubmitting}
 									data-test="po-form-code"
+									trailing={poCodeTrailing}
 								/>
 							</TextField>
 						</div>
@@ -5082,6 +5403,20 @@
 								clearable
 								placeholder={pageContents.poModal.supplierPlaceholder[lang]}
 								disabled={poSubmitting}
+								fullscreen={isMobile}
+								fullscreenCrumbs={[
+									{ label: pageContents.title[lang], kind: 'crumb' },
+									{ label: pageContents.poModal.title[lang], kind: 'crumb' },
+									{ label: pageContents.poModal.supplier[lang], kind: 'current' }
+								]}
+								fullscreenCrumbTap={(i) => {
+									if (i === 0) poCloseGuard.attemptClose();
+									// nấc 1 (PO modal title) chỉ hiển thị — không hành động.
+								}}
+								allowCreate
+								createOptionLabel={pageContents.poModal.createNew[lang]}
+								onOptionCreate={(value) => openQuickCreate('supplier', value, 'supplier')}
+								onTriggerDetail={() => openSelectDetail('supplier', poForm.supplierId)}
 							/>
 						</div>
 						<div class="form-field" data-field="po-branch">
@@ -5095,6 +5430,18 @@
 								clearable
 								placeholder={pageContents.poModal.branchPlaceholder[lang]}
 								disabled={poSubmitting}
+								fullscreen={isMobile}
+								fullscreenCrumbs={[
+									{ label: pageContents.title[lang], kind: 'crumb' },
+									{ label: pageContents.poModal.title[lang], kind: 'crumb' },
+									{ label: pageContents.poModal.branch[lang], kind: 'current' }
+								]}
+								fullscreenCrumbTap={(i) => {
+									if (i === 0) poCloseGuard.attemptClose();
+								}}
+								allowCreate
+								createOptionLabel={pageContents.poModal.createNew[lang]}
+								onOptionCreate={(value) => openQuickCreate('branch', value, 'branch')}
 							/>
 						</div>
 					</div>
@@ -5102,39 +5449,79 @@
 					<div class="items-block" data-field="po-items">
 						<p class="form-label">{pageContents.poModal.items[lang]}</p>
 						{#each poForm.items as item, index (index)}
-							<div class="po-item">
-								<Select
-									class="admin-filter-select po-item-variant"
-									size="sm"
-									bind:value={item.variantId}
-									options={poVariantModalOptions}
-									searchable
-									clearable
-									placeholder={pageContents.poModal.itemVariantPlaceholder[lang]}
-									disabled={poSubmitting}
-								/>
-								<input class="admin-input po-item-num" type="number" min="1" step="1" bind:value={item.quantity} disabled={poSubmitting} placeholder={pageContents.poModal.itemQuantity[lang]} />
-								<input class="admin-input po-item-num" type="number" min="0" step="any" bind:value={item.unitCost} disabled={poSubmitting} placeholder={pageContents.poModal.itemUnitCost[lang]} />
-								<input class="admin-input po-item-lot" type="text" bind:value={item.lotNumber} disabled={poSubmitting} placeholder={pageContents.poModal.itemLot[lang]} />
-								<input class="admin-input po-item-date" type="date" bind:value={item.expiresAt} disabled={poSubmitting} />
-								<!-- delete/remove = error -->
-								<Button color="error" variant="ghost" size="sm" disabled={poSubmitting} onClick={() => removePOItem(index)}>
-									{pageContents.poModal.removeItem[lang]}
-								</Button>
+							<!-- B49 (chain B): highlight dòng trùng variant -->
+							<div class="po-item" class:po-item--dup={poItemDuplicate(index)}>
+								<div class="po-item-field">
+									<span class="form-label po-item-label">{pageContents.poModal.itemVariant[lang]}</span>
+									<Select
+										class="admin-filter-select po-item-variant"
+										size="sm"
+										bind:value={item.variantId}
+										options={poVariantModalOptions}
+										searchable
+										clearable
+										placeholder={pageContents.poModal.itemVariantPlaceholder[lang]}
+										disabled={poSubmitting}
+												fullscreen={isMobile}
+										fullscreenCrumbs={[
+											{ label: pageContents.title[lang], kind: 'crumb' },
+											{ label: pageContents.poModal.title[lang], kind: 'crumb' },
+											{ label: pageContents.poModal.itemVariant[lang], kind: 'current' }
+										]}
+										fullscreenCrumbTap={(i) => {
+											if (i === 0) poCloseGuard.attemptClose();
+										}}
+												allowCreate
+										createOptionLabel={pageContents.poModal.createNew[lang]}
+										onOptionCreate={(value) => openQuickCreate('variant', value, String(index))}
+										onTriggerDetail={() => openSelectDetail('variant', item.variantId)}
+									/>
+								</div>
+								<div class="po-item-field">
+									<span class="form-label po-item-label">{pageContents.poModal.itemQuantity[lang]}</span>
+									<input class="admin-input po-item-num" type="number" min="1" step="1" bind:value={item.quantity} disabled={poSubmitting} placeholder={pageContents.poModal.itemQuantity[lang]} />
+								</div>
+								<!-- B49 (chain B): input unitCost ĐÃ LOẠI BỎ khỏi form (giữ trong type = 0) -->
+								<div class="po-item-field">
+									<span class="form-label po-item-label">{pageContents.poModal.itemLot[lang]}</span>
+									<input class="admin-input po-item-lot" type="text" bind:value={item.lotNumber} disabled={poSubmitting} placeholder={pageContents.poModal.itemLot[lang]} />
+								</div>
+								<div class="po-item-field">
+									<span class="form-label po-item-label">{pageContents.poModal.itemExpires[lang]}</span>
+									<input class="admin-input po-item-date" type="date" bind:value={item.expiresAt} disabled={poSubmitting} />
+								</div>
+								<div class="po-item-field po-item-field--remove">
+									<span class="form-label po-item-label" aria-hidden="true">&nbsp;</span>
+									<!-- delete/remove = error -->
+									<Button color="error" variant="ghost" size="sm" disabled={poSubmitting} onClick={() => removePOItem(index)}>
+										{pageContents.poModal.removeItem[lang]}
+									</Button>
+								</div>
 							</div>
 						{/each}
-						<Button color="default" variant="outline" size="sm" disabled={poSubmitting} onClick={addPOItem}>
+						<!-- B49 (chain B): chỉ thêm dòng khi dòng CUỐI hợp lệ -->
+						<Button
+							color="default"
+							variant="outline"
+							size="sm"
+							disabled={poSubmitting || (poForm.items.length > 0 && !lastPoItemValid)}
+							onClick={addPOItem}
+						>
 							{pageContents.poModal.addItem[lang]}
 						</Button>
-						<p class="po-total">
-							{pageContents.poModal.totalCost[lang]}: <strong>{formatMoney(poTotalCost)}</strong>
-						</p>
+						<!-- B49 (chain B): giá đã bỏ khỏi form — ẩn total khi 0 -->
+						{#if poTotalCost > 0}
+							<p class="po-total">
+								{pageContents.poModal.totalCost[lang]}: <strong>{formatMoney(poTotalCost)}</strong>
+							</p>
+						{/if}
 					</div>
 				</div>
 			</Modal.Container.Body>
 			<Modal.Container.Footer>
 				<!-- create/save = success -->
-				<Button color="success" onClick={submitPO} loading={poSubmitting} disabled={poSubmitting}>
+				<!-- B49 (chain B): Save chỉ mở review — submit thật qua dialog Confirm -->
+				<Button color="success" onClick={openPOReview} loading={poSubmitting} disabled={poSubmitting}>
 					{poEditMode === 'edit' ? pageContents.poModal.save[lang] : pageContents.poModal.submit[lang]}
 				</Button>
 				<Button
@@ -5173,6 +5560,237 @@
 			</AlertDialog.Content>
 		</AlertDialog>
 	{/if}
+{/if}
+
+<!-- ── B49 (chain B): Review trước submit ── -->
+{#if poReviewDisplay}
+	<Modal bind:display={poReviewDisplay} size="sm" isDimissable class="supplier-modal-root">
+		<Modal.Container>
+			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
+				<div class="supplier-modal-title">
+					<button
+						type="button"
+						class="supplier-modal-title__label supplier-modal-title__crumb"
+						disabled={poSubmitting}
+						onclick={() => {
+							poReviewDisplay = false;
+						}}
+					>
+						{pageContents.title[lang]}
+					</button>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name">{pageContents.poModal.title[lang]}</span>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">
+						{poEditMode === 'edit' ? pageContents.poModal.reviewTitleEdit[lang] : pageContents.poModal.reviewTitle[lang]}
+					</span>
+				</div>
+			</Modal.Container.Header>
+			<Modal.Container.Body>
+				<div class="po-review">
+					<div class="po-review-row"><span>{pageContents.poModal.reviewSupplier[lang]}</span><strong>{getSupplierLabel(poForm.supplierId)}</strong></div>
+					<div class="po-review-row"><span>{pageContents.poModal.reviewBranch[lang]}</span><strong>{getBranchLabel(poForm.branchId)}</strong></div>
+					<div class="po-review-row"><span>{pageContents.poModal.reviewExpectedAt[lang]}</span><strong>{poForm.expectedAt ? formatDate(poForm.expectedAt) : '—'}</strong></div>
+					<div class="po-review-row"><span>{pageContents.poModal.reviewItems[lang]}</span><strong>{poForm.items.length}</strong></div>
+					<div class="po-review-items">
+						{#each poForm.items as item, index (index)}
+							<div class="po-review-item">{getVariantLabel(item.variantId)} × {item.quantity}</div>
+						{/each}
+					</div>
+				</div>
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<!-- create/save = success -->
+				<Button color="success" onClick={doSubmitPO} loading={poSubmitting} disabled={poSubmitting}>
+					{pageContents.poModal.reviewConfirm[lang]}
+				</Button>
+				<Button color="default" variant="ghost" disabled={poSubmitting} onClick={() => { poReviewDisplay = false; }}>
+					{pageContents.modals.cancel[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+<!-- ── B49 (chain B): Quick-create (supplier / branch / variant) ── -->
+{#if quickCreateKind}
+	<Modal bind:display={quickCreateDisplay} size="sm" isDimissable onCloseAttempt={() => { if (!quickCreateBusy) closeQuickCreate(); }} class="supplier-modal-root">
+		<Modal.Container>
+			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
+				<div class="supplier-modal-title">
+					<button
+						type="button"
+						class="supplier-modal-title__label supplier-modal-title__crumb"
+						disabled={quickCreateBusy}
+						onclick={() => {
+							closeQuickCreate();
+						}}
+					>
+						{pageContents.title[lang]}
+					</button>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name">{pageContents.poModal.title[lang]}</span>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">
+						{quickCreateKind === 'supplier' ? pageContents.poModal.quickCreateSupplier[lang] : quickCreateKind === 'branch' ? pageContents.poModal.quickCreateBranch[lang] : pageContents.poModal.quickCreateVariant[lang]}
+					</span>
+				</div>
+			</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if quickCreateError}
+					<div class="form-error-banner" role="alert">{quickCreateError}</div>
+				{/if}
+				{#if quickCreateKind === 'supplier'}
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreateName[lang]} *</span>
+						<input class="admin-input" type="text" bind:value={quickCreateName} disabled={quickCreateBusy} data-test="quick-create-name" />
+					</div>
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreatePhone[lang]}</span>
+						<PhoneInput bind:value={quickCreatePhone} disabled={quickCreateBusy} />
+					</div>
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreateEmail[lang]}</span>
+						<EmailInput bind:value={quickCreateEmail} disabled={quickCreateBusy} />
+					</div>
+				{:else if quickCreateKind === 'branch'}
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreateName[lang]} *</span>
+						<input class="admin-input" type="text" bind:value={quickCreateName} disabled={quickCreateBusy} data-test="quick-create-name" />
+					</div>
+				{:else}
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreateProduct[lang]} *</span>
+						<Select
+							class="admin-filter-select"
+							size="sm"
+							bind:value={quickCreateProductId}
+							options={quickCreateProductOptions}
+							searchable
+							placeholder={pageContents.poModal.quickCreateProductPlaceholder[lang]}
+							disabled={quickCreateBusy}
+						/>
+					</div>
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreateSku[lang]} *</span>
+						<input class="admin-input" type="text" bind:value={quickCreateSku} disabled={quickCreateBusy} />
+					</div>
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreateDisplayName[lang]} *</span>
+						<input class="admin-input" type="text" bind:value={quickCreateDisplayName} disabled={quickCreateBusy} />
+					</div>
+					<div class="form-field">
+						<span class="form-label">{pageContents.poModal.quickCreatePrice[lang]}</span>
+						<input class="admin-input" type="number" min="0" step="any" bind:value={quickCreatePrice} disabled={quickCreateBusy} />
+					</div>
+				{/if}
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<!-- create = success -->
+				<Button
+					color="success"
+					onClick={submitQuickCreate}
+					loading={quickCreateBusy}
+					disabled={quickCreateBusy || (quickCreateKind === 'variant'
+						? (!quickCreateProductId || !quickCreateSku.trim() || !quickCreateDisplayName.trim())
+						: !quickCreateName.trim())}
+				>
+					{pageContents.poModal.quickCreate[lang]}
+				</Button>
+				<Button color="default" variant="ghost" disabled={quickCreateBusy} onClick={() => { closeQuickCreate(); }}>
+					{pageContents.modals.cancel[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+<!-- ── B49 (chain B): Variant detail read-only ── -->
+{#if variantDetailDisplay}
+	<Modal bind:display={variantDetailDisplay} size="sm" isDimissable class="supplier-modal-root">
+		<Modal.Container>
+			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
+				<div class="supplier-modal-title">
+					<button
+						type="button"
+						class="supplier-modal-title__label supplier-modal-title__crumb"
+						onclick={() => {
+							variantDetailDisplay = false;
+						}}
+					>
+						{pageContents.title[lang]}
+					</button>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name">{pageContents.poModal.title[lang]}</span>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.poModal.itemVariant[lang]}</span>
+				</div>
+			</Modal.Container.Header>
+			<Modal.Container.Body>
+				{#if variantDetail}
+					<div class="po-review">
+						<div class="po-review-row"><span>{pageContents.poModal.quickCreateSku[lang]}</span><strong>{variantDetail.sku ?? '—'}</strong></div>
+						<div class="po-review-row"><span>{pageContents.poModal.quickCreateDisplayName[lang]}</span><strong>{variantDetail.displayName ?? '—'}</strong></div>
+					</div>
+				{/if}
+			</Modal.Container.Body>
+		</Modal.Container>
+	</Modal>
+{/if}
+
+<!-- ── B49 (chain B): Share ảnh PO sau khi tạo thành công ── -->
+{#if poShareDisplay && poShareData}
+	<Modal bind:display={poShareDisplay} size="sm" isDimissable class="supplier-modal-root">
+		<Modal.Container>
+			<Modal.Container.Header actionButtons={{ close: { display: true } }}>
+				<div class="supplier-modal-title">
+					<button
+						type="button"
+						class="supplier-modal-title__label supplier-modal-title__crumb"
+						onclick={() => {
+							poShareDisplay = false;
+						}}
+					>
+						{pageContents.title[lang]}
+					</button>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name">{poShareData.poCode}</span>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.poModal.shareTitle[lang]}</span>
+				</div>
+			</Modal.Container.Header>
+			<Modal.Container.Body>
+				<!-- html2canvas chỉ render màu hex/rgb an toàn → inline style, không oklch -->
+				<div id="po-share-canvas" class="po-share-canvas">
+					<div class="po-share-brand">{pageContents.poModal.shareAppTitle[lang]}</div>
+					<div class="po-share-code">{poShareData.poCode}</div>
+					<div class="po-share-row"><span>{pageContents.poModal.shareSupplier[lang]}</span><strong>{poShareData.supplierLabel}</strong></div>
+					<div class="po-share-row"><span>{pageContents.poModal.shareBranch[lang]}</span><strong>{poShareData.branchLabel}</strong></div>
+					<div class="po-share-row"><span>{pageContents.poModal.shareDate[lang]}</span><strong>{poShareData.expectedAt ? formatDate(poShareData.expectedAt) : '—'}</strong></div>
+					<table class="po-share-table">
+						<thead><tr><th>{pageContents.poModal.shareItem[lang]}</th><th>{pageContents.poModal.shareQty[lang]}</th></tr></thead>
+						<tbody>
+							{#each poShareData.items as it, shareIndex (shareIndex)}
+								<tr><td>{it.label}</td><td>{it.quantity}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				<!-- share = primary -->
+				<Button color="primary" onClick={() => sharePoImage(false)} loading={poShareBusy} disabled={poShareBusy}>
+					{pageContents.poModal.share[lang]}
+				</Button>
+				<Button color="default" variant="outline" disabled={poShareBusy} onClick={() => sharePoImage(true)}>
+					{pageContents.poModal.shareDownload[lang]}
+				</Button>
+				<Button color="default" variant="ghost" disabled={poShareBusy} onClick={() => { poShareDisplay = false; }}>
+					{pageContents.poModal.shareClose[lang]}
+				</Button>
+			</Modal.Container.Footer>
+		</Modal.Container>
+	</Modal>
 {/if}
 
 <!-- ── Modal cập nhật trạng thái PO ── -->
@@ -6124,13 +6742,141 @@
 
 	.po-item {
 		display: grid;
-		grid-template-columns: minmax(10rem, 2fr) 5rem 6rem minmax(6rem, 1fr) minmax(8rem, 1fr) auto;
+		/* B49 (chain B): 5 cột — variant / qty / lot / date / remove (unitCost đã bỏ) */
+		grid-template-columns: minmax(10rem, 2fr) 5rem minmax(6rem, 1fr) minmax(8rem, 1fr) auto;
 		gap: 0.5rem;
-		align-items: center;
+		align-items: start;
+
+		&.po-item--dup {
+			/* B49 (chain B): dòng trùng variant — viền error */
+			outline: 1px solid #dc2626;
+			outline-offset: 4px;
+			border-radius: 0.5rem;
+		}
 
 		@media (max-width: 860px) {
 			/* B47 (m19661): minmax(0,1fr) — 1fr không co dưới min-content của input làm hàng Items tràn 390px mobile */
 			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		}
+	}
+
+	/* B49 (chain B): bọc label nhỏ trên mỗi field trong hàng item */
+	.po-item-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		min-width: 0;
+
+		&.po-item-field--remove {
+			justify-content: flex-end;
+		}
+	}
+
+	.po-item-label {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--muted-foreground);
+		line-height: 1.2;
+	}
+
+	/* B49 (chain B): review trước submit */
+	.po-review {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.po-review-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		font-size: 0.9rem;
+		color: var(--muted-foreground);
+
+		strong {
+			color: var(--foreground);
+			text-align: right;
+		}
+	}
+
+	.po-review-items {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		border-top: 1px solid var(--border);
+		padding-top: 0.5rem;
+		margin-top: 0.25rem;
+	}
+
+	.po-review-item {
+		font-size: 0.85rem;
+		color: var(--foreground);
+	}
+
+	/* B49 (chain B): share canvas — CHỈ màu hex an toàn (html2canvas không đọc oklch) */
+	.po-share-canvas {
+		background-color: #ffffff;
+		color: #111111;
+		padding: 1rem;
+		border-radius: 0.5rem;
+		font-family: system-ui, sans-serif;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.po-share-brand {
+		font-size: 0.7rem;
+		letter-spacing: 0.2em;
+		font-weight: 700;
+		color: #666666;
+		text-align: center;
+	}
+
+	.po-share-code {
+		font-size: 1.2rem;
+		font-weight: 700;
+		text-align: center;
+		color: #111111;
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid #111111;
+	}
+
+	.po-share-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		font-size: 0.85rem;
+		color: #555555;
+
+		strong {
+			color: #111111;
+			text-align: right;
+		}
+	}
+
+	.po-share-table {
+		width: 100%;
+		border-collapse: collapse;
+		margin-top: 0.25rem;
+		font-size: 0.8rem;
+
+		th,
+		td {
+			border: 1px solid #dddddd;
+			padding: 0.3rem 0.5rem;
+			text-align: left;
+			color: #111111;
+		}
+
+		th {
+			background-color: #f3f4f6;
+			font-weight: 700;
+		}
+
+		td:last-child,
+		th:last-child {
+			text-align: right;
 		}
 	}
 

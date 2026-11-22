@@ -1140,6 +1140,38 @@
 	}
 }
 
+/* ── (B49) Fullscreen header breadcrumb ── */
+.select-fullscreen-crumbs {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+}
+.select-fullscreen-crumbs__crumb {
+	background: none;
+	border: 0;
+	padding: 0;
+	color: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.select-fullscreen-crumbs__name {
+	font-weight: 400;
+	opacity: 0.85;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.select-fullscreen-crumbs__name--active {
+	font-weight: 600;
+	opacity: 1;
+}
+
 /* ── RTL ── */
 [dir='rtl'] .select-trigger {
 	text-align: right;
