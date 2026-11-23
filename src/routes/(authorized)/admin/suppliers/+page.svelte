@@ -101,6 +101,7 @@
 		// B50 (m21047): đơn vị có sẵn của variant + giá nhập dự kiến (server enrich)
 		units?: { name: string; factor: number; price?: number | null }[] | null;
 		lastPurchaseCost?: number | null;
+		price?: number | null; // B52 (m25115) detail edit
 	}
 
 	// ── Ngôn ngữ ──
@@ -342,6 +343,12 @@
 			branch: { vi: 'Chi nhánh', en: 'Branch' },
 			branchPlaceholder: { vi: 'Chọn chi nhánh', en: 'Select a branch' },
 			expectedAt: { vi: 'Ngày dự kiến nhận', en: 'Expected at' },
+			rootCrumb: { vi: 'Đơn mua hàng', en: 'Purchase orders' },
+			expectedAtPast: { vi: 'Ngày dự kiến phải từ hôm nay trở đi', en: 'Expected date must be today or later' },
+			variantSave: { vi: 'Lưu', en: 'Save' },
+			variantSaved: { vi: 'Đã cập nhật sản phẩm', en: 'Variant updated successfully' },
+			variantUpdateFailed: { vi: 'Cập nhật sản phẩm thất bại', en: 'Failed to update variant' },
+			fxNote: { vi: 'Tỷ giá', en: 'FX rate' },
 			items: { vi: 'Các mặt hàng', en: 'Items' },
 			itemVariant: { vi: 'Sản phẩm', en: 'Variant' },
 			itemVariantPlaceholder: { vi: 'Chọn sản phẩm', en: 'Select a variant' },
@@ -379,6 +386,11 @@
 			reviewItems: { vi: 'Số mặt hàng', en: 'Items count' },
 			reviewConfirm: { vi: 'Xác nhận', en: 'Confirm' },
 			shareTitle: { vi: 'Chia sẻ đơn hàng', en: 'Share purchase order' },
+		variantDetailEdit: { vi: "Sửa thông tin", en: "Edit details" },
+		variantDetailSave: { vi: "Lưu thay đổi", en: "Save changes" },
+		variantDetailCancel: { vi: "Huỷ", en: "Cancel" },
+		variantDetailNameRequired: { vi: "Tên hiển thị không được để trống", en: "Display name is required" },
+		variantDetailPriceLabel: { vi: "Giá", en: "Price" },
 			share: { vi: 'Chia sẻ', en: 'Share' },
 			shareDownload: { vi: 'Tải ảnh về', en: 'Download image' },
 			shareClose: { vi: 'Đóng', en: 'Close' },
@@ -429,6 +441,8 @@
 			poUpdated: { vi: 'Đã cập nhật đơn mua hàng', en: 'Purchase order updated' },
 			poUpdateFailed: { vi: 'Cập nhật đơn mua không thành công', en: 'Failed to update purchase order' },
 			poDeleted: { vi: 'Đã xoá đơn mua hàng', en: 'Purchase order deleted' },
+		poVariantUpdated: { vi: "Đã cập nhật sản phẩm", en: "Variant updated successfully" },
+		poVariantUpdateFailed: { vi: "Cập nhật sản phẩm thất bại", en: "Failed to update variant" },
 			statusUpdated: { vi: 'Đã cập nhật trạng thái', en: 'Status updated' },
 			statusFailed: { vi: 'Cập nhật trạng thái không thành công', en: 'Failed to update status' },
 			requestFailed: { vi: 'Đã xảy ra lỗi không xác định', en: 'Unexpected error occurred' },
@@ -658,6 +672,12 @@
 			settingSortField = sortField;
 			settingSortDirection = sortDirection;
 		}
+	});
+
+	// B52 (m25115): expectedAt min = hôm nay (local YYYY-MM-DD).
+	$effect(() => {
+		const now = new Date();
+		poExpectedMin = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 	});
 	// bind:this Input component → instance { configs } (export { configs } cuối
 	// Input/Main.svelte) — focus() qua instance.configs.focus().
@@ -1621,6 +1641,11 @@
 	// B47: xoá 1 PO từ status modal (chỉ draft/cancelled)
 	let poDeleteConfirmDisplay = $state(false);
 	let poDeleteBusy = $state(false);
+	// B52 (m25115): mốc min cho expectedAt — hôm nay (local).
+	let poExpectedMin = $state("");
+	// B52 (m25115): tiền tệ — system currency (VND mặc định) + tỷ giá USD→VND (cache 30 phút).
+	let poCurrency = $state<"VND" | "USD">("VND");
+	let poFxRate = $state(0); // số VND cho 1 USD
 	let poForm = $state<{
 		poCode: string;
 		supplierId: string;
@@ -1681,7 +1706,7 @@
 	let poReviewDisplay = $state(false);
 	// ── B49 (chain B): share ảnh sau khi tạo PO thành công ──
 	let poShareDisplay = $state(false);
-	let poShareData = $state<null | { poCode: string; supplierLabel: string; branchLabel: string; expectedAt: string; items: { label: string; quantity: number }[] }>(null);
+	let poShareData = $state<null | { poCode: string; supplierLabel: string; branchLabel: string; expectedAt: string; totalCost: number; items: { label: string; quantity: number }[] }>(null); // B52 (m25115) totalCost
 	let poShareBusy = $state(false);
 	// ── B49 (chain B): quick-create từ Select (supplier/branch/variant) ──
 	let quickCreateKind = $state<null | 'supplier' | 'branch' | 'variant'>(null);
@@ -1712,6 +1737,12 @@
 	});
 	// ── B49 (chain B): variant detail read-only ──
 	let variantDetailDisplay = $state(false);
+	// B52 (m25115): edit variant từ detail modal — displayName + price (endpoint /api/admin/variants/update).
+	let variantDetailEditing = $state(false);
+	let variantDetailDisplayName = $state("");
+	let variantDetailPrice = $state("");
+	let variantDetailBusy = $state(false);
+	let variantDetailError = $state<string | undefined>(undefined);
 	let variantDetailId = $state<string | null>(null);
 
 	// ── Modal cập nhật trạng thái PO ──
@@ -1840,6 +1871,25 @@
 		void loadSuppliers();
 	}
 
+	// B52 (m25115): sort PO từ DataTable header — persist prefs giống suppliers.
+	function onPOSortChange(columnId: string, order: "asc" | "desc" | null) {
+		if (!order || !columnId) {
+			poSortField = "";
+			poSortDirection = "desc";
+		} else {
+			poSortField = columnId;
+			poSortDirection = order;
+		}
+		saveDataTablePrefs(PO_PREFS_KEY, {
+			sort: poSortField ? { field: poSortField, direction: poSortDirection } : undefined,
+			cardFields: poCardFieldIds
+		});
+		poSearching = true;
+		posPage = 1;
+		currentPagingPage = 1;
+		void loadPOs();
+	}
+
 	// ── Filter tab suppliers: persist filters + searching skeleton ──
 	async function onSupplierFilterChange() {
 		saveDataTablePrefs(PREFS_KEY, {
@@ -1877,6 +1927,23 @@
 
 	function formatMoney(value?: number): string {
 		return new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(value ?? 0);
+	}
+
+	// B52 (m25115): giá PO hiển thị theo đơn vị tiền hệ thống; USD → quy đổi qua tỷ giá live.
+	function formatPoMoney(vndAmount?: number): string {
+		const v = vndAmount ?? 0;
+		if (poCurrency === "USD" && poFxRate > 0) {
+			return new Intl.NumberFormat(lang === "vi" ? "vi-VN" : "en-US", {
+				style: "currency",
+				currency: "USD",
+				maximumFractionDigits: 2
+			}).format(v / poFxRate);
+		}
+		return new Intl.NumberFormat(lang === "vi" ? "vi-VN" : "en-US", {
+			style: "currency",
+			currency: "VND",
+			maximumFractionDigits: 0
+		}).format(v);
 	}
 
 	function showToast(text: string, color: 'success' | 'error') {
@@ -2156,7 +2223,7 @@
 			id: 'totalCost',
 			label: pageContents.poTable.totalCost[lang],
 			sortable: true,
-			accessor: (row) => formatMoney((row as unknown as PurchaseOrderRow).totalCost),
+			accessor: (row) => formatPoMoney((row as unknown as PurchaseOrderRow).totalCost), // B52 (m25115) currency
 			noHighlight: true
 		},
 		{
@@ -2978,6 +3045,42 @@
 		}
 	}
 
+	// B52 (m25115): tải currency system + tỷ giá (cache 30 phút trong session).
+	let poCurrencyLoadedAt = 0;
+	async function loadCurrency() {
+		if (!encryptionKeys) return;
+		if (Date.now() - poCurrencyLoadedAt < 30 * 60 * 1000 && poCurrencyLoadedAt > 0) return;
+		poCurrencyLoadedAt = Date.now();
+		try {
+			const settingsRes = await encryption.fetchSecure(
+				"/api/admin/system-settings/get",
+				{ method: "POST", body: {} },
+				encryptionKeys
+			);
+			if (settingsRes.ok) {
+				const commerce = (settingsRes.data as { settings?: { commerce?: { currency?: string } } } | undefined)?.settings?.commerce;
+				if (commerce?.currency === "USD") poCurrency = "USD";
+				else poCurrency = "VND";
+			}
+		} catch {
+			// settings fail → giữ VND mặc định
+		}
+		if (poCurrency !== "USD") return;
+		try {
+			const fxRes = await encryption.fetchSecure(
+				"/api/admin/currency-rates",
+				{ method: "POST", body: {} },
+				encryptionKeys
+			);
+			if (fxRes.ok) {
+				const rates = (fxRes.data as { rates?: { VND?: number } } | undefined)?.rates;
+				if (typeof rates?.VND === "number" && rates.VND > 0) poFxRate = rates.VND;
+			}
+		} catch {
+			// fx fail → formatPoMoney rơi về VND display poCurrency vẫn USD + fx 0 → guard đã chặn
+		}
+	}
+
 	// ── Modal tạo PO ──
 	function openPOModal() {
 		poEditMode = 'create'; // B47 (m19661)
@@ -2990,6 +3093,7 @@
 			poCloseGuard.markClean();
 		})();
 		void loadVariantOptions();
+		void loadCurrency(); // B52 (m25115)
 	}
 
 	function addPOItem() {
@@ -3159,6 +3263,53 @@
 	}
 
 	// ── B49 (chain B): tap giá trị đã chọn → detail (supplier edit / variant read-only) ──
+	// B52 (m25115): edit variant từ modal detail (displayName + price).
+	function openVariantDetailEditor() {
+		if (!variantDetail) return;
+		variantDetailDisplayName = variantDetail.displayName ?? "";
+		variantDetailPrice = variantDetail.price != null ? String(variantDetail.price) : "";
+		variantDetailError = undefined;
+		variantDetailEditing = true;
+	}
+
+	async function saveVariantDetail() {
+		if (!variantDetail || variantDetailBusy) return;
+		const documentKey = variantDetail._id;
+		const displayName = variantDetailDisplayName.trim();
+		const priceRaw = variantDetailPrice.trim();
+		if (!displayName) {
+			variantDetailError = pageContents.poModal.variantDetailNameRequired[lang];
+			return;
+		}
+		variantDetailBusy = true;
+		variantDetailError = undefined;
+		try {
+			const response = await encryption.fetchSecure(
+				"/api/admin/variants/update",
+				{
+					method: "POST",
+					body: {
+						documentKey,
+						displayName,
+						...(priceRaw !== "" ? { price: Number(priceRaw) } : {})
+					}
+				},
+				encryptionKeys
+			);
+			if (response.ok) {
+				showToast(pageContents.toasts.poVariantUpdated[lang], "success");
+				variantDetailEditing = false;
+				await loadVariantOptions();
+			} else {
+				variantDetailError = resolveServerMessage(response.message, lang, pageContents.toasts.poVariantUpdateFailed);
+			}
+		} catch (err) {
+			variantDetailError = resolveServerMessage(undefined, lang, pageContents.toasts.poVariantUpdateFailed);
+			if (import.meta.env.DEV) console.error("[admin/suppliers] variant update failed:", err);
+		} finally {
+			variantDetailBusy = false;
+		}
+	}
 	function openSelectDetail(kind: 'supplier' | 'variant', value: string) {
 		if (kind === 'supplier') {
 			const row = suppliers.find((s) => s._id === value);
@@ -3260,6 +3411,8 @@
 		}
 		// B49 (chain B): chặn 2 dòng trùng variantId.
 		if (poForm.items.some((_, i) => poItemDuplicate(i))) return pageContents.poModal.duplicateItem[lang];
+		// B52 (m25115): expectedAt không chấp nhận quá khứ.
+		if (str(poForm.expectedAt).trim() && poExpectedMin && str(poForm.expectedAt).trim() < poExpectedMin) return pageContents.poModal.expectedAtPast[lang];
 		return undefined;
 	}
 
@@ -3338,6 +3491,7 @@
 						supplierLabel: getSupplierLabel(poForm.supplierId),
 						branchLabel: getBranchLabel(poForm.branchId),
 						expectedAt: poForm.expectedAt,
+						totalCost: poTotalCost, // B52 (m25115)
 						items: poForm.items.map((item) => ({ label: getVariantLabel(item.variantId), quantity: Number(item.quantity) || 0 }))
 					};
 					poShareDisplay = true;
@@ -3895,6 +4049,7 @@
 					selectionTools={false}
 					getRowId={(row) => String((row as PurchaseOrderRow)._id ?? '')}
 					onSelectionChange={(ids) => (poSelectedIds = ids)}
+				onSortChange={onPOSortChange}
 					pageSize={pageSize}
 					showPagination={false}
 					sortable
@@ -5515,7 +5670,7 @@
 									poCrumbMoreOpen = false;
 									poCloseGuard.attemptClose();
 								}}
-							>{pageContents.title[lang]}</button>
+							>{pageContents.poModal.rootCrumb[lang]}</button>
 						</div>
 					{/if}
 				{/if}
@@ -5526,7 +5681,7 @@
 						disabled={poSubmitting}
 						onclick={() => poCloseGuard.attemptClose()}
 					>
-						{pageContents.title[lang]}
+						{pageContents.poModal.rootCrumb[lang]}
 					</button>
 				{/if}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
@@ -5555,7 +5710,7 @@
 						</div>
 						<div class="form-field" data-field="po-expected">
 							<span class="form-label">{pageContents.poModal.expectedAt[lang]}</span>
-							<input class="admin-input" type="date" bind:value={poForm.expectedAt} disabled={poSubmitting} />
+							<input class="admin-input" type="date" min={poExpectedMin} bind:value={poForm.expectedAt} disabled={poSubmitting} />
 						</div>
 					</div>
 					<div class="form-grid-2">
@@ -5572,7 +5727,7 @@
 								disabled={poSubmitting}
 								fullscreen={isMobile}
 								fullscreenCrumbs={[
-									{ label: pageContents.title[lang], kind: 'crumb' },
+									{ label: pageContents.poModal.rootCrumb[lang], kind: 'crumb' },
 									{ label: pageContents.poModal.title[lang], kind: 'crumb' },
 									{ label: pageContents.poModal.supplier[lang], kind: 'current' }
 								]}
@@ -5599,7 +5754,7 @@
 								disabled={poSubmitting}
 								fullscreen={isMobile}
 								fullscreenCrumbs={[
-									{ label: pageContents.title[lang], kind: 'crumb' },
+									{ label: pageContents.poModal.rootCrumb[lang], kind: 'crumb' },
 									{ label: pageContents.poModal.title[lang], kind: 'crumb' },
 									{ label: pageContents.poModal.branch[lang], kind: 'current' }
 								]}
@@ -5619,7 +5774,7 @@
 							<!-- B49 (chain B): highlight dòng trùng variant -->
 							<div class="po-item" class:po-item--dup={poItemDuplicate(index)}>
 								<!-- B50 (m21047): badge STT góc trái + remove ✕ góc phải (mẫu .field-row) -->
-								<Badge class="po-item-stt" label={String(index + 1)} size="xs" variant="solid" color={poItemDuplicate(index) ? 'error' : 'primary'} />
+								<Badge class="po-item-stt" label={`*${index + 1}`} size="xs" variant="solid" color={poItemDuplicate(index) ? 'error' : 'primary'} />
 								<button type="button" class="po-item-remove" aria-label={pageContents.poModal.removeItem[lang]} disabled={poSubmitting} onclick={() => removePOItem(index)}>✕</button>
 								<div class="po-item-field">
 									<span class="form-label po-item-label">{pageContents.poModal.itemVariant[lang]}</span>
@@ -5634,7 +5789,7 @@
 										disabled={poSubmitting}
 												fullscreen={isMobile}
 										fullscreenCrumbs={[
-											{ label: pageContents.title[lang], kind: 'crumb' },
+											{ label: pageContents.poModal.rootCrumb[lang], kind: 'crumb' },
 											{ label: pageContents.poModal.title[lang], kind: 'crumb' },
 											{ label: pageContents.poModal.itemVariant[lang], kind: 'current' }
 										]}
@@ -5701,7 +5856,7 @@
 						<!-- B49 (chain B): giá đã bỏ khỏi form — ẩn total khi 0 -->
 						{#if poTotalCost > 0}
 							<p class="po-total">
-								{pageContents.poModal.totalCost[lang]}: <strong>{formatMoney(poTotalCost)}</strong>
+								{pageContents.poModal.totalCost[lang]}: <strong>{formatPoMoney(poTotalCost)}</strong>
 							</p>
 						{/if}
 					</div>
@@ -5780,7 +5935,7 @@
 								rvCrumbMoreOpen = false;
 								poReviewDisplay = false;
 							}}
-						>{pageContents.title[lang]}</button>
+						>{pageContents.poModal.rootCrumb[lang]}</button>
 						<button
 							type="button"
 							class="supplier-crumb-popover__item"
@@ -5802,7 +5957,7 @@
 							poReviewDisplay = false;
 						}}
 					>
-						{pageContents.title[lang]}
+						{pageContents.poModal.rootCrumb[lang]}
 					</button>
 			{/if}
 			{#if rvCrumbOverflow < 2}
@@ -5821,6 +5976,7 @@
 					<div class="po-review-row"><span>{pageContents.poModal.reviewBranch[lang]}</span><strong>{getBranchLabel(poForm.branchId)}</strong></div>
 					<div class="po-review-row"><span>{pageContents.poModal.reviewExpectedAt[lang]}</span><strong>{poForm.expectedAt ? formatDate(poForm.expectedAt) : '—'}</strong></div>
 					<div class="po-review-row"><span>{pageContents.poModal.reviewItems[lang]}</span><strong>{poForm.items.length}</strong></div>
+					<div class="po-review-row"><span>{pageContents.poModal.totalCost[lang]}</span><strong>{formatPoMoney(poTotalCost)}</strong></div>
 					<div class="po-review-items">
 						{#each poForm.items as item, index (index)}
 							<div class="po-review-item">{getVariantLabel(item.variantId)} × {item.quantity}</div>
@@ -5870,7 +6026,7 @@
 								qcCrumbMoreOpen = false;
 								closeQuickCreate();
 							}}
-						>{pageContents.title[lang]}</button>
+						>{pageContents.poModal.rootCrumb[lang]}</button>
 						<button
 							type="button"
 							class="supplier-crumb-popover__item"
@@ -5892,7 +6048,7 @@
 							closeQuickCreate();
 						}}
 					>
-						{pageContents.title[lang]}
+						{pageContents.poModal.rootCrumb[lang]}
 					</button>
 			{/if}
 			{#if qcCrumbOverflow < 2}
@@ -6003,7 +6159,7 @@
 								vdCrumbMoreOpen = false;
 								variantDetailDisplay = false;
 							}}
-						>{pageContents.title[lang]}</button>
+						>{pageContents.poModal.rootCrumb[lang]}</button>
 						<button
 							type="button"
 							class="supplier-crumb-popover__item"
@@ -6024,7 +6180,7 @@
 							variantDetailDisplay = false;
 						}}
 					>
-						{pageContents.title[lang]}
+						{pageContents.poModal.rootCrumb[lang]}
 					</button>
 			{/if}
 			{#if vdCrumbOverflow < 2}
@@ -6037,12 +6193,42 @@
 			</Modal.Container.Header>
 			<Modal.Container.Body>
 				{#if variantDetail}
-					<div class="po-review">
-						<div class="po-review-row"><span>{pageContents.poModal.quickCreateSku[lang]}</span><strong>{variantDetail.sku ?? '—'}</strong></div>
-						<div class="po-review-row"><span>{pageContents.poModal.quickCreateDisplayName[lang]}</span><strong>{variantDetail.displayName ?? '—'}</strong></div>
-					</div>
+					{#if variantDetailEditing}
+						<!-- B52 (m25115): update variant từ detail modal -->
+						<div class="po-review">
+							<div class="po-review-row"><span>{pageContents.poModal.quickCreateSku[lang]}</span><strong>{variantDetail.sku ?? '—'}</strong></div>
+							<div class="form-field" data-field="variant-detail-name">
+								<span class="form-label">{pageContents.poModal.quickCreateDisplayName[lang]}</span>
+								<input class="admin-input" type="text" bind:value={variantDetailDisplayName} disabled={variantDetailBusy} maxlength="200" />
+							</div>
+							<div class="form-field" data-field="variant-detail-price">
+								<span class="form-label">{pageContents.poModal.variantDetailPriceLabel[lang]}</span>
+								<input class="admin-input" type="number" min="0" step="any" bind:value={variantDetailPrice} disabled={variantDetailBusy} />
+							</div>
+							{#if variantDetailError}<p class="form-hint form-hint--error">{variantDetailError}</p>{/if}
+						</div>
+					{:else}
+						<div class="po-review">
+							<div class="po-review-row"><span>{pageContents.poModal.quickCreateSku[lang]}</span><strong>{variantDetail.sku ?? '—'}</strong></div>
+							<div class="po-review-row"><span>{pageContents.poModal.quickCreateDisplayName[lang]}</span><strong>{variantDetail.displayName ?? '—'}</strong></div>
+						</div>
+					{/if}
 				{/if}
 			</Modal.Container.Body>
+			<Modal.Container.Footer>
+				{#if variantDetailEditing}
+					<Button color="success" onClick={saveVariantDetail} loading={variantDetailBusy} disabled={variantDetailBusy} data-test="variant-detail-save">
+						{pageContents.poModal.variantDetailSave[lang]}
+					</Button>
+					<Button variant="ghost" onClick={() => { variantDetailEditing = false; }} disabled={variantDetailBusy}>
+						{pageContents.poModal.variantDetailCancel[lang]}
+					</Button>
+				{:else}
+					<Button variant="outline" onClick={openVariantDetailEditor} data-test="variant-detail-edit">
+						{pageContents.poModal.variantDetailEdit[lang]}
+					</Button>
+				{/if}
+			</Modal.Container.Footer>
 		</Modal.Container>
 	</Modal>
 {/if}
@@ -6076,7 +6262,7 @@
 								shCrumbMoreOpen = false;
 								poShareDisplay = false;
 							}}
-						>{pageContents.title[lang]}</button>
+						>{pageContents.poModal.rootCrumb[lang]}</button>
 					</div>
 				{/if}
 			{/if}
@@ -6088,7 +6274,7 @@
 							poShareDisplay = false;
 						}}
 					>
-						{pageContents.title[lang]}
+						{pageContents.poModal.rootCrumb[lang]}
 					</button>
 			{/if}
 			{#if shCrumbOverflow < 2}
@@ -6107,7 +6293,8 @@
 					<div class="po-share-row"><span>{pageContents.poModal.shareSupplier[lang]}</span><strong>{poShareData.supplierLabel}</strong></div>
 					<div class="po-share-row"><span>{pageContents.poModal.shareBranch[lang]}</span><strong>{poShareData.branchLabel}</strong></div>
 					<div class="po-share-row"><span>{pageContents.poModal.shareDate[lang]}</span><strong>{poShareData.expectedAt ? formatDate(poShareData.expectedAt) : '—'}</strong></div>
-					<table class="po-share-table">
+					<div class="po-share-row po-share-total"><span>{pageContents.poModal.totalCost[lang]}</span><strong>{formatPoMoney(poShareData.totalCost)}</strong></div>
+						<table class="po-share-table">
 						<thead><tr><th>{pageContents.poModal.shareItem[lang]}</th><th>{pageContents.poModal.shareQty[lang]}</th></tr></thead>
 						<tbody>
 							{#each poShareData.items as it, shareIndex (shareIndex)}
@@ -6166,7 +6353,7 @@
 									stCrumbMoreOpen = false;
 									statusModalDisplay = false;
 								}}
-							>{pageContents.title[lang]}</button>
+							>{pageContents.poModal.rootCrumb[lang]}</button>
 						</div>
 					{/if}
 				{/if}
@@ -6177,7 +6364,7 @@
 						disabled={statusBusy}
 						onclick={() => (statusModalDisplay = false)}
 					>
-						{pageContents.title[lang]}
+						{pageContents.poModal.rootCrumb[lang]}
 					</button>
 				{/if}
 				{#if stCrumbOverflow < 2}
@@ -7162,7 +7349,7 @@
 
 	.po-item-remove {
 		position: absolute;
-		top: 0.25rem;
+		top: -0.5rem;
 		right: 0.5rem;
 		z-index: 1;
 		min-width: 1.75rem;
@@ -7430,6 +7617,32 @@
 		font-size: 0.85rem;
 		font-weight: 600;
 		color: var(--foreground);
+	}
+
+	/* B52 (m25115): bulk-bar nổi khi có selection — không phải cuộn lên caption để thao tác.
+	   Mobile: fixed đáy viewport (trên pagination z-300). Desktop giữ trong caption tools. */
+	@media (max-width: 767px) {
+		.bulk-row {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: calc(2.75rem + 0.75rem); // trên pagination fixed (B25)
+			z-index: 310;
+			padding: 0.5rem 0.75rem;
+			background: var(--background, #fff);
+			border-top: 1px solid var(--default-300);
+			padding-right: 4.75rem; // chỗ FAB (giống pagination B25)
+		}
+	}
+
+	/* B52 (m25115): mobile tắt hint/info text (Description component + form-hint) — gọn màn hình nhỏ */
+	@media (max-width: 767px) {
+		:global(.supplier-modal-root .form-hint),
+		:global(.supplier-modal-root .form-error-hint),
+		:global(.supplier-modal-root .form-success-hint),
+		:global(.supplier-modal-root .description-root) {
+			display: none;
+		}
 	}
 
 	.field-row--dup {
