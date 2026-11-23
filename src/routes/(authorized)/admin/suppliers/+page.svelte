@@ -989,6 +989,27 @@
 	let hisCrumbNavEl = $state<HTMLElement | null>(null);
 	let hisCrumbOverflow = $state(0);
 	let hisCrumbMoreOpen = $state(false);
+	
+	// B51 (m24556): chuẩn hoá breadcrumb PO — mỗi modal PO = 1 node trong tree;
+	// tràn → nấc cha lùi vào popover more (ưu tiên node lá), tap node → về panel.
+	let poCrumbNavEl = $state<HTMLElement | null>(null);
+	let poCrumbOverflow = $state(0);
+	let poCrumbMoreOpen = $state(false);
+	let stCrumbNavEl = $state<HTMLElement | null>(null);
+	let stCrumbOverflow = $state(0);
+	let stCrumbMoreOpen = $state(false);
+	let rvCrumbNavEl = $state<HTMLElement | null>(null);
+	let rvCrumbOverflow = $state(0);
+	let rvCrumbMoreOpen = $state(false);
+	let qcCrumbNavEl = $state<HTMLElement | null>(null);
+	let qcCrumbOverflow = $state(0);
+	let qcCrumbMoreOpen = $state(false);
+	let vdCrumbNavEl = $state<HTMLElement | null>(null);
+	let vdCrumbOverflow = $state(0);
+	let vdCrumbMoreOpen = $state(false);
+	let shCrumbNavEl = $state<HTMLElement | null>(null);
+	let shCrumbOverflow = $state(0);
+	let shCrumbMoreOpen = $state(false);
 	async function measureTitleCrumbs(
 		nav: HTMLElement | null,
 		onlyMobile: boolean,
@@ -1376,6 +1397,64 @@
 		document.addEventListener('mousedown', onDocClick);
 		return () => document.removeEventListener('mousedown', onDocClick);
 	});
+	
+	// B51 (m24556): đo tràn breadcrumb 6 modal PO sau render + resize (pattern B34).
+	$effect(() => {
+		void poModalDisplay;
+		void statusModalDisplay;
+		void poReviewDisplay;
+		void variantDetailDisplay;
+		void poShareDisplay;
+		void quickCreateDisplay;
+		void statusRow?.poCode;
+		void poShareData?.poCode;
+		void poEditMode;
+		void isMobile;
+		void lang;
+		const measureAll = () => {
+			const jobs: Array<[HTMLElement | null, () => number, (v: number) => void]> = [
+				[poCrumbNavEl, () => poCrumbOverflow, (v) => (poCrumbOverflow = v)],
+				[stCrumbNavEl, () => stCrumbOverflow, (v) => (stCrumbOverflow = v)],
+				[rvCrumbNavEl, () => rvCrumbOverflow, (v) => (rvCrumbOverflow = v)],
+				[qcCrumbNavEl, () => qcCrumbOverflow, (v) => (qcCrumbOverflow = v)],
+				[vdCrumbNavEl, () => vdCrumbOverflow, (v) => (vdCrumbOverflow = v)],
+				[shCrumbNavEl, () => shCrumbOverflow, (v) => (shCrumbOverflow = v)],
+			];
+			for (const [nav, get, set] of jobs) void measureTitleCrumbs(nav, !isMobile, get, set);
+		};
+		const raf = requestAnimationFrame(measureAll);
+		const ro = new ResizeObserver(() => requestAnimationFrame(measureAll));
+		for (const nav of [poCrumbNavEl, stCrumbNavEl, rvCrumbNavEl, qcCrumbNavEl, vdCrumbNavEl, shCrumbNavEl]) {
+			if (nav) ro.observe(nav);
+		}
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+	
+	// B51 (m24556): outside-click đóng popover breadcrumb modal PO (mousedown —
+	// nút form stopPropagation click, Batch 18 review P3).
+	$effect(() => {
+		if (!poCrumbMoreOpen && !stCrumbMoreOpen && !rvCrumbMoreOpen && !qcCrumbMoreOpen && !vdCrumbMoreOpen && !shCrumbMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (poCrumbMoreOpen && poCrumbNavEl && t && poCrumbNavEl.contains(t)) return;
+			if (stCrumbMoreOpen && stCrumbNavEl && t && stCrumbNavEl.contains(t)) return;
+			if (rvCrumbMoreOpen && rvCrumbNavEl && t && rvCrumbNavEl.contains(t)) return;
+			if (qcCrumbMoreOpen && qcCrumbNavEl && t && qcCrumbNavEl.contains(t)) return;
+			if (vdCrumbMoreOpen && vdCrumbNavEl && t && vdCrumbNavEl.contains(t)) return;
+			if (shCrumbMoreOpen && shCrumbNavEl && t && shCrumbNavEl.contains(t)) return;
+			poCrumbMoreOpen = false;
+			stCrumbMoreOpen = false;
+			rvCrumbMoreOpen = false;
+			qcCrumbMoreOpen = false;
+			vdCrumbMoreOpen = false;
+			shCrumbMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
 
 	$effect(() => {
 		// Batch 20 (A4): modal đóng → reset more-menu + panel analytics
@@ -1394,6 +1473,30 @@
 			supplierAnalyticsDisplay = false;
 			supplierAnalyticsData = undefined;
 			supplierAnalyticsLoading = false;
+		}
+		if (!poModalDisplay) {
+			poCrumbOverflow = 0;
+			poCrumbMoreOpen = false;
+		}
+		if (!statusModalDisplay) {
+			stCrumbOverflow = 0;
+			stCrumbMoreOpen = false;
+		}
+		if (!poReviewDisplay) {
+			rvCrumbOverflow = 0;
+			rvCrumbMoreOpen = false;
+		}
+		if (!quickCreateDisplay) {
+			qcCrumbOverflow = 0;
+			qcCrumbMoreOpen = false;
+		}
+		if (!variantDetailDisplay) {
+			vdCrumbOverflow = 0;
+			vdCrumbMoreOpen = false;
+		}
+		if (!poShareDisplay) {
+			shCrumbOverflow = 0;
+			shCrumbMoreOpen = false;
 		}
 		// B38: cả 2 modal con đã đóng → gỡ ?modal= khỏi URL (param chỉ hợp
 		// khi modal đang mở). historyParam chặn replaceState mỗi lần effect chạy.
@@ -5388,7 +5491,35 @@
 				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › Create PO] giống form modal
 				     — tap nấc Suppliers đóng modal về datatable.
 				     B47: edit mode — active = poCode (đồng bộ Suppliers › tên NCC) -->
-				<div class="supplier-modal-title">
+				<div class="supplier-modal-title" bind:this={poCrumbNavEl}>
+				{#if poCrumbOverflow > 0}
+					<button
+						type="button"
+						class="supplier-modal-title__more"
+						aria-label={pageContents.supplierModal.crumbMore[lang as 'vi' | 'en']}
+						aria-expanded={poCrumbMoreOpen}
+						tabindex={poCrumbOverflow > 0 ? 0 : -1}
+						aria-hidden={poCrumbOverflow > 0 ? undefined : 'true'}
+						style={poCrumbOverflow > 0 ? undefined : 'visibility:hidden;pointer-events:none;'}
+						onclick={() => (poCrumbMoreOpen = !poCrumbMoreOpen)}
+					>
+						<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+					</button>
+					{#if poCrumbMoreOpen}
+						<div class="supplier-crumb-popover" role="menu">
+							<button
+								type="button"
+								class="supplier-crumb-popover__item"
+								role="menuitem"
+								onclick={() => {
+									poCrumbMoreOpen = false;
+									poCloseGuard.attemptClose();
+								}}
+							>{pageContents.title[lang]}</button>
+						</div>
+					{/if}
+				{/if}
+				{#if poCrumbOverflow < 1}
 					<button
 						type="button"
 						class="supplier-modal-title__label supplier-modal-title__crumb"
@@ -5397,6 +5528,7 @@
 					>
 						{pageContents.title[lang]}
 					</button>
+				{/if}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name supplier-modal-title__name--active">
 						{poEditMode === 'edit' ? (poOriginalCode || poForm.poCode) : pageContents.poModal.title[lang]}
@@ -5624,7 +5756,44 @@
 	<Modal bind:display={poReviewDisplay} size="sm" isDimissable class="supplier-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
-				<div class="supplier-modal-title">
+				<div class="supplier-modal-title" bind:this={rvCrumbNavEl}>
+			{#if rvCrumbOverflow > 0}
+				<button
+					type="button"
+					class="supplier-modal-title__more"
+					aria-label={pageContents.supplierModal.crumbMore[lang as 'vi' | 'en']}
+					aria-expanded={rvCrumbMoreOpen}
+					tabindex={rvCrumbOverflow > 0 ? 0 : -1}
+					aria-hidden={rvCrumbOverflow > 0 ? undefined : 'true'}
+					style={rvCrumbOverflow > 0 ? undefined : 'visibility:hidden;pointer-events:none;'}
+					onclick={() => (rvCrumbMoreOpen = !rvCrumbMoreOpen)}
+				>
+					<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+				</button>
+				{#if rvCrumbMoreOpen}
+					<div class="supplier-crumb-popover" role="menu">
+						<button
+							type="button"
+							class="supplier-crumb-popover__item"
+							role="menuitem"
+							onclick={() => {
+								rvCrumbMoreOpen = false;
+								poReviewDisplay = false;
+							}}
+						>{pageContents.title[lang]}</button>
+						<button
+							type="button"
+							class="supplier-crumb-popover__item"
+							role="menuitem"
+							onclick={() => {
+								rvCrumbMoreOpen = false;
+								poReviewDisplay = false;
+							}}
+						>{pageContents.poModal.title[lang]}</button>
+					</div>
+				{/if}
+			{/if}
+			{#if rvCrumbOverflow < 1}
 					<button
 						type="button"
 						class="supplier-modal-title__label supplier-modal-title__crumb"
@@ -5635,8 +5804,11 @@
 					>
 						{pageContents.title[lang]}
 					</button>
+			{/if}
+			{#if rvCrumbOverflow < 2}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-					<span class="supplier-modal-title__name">{pageContents.poModal.title[lang]}</span>
+				<button type="button" class="supplier-modal-title__name supplier-modal-title__crumb" disabled={poSubmitting} onclick={() => { poReviewDisplay = false; }}>{pageContents.poModal.title[lang]}</button>
+			{/if}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name supplier-modal-title__name--active">
 						{poEditMode === 'edit' ? pageContents.poModal.reviewTitleEdit[lang] : pageContents.poModal.reviewTitle[lang]}
@@ -5674,7 +5846,44 @@
 	<Modal bind:display={quickCreateDisplay} size="sm" isDimissable onCloseAttempt={() => { if (!quickCreateBusy) closeQuickCreate(); }} class="supplier-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
-				<div class="supplier-modal-title">
+				<div class="supplier-modal-title" bind:this={qcCrumbNavEl}>
+			{#if qcCrumbOverflow > 0}
+				<button
+					type="button"
+					class="supplier-modal-title__more"
+					aria-label={pageContents.supplierModal.crumbMore[lang as 'vi' | 'en']}
+					aria-expanded={qcCrumbMoreOpen}
+					tabindex={qcCrumbOverflow > 0 ? 0 : -1}
+					aria-hidden={qcCrumbOverflow > 0 ? undefined : 'true'}
+					style={qcCrumbOverflow > 0 ? undefined : 'visibility:hidden;pointer-events:none;'}
+					onclick={() => (qcCrumbMoreOpen = !qcCrumbMoreOpen)}
+				>
+					<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+				</button>
+				{#if qcCrumbMoreOpen}
+					<div class="supplier-crumb-popover" role="menu">
+						<button
+							type="button"
+							class="supplier-crumb-popover__item"
+							role="menuitem"
+							onclick={() => {
+								qcCrumbMoreOpen = false;
+								closeQuickCreate();
+							}}
+						>{pageContents.title[lang]}</button>
+						<button
+							type="button"
+							class="supplier-crumb-popover__item"
+							role="menuitem"
+							onclick={() => {
+								qcCrumbMoreOpen = false;
+								closeQuickCreate();
+							}}
+						>{pageContents.poModal.title[lang]}</button>
+					</div>
+				{/if}
+			{/if}
+			{#if qcCrumbOverflow < 1}
 					<button
 						type="button"
 						class="supplier-modal-title__label supplier-modal-title__crumb"
@@ -5685,8 +5894,11 @@
 					>
 						{pageContents.title[lang]}
 					</button>
+			{/if}
+			{#if qcCrumbOverflow < 2}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-					<span class="supplier-modal-title__name">{pageContents.poModal.title[lang]}</span>
+				<button type="button" class="supplier-modal-title__name supplier-modal-title__crumb" disabled={quickCreateBusy} onclick={() => { closeQuickCreate(); }}>{pageContents.poModal.title[lang]}</button>
+			{/if}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name supplier-modal-title__name--active">
 						{quickCreateKind === 'supplier' ? pageContents.poModal.quickCreateSupplier[lang] : quickCreateKind === 'branch' ? pageContents.poModal.quickCreateBranch[lang] : pageContents.poModal.quickCreateVariant[lang]}
@@ -5767,7 +5979,44 @@
 	<Modal bind:display={variantDetailDisplay} size="sm" isDimissable class="supplier-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
-				<div class="supplier-modal-title">
+				<div class="supplier-modal-title" bind:this={vdCrumbNavEl}>
+			{#if vdCrumbOverflow > 0}
+				<button
+					type="button"
+					class="supplier-modal-title__more"
+					aria-label={pageContents.supplierModal.crumbMore[lang as 'vi' | 'en']}
+					aria-expanded={vdCrumbMoreOpen}
+					tabindex={vdCrumbOverflow > 0 ? 0 : -1}
+					aria-hidden={vdCrumbOverflow > 0 ? undefined : 'true'}
+					style={vdCrumbOverflow > 0 ? undefined : 'visibility:hidden;pointer-events:none;'}
+					onclick={() => (vdCrumbMoreOpen = !vdCrumbMoreOpen)}
+				>
+					<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+				</button>
+				{#if vdCrumbMoreOpen}
+					<div class="supplier-crumb-popover" role="menu">
+						<button
+							type="button"
+							class="supplier-crumb-popover__item"
+							role="menuitem"
+							onclick={() => {
+								vdCrumbMoreOpen = false;
+								variantDetailDisplay = false;
+							}}
+						>{pageContents.title[lang]}</button>
+						<button
+							type="button"
+							class="supplier-crumb-popover__item"
+							role="menuitem"
+							onclick={() => {
+								vdCrumbMoreOpen = false;
+								variantDetailDisplay = false;
+							}}
+						>{pageContents.poModal.title[lang]}</button>
+					</div>
+				{/if}
+			{/if}
+			{#if vdCrumbOverflow < 1}
 					<button
 						type="button"
 						class="supplier-modal-title__label supplier-modal-title__crumb"
@@ -5777,8 +6026,11 @@
 					>
 						{pageContents.title[lang]}
 					</button>
+			{/if}
+			{#if vdCrumbOverflow < 2}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-					<span class="supplier-modal-title__name">{pageContents.poModal.title[lang]}</span>
+				<button type="button" class="supplier-modal-title__name supplier-modal-title__crumb" onclick={() => { variantDetailDisplay = false; }}>{pageContents.poModal.title[lang]}</button>
+			{/if}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.poModal.itemVariant[lang]}</span>
 				</div>
@@ -5800,7 +6052,35 @@
 	<Modal bind:display={poShareDisplay} size="sm" isDimissable class="supplier-modal-root">
 		<Modal.Container>
 			<Modal.Container.Header actionButtons={{ close: { display: true } }}>
-				<div class="supplier-modal-title">
+				<div class="supplier-modal-title" bind:this={shCrumbNavEl}>
+			{#if shCrumbOverflow > 0}
+				<button
+					type="button"
+					class="supplier-modal-title__more"
+					aria-label={pageContents.supplierModal.crumbMore[lang as 'vi' | 'en']}
+					aria-expanded={shCrumbMoreOpen}
+					tabindex={shCrumbOverflow > 0 ? 0 : -1}
+					aria-hidden={shCrumbOverflow > 0 ? undefined : 'true'}
+					style={shCrumbOverflow > 0 ? undefined : 'visibility:hidden;pointer-events:none;'}
+					onclick={() => (shCrumbMoreOpen = !shCrumbMoreOpen)}
+				>
+					<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+				</button>
+				{#if shCrumbMoreOpen}
+					<div class="supplier-crumb-popover" role="menu">
+						<button
+							type="button"
+							class="supplier-crumb-popover__item"
+							role="menuitem"
+							onclick={() => {
+								shCrumbMoreOpen = false;
+								poShareDisplay = false;
+							}}
+						>{pageContents.title[lang]}</button>
+					</div>
+				{/if}
+			{/if}
+			{#if shCrumbOverflow < 1}
 					<button
 						type="button"
 						class="supplier-modal-title__label supplier-modal-title__crumb"
@@ -5810,8 +6090,11 @@
 					>
 						{pageContents.title[lang]}
 					</button>
+			{/if}
+			{#if shCrumbOverflow < 2}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name">{poShareData.poCode}</span>
+			{/if}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.poModal.shareTitle[lang]}</span>
 				</div>
@@ -5859,7 +6142,35 @@
 				<!-- B46 (m18161): breadcrumb 3 nấc [Suppliers › PO code › Update status].
 				     Tap nấc Suppliers đóng modal về datatable; nấc PO code đóng status modal
 				     về datatable (PO list không có modal chi tiết riêng). -->
-				<div class="supplier-modal-title">
+				<div class="supplier-modal-title" bind:this={stCrumbNavEl}>
+				{#if stCrumbOverflow > 0}
+					<button
+						type="button"
+						class="supplier-modal-title__more"
+						aria-label={pageContents.supplierModal.crumbMore[lang as 'vi' | 'en']}
+						aria-expanded={stCrumbMoreOpen}
+						tabindex={stCrumbOverflow > 0 ? 0 : -1}
+						aria-hidden={stCrumbOverflow > 0 ? undefined : 'true'}
+						style={stCrumbOverflow > 0 ? undefined : 'visibility:hidden;pointer-events:none;'}
+						onclick={() => (stCrumbMoreOpen = !stCrumbMoreOpen)}
+					>
+						<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+					</button>
+					{#if stCrumbMoreOpen}
+						<div class="supplier-crumb-popover" role="menu">
+							<button
+								type="button"
+								class="supplier-crumb-popover__item"
+								role="menuitem"
+								onclick={() => {
+									stCrumbMoreOpen = false;
+									statusModalDisplay = false;
+								}}
+							>{pageContents.title[lang]}</button>
+						</div>
+					{/if}
+				{/if}
+				{#if stCrumbOverflow < 1}
 					<button
 						type="button"
 						class="supplier-modal-title__label supplier-modal-title__crumb"
@@ -5868,8 +6179,11 @@
 					>
 						{pageContents.title[lang]}
 					</button>
+				{/if}
+				{#if stCrumbOverflow < 2}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name">{statusRow?.poCode ?? '—'}</span>
+				{/if}
 					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
 					<span class="supplier-modal-title__name supplier-modal-title__name--active">{pageContents.statusModal.title[lang]}</span>
 				</div>

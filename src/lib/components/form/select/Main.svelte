@@ -5,7 +5,7 @@
 	import { Icon, Tag, Tooltip } from '$components/element';
 	import { Modal } from '$components/modal';
 	import { client } from '$store/basic.svelte';
-	import { onDestroy, onMount, untrack, type SvelteComponent } from 'svelte';
+	import { onDestroy, onMount, tick, untrack, type SvelteComponent } from 'svelte';
 	import { getFormContext } from '../form';
 	import { setSelectContext } from './_context';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -61,6 +61,42 @@
 	// Display riêng cho Modal fullscreen (không bind trực tiếp configs.status.open —
 	// Modal có logic ESC/backdrop/close-button riêng; onClose sẽ gọi configs.close()).
 	let fullscreenDisplay = $state(false);
+	// B51 (m24556): breadcrumb fullscreen tràn → nấc cha lùi vào popover more (pattern B34
+	// của suppliers modal title — đo scrollWidth>clientWidth trên nav children).
+	let fsCrumbNavEl = $state<HTMLElement | null>(null);
+	let fsCrumbOverflow = $state(0);
+	let fsCrumbMoreOpen = $state(false);
+	async function measureFsCrumbs() {
+		const nav = fsCrumbNavEl;
+		if (!nav) {
+			if (fsCrumbOverflow !== 0) fsCrumbOverflow = 0;
+			return;
+		}
+		// popover + more nằm TRONG nav đo → skip (popover item nowrap+ellipsis cũng tràn — B34 bẫy).
+		const anyTruncated = () => {
+			for (const el of nav.children) {
+				const item = el as HTMLElement;
+				if (item.classList.contains('select-fullscreen-crumbs__more') || item.classList.contains('select-fullscreen-crumbs-popover')) continue;
+				if (item.scrollWidth > item.clientWidth + 1) return true;
+			}
+			return false;
+		};
+		let guard = 0;
+		while (anyTruncated() && guard < 8) {
+			fsCrumbOverflow += 1;
+			guard += 1;
+			await tick();
+		}
+		while (fsCrumbOverflow > 0 && guard < 16) {
+			fsCrumbOverflow -= 1;
+			guard += 1;
+			await tick();
+			if (anyTruncated()) {
+				fsCrumbOverflow += 1;
+				break;
+			}
+		}
+	}
 
 	// Refs DOM
 	let searchInputEl: HTMLInputElement | undefined;
@@ -1290,6 +1326,7 @@
 			};
 		}
 	});
+		// B51 (m24556): đo tràn breadcrumb fullscreen sau render + resize (fullscreen chỉ mobile).,		$effect(() => {,			if (!fullscreenDisplay) return;,			// track crumbs length + label đầu (đổi crumbs → đo lại),			void props.fullscreenCrumbs?.length;,			void props.fullscreenCrumbs?.[0]?.label;,			const raf = requestAnimationFrame(() => void measureFsCrumbs());,			const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureFsCrumbs()));,			const nav = fsCrumbNavEl;,			if (nav) ro.observe(nav);,			return () => {,				cancelAnimationFrame(raf);,				ro.disconnect();,			};,		});,		// B51 (m24556): outside-click đóng popover crumb fullscreen.,		$effect(() => {,			if (!fsCrumbMoreOpen) return;,			const onDocClick = (e: MouseEvent) => {,				const t = e.target as Node | null;,				if (fsCrumbNavEl && t && fsCrumbNavEl.contains(t)) return;,				fsCrumbMoreOpen = false;,			};,			document.addEventListener('mousedown', onDocClick);,			return () => document.removeEventListener('mousedown', onDocClick);,		});,		// B51 (m24556): đóng fullscreen → reset overflow + popover.,		$effect(() => {,			if (!fullscreenDisplay) {,				fsCrumbOverflow = 0;,				fsCrumbMoreOpen = false;,			},		});
 
 	// ── (9) Chip fit: đo width trigger → fit chip (ResizeObserver + rAF) ──
 	// Đọc selectedOptionsDerived/removableChipsDerived/chipTruncateLengthDerived TRONG BODY
@@ -1990,12 +2027,53 @@
 			<Modal.Container.Header actionButtons={{ close: { display: false } }}>
 					{#if props.fullscreenCrumbs?.length}
 						{@const crumbs = props.fullscreenCrumbs}
-						<div class="select-fullscreen-crumbs">
+						<div class="select-fullscreen-crumbs" bind:this={fsCrumbNavEl}>
+							{#if fsCrumbOverflow > 0}
+								<button
+									type="button"
+									class="select-fullscreen-crumbs__more"
+									aria-label="Show path"
+									aria-expanded={fsCrumbMoreOpen}
+									tabindex={fsCrumbOverflow > 0 ? 0 : -1}
+									aria-hidden={fsCrumbOverflow > 0 ? undefined : 'true'}
+									style={fsCrumbOverflow > 0 ? undefined : 'visibility:hidden;pointer-events:none;'}
+									onclick={() => (fsCrumbMoreOpen = !fsCrumbMoreOpen)}
+								>
+									<svg width="1.25em" height="1.25em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+								</button>
+								{#if fsCrumbMoreOpen}
+									<div class="select-fullscreen-crumbs-popover" role="menu">
+										{#each props.fullscreenCrumbs ?? [] as c, i}
+											{#if c.kind !== "current" && i < fsCrumbOverflow}
+												<button
+													type="button"
+													class="select-fullscreen-crumbs-popover__item"
+													role="menuitem"
+													onclick={() => {
+														fsCrumbMoreOpen = false;
+														configs.close();
+														props.fullscreenCrumbTap?.(i);
+													}}
+												>{c.label}</button>
+											{/if}
+										{/each}
+									</div>
+								{/if}
+							{/if}
 							{#each crumbs as c, i}
-								{#if i > 0}<span class="select-fullscreen-crumbs__name" aria-hidden="true">›</span>{/if}
+								{#if i > 0 && i > fsCrumbOverflow}<span class="select-fullscreen-crumbs__name" aria-hidden="true">›</span>{/if}
 								{#if c.kind === "current"}
-									<span class="select-fullscreen-crumbs__name select-fullscreen-crumbs__name--active">{c.label}</span>
-								{:else}
+									{#if props.onTriggerDetail}
+										<!-- B51 (m24556): tap node hiện tại khi ĐÃ chọn → mở detail (chốt user m24594) -->
+										<button
+											type="button"
+											class="select-fullscreen-crumbs__name select-fullscreen-crumbs__name--active select-fullscreen-crumbs__crumb"
+											onclick={() => { props.onTriggerDetail?.(); }}
+										>{c.label}</button>
+									{:else}
+										<span class="select-fullscreen-crumbs__name select-fullscreen-crumbs__name--active">{c.label}</span>
+									{/if}
+								{:else if i >= fsCrumbOverflow}
 									<button
 										type="button"
 										class="select-fullscreen-crumbs__label select-fullscreen-crumbs__crumb"

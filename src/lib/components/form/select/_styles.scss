@@ -1142,11 +1142,57 @@
 
 /* ── (B49) Fullscreen header breadcrumb ── */
 .select-fullscreen-crumbs {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
 	min-width: 0;
 }
+// B51 (m24556): more button + popover cho breadcrumb fullscreen (pattern suppliers modal title).
+.select-fullscreen-crumbs__more {
+	width: 2rem;
+	height: 2rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	padding: 0;
+	border-radius: 9999px;
+}
+
+.select-fullscreen-crumbs-popover {
+	position: absolute;
+	top: calc(100% + 0.35rem);
+	left: 0;
+	z-index: 50;
+	min-width: 10rem;
+	padding: 0.25rem;
+	background: var(--background, #fff);
+	border: 1px solid var(--default-300, #d4d4d8);
+	border-radius: 0.5rem;
+	box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+}
+
+.select-fullscreen-crumbs-popover__item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: var(--foreground, #111);
+	padding: 0.375rem 0.5rem;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 12rem;
+}
+
 .select-fullscreen-crumbs__crumb {
 	background: none;
 	border: 0;
