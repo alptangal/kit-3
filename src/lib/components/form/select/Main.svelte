@@ -1326,7 +1326,47 @@
 			};
 		}
 	});
-		// B51 (m24556): đo tràn breadcrumb fullscreen sau render + resize (fullscreen chỉ mobile).,		$effect(() => {,			if (!fullscreenDisplay) return;,			// track crumbs length + label đầu (đổi crumbs → đo lại),			void props.fullscreenCrumbs?.length;,			void props.fullscreenCrumbs?.[0]?.label;,			const raf = requestAnimationFrame(() => void measureFsCrumbs());,			const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureFsCrumbs()));,			const nav = fsCrumbNavEl;,			if (nav) ro.observe(nav);,			return () => {,				cancelAnimationFrame(raf);,				ro.disconnect();,			};,		});,		// B51 (m24556): outside-click đóng popover crumb fullscreen.,		$effect(() => {,			if (!fsCrumbMoreOpen) return;,			const onDocClick = (e: MouseEvent) => {,				const t = e.target as Node | null;,				if (fsCrumbNavEl && t && fsCrumbNavEl.contains(t)) return;,				fsCrumbMoreOpen = false;,			};,			document.addEventListener('mousedown', onDocClick);,			return () => document.removeEventListener('mousedown', onDocClick);,		});,		// B51 (m24556): đóng fullscreen → reset overflow + popover.,		$effect(() => {,			if (!fullscreenDisplay) {,				fsCrumbOverflow = 0;,				fsCrumbMoreOpen = false;,			},		});
+		// B51 (m24556): đo tràn breadcrumb fullscreen sau render + resize (fullscreen chỉ mobile).
+		// B51.1 (m24912): bind:this có thể gán SAU effect → measure trong rAF sau mount;
+		// (patch B51 cũ chèn cả 3 effect thành 1 dòng comment — effect chưa từng chạy).
+		$effect(() => {
+			if (!fullscreenDisplay) return;
+			// track crumbs length + label đầu (đổi crumbs → đo lại)
+			void props.fullscreenCrumbs?.length;
+			void props.fullscreenCrumbs?.[0]?.label;
+			let ro: ResizeObserver | null = null;
+			const raf = requestAnimationFrame(() => {
+				const nav = fsCrumbNavEl;
+				if (!nav) return;
+				void measureFsCrumbs();
+				ro = new ResizeObserver(() => requestAnimationFrame(() => void measureFsCrumbs()));
+				ro.observe(nav);
+			});
+			return () => {
+				cancelAnimationFrame(raf);
+				ro?.disconnect();
+			};
+		});
+
+		// B51 (m24556): outside-click đóng popover crumb fullscreen.
+		$effect(() => {
+			if (!fsCrumbMoreOpen) return;
+			const onDocClick = (e: MouseEvent) => {
+				const t = e.target as Node | null;
+				if (fsCrumbNavEl && t && fsCrumbNavEl.contains(t)) return;
+				fsCrumbMoreOpen = false;
+			};
+			document.addEventListener('mousedown', onDocClick);
+			return () => document.removeEventListener('mousedown', onDocClick);
+		});
+
+		// B51 (m24556): đóng fullscreen → reset overflow + popover.
+		$effect(() => {
+			if (!fullscreenDisplay) {
+				fsCrumbOverflow = 0;
+				fsCrumbMoreOpen = false;
+			}
+		});
 
 	// ── (9) Chip fit: đo width trigger → fit chip (ResizeObserver + rAF) ──
 	// Đọc selectedOptionsDerived/removableChipsDerived/chipTruncateLengthDerived TRONG BODY
