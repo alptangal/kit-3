@@ -8,6 +8,7 @@ import {
 	statusForServiceFailure
 } from '$lib/server/admin/api';
 import { ProductAdminService } from '$lib/server/db/products';
+import { SupplierService } from '$lib/server/db/suppliers';
 
 export const POST: RequestHandler = async (event) => {
 	const { locals } = event;
@@ -42,10 +43,24 @@ export const POST: RequestHandler = async (event) => {
 			return respond({ ok: false, message: result.messages }, statusForServiceFailure(result.messages));
 		}
 
+		// B50 (m21047): giá nhập dự kiến = unitCost PO gần nhất per variant (fill sẵn form PO).
+		// Lỗi enrich không chặn list.
+		let lastCosts = new Map<string, number>();
+		try {
+			const ids = result.items.map((v: Record<string, unknown>) => String(v._id ?? ""));
+			lastCosts = await SupplierService.latestPurchaseCostByVariant(actor, ids);
+		} catch {
+			lastCosts = new Map();
+		}
+		const items = result.items.map((v: Record<string, unknown>) => ({
+			...v,
+			lastPurchaseCost: lastCosts.get(String(v._id ?? "")) ?? null
+		}));
+
 		return respond({
 			ok: true,
 			message: { vi: 'Lấy danh sách biến thể thành công', en: 'Variant list fetched successfully' },
-			data: { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize }
+			data: { items, total: result.total, page: result.page, pageSize: result.pageSize }
 		});
 	} catch (e) {
 		console.error('[POST /api/admin/variants/list]', e);

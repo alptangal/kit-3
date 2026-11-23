@@ -795,9 +795,9 @@
 				const firstIndex = configs.visibleOptions.findIndex((o) => !o.disabled);
 				configs.status.highlightedIndex = firstIndex >= 0 ? firstIndex : -1;
 				// Autofocus search input (an toàn iOS Safari — requestAnimationFrame + preventScroll)
-				// Fullscreen: KHÔNG auto-focus — iOS 15 bật keyboard ngay → viewport co 746→430,
-				// modal full màn nhảy layout = lag cảm giác. User tự tap ô search khi cần gõ.
-				if (!fullscreenDerived) configs.focusSearchInput();
+				// B50 (m21047): fullscreen CŨNG auto-focus — user yêu cầu mở modal là focus ô search.
+				// rAF + preventScroll tránh keyboard jank; iOS 15 mở keyboard sau layout xong.
+				configs.focusSearchInput();
 				// Load options async lần đầu (nếu có loadOptions)
 				if (props.loadOptions && !initialOptionsLoaded) {
 					configs.loadInitialOptions();
@@ -1986,7 +1986,8 @@
 			bind:display={fullscreenDisplay}
 		>
 			<Modal.Container>
-				<Modal.Container.Header>
+				<!-- B50 (m21047): fullscreen chỉ chạy mobile — breadcrumb là lối đóng duy nhất, ẩn nút X -->
+			<Modal.Container.Header actionButtons={{ close: { display: false } }}>
 					{#if props.fullscreenCrumbs?.length}
 						{@const crumbs = props.fullscreenCrumbs}
 						<div class="select-fullscreen-crumbs">
@@ -1998,7 +1999,8 @@
 									<button
 										type="button"
 										class="select-fullscreen-crumbs__label select-fullscreen-crumbs__crumb"
-										onclick={() => props.fullscreenCrumbTap?.(i)}
+										// B50 (m21047): tap crumb bất kỳ = đóng select trước, page callback xử lý navigate
+										onclick={() => { configs.close(); props.fullscreenCrumbTap?.(i); }}
 									>{c.label}</button>
 								{/if}
 							{/each}

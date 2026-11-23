@@ -83,6 +83,9 @@
 		unitCost: number;
 		lotNumber?: string;
 		expiresAt?: string;
+		// B50 (m21047): đơn vị nhập + hệ số (lưu nguyên trạng — nhận hàng hiểu "48 chai/thùng")
+		unitName?: string;
+		unitFactor?: number;
 	}
 
 	interface BranchOption {
@@ -95,6 +98,9 @@
 		_id: string;
 		sku?: string;
 		displayName?: string;
+		// B50 (m21047): đơn vị có sẵn của variant + giá nhập dự kiến (server enrich)
+		units?: { name: string; factor: number; price?: number | null }[] | null;
+		lastPurchaseCost?: number | null;
 	}
 
 	// ── Ngôn ngữ ──
@@ -381,7 +387,12 @@
 			shareBranch: { vi: 'Chi nhánh', en: 'Branch' },
 			shareDate: { vi: 'Ngày nhận', en: 'Expected' },
 			shareItem: { vi: 'Mặt hàng', en: 'Item' },
-			shareQty: { vi: 'SL', en: 'Qty' }
+			shareQty: { vi: 'SL', en: 'Qty' },
+			// B50 (m21047): đơn vị + giá nhập dự kiến trong item hàng
+			itemUnit: { vi: 'Đơn vị', en: 'Unit' },
+			itemUnitPlaceholder: { vi: 'Đơn vị (tuỳ chọn)', en: 'Unit (optional)' },
+			itemUnitHint: { vi: 'Ví dụ: chiếc, thùng, lốc, dây', en: 'e.g. piece, box, pack, coil' },
+			itemExpectedCost: { vi: 'Giá nhập dự kiến', en: 'Expected unit cost' }
 		},
 		statusModal: {
 			title: { vi: 'Cập nhật trạng thái PO', en: 'Update PO status' },
@@ -1553,6 +1564,9 @@
 		const last = poForm.items[poForm.items.length - 1];
 		return !!last.variantId && Number.isFinite(last.quantity) && last.quantity > 0;
 	});
+
+	// B50 (m21047): nút Save PO disabled khi form invalid — disable thay vì báo lỗi lúc bấm.
+	const poFormInvalid = $derived(validatePOForm() !== undefined);
 	// B49 (chain B): 2 dòng trùng variantId → highlight + chặn submit.
 	function poItemDuplicate(index: number): boolean {
 		const cur = poForm.items[index];
@@ -1568,6 +1582,8 @@
 	let poShareBusy = $state(false);
 	// ── B49 (chain B): quick-create từ Select (supplier/branch/variant) ──
 	let quickCreateKind = $state<null | 'supplier' | 'branch' | 'variant'>(null);
+	// B50 (m21047): PO select đang đợi supplier mới — tạo xong chọn vào Select + nạp lại
+	let poSelectPendingSupplier: { seedName?: string } | null = null;
 	// target: field đợi giá trị sau khi tạo — 'supplier' | 'branch' | index item (string số)
 	let quickCreateTarget = $state<null | 'supplier' | 'branch' | string>(null);
 	let quickCreateName = $state('');
@@ -2712,6 +2728,14 @@
 					// Baseline = dữ liệu vừa lưu → nút Save tắt cho tới khi user sửa tiếp.
 					supplierEditBaseline = JSON.stringify(supplierForm);
 				} else {
+					// B50 (m21047): nếu luồng PO quick-create supplier → chọn supplier vừa tạo vào Select PO.
+					if (poSelectPendingSupplier) {
+						poSelectPendingSupplier = null;
+						const newSupplierId = String(respSupplier?._id ?? '');
+						if (newSupplierId) {
+							poForm.supplierId = newSupplierId;
+						}
+					}
 					// CREATE thành công → reset về form trống (giữ modal mở)
 					supplierForm = emptySupplierForm();
 					supplierAddressBreakdowns = [];
@@ -2876,13 +2900,21 @@
 
 	// ── B49 (chain B): quick-create từ Select khi search không thấy ──
 	function openQuickCreate(kind: 'supplier' | 'branch' | 'variant', value: string, target: 'supplier' | 'branch' | string) {
+		// B50 (m21047): supplier → mở form create ĐẦY ĐỦ tab suppliers (PO modal giữ phía sau).
+		// Tạo xong Select PO tự nạp lại (loadSuppliers) + chọn supplier vừa tạo.
+		if (kind === 'supplier') {
+			poSelectPendingSupplier = { seedName: value.trim() };
+			openSupplierModal();
+			return;
+		}
 		quickCreateKind = kind;
 		quickCreateDisplay = true;
 		quickCreateTarget = target;
 		quickCreateError = undefined;
 		// seed tên đã gõ vào field đầu tiên (name/sku) để user đỡ gõ lại.
 		const seeded = value.trim();
-		quickCreateName = kind === 'supplier' ? seeded : '';
+		// B50 (m21047): supplier đã return sớm — quick-create chỉ còn branch/variant (name không dùng).
+		quickCreateName = '';
 		quickCreatePhone = '';
 		quickCreateEmail = '';
 		quickCreateSku = kind === 'variant' ? seeded : '';
@@ -3165,8 +3197,11 @@
 				items: poForm.items.map((item) => ({
 					variantId: item.variantId,
 					quantity: Number(item.quantity),
-					// B49 (chain B): unitCost bỏ khỏi form — server type yêu cầu number → gửi 0.
-					unitCost: 0,
+					// B50 (m21047): giá nhập dự kiến (fill từ PO gần nhất — user sửa được)
+					unitCost: Number(item.unitCost) || 0,
+					// B50: đơn vị nhập (tuỳ chọn) — server lưu nguyên trạng
+					unitName: str(item.unitName).trim() || undefined,
+					unitFactor: Number(item.unitFactor) > 0 ? Number(item.unitFactor) : undefined,
 					lotNumber: str(item.lotNumber).trim() || undefined,
 					expiresAt: item.expiresAt || undefined
 				})),
@@ -5451,6 +5486,9 @@
 						{#each poForm.items as item, index (index)}
 							<!-- B49 (chain B): highlight dòng trùng variant -->
 							<div class="po-item" class:po-item--dup={poItemDuplicate(index)}>
+								<!-- B50 (m21047): badge STT góc trái + remove ✕ góc phải (mẫu .field-row) -->
+								<Badge class="po-item-stt" label={String(index + 1)} size="xs" variant="solid" color={poItemDuplicate(index) ? 'error' : 'primary'} />
+								<button type="button" class="po-item-remove" aria-label={pageContents.poModal.removeItem[lang]} disabled={poSubmitting} onclick={() => removePOItem(index)}>✕</button>
 								<div class="po-item-field">
 									<span class="form-label po-item-label">{pageContents.poModal.itemVariant[lang]}</span>
 									<Select
@@ -5475,11 +5513,37 @@
 										createOptionLabel={pageContents.poModal.createNew[lang]}
 										onOptionCreate={(value) => openQuickCreate('variant', value, String(index))}
 										onTriggerDetail={() => openSelectDetail('variant', item.variantId)}
+									onValueChange={() => {
+										// B50 (m21047): chọn variant → fill giá nhập dự kiến + hệ số đơn vị đầu tiên
+										const v = variantOptions.find((vv) => vv._id === item.variantId);
+										item.unitCost = v?.lastPurchaseCost ?? 0;
+										item.unitFactor = v?.units?.[0]?.factor ?? undefined;
+									}}
 									/>
 								</div>
 								<div class="po-item-field">
 									<span class="form-label po-item-label">{pageContents.poModal.itemQuantity[lang]}</span>
 									<input class="admin-input po-item-num" type="number" min="1" step="1" bind:value={item.quantity} disabled={poSubmitting} placeholder={pageContents.poModal.itemQuantity[lang]} />
+								</div>
+								<!-- B50 (m21047): đơn vị nhập — gợi ý từ units variant, cho gõ mới -->
+								<div class="po-item-field">
+									<span class="form-label po-item-label">{pageContents.poModal.itemUnit[lang]}</span>
+									<Select
+										class="admin-filter-select po-item-unit"
+										size="sm"
+										bind:value={item.unitName}
+										options={variantOptions.find((v) => v._id === item.variantId)?.units?.map((u) => ({ value: u.name, label: u.name })) ?? []}
+										allowCreate
+										createOptionLabel={pageContents.poModal.itemUnitHint[lang]}
+										clearable
+										placeholder={pageContents.poModal.itemUnitPlaceholder[lang]}
+										disabled={poSubmitting}
+									/>
+								</div>
+								<!-- B50 (m21047): giá nhập dự kiến fill từ PO gần nhất — user sửa được -->
+								<div class="po-item-field">
+									<span class="form-label po-item-label">{pageContents.poModal.itemExpectedCost[lang]}</span>
+									<input class="admin-input po-item-num" type="number" min="0" step="any" bind:value={item.unitCost} disabled={poSubmitting} placeholder={pageContents.poModal.itemExpectedCost[lang]} />
 								</div>
 								<!-- B49 (chain B): input unitCost ĐÃ LOẠI BỎ khỏi form (giữ trong type = 0) -->
 								<div class="po-item-field">
@@ -5489,13 +5553,6 @@
 								<div class="po-item-field">
 									<span class="form-label po-item-label">{pageContents.poModal.itemExpires[lang]}</span>
 									<input class="admin-input po-item-date" type="date" bind:value={item.expiresAt} disabled={poSubmitting} />
-								</div>
-								<div class="po-item-field po-item-field--remove">
-									<span class="form-label po-item-label" aria-hidden="true">&nbsp;</span>
-									<!-- delete/remove = error -->
-									<Button color="error" variant="ghost" size="sm" disabled={poSubmitting} onClick={() => removePOItem(index)}>
-										{pageContents.poModal.removeItem[lang]}
-									</Button>
 								</div>
 							</div>
 						{/each}
@@ -5521,7 +5578,7 @@
 			<Modal.Container.Footer>
 				<!-- create/save = success -->
 				<!-- B49 (chain B): Save chỉ mở review — submit thật qua dialog Confirm -->
-				<Button color="success" onClick={openPOReview} loading={poSubmitting} disabled={poSubmitting}>
+				<Button color="success" onClick={openPOReview} loading={poSubmitting} disabled={poSubmitting || poFormInvalid}>
 					{poEditMode === 'edit' ? pageContents.poModal.save[lang] : pageContents.poModal.submit[lang]}
 				</Button>
 				<Button
@@ -6146,10 +6203,7 @@
 		}
 	}
 
-	.po-item :global(.admin-filter-select.po-item-variant) {
-		flex: 1 1 12rem;
-		min-width: 10rem;
-	}
+	/* B50: bỏ flex: 1 1 12rem — flex-basis dọc làm select-root cao 192px (khoảng trống giữa qty và unit) */
 
 	@media (max-width: 767px) {
 		:global(.datatable-caption-tools .admin-filter-select) {
@@ -6741,11 +6795,17 @@
 	}
 
 	.po-item {
+		position: relative;
 		display: grid;
-		/* B49 (chain B): 5 cột — variant / qty / lot / date / remove (unitCost đã bỏ) */
-		grid-template-columns: minmax(10rem, 2fr) 5rem minmax(6rem, 1fr) minmax(8rem, 1fr) auto;
+		/* B50 (m21047): 6 cột — variant / qty / unit / cost / lot / date (remove → ✕ góc phải trên) */
+		grid-template-columns: minmax(10rem, 2fr) 5rem minmax(6rem, 1fr) minmax(7rem, 1fr) minmax(6rem, 1fr) minmax(8rem, 1fr);
 		gap: 0.5rem;
 		align-items: start;
+		/* B50: group item nổi bật — nền nhạt + viền, chứa badge STT / ✕ góc */
+		background: var(--muted, #f3f4f6);
+		border: 1px solid var(--default-300, #e5e7eb);
+		border-radius: 0.75rem;
+		padding: 1.25rem 0.75rem 0.75rem;
 
 		&.po-item--dup {
 			/* B49 (chain B): dòng trùng variant — viền error */
@@ -6767,9 +6827,7 @@
 		gap: 0.25rem;
 		min-width: 0;
 
-		&.po-item-field--remove {
-			justify-content: flex-end;
-		}
+		/* B50 (m21047): xoá &.po-item-field--remove — field remove đã thay bằng ✕ badge góc */
 	}
 
 	.po-item-label {
@@ -6777,6 +6835,38 @@
 		font-weight: 600;
 		color: var(--muted-foreground);
 		line-height: 1.2;
+	}
+
+	/* B50 (m21047): badge STT góc trái trên + nút ✕ góc phải trên (mẫu .field-row-stt / .field-row-remove) */
+	/* Badge render hash riêng → class qua props.class phải :global (B46 pattern) */
+	.po-item :global(.po-item-stt) {
+		position: absolute;
+		top: -0.5rem;
+		left: 0.75rem;
+		z-index: 1;
+	}
+
+	.po-item-remove {
+		position: absolute;
+		top: 0.25rem;
+		right: 0.5rem;
+		z-index: 1;
+		min-width: 1.75rem;
+		min-height: 1.75rem;
+		border: 0;
+		border-radius: 0.375rem;
+		background: transparent;
+		color: var(--muted-foreground);
+		font-size: 0.875rem;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+
+		&:hover {
+			background: var(--error, #dc2626);
+			color: #fff;
+		}
 	}
 
 	/* B49 (chain B): review trước submit */

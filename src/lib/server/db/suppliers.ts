@@ -891,7 +891,43 @@ export class SupplierService {
   /**
    * List purchase orders.
    */
-  static async listPurchaseOrders(
+    /**
+   * B50 (m21047): giá nhập dự kiến — PO gần nhất per variant (received/created mới nhất).
+   * Trả Map<variantId, unitCost> — item của PO mới nhất trước, variant chưa có → bỏ qua.
+   */
+  static async latestPurchaseCostByVariant(
+    actor: ActorContext,
+    variantIds: string[]
+  ): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    const unique = [...new Set(variantIds.filter((id): id is string => typeof id === "string" && id.length > 0))];
+    if (unique.length === 0) return map;
+    const res = await cbPurchaseOrders.document.query({
+      statement:
+        `SELECT po.items, po.receivedAt, po.createdAt FROM ${purchaseOrdersKeyspace} AS po
+          WHERE ANY item IN po.items SATISFIES item.variantId IN $1 END
+            AND (po.deletedAt IS NULL OR po.deletedAt IS MISSING)`,
+      args: [unique],
+      readonly: true
+    });
+    if (!res.ok) return map;
+    const docs = (res.data?.results ?? []) as Array<{ items?: Array<{ variantId?: string; unitCost?: number }>; receivedAt?: string | null; createdAt?: string | null }>;
+    docs.sort((a, b) => {
+      const ta = a.receivedAt || a.createdAt || "";
+      const tb = b.receivedAt || b.createdAt || "";
+      return tb.localeCompare(ta);
+    });
+    for (const doc of docs) {
+      for (const it of doc.items ?? []) {
+        if (typeof it.variantId === "string" && !map.has(it.variantId) && typeof it.unitCost === "number") {
+          map.set(it.variantId, it.unitCost);
+        }
+      }
+    }
+    return map;
+  }
+
+static async listPurchaseOrders(
     actor: ActorContext,
     options: {
       branchId?: string;
