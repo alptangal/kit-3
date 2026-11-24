@@ -376,11 +376,11 @@
 		}
 		// scroll / button: slice theo visibleCount
 		// Nếu visibleCount = 0 (chưa init) → dùng maxOptionsDerived
-		const cap = visibleCount === 0 ? maxOptionsDerived : visibleCount;
+		const cap = fullscreenDerived ? Infinity : visibleCount === 0 ? maxOptionsDerived : visibleCount; // B53 (m26523): fullscreen = hiện TỐI ĐA option (body modal tự cuộn)
 		return opts.slice(0, cap);
 	});
 	// hasMore: chỉ hiện UI load-more khi còn option chưa hiển thị (đã vượt không gian)
-	const hasMoreDerived = $derived(filteredOptionsDerived.length > visibleOptionsDerived.length);
+	const hasMoreDerived = $derived(!fullscreenDerived && filteredOptionsDerived.length > visibleOptionsDerived.length); // B53 (m26523)
 
 	// ── Select-all state (multiple) ──
 	const selectAllStateDerived = $derived.by((): SelectAllState => {

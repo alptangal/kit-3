@@ -1898,6 +1898,7 @@
 		});
 		suppliersPage = 1;
 		currentPagingPage = 1;
+		searching = true; // B53 (m26523): skeleton khi filter
 		await loadSuppliers();
 	}
 
@@ -4054,7 +4055,7 @@
 					showPagination={false}
 					sortable
 					resizable={{ enabled: true, fit: true }}
-					loading={posLoading && !posLoadedOnce}
+					loading={posLoading || poSearching || (posLoading && !posLoadedOnce)}
 					visual={{ striped: true, hoverable: true }}
 					emptyLabel={pageContents.states.emptyPOs[lang]}
 					loadingLabel={pageContents.states.loading[lang]}
@@ -5708,9 +5709,11 @@
 								/>
 							</TextField>
 						</div>
-						<div class="form-field" data-field="po-expected">
-							<span class="form-label">{pageContents.poModal.expectedAt[lang]}</span>
-							<input class="admin-input" type="date" min={poExpectedMin} bind:value={poForm.expectedAt} disabled={poSubmitting} />
+						<div data-field="po-expected">
+						  <TextField name="po-expected">
+						    <Label>{pageContents.poModal.expectedAt[lang]}</Label>
+						    <input class="admin-input" type="date" min={poExpectedMin} bind:value={poForm.expectedAt} disabled={poSubmitting} />
+						  </TextField>
 						</div>
 					</div>
 					<div class="form-grid-2">
@@ -5774,7 +5777,7 @@
 							<!-- B49 (chain B): highlight dòng trùng variant -->
 							<div class="po-item" class:po-item--dup={poItemDuplicate(index)}>
 								<!-- B50 (m21047): badge STT góc trái + remove ✕ góc phải (mẫu .field-row) -->
-								<Badge class="po-item-stt" label={`*${index + 1}`} size="xs" variant="solid" color={poItemDuplicate(index) ? 'error' : 'primary'} />
+								<Badge class="po-item-stt" label={`#${index + 1}`} size="xs" variant="solid" color={poItemDuplicate(index) ? 'error' : 'primary'} />
 								<button type="button" class="po-item-remove" aria-label={pageContents.poModal.removeItem[lang]} disabled={poSubmitting} onclick={() => removePOItem(index)}>✕</button>
 								<div class="po-item-field">
 									<span class="form-label po-item-label">{pageContents.poModal.itemVariant[lang]}</span>
@@ -7308,6 +7311,7 @@
 		border-radius: 0.75rem;
 		padding: 1.25rem 0.75rem 0.75rem;
 
+
 		&.po-item--dup {
 			/* B49 (chain B): dòng trùng variant — viền error */
 			outline: 1px solid #dc2626;
@@ -7320,6 +7324,9 @@
 			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		}
 	}
+
+	/* B53 (m26523): input date expectedAt khớp chiều cao Input component (min-height chuẩn size-md) */
+	:global(.supplier-modal-root [data-field='po-expected'] .admin-input) { min-height: 2.875rem; }
 
 	/* B49 (chain B): bọc label nhỏ trên mỗi field trong hàng item */
 	.po-item-field {
@@ -7633,6 +7640,19 @@
 			border-top: 1px solid var(--default-300);
 			padding-right: 4.75rem; // chỗ FAB (giống pagination B25)
 		}
+  /* B53 (m26523): khi đang cuộn ẩn bulk-bar như các group khác (breadcrumb/tab/pagination) —
+     giữ chỗ trong flow để không đảy layout (pattern tab-strip B9b) */
+  @media (max-width: 767px) {
+    .admin-page.is-scrolling .bulk-row {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 150ms ease;
+    }
+    .admin-page .bulk-row {
+      transition: opacity 150ms ease;
+    }
+  }
+
 	}
 
 
