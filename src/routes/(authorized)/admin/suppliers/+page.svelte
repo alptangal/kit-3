@@ -7635,15 +7635,7 @@
 		}
 	}
 
-	/* B52 (m25115): mobile tắt hint/info text (Description component + form-hint) — gọn màn hình nhỏ */
-	@media (max-width: 767px) {
-		:global(.supplier-modal-root .form-hint),
-		:global(.supplier-modal-root .form-error-hint),
-		:global(.supplier-modal-root .form-success-hint),
-		:global(.supplier-modal-root .description-root) {
-			display: none;
-		}
-	}
+
 
 	.field-row--dup {
 		& > :global(.input-root),

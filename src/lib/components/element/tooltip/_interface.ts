@@ -66,6 +66,9 @@ export type TooltipVariant = 'solid' | 'outline' | 'soft' | 'ghost';
 // theo hướng position. Prop animate nhận thêm boolean (true = fade).
 export type TooltipAnimation = 'fade' | 'scale' | 'slide';
 export interface TooltipProps extends BasicProps {
+	/** B52.1 (m25822): nút info icon trên mobile — mặc định TẮT (user yêu cầu);
+	 *  đặt true để bật lại cho 1 tooltip cụ thể. */
+	showInfoMobile?: boolean;
 	disabled?: boolean;
 	delay?: TimeUnits;
 	offset?: DistanceUnits;

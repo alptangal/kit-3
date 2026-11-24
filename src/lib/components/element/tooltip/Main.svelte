@@ -330,7 +330,7 @@
 	{@attach handleEvents(configs.event)}
 >
 	{@render children?.()}
-	{#if client.browser?.isMobile && !props.actionButtons?.info?.hide}
+	{#if client.browser?.isMobile && props.showInfoMobile === true && !props.actionButtons?.info?.hide}
 		<Button
 			bind:this={configs.actionButtons.info.component}
 			class={configs.actionButtons.info.style}
