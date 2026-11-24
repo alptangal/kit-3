@@ -396,17 +396,18 @@
    ESC/backdrop, nút close (Button) + body scroll lock.
    .select-fullscreen-body: cột flex chiếm hết chiều cao container để
    option list scroll nội bộ (search + controls row cố định trên đầu). */
-.select-fullscreen-body {
+/* B53 (m26523): .select-fullscreen-body nằm trên element Modal (hash modal ≠ hash select) —
+   rule scoped select không bao giờ match ⇒ phải :global() full top-level. */
+:global(.select-fullscreen-body) {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	min-height: 0;
-
-	.select-option-list {
-		flex: 1 1 auto;
-		max-height: none;
-		min-height: 0;
-	}
+}
+:global(.select-fullscreen-body .select-option-list.select-option-list) {
+	flex: 1 1 auto;
+	max-height: none;
+	min-height: 0;
 }
 
 /* Highlight segment khớp query search (label/description option) —
