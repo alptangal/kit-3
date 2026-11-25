@@ -118,7 +118,18 @@ export interface SelectProps extends BasicProps {
 	 * Nguồn option async. Gọi khi mở lần đầu (query=undefined) và (nếu remoteSearch)
 	 * khi search debounce. Kết quả merge vào danh sách hiện có (dedupe by value).
 	 */
-	loadOptions?: (query?: string) => Promise<SelectOption[]>;
+	/**
+	 * Nạp options bất đồng bộ. Gọi khi mở lần đầu (query/page undefined) + mỗi lần
+	 * search đổi (query mới). Khi `loadMorePages` bật, scroll đáy gọi lại với
+	 * `page` tăng dần — handler trả options của trang đó (component tự append).
+	 */
+	loadOptions?: (query?: string, page?: number) => Promise<SelectOption[]>;
+	/**
+	 * Bật lazyload server-side: có hàm này → scroll đáy gọi `loadOptions(query, page+1)`
+	 * thay vì chỉ slice client-side; `hasMore` do handler quyết định qua
+	 * `configs.setRemoteHasMore(false)` khi hết trang.
+	 */
+	loadMorePages?: boolean;
 	/**
 	 * Khi true + loadOptions: mỗi lần gõ search sẽ gọi loadOptions(query) (remote
 	 * search) thay vì filter local. Nếu không: loadOptions chỉ dùng để nạp ban đầu.

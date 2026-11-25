@@ -1,15 +1,17 @@
 <script lang="ts">
 	// src/routes/(authorized)/admin/categories/+page.svelte
 	// B6.2: migrate sang DataTable + Pagination (pattern users/brands page).
+	// B54: đồng bộ chuẩn UI/UX page suppliers — search suggest từ khoá, setting
+	// modal (sort + showDeleted), bulk copy/delete + selection, FAB mobile,
+	// modal breadcrumb more-popover, skeleton (DataTable loading).
 	// FIX BUG pre-existing: page cũ fetch GET ?params + đọc data.success/items
 	// nhưng endpoint chỉ export POST (readAdminRequest mã hoá RSA) → bảng
 	// không bao giờ render. Chuyển sang encryption.fetchSecure POST.
-	// Category KHÔNG có deletedAt trong schema (hard-delete) → không toggle
-	// "Show deleted". Tree hiển thị flatten theo depth — prefix '↳ ' ở cột
-	// Category (DataTable render là string thuần, không HTML).
-	import { onMount } from 'svelte';
-	import { Button, DataTable, Pagination } from '$components/element';
-	import { Input, Label, TextField } from '$components/form';
+	// Category KHÔNG có deletedAt trong schema (hard-delete) → toggle
+	// "Show deleted" chỉ persist prefs (server bỏ qua includeDeleted).
+	import { onMount, flushSync, tick } from 'svelte';
+	import { Button, DataTable, Pagination, AlertDialog, Spinner } from '$components/element';
+	import { Input, Label, TextField, Select, Checkbox } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
 	import { ModalHeader } from '$components/modal/Header';
@@ -19,7 +21,7 @@
 	import { iconify } from '$assets/icons/iconify';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
-	import type { DataTableColumn } from '$components/element/datatable';
+	import type { DataTableColumn, DataTableSortOrder } from '$components/element/datatable';
 	import { resolveServerMessage } from '../_interface';
 	import type { Size } from '$components/interface';
 	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
@@ -29,6 +31,13 @@
 	import { subscribeDbChanges } from '$modules/db-realtime';
 	// P3: dialog xác nhận khi đóng modal với form còn dirty.
 	import DirtyCloseDialog from '../DirtyCloseDialog.svelte';
+	// B54: prefs trang (sort/showDeleted) + từ khoá tìm kiếm gần đây.
+	import {
+		recordSearchKeyword,
+		getSearchKeywords,
+		saveDataTablePrefs,
+		userPrefs
+	} from '$store/user-prefs.svelte';
 	// Types
 	interface CategoryListItem {
 		_id: string;
@@ -44,6 +53,12 @@
 	const lang: 'vi' | 'en' = $derived(
 		client.browser?.language === 'vi' ? 'vi' : (client.browser?.language === 'en' ? 'en' : 'en')
 	);
+
+	// B54: isMobile — pattern suppliers (client.browser.isMobile).
+	const isMobile: boolean = $derived(client.browser?.isMobile === true);
+
+	// B54: helper — searchQuery có thể undefined (Input unmount emit undefined).
+	const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 	// Type mở (pattern users/brands page) — lang index không narrow.
 	const pageContents: { [k: string]: any } = {
@@ -67,6 +82,32 @@
 		deleteAction: { vi: 'Xoá', en: 'Delete' },
 		updated: { vi: 'Cập nhật', en: 'Updated' },
 		totalCount: { vi: '{n} danh mục', en: '{n} categories' },
+		// B54: thêm mới — breadcrumb more + search mobile + suggest + settings + bulk.
+		crumbMore: { vi: 'Xem đường dẫn', en: 'Show path' },
+		searchMobile: { vi: 'Tìm kiếm', en: 'Search' },
+		suggest: { title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' } },
+		settings: {
+			title: { vi: 'Cài đặt danh sách', en: 'List settings' },
+			sortBy: { vi: 'Sắp xếp theo', en: 'Sort by' },
+			sortDirection: { vi: 'Chiều sắp xếp', en: 'Sort direction' },
+			asc: { vi: 'Tăng dần', en: 'Ascending' },
+			desc: { vi: 'Giảm dần', en: 'Descending' },
+			apply: { vi: 'Áp dụng', en: 'Apply' },
+			reset: { vi: 'Đặt lại', en: 'Reset' },
+			showDeleted: { vi: 'Hiện danh mục đã xoá', en: 'Show deleted categories' }
+		},
+		bulk: {
+			title: { vi: 'Xoá danh mục đã chọn?', en: 'Delete selected categories?' },
+			desc: {
+				vi: '{count} danh mục sẽ bị xoá vĩnh viễn. Danh mục có danh mục con hoặc đang dùng bởi sản phẩm sẽ bị bỏ qua và báo lỗi.',
+				en: '{count} categories will be permanently deleted. Categories with children or in use by products are skipped and reported.'
+			},
+			confirm: { vi: 'Xoá', en: 'Delete' },
+			cancel: { vi: 'Huỷ', en: 'Cancel' },
+			copy: { vi: 'Copy', en: 'Copy' },
+			delete: { vi: 'Xoá', en: 'Delete' },
+			selected: { vi: 'Đã chọn {count}', en: 'Selected {count}' }
+		},
 		states: {
 			loadFailed: { vi: 'Không tải được danh sách danh mục', en: 'Failed to load categories' },
 			created: { vi: 'Đã tạo danh mục', en: 'Category created' },
@@ -74,7 +115,10 @@
 			deleted: { vi: 'Đã xoá danh mục', en: 'Category deleted' },
 			deleteFailed: { vi: 'Không xoá được danh mục', en: 'Failed to delete category' },
 			operationFailed: { vi: 'Thao tác thất bại', en: 'Operation failed' },
-			networkError: { vi: 'Lỗi kết nối', en: 'Network error' }
+			networkError: { vi: 'Lỗi kết nối', en: 'Network error' },
+			bulkDeleted: { vi: 'Đã xoá {count} danh mục', en: 'Deleted {count} categories' },
+			bulkDeleteFailed: { vi: 'Xoá hàng loạt không thành công', en: 'Bulk delete failed' },
+			bulkCopied: { vi: 'Đã copy {count} dòng', en: 'Copied {count} rows' }
 		}
 	};
 
@@ -92,13 +136,36 @@
 	let total = $state(0);
 	let pageNumber = $state(1);
 	let pageSize = $state(20);
-	let searchQuery = $state('');
+	// B54: string | undefined — Input unmount (card mode / mobile swap) emit
+	// value = undefined qua bind:value → không dùng type thuần string.
+	let searchQuery = $state<string | undefined>('');
 	// Modal create/edit dùng chung 1 biến display (bind:display — modal tự
 	// đóng qua Escape/backdrop phải sync ngược về parent, one-way sẽ hở).
 	let modalOpen = $state(false);
 	let editingCategory = $state<CategoryListItem | null>(null);
 	let formErrors = $state<Record<string, string>>({});
 	let formSubmitting = $state(false);
+
+	// ── B54: sort client (server listCategories KHÔNG sort) + prefs ──
+	const PREFS_KEY = '/admin/categories';
+	let sortField = $state<string | undefined>('');
+	let sortDirection = $state<'asc' | 'desc'>('desc');
+	// B54: showDeleted — category hard-delete nhưng vẫn persist prefs (server
+	// nhận includeDeleted, bỏ qua). Toggle ở setting modal (pattern brands).
+	let showDeleted = $state(false);
+
+	// ── B54: setting modal (sort + showDeleted) — pattern suppliers B10 ──
+	let settingModalDisplay = $state(false);
+	let settingSortField = $state('');
+	let settingSortDirection = $state<'asc' | 'desc'>('desc');
+	let settingShowDeleted = $state(false);
+	$effect(() => {
+		if (settingModalDisplay) {
+			settingSortField = str(sortField);
+			settingSortDirection = sortDirection;
+			settingShowDeleted = showDeleted;
+		}
+	});
 
 	// ── B9 draft autosave ──
 	// draftOn: flag từ system settings (getPublicDefaults → layout data.system);
@@ -143,7 +210,8 @@
 					body: {
 						page: pageNumber,
 						pageSize,
-						search: searchQuery || undefined
+						search: str(searchQuery).trim() || undefined,
+						includeDeleted: showDeleted || undefined
 					}
 				},
 				encryptionKeys
@@ -183,9 +251,23 @@
 		}
 		clearTimeout(searchDebounce);
 		searchDebounce = setTimeout(() => {
-			pageNumber = 1;
-			void fetchCategories();
+			if (pageNumber === 1) void fetchCategories();
+			else pageNumber = 1;
 		}, 300);
+	});
+
+	// B54: toggle showDeleted (setting modal Apply) — refetch 1 lần (pattern
+	// brands deletedToggleArmed). pageNumber khác 1 → về trang 1 (effect
+	// pagination tự fetch); đã ở trang 1 → fetch trực tiếp.
+	let deletedToggleArmed = false;
+	$effect(() => {
+		void showDeleted;
+		if (!deletedToggleArmed) {
+			deletedToggleArmed = true;
+			return;
+		}
+		if (pageNumber === 1) void fetchCategories();
+		else pageNumber = 1;
 	});
 
 	// Pagination — server-side: effect theo dõi pageNumber + pageSize refetch.
@@ -297,6 +379,20 @@
 			noHighlight: true
 		}
 	]);
+
+	// Options sortBy từ columns sortable (id + label hiện tại).
+	// (khai báo SAU columns — $derived không hoist, dùng trước sẽ TS error)
+	const settingSortOptions = $derived(
+		columns.filter((c) => c.sortable).map((c) => ({ value: c.id, label: String(c.label) }))
+	);
+
+	// B54: sort client — bind:sortColumn/sortDirection tự sort; onSortChange
+	// chỉ persist prefs (server listCategories không nhận sort).
+	function onSortPersist(columnId: string, order: DataTableSortOrder) {
+		void saveDataTablePrefs(PREFS_KEY, {
+			sort: { field: columnId, direction: order }
+		});
+	}
 
 	// Gộp class: defaultStyles snippet là (string|undefined)[] — lọc undefined
 	// trước khi truyền vào Icon class (string[]). Helper này nằm trong script
@@ -598,11 +694,265 @@
 		resetForm();
 	}
 
+	// ── B54: search suggest từ khoá (pattern suppliers) ──
+	// Lưu từ khoá khi blur (có nội dung) — recordSearchKeyword routeKey.
+	function saveSearchKeyword() {
+		const kw = str(searchQuery).trim();
+		if (kw) recordSearchKeyword(PREFS_KEY, kw);
+	}
+	// Gợi ý từ khoá đã tìm, lọc theo query đang gõ.
+	const recentKeywordsFiltered = $derived.by(() => {
+		const q = str(searchQuery).trim().toLowerCase();
+		const all = getSearchKeywords(PREFS_KEY);
+		if (!q) return all;
+		return all.filter((k) => k.toLowerCase().includes(q));
+	});
+	let searchFocused = $state(false);
+	let suggestOpen = $state(false);
+	// Mobile 2c: search icon → text field; đóng khi blur RỖNG.
+	let mobileSearchOpen = $state(false);
+	// bind:this Input component → instance { configs } — focus() qua
+	// instance.configs.focus() (flushSync mount + focus TRONG user gesture).
+	let mobileSearchInputInstance = $state<{ configs: { focus: () => void } } | undefined>(
+		undefined
+	);
+
+	// ── B54: bulk copy/delete + selection ──
+	let selectedIds = $state<string[]>([]);
+	let bulkDeleting = $state(false);
+	let bulkDeleteDisplay = $state(false);
+
+	function clearSelection() {
+		selectedIds = [];
+	}
+
+	// Bulk copy TSV: header + các cột có accessor function (pattern suppliers).
+	function bulkCopySelected() {
+		const cols = columns.filter((c) => c.id !== 'actions' && typeof c.accessor === 'function');
+		const header = cols.map((c) => String(c.label)).join('\t');
+		const rows = tableRowsAny
+			.filter((r) => str(r._id) && selectedIds.includes(str(r._id)))
+			.map((r) =>
+				cols
+					.map((c) => String((c.accessor as (row: unknown) => unknown)(r) ?? ''))
+					.join('\t')
+			);
+		const tsv = [header, ...rows].join('\n');
+		navigator.clipboard
+			.writeText(tsv)
+			.then(() =>
+				showToast(
+					pageContents.states.bulkCopied[lang].replace('{count}', String(selectedIds.length)),
+					'success'
+				)
+			)
+			.catch(() => showToast(pageContents.states.operationFailed[lang], 'error'));
+	}
+
+	async function bulkDeleteSelected() {
+		if (!encryptionKeys || bulkDeleting || selectedIds.length === 0) return;
+		bulkDeleting = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/categories/bulk',
+				{ method: 'POST', body: { ids: selectedIds } },
+				encryptionKeys
+			);
+			bulkDeleting = false;
+			if (response.ok) {
+				const data = response.data as { deleted?: number } | undefined;
+				showToast(
+					pageContents.states.bulkDeleted[lang].replace(
+						'{count}',
+						String(data?.deleted ?? selectedIds.length)
+					),
+					'success'
+				);
+				bulkDeleteDisplay = false;
+				clearSelection();
+				void fetchCategories();
+			} else {
+				showToast(
+					resolveServerMessage(response.message, lang, pageContents.states.bulkDeleteFailed),
+					'error'
+				);
+			}
+		} catch (err) {
+			bulkDeleting = false;
+			showToast(pageContents.states.bulkDeleteFailed[lang], 'error');
+			if (import.meta.env.DEV) console.error('[categories] bulk delete failed:', err);
+		}
+	}
+
+	// ── B54: scroll state minimal (pattern suppliers 566-660) — chỉ phần cần
+	// cho is-scrolling + fab-hidden. Wrap tự cuộn → onTableScroll; iOS ≤15.3
+	// (:has() chết → wrap không cuộn, trang cuộn ở root Container) →
+	// onWindowScroll qua document capture. ──
+	let wrapEl = $state<HTMLElement | undefined>(undefined);
+	let tableScrolled = $state(false);
+	let scrollRaf = 0;
+	let scrollActive = $state(false);
+	let scrollActiveTimer: ReturnType<typeof setTimeout>;
+	let lastActiveScrollTop = -1;
+	function markScrollActive(scrollTop: number, maxScroll: number) {
+		// iOS rubber-band: bỏ qua event ngoài biên (top<0 / top>max) + top không
+		// đổi — chỉ cú kéo thật trong biên mới prolong ẩn (dừng 200ms trả lại).
+		const rubber = scrollTop < 0 || scrollTop > maxScroll;
+		if (!rubber && scrollTop !== lastActiveScrollTop) {
+			scrollActive = true;
+		}
+		lastActiveScrollTop = scrollTop;
+		clearTimeout(scrollActiveTimer);
+		scrollActiveTimer = setTimeout(() => {
+			scrollActive = false;
+			lastActiveScrollTop = -1;
+		}, 200);
+	}
+	function onTableScroll() {
+		const el = wrapEl;
+		if (!el) return;
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			markScrollActive(el.scrollTop, el.scrollHeight - el.clientHeight);
+			tableScrolled = el.scrollTop > 8;
+		});
+	}
+
+	// Tìm ancestor scroll container thật (root Container overflow:auto).
+	function findScrollContainer(): HTMLElement | undefined {
+		let el = wrapEl?.parentElement;
+		while (el && el !== document.body) {
+			const ov = getComputedStyle(el).overflowY;
+			if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight + 4) return el;
+			el = el.parentElement;
+		}
+		return undefined;
+	}
+	function onWindowScroll() {
+		// Wrap tự cuộn được → nhường event cho onTableScroll (2 hàm chung rAF).
+		const wrapNow = wrapEl;
+		if (wrapNow && wrapNow.scrollHeight > wrapNow.clientHeight + 4) return;
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			const el = wrapEl;
+			if (!el || el.scrollHeight > el.clientHeight + 4) return;
+			const sc = findScrollContainer();
+			const top = sc ? sc.scrollTop : window.scrollY;
+			const viewH = sc ? sc.clientHeight : window.innerHeight;
+			const totalH = sc ? sc.scrollHeight : document.documentElement.scrollHeight;
+			markScrollActive(top, totalH - viewH);
+			tableScrolled = top > 8;
+		});
+	}
+
+	// ── B54: modal breadcrumb more-popover (pattern suppliers B18/B34) ──
+	let crumbTitleEl = $state<HTMLElement | null>(null);
+	// crumbOverflow = số nấc breadcrumb bị ẩn vào more-popover (0 = hiển thị đủ).
+	let crumbOverflow = $state(0);
+	let crumbMoreOpen = $state(false);
+	async function measureTitleCrumbs(
+		nav: HTMLElement | null,
+		onlyMobile: boolean,
+		getOverflow: () => number,
+		setOverflow: (v: number) => void
+	) {
+		if (!nav || onlyMobile) {
+			if (getOverflow() !== 0) setOverflow(0);
+			return;
+		}
+		// Bất kỳ item con scrollWidth > clientWidth+1 = đang bị cắt. Bỏ qua
+		// more-button + popover (popover item nowrap ellipsis cũng tràn nhưng
+		// không phải nấc breadcrumb trên nav).
+		const anyTruncated = () => {
+			for (const el of nav.children) {
+				const item = el as HTMLElement;
+				if (
+					item.classList.contains('supplier-modal-title__more') ||
+					item.classList.contains('supplier-crumb-popover')
+				)
+					continue;
+				if (item.scrollWidth > item.clientWidth + 1) return true;
+			}
+			return false;
+		};
+		let guard = 0;
+		while (anyTruncated() && guard < 8) {
+			setOverflow(getOverflow() + 1);
+			guard += 1;
+			await tick();
+		}
+		while (getOverflow() > 0 && guard < 16) {
+			setOverflow(getOverflow() - 1);
+			guard += 1;
+			await tick();
+			if (anyTruncated()) {
+				setOverflow(getOverflow() + 1);
+				break;
+			}
+		}
+	}
+	$effect(() => {
+		// Đo tràn breadcrumb sau khi modal render (1 frame) + resize.
+		void modalOpen;
+		void editingCategory?.name;
+		void isMobile;
+		void lang;
+		const measure = () =>
+			void measureTitleCrumbs(
+				crumbTitleEl,
+				!isMobile,
+				() => crumbOverflow,
+				(v) => (crumbOverflow = v)
+			);
+		const raf = requestAnimationFrame(measure);
+		const ro = new ResizeObserver(() => requestAnimationFrame(measure));
+		if (crumbTitleEl) ro.observe(crumbTitleEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+	$effect(() => {
+		// Outside-click đóng popover crumb (mousedown — pattern suppliers).
+		if (!crumbMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (crumbTitleEl && t && crumbTitleEl.contains(t)) return;
+			crumbMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
+	$effect(() => {
+		// Đóng modal → reset trạng thái crumb (mở lại đo từ đầu).
+		if (!modalOpen) {
+			crumbOverflow = 0;
+			crumbMoreOpen = false;
+		}
+	});
+
 	// Initial load
-	// B8 realtime: refetch list khi collection thay đổi từ client khác
+	// B54: seed prefs sort + showDeleted TRƯỚC generateRSAKeyPair + load
+	// (pattern suppliers 3639).
 	onMount(() => subscribeDbChanges('categories', () => void fetchCategories()));
+	onMount(() => {
+		// B54: scroll listener document capture (root Container là scroll
+		// container — scroll không bubble, phải capture).
+		document.addEventListener('scroll', onWindowScroll, { capture: true, passive: true });
+		return () => {
+			document.removeEventListener('scroll', onWindowScroll, { capture: true });
+		};
+	});
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
+		const prefs = userPrefs.datatable?.[PREFS_KEY];
+		if (prefs?.sort?.field) {
+			sortField = prefs.sort.field;
+			sortDirection = prefs.sort.direction === 'asc' ? 'asc' : 'desc';
+		}
+		if (prefs?.filters?.showDeleted === true) showDeleted = true;
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await fetchCategories();
@@ -613,33 +963,146 @@
 	<title>{pageContents.title[lang]}</title>
 </svelte:head>
 
-<section class="admin-page">
+<section
+	class="admin-page admin-page--fullheight"
+	class:is-scrolled={tableScrolled && isMobile}
+	class:is-scrolling={scrollActive && isMobile}
+>
 	<header class="admin-header">
 		<div class="admin-header-text">
 			<h1 class="admin-title">{pageContents.title[lang]}</h1>
 			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
 		<div class="admin-header-actions">
-			<!-- Quy ước màu nút: create = success -->
-			<Button color="success" onClick={openCreateModal}>
-				{pageContents.addCategory[lang]}
-			</Button>
+			<!-- B54: mobile create qua FAB primary — ẩn nút header tránh trùng. -->
+			{#if !isMobile}
+				<!-- Quy ước màu nút: create = success -->
+				<Button color="success" onClick={openCreateModal}>
+					{pageContents.addCategory[lang]}
+				</Button>
+			{/if}
 		</div>
 	</header>
 
-	<!-- ── Bộ lọc ── -->
+	<!-- ── Bộ lọc: search suggest (3 nhánh mobile/desktop) + setting ── -->
 	<div class="admin-filters">
-		<div class="admin-search">
-			<Input placeholder={pageContents.searchPlaceholder[lang]} bind:value={searchQuery}>
-				{#snippet leading(data)}
-					<Icon
-						icon={iconify['search-rounded']}
-						size={(data?.size ?? 'sm') as Size}
-						class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-					/>
-				{/snippet}
-			</Input>
+		<div class="admin-search" data-suggest>
+			{#if isMobile && !mobileSearchOpen}
+				<!-- mobile 2c: search icon → click mở text field (autofocus);
+				     đóng khi blur RỖNG (có từ khoá → giữ field) -->
+				<button
+					type="button"
+					class="mobile-caption-icon"
+					aria-label={pageContents.searchMobile[lang]}
+					data-test="categories-mobile-search-open"
+					onclick={() => {
+						// flushSync mount field + focus TRONG user gesture (iOS Safari
+						// chỉ mở keyboard khi focus nằm trong gesture).
+						flushSync(() => {
+							mobileSearchOpen = true;
+							suggestOpen = true;
+						});
+						mobileSearchInputInstance?.configs.focus();
+					}}
+				>
+					<Icon icon={iconify['search-rounded']} size="sm" />
+				</button>
+			{:else}
+				<Input
+					bind:this={mobileSearchInputInstance}
+					type="text"
+					placeholder={pageContents.searchPlaceholder[lang]}
+					bind:value={searchQuery}
+					events={[
+						{
+							events: {
+								focus: {
+									handler() {
+										searchFocused = true;
+										suggestOpen = true;
+									}
+								},
+								blur: {
+									handler() {
+										searchFocused = false;
+										suggestOpen = false;
+										saveSearchKeyword();
+										// mobile: rỗng → thu về icon (có từ khoá → giữ field)
+										if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
+									}
+								}
+							}
+						}
+					]}
+				>
+					{#snippet leading(data)}
+						{#if loading}
+							<span class="admin-search-loading">
+								<Spinner size="xs" pattern="circle" />
+							</span>
+						{:else}
+							<Icon
+								icon={iconify['search-rounded']}
+								size={(data?.size ?? 'sm') as Size}
+								class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+							/>
+						{/if}
+					{/snippet}
+				</Input>
+			{/if}
+			{#if suggestOpen && recentKeywordsFiltered.length > 0}
+				<div class="suggest-popover" role="listbox">
+					<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
+					{#each recentKeywordsFiltered as kw (kw)}
+						<button
+							type="button"
+							class="suggest-item"
+							role="option"
+							aria-selected="false"
+							// preventDefault giữ focus input (mousedown không blur)
+							onmousedown={(e) => e.preventDefault()}
+							onclick={() => {
+								searchQuery = kw;
+								suggestOpen = false;
+								if (pageNumber === 1) void fetchCategories();
+								else pageNumber = 1;
+							}}
+						>
+							{kw}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
+
+		<!-- B54: setting modal (sort + showDeleted) — desktop outline tune,
+		     mobile icon (thay Select filter trần — categories không có). -->
+		{#if isMobile}
+			<button
+				type="button"
+				class="mobile-caption-icon"
+				aria-label={pageContents.settings.title[lang]}
+				data-test="categories-mobile-filter-btn"
+				onclick={() => {
+					settingModalDisplay = true;
+				}}
+			>
+				<Icon icon={iconify['tune-rounded']} size="sm" />
+			</button>
+		{:else}
+			<Button
+				color="default"
+				variant="outline"
+				size="sm"
+				onClick={() => {
+					settingModalDisplay = true;
+				}}
+				aria-label={pageContents.settings.title[lang]}
+				data-test="categories-setting-btn"
+			>
+				<Icon icon={iconify['tune-rounded']} size="sm" />
+			</Button>
+		{/if}
 	</div>
 
 	<!-- ── Trạng thái loading/first-load error ── -->
@@ -647,16 +1110,19 @@
 		<div class="admin-state admin-state--error" data-test="categories-load-error">{loadError}</div>
 	{/if}
 
-	<!-- ── Bảng categories (DataTable + snippet actions) ── -->
-	<div class="admin-table-wrap">
+	<!-- ── Bảng categories (DataTable + captionTools bulk + snippet actions) ── -->
+	<div class="admin-table-wrap" bind:this={wrapEl} onscroll={onTableScroll}>
 		<DataTable
 			data={tableRowsAny}
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
 			sortable
-			searchable
-			searchPlaceholder={pageContents.searchPlaceholder}
+			bind:sortColumn={sortField}
+			bind:sortDirection={sortDirection}
+			onSortChange={onSortPersist}
+			// highlight theo query trang (search thật do server làm)
+			searchQuery={searchQuery ?? ''}
 			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
@@ -665,11 +1131,50 @@
 			caption={{ vi: 'Danh sách danh mục', en: 'Category list' }}
 			actionsLabel={{ vi: 'Thao tác', en: 'Actions' }}
 			stickyHead
+			selectable
+			showIndex
+			indexOffset={(pageNumber - 1) * pageSize}
+			indexCheckboxes
+			checkOnRowClick
+			selectionTools={false}
+			// id THẬT (_id DB) — default idOf = index trang → stale giữa trang
+			getRowId={(row) => String((row as unknown as CategoryListItem)._id ?? '')}
+			selection={selectedIds}
+			onSelectionChange={(ids) => (selectedIds = ids)}
 			mobileTapMode="callback"
 			onRowClick={(row) => openEditModal(row as unknown as CategoryListItem)}
 			cardFields={['category', 'slug', 'status', 'updated']}
 			data-test="categories-datatable"
 		>
+			{#snippet captionTools()}
+				{#if selectedIds.length > 0}
+					<!-- bulk-bar khi chọn ≥1 row — mobile fixed đáy (trên pagination) -->
+					<div class="bulk-row" data-test="categories-bulk-row">
+						<div class="bulk-bar" data-test="categories-bulk-bar">
+							<span class="bulk-count">
+								{pageContents.bulk.selected[lang].replace('{count}', String(selectedIds.length))}
+							</span>
+							<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected} data-test="categories-bulk-copy">
+								{pageContents.bulk.copy[lang]}
+							</Button>
+							<Button
+								color="error"
+								variant="soft"
+								size="sm"
+								onClick={() => {
+									bulkDeleteDisplay = true;
+								}}
+								data-test="categories-bulk-delete"
+							>
+								{pageContents.bulk.delete[lang]}
+							</Button>
+							<Button color="default" variant="ghost" size="sm" onClick={clearSelection} aria-label={pageContents.cancel[lang]}>
+								<Icon icon={iconify['close-rounded']} size="sm" />
+							</Button>
+						</div>
+					</div>
+				{/if}
+			{/snippet}
 			{#snippet actionsContent(row)}
 				{@const category = row as unknown as CategoryListItem}
 				<div class="row-actions">
@@ -722,13 +1227,73 @@
 		</div>
 	</footer>
 
-	<!-- ── Create/Edit Modal ── -->
-	<Modal bind:display={modalOpen} onClose={closeModals} onCloseAttempt={closeGuard.attemptClose} size="md">
+	<!-- ── Create/Edit Modal (B54: breadcrumb + more-popover, ẩn X mobile) ── -->
+	<Modal
+		bind:display={modalOpen}
+		onClose={closeModals}
+		onCloseAttempt={closeGuard.attemptClose}
+		size="md"
+		class="supplier-modal-root"
+	>
 		<ModalContainer>
-			<ModalHeader>
-				<h2 class="modal-title">
-					{editingCategory ? pageContents.editTitle[lang] : pageContents.createTitle[lang]}
-				</h2>
+			<ModalHeader actionButtons={{ close: { display: !isMobile } }}>
+				<div class="supplier-modal-title" bind:this={crumbTitleEl}>
+					{#if isMobile && crumbOverflow > 0}
+						<button
+							type="button"
+							class="supplier-modal-title__more"
+							data-test="category-crumb-more"
+							aria-label={pageContents.crumbMore[lang]}
+							aria-expanded={crumbMoreOpen}
+							disabled={formSubmitting}
+							onclick={() => (crumbMoreOpen = !crumbMoreOpen)}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</button>
+						{#if crumbMoreOpen}
+							<div class="supplier-crumb-popover" role="menu">
+								<button
+									type="button"
+									class="supplier-crumb-popover__item"
+									disabled={formSubmitting}
+									onclick={() => {
+										crumbMoreOpen = false;
+										closeGuard.attemptClose();
+									}}
+								>
+									{pageContents.title[lang]}
+								</button>
+							</div>
+						{/if}
+					{/if}
+					{#if !isMobile || crumbOverflow === 0}
+						{#if isMobile}
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
+								disabled={formSubmitting}
+								onclick={() => closeGuard.attemptClose()}
+							>
+								{pageContents.title[lang]}
+							</button>
+						{:else}
+							<span class="supplier-modal-title__label">
+								{pageContents.title[lang]}
+							</span>
+						{/if}
+					{/if}
+					{#if editingCategory}
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">
+							{formData.name || pageContents.editTitle[lang]}
+						</span>
+					{:else}
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">
+							{pageContents.saveCreate[lang]}
+						</span>
+					{/if}
+				</div>
 			</ModalHeader>
 			<ModalBody class="modal-body">
 				<div class="grid-2">
@@ -813,6 +1378,115 @@
 		</ModalContainer>
 	</Modal>
 
+	<!-- ── B54: Setting modal (sort + showDeleted) — pattern suppliers B10 ── -->
+	{#if settingModalDisplay}
+		<Modal bind:display={settingModalDisplay} size="sm">
+			<ModalContainer>
+				<ModalHeader>{pageContents.settings.title[lang]}</ModalHeader>
+				<ModalBody>
+					<div class="setting-form" data-test="categories-setting-modal">
+						<TextField name="categories-setting-sort">
+							<Label>{pageContents.settings.sortBy[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingSortField}
+								options={settingSortOptions}
+								clearable
+								fullscreen
+								placeholder={pageContents.settings.sortBy[lang]}
+								data-test="categories-setting-sort"
+							/>
+						</TextField>
+						<TextField name="categories-setting-direction">
+							<Label>{pageContents.settings.sortDirection[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingSortDirection}
+								options={[
+									{ value: 'asc', label: pageContents.settings.asc[lang] },
+									{ value: 'desc', label: pageContents.settings.desc[lang] }
+								]}
+								fullscreen
+								data-test="categories-setting-direction"
+							/>
+						</TextField>
+						<div class="setting-check">
+							<Checkbox bind:checked={settingShowDeleted} data-test="categories-setting-show-deleted">
+								{pageContents.settings.showDeleted[lang]}
+							</Checkbox>
+						</div>
+					</div>
+				</ModalBody>
+				<ModalFooter class="modal-footer">
+					<Button
+						color="secondary"
+						variant="outline"
+						disabled={settingSortField === '' && !settingShowDeleted}
+						onClick={() => {
+							settingSortField = '';
+							settingSortDirection = 'desc';
+							settingShowDeleted = false;
+						}}
+					>
+						{pageContents.settings.reset[lang]}
+					</Button>
+					<Button
+						color="primary"
+						data-test="categories-setting-apply"
+						onClick={() => {
+							const prevShowDeleted = showDeleted;
+							sortField = settingSortField;
+							sortDirection = settingSortDirection === 'asc' ? 'asc' : 'desc';
+							showDeleted = settingShowDeleted;
+							settingModalDisplay = false;
+							void saveDataTablePrefs(PREFS_KEY, {
+								filters: { showDeleted: showDeleted || null },
+								sort: sortField ? { field: sortField, direction: sortDirection } : undefined
+							});
+							// showDeleted đổi → effect toggle tự fetch (tránh double).
+							// Sort client không cần fetch — chỉ về trang 1.
+							if (prevShowDeleted === showDeleted && pageNumber !== 1) pageNumber = 1;
+						}}
+					>
+						{pageContents.settings.apply[lang]}
+					</Button>
+				</ModalFooter>
+			</ModalContainer>
+		</Modal>
+	{/if}
+
+	<!-- ── B54: AlertDialog bulk-delete (confirm xoá hàng loạt) ── -->
+	{#if bulkDeleteDisplay}
+		<AlertDialog
+			bind:open={bulkDeleteDisplay}
+			title={pageContents.bulk.title[lang]}
+			description={pageContents.bulk.desc[lang]}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.bulk.title[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>
+						{pageContents.bulk.desc[lang].replace('{count}', String(selectedIds.length))}
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="danger"
+						disabled={bulkDeleting}
+						onselect={() => {
+							void bulkDeleteSelected();
+						}}
+					>
+						{pageContents.bulk.confirm[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
 	<!-- ── B9: dialog hỏi khôi phục bản nháp ── -->
 	<DraftRestoreDialog
 		bind:display={draftRestoreDisplay}
@@ -833,6 +1507,53 @@
 		continueLabel={{ vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' }[lang]}
 		onDiscard={closeGuard.confirmDiscard}
 	/>
+
+	<!-- ── B54: FAB mobile (3 nút: create/setting/search) — ẩn khi chưa cuộn ── -->
+	<div
+		class="fab-group"
+		class:fab-hidden={isMobile && !tableScrolled}
+		class:is-scrolling={scrollActive && isMobile}
+		data-suggest
+	>
+		<button
+			type="button"
+			class="fab fab--primary"
+			aria-label={pageContents.addCategory[lang]}
+			data-test="categories-fab"
+			onclick={() => openCreateModal()}
+		>
+			<Icon icon={iconify['add-rounded']} />
+		</button>
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.settings.title[lang]}
+			data-test="categories-fab-setting"
+			onclick={() => {
+				settingModalDisplay = true;
+				scrollActive = false;
+			}}
+		>
+			<Icon icon={iconify['tune-rounded']} />
+		</button>
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.searchMobile[lang]}
+			data-test="categories-fab-search-btn"
+			onclick={() => {
+				// flushSync mount field + focus TRONG gesture (iOS keyboard).
+				flushSync(() => {
+					mobileSearchOpen = true;
+					suggestOpen = true;
+					scrollActive = false;
+				});
+				mobileSearchInputInstance?.configs.focus();
+			}}
+		>
+			<Icon icon={iconify['search-rounded']} />
+		</button>
+	</div>
 </section>
 
 <style lang="scss">
@@ -894,10 +1615,98 @@
 		}
 	}
 
+	/* B54: search suggest — position relative làm mốc popover (pattern suppliers). */
 	.admin-search {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
 		flex: 1;
 		min-width: 220px;
 		max-width: 320px;
+	}
+
+	.admin-search-icon {
+		opacity: 0.6;
+	}
+
+	.admin-search-loading {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+	}
+
+	/* Suggest popover từ khoá đã tìm */
+	.suggest-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		min-width: 14rem;
+		max-height: 16rem;
+		overflow-y: auto;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+		padding: 0.35rem;
+		z-index: 50;
+	}
+
+	.suggest-title {
+		margin: 0.25rem 0.5rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--foreground-500);
+	}
+
+	.suggest-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		padding: 0.45rem 0.6rem;
+		border: none;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground);
+		font-size: 0.85rem;
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	/* B54: mobile icon search/filter thu gọn (pattern suppliers). */
+	.mobile-caption-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
+		color: var(--foreground);
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	/* B54: form trong setting modal (pattern suppliers .setting-form). */
+	.setting-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.setting-check {
+		display: flex;
+		align-items: center;
 	}
 
 	.admin-state {
@@ -940,6 +1749,56 @@
 		justify-content: flex-end;
 	}
 
+	/* B54: bulk-bar (copy nguyên pattern suppliers). */
+	.bulk-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	@media (max-width: 767px) {
+		.bulk-row {
+			flex-basis: 100%;
+		}
+	}
+
+	.bulk-count {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+
+	/* B54: bulk-bar nổi khi có selection. Mobile: fixed đáy viewport (trên
+	   pagination). Desktop giữ trong caption tools. */
+	@media (max-width: 767px) {
+		.bulk-row {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: calc(2.75rem + 0.75rem); // trên pagination (B25)
+			z-index: 310;
+			padding: 0.5rem 0.75rem;
+			background: var(--background, #fff);
+			border-top: 1px solid var(--default-300);
+			padding-right: 4.75rem; // chỗ FAB (giống pagination B25)
+		}
+	}
+
+	/* B53: khi đang cuộn ẩn bulk-bar như các group khác — giữ chỗ trong flow
+	   để không đẩy layout (transition riêng để mờ đi mượt). */
+	@media (max-width: 767px) {
+		.admin-page.is-scrolling .bulk-row {
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 150ms ease;
+		}
+
+		.admin-page .bulk-row {
+			transition: opacity 150ms ease;
+		}
+	}
+
 	.admin-pagination {
 		display: flex;
 		flex-wrap: wrap;
@@ -956,6 +1815,8 @@
 			background: var(--background, #fff);
 			padding-block: 0.5rem;
 			margin-block: -1rem;
+			/* B54: chừa chỗ phải cho FAB (không đè page-size select). */
+			padding-right: 4.75rem;
 		}
 	}
 
@@ -988,10 +1849,243 @@
 		}
 	}
 
-	.modal-title {
-		font-size: 1.125rem;
-		font-weight: 600;
+	/* ── B54: FAB mobile (copy pattern suppliers) ── */
+	.fab-group {
+		position: fixed;
+		right: 1rem;
+		bottom: 7.25rem;
+		display: flex;
+		flex-direction: column-reverse;
+		align-items: center;
+		gap: 0.6rem;
+		z-index: 400;
+		/* ẩn theo HÀNH ĐỘNG cuộn — scrollY=0 → ẩn (tools đang hiện), đang cuộn
+		   → ẩn, dừng 200ms → hiện lại. */
+		transition: opacity 200ms ease;
+
+		&.fab-hidden {
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		&.is-scrolling {
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		@media (min-width: 768px) {
+			display: none;
+		}
+	}
+
+	.fab {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 9999px;
+		border: 1px solid var(--default-300);
+		box-shadow: var(--shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
+		cursor: pointer;
+		transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+		&:active {
+			transform: scale(0.96);
+		}
+	}
+
+	.fab--primary {
+		width: 3.25rem;
+		height: 3.25rem;
+		background: var(--primary);
+		color: var(--primary-contrast, #fff);
+		border-color: transparent;
+	}
+
+	.fab--secondary {
+		width: 2.75rem;
+		height: 2.75rem;
+		background: var(--background);
 		color: var(--foreground);
+	}
+
+	/* Fullheight padding bottom cho FAB — FAB group 3 nút chồng dọc ~7rem +
+	   pagination ~3rem → đệm 12rem để card cuối không bị FAB fixed che. */
+	@media (max-width: 767px) {
+		.admin-page--fullheight {
+			padding-bottom: 12rem;
+		}
+	}
+
+	/* ── B54: Mobile FULL-SIZE modal (copy pattern suppliers batch7) — modal
+	   form chiếm trọn màn hình. KHÔNG dùng vh/dvh (iOS ≤15.3 chết) — fixed
+	   inset:0 = đúng vùng nhìn thấy trên mọi trình duyệt. ── */
+	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+		:global(.modal-root.supplier-modal-root) {
+			padding: 0;
+			align-items: stretch;
+		}
+
+		:global(.supplier-modal-root .modal-container-root) {
+			position: fixed;
+			inset: 0;
+			width: 100% !important; /* thắng .size-md — scoped CSS load sau page CSS */
+			max-width: none;
+			max-height: none;
+			border-radius: 0;
+			margin: 0;
+		}
+
+		/* Header modal: co padding + title đẩy sang TRÁI (header mặc định
+		   justify-end làm title trôi phải khi ẩn nút close trên mobile). */
+		:global(.supplier-modal-root .modal-header-root) {
+			padding-block: 0.5rem;
+			justify-content: flex-start;
+		}
+
+		/* Title chiếm đủ width header (clientWidth cố định) — toggle ẩn item
+		   breadcrumb không đổi kích thước container → RO không ping-pong. */
+		.supplier-modal-title {
+			flex: 1 1 auto;
+		}
+	}
+
+	/* B54: modal-title breadcrumb (copy pattern suppliers B16/B18). */
+	.supplier-modal-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+		/* mốc định vị popover tràn breadcrumb */
+		position: relative;
+		/* stacking context z3 để popover con thắng .field-icon (z2) */
+		z-index: 3;
+	}
+
+	/* nút more — hiện khi item breadcrumb bị ẩn vào popover (mobile) */
+	.supplier-modal-title__more {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		margin-left: -0.25rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground-500);
+		cursor: pointer;
+		flex-shrink: 0;
+
+		&:hover {
+			background: hsl(0 0% 0% / 0.06);
+		}
+
+		&:disabled {
+			cursor: default;
+			opacity: 0.5;
+		}
+	}
+
+	/* popover item breadcrumb bị ẩn — cấu trúc breadcrumb trục Y */
+	.supplier-crumb-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 10rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		/* token đúng là --box-shadow-lg (variables.scss:570) */
+		box-shadow: var(--box-shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+	}
+
+	.supplier-crumb-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		text-align: left;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		/* --foreground-600 = 7.0:1 PASS AA (--foreground-500 fail sát 4.5) */
+		color: var(--foreground-600);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+
+		&:disabled {
+			cursor: default;
+		}
+	}
+
+	.supplier-modal-title__label {
+		flex-shrink: 0;
+		font-weight: 600;
+	}
+
+	/* mobile — label thành nút breadcrumb item DEACTIVE nhưng tap được
+	   (quay lại datatable qua attemptClose). Reset style button về text. */
+	.supplier-modal-title__crumb {
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font: inherit;
+		font-weight: 600;
+		color: var(--foreground-500);
+		cursor: pointer;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		&:disabled {
+			cursor: default;
+		}
+	}
+
+	.supplier-modal-title__name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--foreground-500);
+		font-weight: 400;
+	}
+
+	/* name = breadcrumb item ACTIVE (đậm hơn item label). */
+	.supplier-modal-title__name--active {
+		color: var(--foreground);
+		font-weight: 600;
+	}
+
+	/* dấu phân tách breadcrumb — không co giãn */
+	.supplier-modal-title__name[aria-hidden='true'] {
+		flex: none;
+		overflow: visible;
+	}
+
+	/* ✕ = đóng (không destructive) → trung tính hoá (pattern suppliers). */
+	:global(.supplier-modal-root .modal-container-root .modal-close-button) {
+		--color: var(--foreground-500, hsl(240 3.83% 46.08%)) !important;
+		--border-color: transparent !important;
+
+		@media (hover: hover) and (pointer: fine) {
+			&:hover {
+				--background: var(--default-200, hsl(240 4.9% 89.8%));
+				--color: var(--foreground);
+			}
+		}
 	}
 
 	.modal-body {

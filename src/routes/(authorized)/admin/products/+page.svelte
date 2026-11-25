@@ -4,8 +4,8 @@
 	// FIX BUG pre-existing: page cũ fetch GET ?params + đọc data.success/items
 	// nhưng endpoint chỉ export POST (readAdminRequest mã hoá RSA) → bảng
 	// không bao giờ render. Chuyển sang encryption.fetchSecure POST.
-	import { onMount } from 'svelte';
-	import { Button, DataTable, Pagination } from '$components/element';
+	import { onMount, flushSync, tick } from 'svelte';
+	import { AlertDialog, Button, DataTable, Pagination, Spinner } from '$components/element';
 	import { ImageUpload, Input, Label, TextField, Select } from '$components/form';
 	import { Checkbox } from '$components/form/checkbox';
 	import { Modal } from '$components/modal';
@@ -21,6 +21,8 @@
 	import { resolveServerMessage } from '../_interface';
 	import type { Size } from '$components/interface';
 	import { saveDraft, readDraft, clearDraft } from '$modules/draft-store';
+	// B54: search-suggest + setting-modal prefs (pattern suppliers page).
+	import { recordSearchKeyword, getSearchKeywords, saveDataTablePrefs, userPrefs } from '$store/user-prefs.svelte';
 	import DraftRestoreDialog from '../../_DraftRestoreDialog.svelte';
 	import { createCloseGuard } from '$modules/close-guard.svelte';
 
@@ -97,6 +99,43 @@
 			deleteFailed: { vi: 'Không xoá được sản phẩm', en: 'Failed to delete product' },
 			operationFailed: { vi: 'Thao tác thất bại', en: 'Operation failed' },
 			networkError: { vi: 'Lỗi kết nối', en: 'Network error' }
+		},
+		// B54: search suggest + setting modal + bulk + crumb + quick-create.
+		search: { vi: 'Tìm kiếm', en: 'Search' },
+		suggest: { vi: 'Từ khoá đã tìm', en: 'Recent searches' },
+		crumbMore: { vi: 'Xem đường dẫn', en: 'Show path' },
+		settings: {
+			title: { vi: 'Cài đặt danh sách', en: 'List settings' },
+			filterCategory: { vi: 'Danh mục', en: 'Category' },
+			filterBrand: { vi: 'Thương hiệu', en: 'Brand' },
+			showDeleted: { vi: 'Hiện đã xoá', en: 'Show deleted' },
+			apply: { vi: 'Áp dụng', en: 'Apply' },
+			reset: { vi: 'Đặt lại', en: 'Reset' }
+		},
+		bulk: {
+			selected: { vi: 'Đã chọn {count}', en: '{count} selected' },
+			copy: { vi: 'Copy', en: 'Copy' },
+			delete: { vi: 'Xoá', en: 'Delete' },
+			title: { vi: 'Xoá sản phẩm đã chọn?', en: 'Delete selected products?' },
+			desc: {
+				vi: '{count} sản phẩm sẽ bị xoá. Sản phẩm còn biến thể sẽ không xoá được.',
+				en: '{count} products will be deleted. Products with variants cannot be deleted.'
+			},
+			confirm: { vi: 'Xoá', en: 'Delete' },
+			cancel: { vi: 'Huỷ', en: 'Cancel' }
+		},
+		toasts: {
+			bulkCopied: { vi: 'Đã copy {count} dòng', en: 'Copied {count} rows' },
+			bulkDeleted: { vi: 'Đã xoá {count} sản phẩm', en: 'Deleted {count} products' },
+			bulkDeleteFailed: { vi: 'Không xoá được sản phẩm đã chọn', en: 'Failed to delete selected products' },
+			copiedFailed: { vi: 'Không copy được', en: 'Failed to copy' }
+		},
+		quickCreate: {
+			title: { vi: 'Tạo mới nhanh', en: 'Quick create' },
+			create: { vi: 'Tạo', en: 'Create' },
+			createNew: { vi: 'Tạo mới "{value}"', en: 'Create new "{value}"' },
+			nameLabel: { vi: 'Tên', en: 'Name' },
+			failed: { vi: 'Tạo mới thất bại. Vui lòng thử lại.', en: 'Failed to create. Please try again.' }
 		}
 	};
 
@@ -124,6 +163,330 @@
 	// ── Options cho component Select (searchable) — category/brand filter + modal ──
 	const categorySelectOptions = $derived(categories.map((c) => ({ value: c._id, label: c.name })));
 	const brandSelectOptions = $derived(brands.map((b) => ({ value: b._id, label: b.name })));
+
+	// ── B54: isMobile + scroll state (pattern suppliers — minimal) ──
+	const isMobile = $derived(client.browser?.isMobile ?? false);
+	let wrapEl = $state<HTMLElement | undefined>(undefined);
+	let tableScrolled = $state(false);
+	let scrollActive = $state(false);
+	let scrollRaf = 0;
+	let scrollActiveTimer: ReturnType<typeof setTimeout> | undefined;
+	let lastActiveScrollTop = -1;
+
+	// markScrollActive: bật scrollActive (ẩn bulk-row/FAB khi đang cuộn), timer
+	// 200ms tắt lại. Rubber-band iOS (top<0 / top>maxScroll) bỏ qua.
+	function markScrollActive(scrollTop: number, maxScroll: number) {
+		const rubber = scrollTop < 0 || scrollTop > maxScroll;
+		if (!rubber && scrollTop !== lastActiveScrollTop) scrollActive = true;
+		lastActiveScrollTop = scrollTop;
+		if (scrollActiveTimer) clearTimeout(scrollActiveTimer);
+		scrollActiveTimer = setTimeout(() => {
+			scrollActive = false;
+			lastActiveScrollTop = -1;
+		}, 200);
+	}
+
+	// onTableScroll: cuộn TRONG table wrap (desktop + mobile).
+	function onTableScroll() {
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			const el = wrapEl;
+			if (!el) return;
+			markScrollActive(el.scrollTop, el.scrollHeight - el.clientHeight);
+			const scrollable = el.scrollHeight > el.clientHeight + 4;
+			tableScrolled = el.scrollTop > 8 && scrollable;
+		});
+	}
+
+	// findScrollContainer: walk-up tìm ancestor cuộn được (mobile — table wrap
+	// overflow visible khi stickyHead, cuộn thật sự ở window/parent).
+	function findScrollContainer(start: HTMLElement | null): HTMLElement | null {
+		let el: HTMLElement | null = start;
+		while (el && el !== document.body) {
+			const style = window.getComputedStyle(el);
+			const oy = style.overflowY;
+			if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 4) return el;
+			el = el.parentElement;
+		}
+		return null;
+	}
+
+	// onWindowScroll: scroll không bubble — bắt capture trên document; NHƯỜNG
+	// wrapEl nếu nó đang cuộn được (guard sớm — 2 handler chung scrollRaf).
+	function onWindowScroll(event: Event) {
+		const wrapNow = wrapEl;
+		if (wrapNow && wrapNow.scrollHeight > wrapNow.clientHeight + 4) return;
+		if (scrollRaf) return;
+		const target = event.target as HTMLElement | null;
+		const container = target instanceof HTMLElement ? (findScrollContainer(target) ?? document.documentElement) : document.documentElement;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			const top = container === document.documentElement ? window.scrollY : container.scrollTop;
+			const viewH = container === document.documentElement ? window.innerHeight : container.clientHeight;
+			const totalH = container === document.documentElement ? document.documentElement.scrollHeight : container.scrollHeight;
+			markScrollActive(top, totalH - viewH);
+			tableScrolled = top > 8;
+		});
+	}
+
+	// ── B54: search-suggest state ──
+	let searchFocused = $state(false);
+	let suggestOpen = $state(false);
+	let mobileSearchOpen = $state(false);
+	let mobileSearchInputInstance = $state<{ configs: { focus: () => void } } | undefined>(undefined);
+
+	// Lưu keyword khi blur / chọn suggest.
+	function saveSearchKeyword() {
+		const kw = (searchQuery ?? '').trim();
+		if (kw) recordSearchKeyword('/admin/products', kw);
+	}
+	const recentKeywordsFiltered = $derived.by(() => {
+		const q = (searchQuery ?? '').toLowerCase();
+		return getSearchKeywords('/admin/products').filter((kw) => kw.toLowerCase().includes(q));
+	});
+
+	// ── B54: bulk selection state ──
+	let selectedIds = $state<string[]>([]);
+	let allFilteredSelected = $state(false);
+	let selectAllBusy = $state(false);
+	let bulkDeleteDisplay = $state(false);
+	let bulkDeleting = $state(false);
+	let bulkDisplayCount = $derived(selectedIds.length);
+
+	// Chọn tất cả (filtered mode): fetch toàn bộ ids khớp filter hiện tại.
+	async function selectAllFilteredProducts() {
+		if (selectAllBusy || !encryptionKeys) return;
+		selectAllBusy = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/products/list',
+				{
+					method: 'POST',
+					body: {
+						page: 1,
+						pageSize: Math.max(total, 1),
+						includeDeleted: showDeleted,
+						search: searchQuery || undefined,
+						categoryId: selectedCategory || undefined,
+						brandId: selectedBrand || undefined
+					}
+				},
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as { items?: ProductListItem[] } | undefined;
+				selectedIds = (data?.items ?? []).map((p) => p._id);
+				allFilteredSelected = selectedIds.length > 0;
+			}
+		} catch (err) {
+			if (import.meta.env.DEV) console.error('[products] select all error:', err);
+		} finally {
+			selectAllBusy = false;
+		}
+	}
+
+	function clearProductsSelection() {
+		selectedIds = [];
+		allFilteredSelected = false;
+	}
+
+	// allFilteredSelected=true nhưng selection bị giảm (user uncheck 1 row) → tắt.
+	$effect(() => {
+		if (allFilteredSelected && selectedIds.length < total) allFilteredSelected = false;
+	});
+
+	// Bulk copy TSV (pattern suppliers): header + các dòng được chọn.
+	async function bulkCopySelected() {
+		if (!navigator.clipboard) return;
+		const cols = columns.filter((c) => c.id !== 'actions' && typeof c.accessor === 'function');
+		const header = cols.map((c) => String(c.label)).join('\t');
+		const rows = products
+			.filter((p) => selectedIds.includes(p._id))
+			.map((p) =>
+				cols
+					.map((c) => String((c.accessor as (row: Record<string, unknown>) => unknown)(p as unknown as Record<string, unknown>) ?? ''))
+					.join('\t')
+			);
+		const tsv = [header, ...rows].join('\n');
+		navigator.clipboard
+			.writeText(tsv)
+			.then(() => showToast(pageContents.toasts.bulkCopied[lang].replace('{count}', String(selectedIds.length))))
+			.catch(() => showToast(pageContents.toasts.copiedFailed[lang], 'error'));
+	}
+
+	// Bulk delete → POST /api/admin/products/bulk.
+	async function bulkDeleteSelected() {
+		if (bulkDeleting || !encryptionKeys || selectedIds.length === 0) return;
+		bulkDeleting = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/products/bulk',
+				{ method: 'POST', body: { ids: selectedIds } },
+				encryptionKeys
+			);
+			bulkDeleting = false;
+			if (response.ok) {
+				const data = response.data as { deleted?: number } | undefined;
+				showToast(pageContents.toasts.bulkDeleted[lang].replace('{count}', String(data?.deleted ?? 0)));
+				bulkDeleteDisplay = false;
+				clearProductsSelection();
+				await fetchProducts();
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.toasts.bulkDeleteFailed), 'error');
+			}
+		} catch (err) {
+			bulkDeleting = false;
+			showToast(pageContents.toasts.bulkDeleteFailed[lang], 'error');
+			if (import.meta.env.DEV) console.error('[products] bulk delete error:', err);
+		}
+	}
+
+	// ── B54: setting modal state (category/brand/showDeleted) ──
+	let settingModalDisplay = $state(false);
+	// Draft trong modal: chỉ Apply mới ghi về filter thật + saveDataTablePrefs.
+	let settingCategory = $state('');
+	let settingBrand = $state('');
+	let settingShowDeleted = $state(false);
+
+	// ── B54: modal crumb more-popover state ──
+	let crumbTitleEl = $state<HTMLElement | undefined>(undefined);
+	let productsCrumbHidden = $state(false);
+	let crumbMoreOpen = $state(false);
+
+	// Đo tràn: item CUỐI trong crumb (active name hoặc crumb button) — nếu
+	// scrollWidth vượt clientWidth +1 → gom vào more popover.
+	async function measureCrumbOverflow() {
+		if (!isMobile || !crumbTitleEl) return;
+		if (productsCrumbHidden) {
+			productsCrumbHidden = false;
+			await tick();
+		}
+		const activeEl = crumbTitleEl.querySelector<HTMLElement>('.supplier-modal-title__name--active');
+		const crumbEl = crumbTitleEl.querySelector<HTMLElement>('.supplier-modal-title__crumb');
+		const overflowEl = activeEl ?? crumbEl;
+		productsCrumbHidden = !!overflowEl && overflowEl.scrollWidth > overflowEl.clientWidth + 1;
+	}
+
+	// Ẩn/hiện label gốc: hidden → hiện more button; mở lại modal → reset.
+	$effect(() => {
+		void modalOpen;
+		void crumbTitleEl;
+		void formData.name;
+		void editingProduct;
+		void isMobile;
+		const raf = requestAnimationFrame(() => void measureCrumbOverflow());
+		const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureCrumbOverflow()));
+		if (crumbTitleEl) ro.observe(crumbTitleEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+	$effect(() => {
+		if (!modalOpen) {
+			productsCrumbHidden = false;
+			crumbMoreOpen = false;
+		}
+	});
+	// Outside-click đóng popover crumb.
+	$effect(() => {
+		if (!crumbMoreOpen) return;
+		const handler = (event: MouseEvent) => {
+			const target = event.target as Node | null;
+			if (crumbTitleEl && target && !crumbTitleEl.contains(target)) crumbMoreOpen = false;
+		};
+		document.addEventListener('mousedown', handler);
+		return () => document.removeEventListener('mousedown', handler);
+	});
+
+	// ── B54: quick-create category/brand từ Select (allowCreate) ──
+	let quickCreateKind = $state<'category' | 'brand' | null>(null);
+	let quickCreateDisplay = $state(false);
+	let quickCreateTarget = $state<'categoryId' | 'brandId' | null>(null);
+	let quickCreateName = $state('');
+	let quickCreateBusy = $state(false);
+	let quickCreateError = $state<string | undefined>(undefined);
+	// Callback nạp lại options của Select vừa tạo (gán bởi loadOptions closure).
+	let quickCreateReload: (() => Promise<void>) | null = null;
+
+	// remote lazy-load options cho Select category/brand trong modal:
+	// loadOptions(query) → fetch trang đầu pageSize 100 (cap server). Remote
+	// search thay loadedOptions — đủ cho danh sách option lớn.
+	async function fetchRemoteOptions(
+		kind: 'category' | 'brand',
+		query?: string
+	): Promise<{ value: string; label: string }[]> {
+		if (!encryptionKeys) return [];
+		const response = await encryption.fetchSecure(
+			kind === 'category' ? '/api/admin/categories/list' : '/api/admin/brands/list',
+			{ method: 'POST', body: { page: 1, pageSize: 100, search: query || undefined } },
+			encryptionKeys
+		);
+		if (!response.ok) return [];
+		const data = response.data as { categories?: OptionItem[]; brands?: OptionItem[] } | undefined;
+		const items = kind === 'category' ? (data?.categories ?? []) : (data?.brands ?? []);
+		return items.map((c) => ({ value: c._id, label: c.name }));
+	}
+
+	function openQuickCreate(kind: 'category' | 'brand', value: string, target: 'categoryId' | 'brandId', reload: () => Promise<void>) {
+		quickCreateKind = kind;
+		quickCreateDisplay = true;
+		quickCreateTarget = target;
+		quickCreateName = value;
+		quickCreateError = undefined;
+		quickCreateReload = reload;
+	}
+
+	function closeQuickCreate() {
+		quickCreateDisplay = false;
+		quickCreateKind = null;
+		quickCreateTarget = null;
+		quickCreateError = undefined;
+		quickCreateReload = null;
+	}
+
+	// Tạo nhanh category/brand: POST create + chọn giá trị mới vào Select.
+	async function submitQuickCreate() {
+		if (quickCreateBusy || !encryptionKeys) return;
+		const name = quickCreateName.trim();
+		if (!name || !quickCreateKind) return;
+		const kind = quickCreateKind;
+		quickCreateBusy = true;
+		try {
+			// slug gen client (server yêu cầu slug unique — categories/create +
+			// brands/create validate slug bắt buộc).
+			const slug =
+				name
+					.toLowerCase()
+					.normalize('NFD')
+					.replace(/[̀-ͯ]/g, '')
+					.replace(/[^a-z0-9]+/g, '-')
+					.replace(/^-+|-+$/g, '') || `${kind}-${Date.now()}`;
+			const response = await encryption.fetchSecure(
+				kind === 'category' ? '/api/admin/categories/create' : '/api/admin/brands/create',
+				{ method: 'POST', body: { name, slug } },
+				encryptionKeys
+			);
+			quickCreateBusy = false;
+			if (!response.ok) {
+				quickCreateError = resolveServerMessage(response.message, lang, pageContents.quickCreate.failed);
+				return;
+			}
+			const data = response.data as { documentKey?: string } | undefined;
+			const newId = data?.documentKey ?? '';
+			showToast(pageContents.quickCreate.title[lang]);
+			// Nạp lại options Select (loadOptions closure) rồi chọn giá trị mới.
+			if (quickCreateReload) await quickCreateReload();
+			if (newId && quickCreateTarget) formData[quickCreateTarget] = newId;
+			closeQuickCreate();
+		} catch (err) {
+			quickCreateBusy = false;
+			quickCreateError = pageContents.quickCreate.failed[lang];
+			if (import.meta.env.DEV) console.error('[products] quick create error:', err);
+		}
+	}
+
 	// Modal create/edit dùng chung 1 biến display (bind:display — modal tự
 	// đóng qua Escape/backdrop phải sync ngược về parent, one-way sẽ hở).
 	let modalOpen = $state(false);
@@ -634,10 +997,22 @@
 	// Initial load
 	// B8 realtime: refetch list khi collection thay đổi từ client khác
 	onMount(() => subscribeDbChanges('products', () => void fetchProducts()));
+	// B54: scroll không bubble — bắt capture trên document cho cả wrap + window.
+	onMount(() => {
+		document.addEventListener('scroll', onWindowScroll, { capture: true, passive: true });
+		return () => document.removeEventListener('scroll', onWindowScroll, { capture: true } as EventListenerOptions);
+	});
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
+		// B54: restore filter prefs (category/brand/showDeleted) TRƯỚC load đầu.
+		const prefs = userPrefs.datatable?.['/admin/products'];
+		if (prefs?.filters) {
+			selectedCategory = typeof prefs.filters.category === 'string' ? prefs.filters.category : '';
+			selectedBrand = typeof prefs.filters.brand === 'string' ? prefs.filters.brand : '';
+			showDeleted = prefs.filters.showDeleted === true;
+		}
 		await fetchProducts();
 		void fetchOptions();
 	});
@@ -647,7 +1022,7 @@
 	<title>{pageContents.title[lang]}</title>
 </svelte:head>
 
-<section class="admin-page">
+<section class="admin-page" class:is-scrolling={scrollActive && isMobile}>
 	<header class="admin-header">
 		<div class="admin-header-text">
 			<h1 class="admin-title">{pageContents.title[lang]}</h1>
@@ -661,40 +1036,194 @@
 		</div>
 	</header>
 
+	<!-- ── B54: FAB mobile (create/setting/search — ẩn khi chưa cuộn) ── -->
+	<div
+		class="fab-group"
+		class:fab-hidden={isMobile && !tableScrolled}
+		class:is-scrolling={scrollActive && isMobile}
+		data-suggest
+	>
+		<button
+			type="button"
+			class="fab fab--primary"
+			aria-label={pageContents.addProduct[lang]}
+			data-test="products-fab"
+			onclick={openCreateModal}
+		>
+			<Icon icon={iconify['add-rounded']} size="sm" />
+		</button>
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.settings.title[lang]}
+			onclick={() => {
+				settingCategory = selectedCategory;
+				settingBrand = selectedBrand;
+				settingShowDeleted = showDeleted;
+				settingModalDisplay = true;
+				scrollActive = false;
+			}}
+		>
+			<Icon icon={iconify['tune-rounded']} size="sm" />
+		</button>
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.search[lang]}
+			onclick={() => {
+				flushSync(() => {
+					mobileSearchOpen = true;
+					scrollActive = false;
+				});
+				mobileSearchInputInstance?.configs.focus();
+			}}
+		>
+			<Icon icon={iconify['search-rounded']} size="sm" />
+		</button>
+	</div>
+
 	<!-- ── Bộ lọc ── -->
 	<div class="admin-filters">
-		<div class="admin-search">
-			<Input placeholder={pageContents.searchPlaceholder[lang]} bind:value={searchQuery}>
-				{#snippet leading(data)}
-					<Icon
-						icon={iconify['search-rounded']}
-						size={(data?.size ?? 'sm') as Size}
-						class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-					/>
-				{/snippet}
-			</Input>
+		<div class="admin-search" data-suggest>
+			{#if isMobile && !mobileSearchOpen}
+				<button
+					type="button"
+					class="mobile-caption-icon"
+					aria-label={pageContents.search[lang]}
+					data-test="products-mobile-search-open"
+					onclick={() => {
+						flushSync(() => {
+							mobileSearchOpen = true;
+							suggestOpen = true;
+						});
+						mobileSearchInputInstance?.configs.focus();
+					}}
+				>
+					<Icon icon={iconify['search-rounded']} size="sm" />
+				</button>
+			{:else}
+				<Input
+					bind:this={mobileSearchInputInstance}
+					type="text"
+					size="sm"
+					placeholder={pageContents.searchPlaceholder[lang]}
+					bind:value={searchQuery}
+					events={[
+						{
+							events: {
+								focus: {
+									handler() {
+										searchFocused = true;
+										suggestOpen = true;
+									}
+								},
+								blur: {
+									handler() {
+										searchFocused = false;
+										suggestOpen = false;
+										saveSearchKeyword();
+										if (isMobile && !searchQuery.trim()) mobileSearchOpen = false;
+									}
+								}
+							}
+						}
+					]}
+				>
+					{#snippet leading(data)}
+						{#if loading}
+							<span class="admin-search-loading">
+								<Spinner size="xs" pattern="circle" />
+							</span>
+						{:else}
+							<Icon
+								icon={iconify['search-rounded']}
+								size={(data?.size ?? 'sm') as Size}
+								class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+							/>
+						{/if}
+					{/snippet}
+				</Input>
+				{#if suggestOpen && recentKeywordsFiltered.length > 0}
+					<div class="suggest-popover" role="listbox">
+						<p class="suggest-title">{pageContents.suggest[lang]}</p>
+						{#each recentKeywordsFiltered as kw (kw)}
+							<button
+								type="button"
+								class="suggest-item"
+								role="option"
+								aria-selected="false"
+								onmousedown={(e) => e.preventDefault()}
+								onclick={() => {
+									searchQuery = kw;
+									suggestOpen = false;
+									pageNumber = 1;
+									void fetchProducts();
+								}}
+							>
+								{kw}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			{/if}
 		</div>
-		<Select
-			class="admin-filter-select"
-			bind:value={selectedCategory}
-			options={categorySelectOptions}
-			searchable
-			clearable
-			placeholder={pageContents.allCategories[lang]}
-			name="category-filter"
-		/>
-		<Select
-			class="admin-filter-select"
-			bind:value={selectedBrand}
-			options={brandSelectOptions}
-			searchable
-			clearable
-			placeholder={pageContents.allBrands[lang]}
-			name="brand-filter"
-		/>
-		<Checkbox bind:checked={showDeleted}>
-			{pageContents.showDeleted[lang]}
-		</Checkbox>
+		{#if !isMobile}
+			<Select
+				class="admin-filter-select"
+				bind:value={selectedCategory}
+				options={categorySelectOptions}
+				searchable
+				clearable
+				placeholder={pageContents.allCategories[lang]}
+				name="category-filter"
+				data-test="products-filter-category"
+			/>
+			<Select
+				class="admin-filter-select"
+				bind:value={selectedBrand}
+				options={brandSelectOptions}
+				searchable
+				clearable
+				placeholder={pageContents.allBrands[lang]}
+				name="brand-filter"
+				data-test="products-filter-brand"
+			/>
+			<Checkbox bind:checked={showDeleted}>
+				{pageContents.showDeleted[lang]}
+			</Checkbox>
+		{/if}
+		<div class="admin-actions-group">
+			{#if isMobile}
+				<button
+					type="button"
+					class="mobile-caption-icon"
+					aria-label={pageContents.settings.title[lang]}
+					data-test="products-mobile-filter-btn"
+					onclick={() => {
+						settingModalDisplay = true;
+						scrollActive = false;
+					}}
+				>
+					<Icon icon={iconify['tune-rounded']} size="sm" />
+				</button>
+			{:else}
+				<Button
+					color="default"
+					variant="outline"
+					size="sm"
+					onClick={() => {
+						settingCategory = selectedCategory;
+						settingBrand = selectedBrand;
+						settingShowDeleted = showDeleted;
+						settingModalDisplay = true;
+					}}
+					aria-label={pageContents.settings.title[lang]}
+					data-test="products-header-setting-btn"
+				>
+					<Icon icon={iconify['tune-rounded']} size="sm" />
+				</Button>
+			{/if}
+		</div>
 	</div>
 
 	<!-- ── Trạng thái loading/first-load error ── -->
@@ -703,7 +1232,7 @@
 	{/if}
 
 	<!-- ── Bảng products (DataTable + snippet actions) ── -->
-	<div class="admin-table-wrap">
+	<div class="admin-table-wrap" bind:this={wrapEl} onscroll={onTableScroll}>
 		<DataTable
 			data={productsAny}
 			{columns}
@@ -723,6 +1252,22 @@
 			mobileTapMode="callback"
 			onRowClick={(row) => openEditModal(row as unknown as ProductListItem)}
 			cardFields={['product', 'category', 'status']}
+			selection={selectedIds}
+			onSelectionChange={(ids) => (selectedIds = ids)}
+			selectable
+			showIndex
+			indexOffset={(pageNumber - 1) * pageSize}
+			indexCheckboxes
+			checkOnRowClick
+			selectionTools={false}
+			getRowId={(row) => String((row as unknown as ProductListItem)._id ?? '')}
+			selectAllMode="filtered"
+			selectAllBusy={selectAllBusy}
+			bind:allFilteredSelected={allFilteredSelected}
+			onSelectAllFiltered={selectAllFilteredProducts}
+			class={[tableScrolled && isMobile ? 'caption-collapsed' : undefined, scrollActive && isMobile ? 'tools-hidden-mobile' : undefined]
+				.filter(Boolean)
+				.join(' ') || undefined}
 			data-test="products-datatable"
 		>
 			{#snippet actionsContent(row)}
@@ -744,6 +1289,39 @@
 			{/snippet}
 		</DataTable>
 	</div>
+
+	<!-- ── B54: bulk bar (copy/delete + count) ── -->
+	{#if selectedIds.length > 0}
+		<div class="bulk-row" data-test="products-bulk-row">
+			<div class="bulk-bar" data-test="products-bulk-bar">
+				<span class="bulk-count">{pageContents.bulk.selected[lang].replace('{count}', String(bulkDisplayCount))}</span>
+				<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected} data-test="products-bulk-copy">
+					{pageContents.bulk.copy[lang]}
+				</Button>
+				<Button
+					color="error"
+					variant="soft"
+					size="sm"
+					onClick={() => {
+						bulkDeleteDisplay = true;
+					}}
+					data-test="products-bulk-delete"
+				>
+					{pageContents.bulk.delete[lang]}
+				</Button>
+				<Button
+					color="default"
+					variant="ghost"
+					size="sm"
+					onClick={clearProductsSelection}
+					aria-label={pageContents.bulk.cancel[lang]}
+					data-test="products-bulk-clear"
+				>
+					<Icon icon={iconify['close-rounded']} size="sm" />
+				</Button>
+			</div>
+		</div>
+	{/if}
 
 	<!-- ── Pagination server-side ── -->
 	<footer class="admin-pagination">
@@ -778,12 +1356,70 @@
 	</footer>
 
 	<!-- ── Create/Edit Modal ── -->
-	<Modal bind:display={modalOpen} onClose={closeModals} onCloseAttempt={closeGuard.attemptClose} size="lg">
+	<Modal
+		bind:display={modalOpen}
+		onClose={closeModals}
+		onCloseAttempt={closeGuard.attemptClose}
+		size="lg"
+		isDimissable
+		autoFocus={false}
+		class="supplier-modal-root"
+	>
 		<ModalContainer>
-			<ModalHeader>
-				<h2 class="modal-title">
-					{editingProduct ? pageContents.editTitle[lang] : pageContents.createTitle[lang]}
-				</h2>
+			<ModalHeader actionButtons={{ close: { display: !isMobile } }}>
+				<div class="supplier-modal-title" bind:this={crumbTitleEl}>
+					{#if isMobile && productsCrumbHidden}
+						<button
+							type="button"
+							class="supplier-modal-title__more"
+							data-test="product-crumb-more"
+							aria-label={pageContents.crumbMore[lang]}
+							aria-expanded={crumbMoreOpen}
+							disabled={formSubmitting}
+							onclick={() => (crumbMoreOpen = !crumbMoreOpen)}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</button>
+						{#if crumbMoreOpen}
+							<div class="supplier-crumb-popover" role="menu">
+								<button
+									type="button"
+									class="supplier-crumb-popover__item"
+									disabled={formSubmitting}
+									onclick={() => {
+										crumbMoreOpen = false;
+										closeGuard.attemptClose();
+									}}
+								>
+									{pageContents.title[lang]}
+								</button>
+							</div>
+						{/if}
+					{/if}
+					{#if !isMobile || !productsCrumbHidden}
+						{#if isMobile}
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
+								disabled={formSubmitting}
+								onclick={() => closeGuard.attemptClose()}
+							>
+								{pageContents.title[lang]}
+							</button>
+						{:else}
+							<span class="supplier-modal-title__label">{pageContents.title[lang]}</span>
+						{/if}
+					{/if}
+					{#if editingProduct && formData.name}
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">{formData.name}</span>
+					{:else if !editingProduct}
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">
+							{pageContents.createTitle[lang]}
+						</span>
+					{/if}
+				</div>
 			</ModalHeader>
 			<ModalBody class="modal-body">
 				<TextField name="product-name" required>
@@ -820,6 +1456,23 @@
 							clearable
 							placeholder="—"
 							name="product-category"
+							fullscreen={isMobile}
+							fullscreenCrumbs={[
+								{ label: pageContents.title[lang], kind: 'crumb' },
+								{ label: editingProduct ? pageContents.editTitle[lang] : pageContents.createTitle[lang], kind: 'current' }
+							]}
+							fullscreenCrumbTap={(i) => {
+								if (i === 0) closeGuard.attemptClose();
+							}}
+							remoteSearch
+							loadOptions={(query) => fetchRemoteOptions('category', query)}
+							allowCreate
+							createOptionLabel={pageContents.quickCreate.createNew[lang]}
+							onOptionCreate={(value) =>
+								openQuickCreate('category', value, 'categoryId', async () => {
+									await fetchOptions();
+								})}
+							data-test="products-modal-category"
 						/>
 					</TextField>
 					<TextField name="product-brand">
@@ -832,15 +1485,33 @@
 							clearable
 							placeholder="—"
 							name="product-brand"
+							fullscreen={isMobile}
+							fullscreenCrumbs={[
+								{ label: pageContents.title[lang], kind: 'crumb' },
+								{ label: editingProduct ? pageContents.editTitle[lang] : pageContents.createTitle[lang], kind: 'current' }
+							]}
+							fullscreenCrumbTap={(i) => {
+								if (i === 0) closeGuard.attemptClose();
+							}}
+							remoteSearch
+							loadOptions={(query) => fetchRemoteOptions('brand', query)}
+							allowCreate
+							createOptionLabel={pageContents.quickCreate.createNew[lang]}
+							onOptionCreate={(value) =>
+								openQuickCreate('brand', value, 'brandId', async () => {
+									await fetchOptions();
+								})}
+							data-test="products-modal-brand"
 						/>
 					</TextField>
 				</div>
 
 				<div class="grid-2">
 					<TextField name="product-image" class="product-image-field">
-						<Label>{pageContents.imageLabel[lang]}</Label>
 						<!-- SỬA: dùng ImageUpload (upload thẳng hosting ngoài + preview + xoá)
-						     thay URL input tay — vẫn bind cùng field formData.imageUrl -->
+						     thay URL input tay — vẫn bind cùng field formData.imageUrl.
+						     BỎ Label bọc ngoài: ImageUpload đã render label riêng (trước đó
+						     label lặp 2 lần — ui-checker bắt ở screenshot verify). -->
 						<ImageUpload bind:value={formData.imageUrl} label={pageContents.imageLabel[lang]} disabled={loading} />
 					</TextField>
 					<TextField name="product-status">
@@ -963,6 +1634,165 @@
 		{lang}
 	/>
 
+	<!-- ── B54: setting modal (filter category/brand + showDeleted) ── -->
+	{#if settingModalDisplay}
+		<Modal bind:display={settingModalDisplay} size="sm" onClose={() => (settingModalDisplay = false)}>
+			<Modal.Container>
+				<Modal.Container.Header>
+					<h2 class="modal-title">{pageContents.settings.title[lang]}</h2>
+				</Modal.Container.Header>
+				<Modal.Container.Body>
+					<div class="setting-form" data-test="products-setting-form">
+						<TextField name="setting-category">
+							<Label>{pageContents.settings.filterCategory[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingCategory}
+								options={categorySelectOptions}
+								searchable
+								clearable
+								placeholder={pageContents.allCategories[lang]}
+								fullscreen
+							/>
+						</TextField>
+						<TextField name="setting-brand">
+							<Label>{pageContents.settings.filterBrand[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingBrand}
+								options={brandSelectOptions}
+								searchable
+								clearable
+								placeholder={pageContents.allBrands[lang]}
+								fullscreen
+							/>
+						</TextField>
+						<div class="setting-check">
+							<Checkbox bind:checked={settingShowDeleted}>
+								{pageContents.settings.showDeleted[lang]}
+							</Checkbox>
+						</div>
+					</div>
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button
+						color="secondary"
+						variant="outline"
+						disabled={settingCategory === '' && settingBrand === '' && !settingShowDeleted}
+						onClick={() => {
+							settingCategory = '';
+							settingBrand = '';
+							settingShowDeleted = false;
+						}}
+						data-test="products-setting-reset"
+					>
+						{pageContents.settings.reset[lang]}
+					</Button>
+					<Button
+						color="primary"
+						onClick={() => {
+							selectedCategory = settingCategory;
+							selectedBrand = settingBrand;
+							showDeleted = settingShowDeleted;
+							settingModalDisplay = false;
+							saveDataTablePrefs('/admin/products', {
+								filters: {
+									category: settingCategory || null,
+									brand: settingBrand || null,
+									showDeleted: settingShowDeleted ? true : null
+								}
+							});
+						}}
+						data-test="products-setting-apply"
+					>
+						{pageContents.settings.apply[lang]}
+					</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
+	<!-- ── B54: quick-create modal (category/brand) ── -->
+	{#if quickCreateKind}
+		<Modal
+			bind:display={quickCreateDisplay}
+			size="sm"
+			isDimissable
+			onCloseAttempt={() => {
+				if (!quickCreateBusy) closeQuickCreate();
+			}}
+			class="supplier-modal-root"
+		>
+			<Modal.Container>
+				<Modal.Container.Header actionButtons={{ close: { display: !isMobile } }}>
+					<div class="supplier-modal-title">
+						<span class="supplier-modal-title__label">{pageContents.title[lang]}</span>
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active">
+							{pageContents.quickCreate.title[lang]}
+						</span>
+					</div>
+				</Modal.Container.Header>
+				<Modal.Container.Body>
+					{#if quickCreateError}
+						<div class="form-error-banner" role="alert">{quickCreateError}</div>
+					{/if}
+					<div class="setting-form">
+						<TextField name="quick-create-name" required>
+							<Label>{pageContents.quickCreate.nameLabel[lang]}</Label>
+							<Input
+								bind:value={quickCreateName}
+								disabled={quickCreateBusy}
+								data-test="quick-create-name"
+							/>
+						</TextField>
+					</div>
+				</Modal.Container.Body>
+				<Modal.Container.Footer>
+					<Button
+						color="success"
+						onClick={submitQuickCreate}
+						loading={quickCreateBusy}
+						disabled={quickCreateBusy || !quickCreateName.trim()}
+						data-test="quick-create-submit"
+					>
+						{pageContents.quickCreate.create[lang]}
+					</Button>
+					<Button color="default" variant="ghost" disabled={quickCreateBusy} onClick={closeQuickCreate}>
+						{pageContents.cancel[lang]}
+					</Button>
+				</Modal.Container.Footer>
+			</Modal.Container>
+		</Modal>
+	{/if}
+
+	<!-- ── B54: AlertDialog xác nhận bulk delete ── -->
+	{#if bulkDeleteDisplay}
+		<AlertDialog bind:open={bulkDeleteDisplay}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.bulk.title[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>
+						{pageContents.bulk.desc[lang].replace('{count}', String(selectedIds.length))}
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel disabled={bulkDeleting}>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="danger"
+						disabled={bulkDeleting}
+						data-test="products-bulk-delete-confirm"
+						onselect={bulkDeleteSelected}
+					>
+						{pageContents.bulk.confirm[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
 	<!-- ── P3: dialog xác nhận khi đóng modal mà form còn dirty ── -->
 	<DirtyCloseDialog
 		bind:open={dirtyCloseDisplay}
@@ -1037,6 +1867,9 @@
 	}
 
 	.admin-search {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
 		flex: 1;
 		min-width: 220px;
 		max-width: 320px;
@@ -1285,5 +2118,340 @@
 	   anchor scoped .modal-footer khong match. */
 	:global(.modal-footer [data-test='product-modal-delete']) {
 		margin-right: auto;
+	}
+
+	/* ═══════════ B54: search suggest + mobile caption + bulk + FAB + crumb ═══════════ */
+
+	.admin-search-loading {
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.suggest-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		min-width: 14rem;
+		max-height: 16rem;
+		overflow-y: auto;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+		padding: 0.35rem;
+		z-index: 50;
+	}
+
+	.suggest-title {
+		margin: 0.25rem 0.5rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--foreground-500);
+	}
+
+	.suggest-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground);
+		font-size: 0.85rem;
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	.admin-actions-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.mobile-caption-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
+		color: var(--foreground);
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	.bulk-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.bulk-row {
+		@media (max-width: 767px) {
+			flex-basis: 100%;
+		}
+	}
+
+	.bulk-count {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+
+	/* Mobile: bulk bar fixed trên pagination, đủ chỗ cho FAB (4.75rem phải). */
+	@media (max-width: 767px) {
+		.bulk-row {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: calc(2.75rem + 0.75rem);
+			z-index: 310;
+			padding: 0.5rem 0.75rem;
+			background: var(--background, #fff);
+			border-top: 1px solid var(--default-300);
+			padding-right: 4.75rem;
+		}
+	}
+
+	/* Ẩn bulk bar khi đang cuộn (mobile) — .is-scrolling đặt trên section. */
+	@media (max-width: 767px) {
+		.admin-page.is-scrolling .bulk-row {
+			opacity: 0;
+			pointer-events: none;
+		}
+	}
+
+	.admin-page .bulk-row {
+		transition: opacity 150ms ease;
+	}
+
+	.fab-group {
+		position: fixed;
+		right: 1rem;
+		bottom: 7.25rem;
+		display: flex;
+		flex-direction: column-reverse;
+		align-items: center;
+		gap: 0.6rem;
+		z-index: 400;
+		transition: opacity 200ms ease;
+
+		&.fab-hidden {
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		&.is-scrolling {
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		@media (min-width: 768px) {
+			display: none;
+		}
+	}
+
+	.fab {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 9999px;
+		border: 1px solid var(--default-300);
+		box-shadow: var(--shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
+		cursor: pointer;
+		transition: transform 0.15s ease;
+
+		&:active {
+			transform: scale(0.96);
+		}
+	}
+
+	.fab--primary {
+		width: 3.25rem;
+		height: 3.25rem;
+		background: var(--primary);
+		color: var(--primary-contrast, #fff);
+		border-color: transparent;
+	}
+
+	.fab--secondary {
+		width: 2.75rem;
+		height: 2.75rem;
+		background: var(--background);
+		color: var(--foreground);
+	}
+
+	@media (max-width: 767px) {
+		.admin-page {
+			padding-bottom: 12rem;
+		}
+
+		.admin-pagination {
+			padding-right: 4.75rem;
+		}
+	}
+
+	/* Mobile: modal full màn (pattern suppliers — class trên Modal root). */
+	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+		:global(.modal-root.supplier-modal-root) {
+			padding: 0;
+			align-items: stretch;
+		}
+
+		:global(.supplier-modal-root .modal-container-root) {
+			position: fixed;
+			inset: 0;
+			width: 100% !important;
+			max-width: none;
+			max-height: none;
+			border-radius: 0;
+			margin: 0;
+		}
+
+		:global(.supplier-modal-root .modal-header-root) {
+			padding-block: 0.5rem;
+			justify-content: flex-start;
+		}
+
+		.supplier-modal-title {
+			flex: 1 1 auto;
+		}
+	}
+
+	/* ── B54: modal breadcrumb title (crumb + more popover) ── */
+	.supplier-modal-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+		position: relative;
+		z-index: 3;
+	}
+
+	.supplier-modal-title__more {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		margin-left: -0.25rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground-500);
+		cursor: pointer;
+		flex-shrink: 0;
+
+		&:hover {
+			background: hsl(0 0% 0% / 0.06);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+		}
+	}
+
+	.supplier-crumb-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 10rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--box-shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+	}
+
+	.supplier-crumb-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		text-align: left;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground-600);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100, var(--default-200));
+		}
+	}
+
+	.supplier-modal-title__label {
+		flex-shrink: 0;
+		font-weight: 600;
+	}
+
+	.supplier-modal-title__crumb {
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font: inherit;
+		font-weight: 600;
+		color: var(--foreground-500);
+		cursor: pointer;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		&:disabled {
+			color: var(--foreground-500);
+		}
+	}
+
+	.supplier-modal-title__name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--foreground-500);
+		font-weight: 400;
+	}
+
+	.supplier-modal-title__name--active {
+		color: var(--foreground);
+		font-weight: 600;
+	}
+
+	.supplier-modal-title__name[aria-hidden='true'] {
+		flex: none;
+		overflow: visible;
+	}
+
+	.setting-form {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.form-error-banner {
+		padding: 0.6rem 0.75rem;
+		border-radius: 0.5rem;
+		background: var(--danger-50, rgb(239 68 68 / 0.08));
+		color: var(--danger-600, #dc2626);
+		font-size: 0.85rem;
 	}
 </style>

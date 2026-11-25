@@ -380,7 +380,16 @@
 		return opts.slice(0, cap);
 	});
 	// hasMore: chỉ hiện UI load-more khi còn option chưa hiển thị (đã vượt không gian)
-	const hasMoreDerived = $derived(!fullscreenDerived && filteredOptionsDerived.length > visibleOptionsDerived.length); // B53 (m26523)
+	// B54 (m27374): khi lazyload server (loadMorePages), hasMore do handler quyết định
+	// qua _remoteHasMore — không còn suy từ độ dài mảng nội bộ.
+	let _remoteHasMore = $state(false);
+	let _remotePage = $state(1);
+	let _remotePageLoading = $state(false);
+	const hasMoreDerived = $derived(
+		props.loadMorePages
+			? _remoteHasMore
+			: !fullscreenDerived && filteredOptionsDerived.length > visibleOptionsDerived.length
+	); // B53 (m26523)
 
 	// ── Select-all state (multiple) ──
 	const selectAllStateDerived = $derived.by((): SelectAllState => {
@@ -913,7 +922,34 @@
 			configs.processValidation('change');
 		},
 		// Load thêm option (scroll / button): tăng visibleCount theo chunk
-		loadMore() {
+		// B54 (m27374): lazyload server (loadMorePages) → fetch trang kế qua
+		// loadOptions(query, page+1) và APPEND vào loadedOptions (không slice client).
+		async loadMore() {
+			if (props.loadMorePages && props.loadOptions) {
+				if (_remotePageLoading) return;
+				_remotePageLoading = true;
+				const page = _remotePage + 1;
+				try {
+					const query = (configs.status.searchQuery ?? '').trim();
+					const opts = await props.loadOptions(query || undefined, page);
+					if (Array.isArray(opts)) {
+						if (opts.length === 0) {
+							_remoteHasMore = false; // hết trang — ngừng hỏi server
+						} else {
+							// Append giữ nguyên thứ tự trang; dedup theo value chống trùng
+							const seen = new Set(loadedOptions.map((o) => o.value));
+							loadedOptions = [...loadedOptions, ...opts.filter((o) => !seen.has(o.value))];
+							_remotePage = page;
+							if (opts.length < 20) _remoteHasMore = false; // trang cụt = trang cuối
+						}
+					}
+				} catch (e) {
+					console.warn('[Select] loadMorePages failed:', e);
+				} finally {
+					_remotePageLoading = false;
+				}
+				return;
+			}
 			// visibleCount = 0 nghĩa là đang hiển thị theo cap mặc định (maxOptions)
 			const current = visibleCount === 0 ? maxOptionsDerived : visibleCount;
 			visibleCount = Math.min(filteredOptionsDerived.length, current + loadMoreChunkDerived);
@@ -951,6 +987,9 @@
 		resetPagination() {
 			visibleCount = 0;
 			currentPage = 1;
+			// B54 (m27374): lazyload server — reset trạng thái trang remote
+			_remotePage = 1;
+			_remoteHasMore = !!props.loadMorePages;
 		},
 		selectCreateOption() {
 			if (!configs.showCreateOption) return;
@@ -1031,6 +1070,8 @@
 				const opts = await props.loadOptions();
 				if (opts && Array.isArray(opts)) {
 					loadedOptions = opts;
+					// B54 (m27374): lazyload server — trang đầu < pageSize → hết dữ liệu
+					_remoteHasMore = !!props.loadMorePages && opts.length >= 20;
 				}
 			} catch (e) {
 				// Silent — user có thể xử lý qua onSearch/timeout
@@ -1095,6 +1136,9 @@
 							if (opts && Array.isArray(opts)) {
 								// Remote search: thay thế loadedOptions (không merge với local)
 								loadedOptions = opts;
+								// B54 (m27374): lazyload server — trang đầu của query mới
+								_remotePage = 1;
+								_remoteHasMore = !!props.loadMorePages && opts.length >= 20;
 							}
 						} catch (e) {
 							console.warn('[Select] remote search failed:', e);

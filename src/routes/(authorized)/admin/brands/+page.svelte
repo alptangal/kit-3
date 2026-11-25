@@ -5,10 +5,12 @@
 	// nhưng endpoint chỉ export POST (readAdminRequest mã hoá RSA) + response
 	// {ok, message, data:{brands}} → bảng không bao giờ render. Chuyển sang
 	// encryption.fetchSecure POST như users page.
-	import { onMount } from 'svelte';
-	import { Button, DataTable, Pagination } from '$components/element';
-	import { ImageUpload, Input, Label, TextField } from '$components/form';
-	import { Checkbox } from '$components/form/checkbox';
+	// Batch 54: đồng bộ chuẩn UI/UX suppliers — search suggest từ khoá + setting
+	// modal (sort/filter) + bulk copy/delete + FAB mobile + modal breadcrumb
+	// more-popover + skeleton. Sort CHỐT client-side (listBrands không sort server).
+	import { onMount, flushSync, tick } from 'svelte';
+	import { Button, DataTable, Pagination, AlertDialog, Spinner } from '$components/element';
+	import { ImageUpload, Input, Label, TextField, Select } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
 	import { ModalHeader } from '$components/modal/Header';
@@ -18,6 +20,7 @@
 	import { iconify } from '$assets/icons/iconify';
 	import { encryption } from '$modules/encryption';
 	import { client } from '$store/basic.svelte';
+	import { recordSearchKeyword, saveDataTablePrefs, getSearchKeywords, userPrefs } from '$store/user-prefs.svelte';
 	import type { DataTableColumn } from '$components/element/datatable';
 	import { resolveServerMessage } from '../_interface';
 	import type { Size } from '$components/interface';
@@ -70,6 +73,36 @@
 		updated: { vi: 'Cập nhật', en: 'Updated' },
 		totalCount: { vi: '{n} thương hiệu', en: '{n} brands' },
 		deletedBadge: { vi: 'Đã xoá', en: 'Deleted' },
+		// Batch54: setting modal (filter + sort) — pattern suppliers
+		settings: {
+			title: { vi: 'Cài đặt danh sách', en: 'List settings' },
+			showDeleted: { vi: 'Hiện đã xoá', en: 'Show deleted' },
+			sortBy: { vi: 'Sắp xếp theo', en: 'Sort by' },
+			sortDirection: { vi: 'Chiều sắp xếp', en: 'Sort direction' },
+			asc: { vi: 'Tăng dần', en: 'Ascending' },
+			desc: { vi: 'Giảm dần', en: 'Descending' },
+			apply: { vi: 'Áp dụng', en: 'Apply' },
+			reset: { vi: 'Đặt lại', en: 'Reset' }
+		},
+		// Batch54: bulk copy/delete + dialog confirm
+		bulk: {
+			title: { vi: 'Xoá thương hiệu đã chọn?', en: 'Delete selected brands?' },
+			desc: {
+				vi: 'Các thương hiệu đã chọn sẽ bị xoá vĩnh viễn khỏi hệ thống.',
+				en: 'The selected brands will be permanently removed.'
+			},
+			confirm: { vi: 'Xoá', en: 'Delete' },
+			cancel: { vi: 'Huỷ', en: 'Cancel' },
+			copy: { vi: 'Copy', en: 'Copy' },
+			delete: { vi: 'Xoá', en: 'Delete' },
+			selected: { vi: 'Đã chọn {count}', en: '{count} selected' }
+		},
+		// Batch54: suggest popover từ khoá đã tìm
+		suggest: {
+			title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' }
+		},
+		// Batch54: nút more khi breadcrumb modal tràn
+		crumbMore: { vi: 'Xem đường dẫn', en: 'Show path' },
 		states: {
 			loadFailed: { vi: 'Không tải được danh sách thương hiệu', en: 'Failed to load brands' },
 			created: { vi: 'Đã tạo thương hiệu', en: 'Brand created' },
@@ -77,7 +110,11 @@
 			deleted: { vi: 'Đã xoá thương hiệu', en: 'Brand deleted' },
 			deleteFailed: { vi: 'Không xoá được thương hiệu', en: 'Failed to delete brand' },
 			operationFailed: { vi: 'Thao tác thất bại', en: 'Operation failed' },
-			networkError: { vi: 'Lỗi kết nối', en: 'Network error' }
+			networkError: { vi: 'Lỗi kết nối', en: 'Network error' },
+			bulkDeleted: { vi: 'Đã xoá {count} thương hiệu', en: 'Deleted {count} brands' },
+			bulkDeleteFailed: { vi: 'Không xoá được thương hiệu đã chọn', en: 'Failed to delete selected brands' },
+			bulkCopied: { vi: 'Đã copy {count} thương hiệu', en: 'Copied {count} brands' },
+			copyFailed: { vi: 'Không copy được', en: 'Copy failed' }
 		}
 	};
 
@@ -134,6 +171,286 @@
 		form: () => formData,
 		openConfirm: () => (dirtyCloseDisplay = true),
 		close: () => closeModals()
+	});
+
+	// ── Batch54: chuẩn suppliers — search suggest + setting + bulk + FAB + crumb ──
+	const PREFS_KEY = '/admin/brands';
+	const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+	const isMobile = $derived(client.browser?.isMobile ?? false);
+
+	// Search suggest (pattern suppliers): mobile icon → field; popover từ khoá.
+	let searchFocused = $state(false);
+	let suggestOpen = $state(false);
+	let mobileSearchOpen = $state(false);
+	let mobileSearchInputInstance = $state<{ configs: { focus: () => void } } | undefined>(undefined);
+
+	function saveSearchKeyword() {
+		const kw = (searchQuery ?? '').trim();
+		if (kw) recordSearchKeyword(PREFS_KEY, kw);
+	}
+	const recentKeywordsFiltered = $derived.by(() => {
+		const q = (searchQuery ?? '').trim().toLowerCase();
+		const all = getSearchKeywords(PREFS_KEY);
+		return q ? all.filter((k) => k.toLowerCase().includes(q)) : all;
+	});
+
+	// Sort — CHỐT client-side (listBrands chỉ nhận page/pageSize/includeDeleted/search).
+	// DataTable sortable tự sort data đã load; onSortChange chỉ persist prefs.
+	let sortField = $state('');
+	let sortDirection = $state<'asc' | 'desc'>('desc');
+
+	// Setting modal (filter showDeleted + sort) — pattern suppliers: mở từ nút
+	// tune header (desktop) / icon mobile + FAB. Apply mới ghi vào state thật.
+	let settingModalDisplay = $state(false);
+	let settingSortField = $state('');
+	let settingSortDirection = $state<'asc' | 'desc'>('desc');
+	// Select value là string → draft showDeleted dạng 'true'/'false' (convert khi Apply).
+	let settingShowDeleted = $state<'true' | 'false'>('false');
+	$effect(() => {
+		if (settingModalDisplay) {
+			settingSortField = sortField;
+			settingSortDirection = sortDirection;
+			settingShowDeleted = showDeleted ? 'true' : 'false';
+		}
+	});
+
+	// Bulk selection (pattern suppliers).
+	let selectedIds = $state<string[]>([]);
+	let bulkDeleteDisplay = $state(false);
+	let bulkDeleting = $state(false);
+	const bulkDisplayCount = $derived(selectedIds.length);
+
+	function clearBrandsSelection() {
+		selectedIds = [];
+	}
+
+	// Bulk copy TSV (header + các cột accessor) — pattern suppliers bulkCopySelected.
+	function bulkCopySelected() {
+		const cols = columns.filter((c) => c.id !== 'actions' && typeof c.accessor === 'function');
+		const header = cols.map((c) => String(c.label)).join('\t');
+		const rows = brands
+			.filter((b) => b._id && selectedIds.includes(b._id))
+			.map((b) =>
+				cols.map((c) => String((c.accessor as (row: unknown) => unknown)(b) ?? '')).join('\t')
+			);
+		const tsv = [header, ...rows].join('\n');
+		navigator.clipboard
+			.writeText(tsv)
+			.then(() =>
+				showToast(pageContents.states.bulkCopied[lang].replace('{count}', String(bulkDisplayCount)))
+			)
+			.catch(() => showToast(pageContents.states.copyFailed[lang], 'error'));
+	}
+
+	// Bulk delete — POST /api/admin/brands/bulk {ids} (endpoint riêng Batch54).
+	async function bulkDeleteSelected() {
+		if (!encryptionKeys || bulkDeleting || selectedIds.length === 0) return;
+		bulkDeleting = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/brands/bulk',
+				{ method: 'POST', body: { ids: selectedIds } },
+				encryptionKeys
+			);
+			bulkDeleting = false;
+			if (response.ok) {
+				const data = response.data as { deleted?: number } | undefined;
+				showToast(
+					pageContents.states.bulkDeleted[lang].replace(
+						'{count}',
+						String(data?.deleted ?? selectedIds.length)
+					)
+				);
+				bulkDeleteDisplay = false;
+				clearBrandsSelection();
+				await fetchBrands();
+			} else {
+				showToast(
+					resolveServerMessage(response.message, lang, pageContents.states.bulkDeleteFailed),
+					'error'
+				);
+			}
+		} catch (err) {
+			bulkDeleting = false;
+			showToast(pageContents.states.bulkDeleteFailed[lang], 'error');
+			if (import.meta.env.DEV) console.error('[brands] bulk delete failed:', err);
+		}
+	}
+
+	// ── Batch54: setting modal Apply — gán sort + showDeleted + persist prefs +
+	// về trang 1 + reload (mirror suppliers setting Apply). Reset disabled khi
+	// hết filter/sort. ──
+	function applyBrandsSettings() {
+		sortField = settingSortField;
+		sortDirection = settingSortDirection === 'asc' ? 'asc' : 'desc';
+		showDeleted = settingShowDeleted === 'true';
+		settingModalDisplay = false;
+		saveDataTablePrefs(PREFS_KEY, {
+			filters: { showDeleted: showDeleted === true ? true : null },
+			sort: sortField ? { field: sortField, direction: sortDirection } : undefined
+		});
+		pageNumber = 1;
+		void fetchBrands();
+	}
+
+	// ── Batch54: DataTable onSortChange — sort client-side (bindable tự sort data
+	// đã load); handler CHỈ persist prefs (không refetch — listBrands không sort).
+	function onBrandsSortChange(columnId: string, order: 'asc' | 'desc' | null) {
+		if (!order || !columnId) {
+			sortField = '';
+			sortDirection = 'desc';
+		} else {
+			sortField = columnId;
+			sortDirection = order === 'asc' ? 'asc' : 'desc';
+		}
+		saveDataTablePrefs(PREFS_KEY, {
+			filters: { showDeleted: showDeleted === true ? true : null },
+			sort: sortField ? { field: sortField, direction: sortDirection } : undefined
+		});
+	}
+
+	// ── Scroll state minimal (pattern suppliers 660-802 — chỉ phần is-scrolling +
+	// fab-hidden cho mobile): tableScrolled quyết định FAB ẩn/hiện; scrollActive
+	// ẩn bulk-bar/FAB khi đang cuộn. Wrap không tự cuộn (iOS ≤15.3 :has chết) →
+	// fallback document capture walk-up ancestor (pattern suppliers).
+	let wrapEl = $state<HTMLElement | undefined>(undefined);
+	let tableScrolled = $state(false);
+	let scrollActive = $state(false);
+	let scrollRaf = 0;
+	let scrollActiveTimer: ReturnType<typeof setTimeout>;
+	let lastActiveScrollTop = -1;
+	function markScrollActive(scrollTop: number, maxScroll: number) {
+		const rubber = scrollTop < 0 || scrollTop > maxScroll;
+		if (!rubber && scrollTop !== lastActiveScrollTop) {
+			scrollActive = true;
+		}
+		lastActiveScrollTop = scrollTop;
+		clearTimeout(scrollActiveTimer);
+		scrollActiveTimer = setTimeout(() => {
+			scrollActive = false;
+			lastActiveScrollTop = -1;
+		}, 200);
+	}
+	function applyScrollTop(top: number, viewH: number, totalH: number) {
+		markScrollActive(top, totalH - viewH);
+		tableScrolled = top > 8;
+	}
+	function findScrollContainer(): HTMLElement | undefined {
+		let el = wrapEl?.parentElement;
+		while (el && el !== document.body) {
+			const ov = getComputedStyle(el).overflowY;
+			if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight + 4) return el;
+			el = el.parentElement;
+		}
+		return undefined;
+	}
+	function onWindowScroll() {
+		// wrap tự cuộn được → nhường event cho onTableScroll (listener trên wrap);
+		// 2 handler dùng CHUNG scrollRaf (pattern suppliers B39 guard).
+		const wrapNow = wrapEl;
+		if (wrapNow && wrapNow.scrollHeight > wrapNow.clientHeight + 4) return;
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			const el = wrapEl;
+			if (!el || el.scrollHeight > el.clientHeight + 4) return;
+			const sc = findScrollContainer();
+			const top = sc ? sc.scrollTop : window.scrollY;
+			const viewH = sc ? sc.clientHeight : window.innerHeight;
+			const totalH = sc ? sc.scrollHeight : document.documentElement.scrollHeight;
+			applyScrollTop(top, viewH, totalH);
+		});
+	}
+	function onTableScroll() {
+		const el = wrapEl;
+		if (!el) return;
+		if (scrollRaf) return;
+		scrollRaf = requestAnimationFrame(() => {
+			scrollRaf = 0;
+			applyScrollTop(el.scrollTop, el.clientHeight, el.scrollHeight);
+		});
+	}
+
+	// ── Modal breadcrumb more-popover (pattern suppliers B18/B34) ──
+	let crumbNavEl = $state<HTMLElement | null>(null);
+	let crumbOverflow = $state(0);
+	let crumbMoreOpen = $state(false);
+	async function measureTitleCrumbs(
+		nav: HTMLElement | null,
+		onlyMobile: boolean,
+		getOverflow: () => number,
+		setOverflow: (v: number) => void
+	) {
+		if (!nav || onlyMobile) {
+			if (getOverflow() !== 0) setOverflow(0);
+			return;
+		}
+		const anyTruncated = () => {
+			for (const el of nav.children) {
+				const item = el as HTMLElement;
+				if (
+					item.classList.contains('supplier-modal-title__more') ||
+					item.classList.contains('supplier-crumb-popover')
+				)
+					continue;
+				if (item.scrollWidth > item.clientWidth + 1) return true;
+			}
+			return false;
+		};
+		let guard = 0;
+		while (anyTruncated() && guard < 8) {
+			setOverflow(getOverflow() + 1);
+			guard += 1;
+			await tick();
+		}
+		while (getOverflow() > 0 && guard < 16) {
+			setOverflow(getOverflow() - 1);
+			guard += 1;
+			await tick();
+			if (anyTruncated()) {
+				setOverflow(getOverflow() + 1);
+				break;
+			}
+		}
+	}
+	// Đo tràn breadcrumb modal sau render + resize (rAF + ResizeObserver).
+	$effect(() => {
+		void modalOpen;
+		void editingBrand?.name;
+		void formData.name;
+		void isMobile;
+		void lang;
+		const raf = requestAnimationFrame(() =>
+			void measureTitleCrumbs(crumbNavEl, !isMobile, () => crumbOverflow, (v) => (crumbOverflow = v))
+		);
+		const ro = new ResizeObserver(() =>
+			requestAnimationFrame(() =>
+				void measureTitleCrumbs(crumbNavEl, !isMobile, () => crumbOverflow, (v) => (crumbOverflow = v))
+			)
+		);
+		if (crumbNavEl) ro.observe(crumbNavEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+	// Reset more-popover khi đóng modal.
+	$effect(() => {
+		if (!modalOpen) {
+			crumbMoreOpen = false;
+			crumbOverflow = 0;
+		}
+	});
+	// Outside-click đóng popover breadcrumb (mousedown — pattern B34 review P3).
+	$effect(() => {
+		if (!crumbMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (crumbNavEl && t && crumbNavEl.contains(t)) return;
+			crumbMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
 	});
 
 	// Fetch brands — fetchSecure POST (endpoint mã hoá RSA).
@@ -195,22 +512,8 @@
 		}, 300);
 	});
 
-	// Checkbox không có callback — theo dõi showDeleted bằng $effect
-	// (pattern users page; chỉ chạy sau lần đầu để tránh refetch trùng onMount).
-	let deletedToggleArmed = false;
-	let lastShowDeleted = false;
-	$effect(() => {
-		const current = showDeleted;
-		if (!deletedToggleArmed) {
-			deletedToggleArmed = true;
-			lastShowDeleted = current;
-			return;
-		}
-		if (current === lastShowDeleted) return;
-		lastShowDeleted = current;
-		pageNumber = 1;
-		void fetchBrands();
-	});
+	// Batch54: Checkbox showDeleted TRONG admin-filters bỏ — filter chuyển vào
+	// setting modal (Apply mới fetch explicit → không cần effect refetch).
 
 	// Pagination — server-side: Pagination element chỉ có bindable page (không
 	// callback) — effect theo dõi pageNumber + pageSize refetch server. Chỉ chạy
@@ -268,6 +571,12 @@
 			noHighlight: true
 		}
 	]);
+
+	// Options sortBy từ columns sortable (id + label hiện tại).
+	// (khai báo SAU columns — $derived không hoist, dùng trước sẽ TS error)
+	const settingSortOptions = $derived(
+		columns.filter((c) => c.sortable).map((c) => ({ value: c.id, label: String(c.label) }))
+	);
 
 	// Gộp class: defaultStyles snippet là (string|undefined)[] — lọc undefined
 	// trước khi truyền vào Icon class (string[]). Helper này nằm trong script
@@ -533,8 +842,23 @@
 	// Initial load
 	// B8 realtime: refetch list khi collection thay đổi từ client khác
 	onMount(() => subscribeDbChanges('brands', () => void fetchBrands()));
+	// Batch54: scroll event KHÔNG bubble → capture trên document bắt scroll của
+	// mọi element (pattern suppliers B25; iOS ≤15.3 trang cuộn ở root Container).
+	onMount(() => {
+		document.addEventListener('scroll', onWindowScroll, { capture: true, passive: true });
+		return () => {
+			document.removeEventListener('scroll', onWindowScroll, { capture: true });
+		};
+	});
 	onMount(async () => {
 		if (!client.browser) client.browser = {};
+		// Batch54: restore prefs TRƯỚC load đầu (pattern suppliers) — sort + showDeleted.
+		const prefs = userPrefs.datatable?.[PREFS_KEY];
+		if (prefs?.sort?.field) {
+			sortField = prefs.sort.field;
+			sortDirection = prefs.sort.direction === 'asc' ? 'asc' : 'desc';
+		}
+		if (prefs?.filters?.showDeleted === true) showDeleted = true;
 		const { privateKey, publicKey } = await encryption.generateRSAKeyPair();
 		encryptionKeys = { privateKey, publicKey };
 		await fetchBrands();
@@ -545,36 +869,138 @@
 	<title>{pageContents.title[lang]}</title>
 </svelte:head>
 
-<section class="admin-page">
+<section class="admin-page" class:is-scrolling={scrollActive && isMobile}>
 	<header class="admin-header">
 		<div class="admin-header-text">
 			<h1 class="admin-title">{pageContents.title[lang]}</h1>
 			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
 		<div class="admin-header-actions">
-			<!-- Quy ước màu nút: create = success -->
-			<Button color="success" onClick={openCreateModal}>
-				{pageContents.addBrand[lang]}
-			</Button>
+			<!-- Quy ước màu nút: create = success. Mobile ẩn (FAB thay) — desktop giữ. -->
+			{#if !isMobile}
+				<Button color="success" onClick={openCreateModal}>
+					{pageContents.addBrand[lang]}
+				</Button>
+			{/if}
 		</div>
 	</header>
 
-	<!-- ── Bộ lọc ── -->
+	<!-- ── Bộ lọc (Batch54: search 3 nhánh pattern suppliers — mobile icon mở
+	     field + suggest popover từ khoá; showDeleted chuyển vào setting modal) ── -->
 	<div class="admin-filters">
-		<div class="admin-search">
-			<Input placeholder={pageContents.searchPlaceholder[lang]} bind:value={searchQuery}>
-				{#snippet leading(data)}
-					<Icon
-						icon={iconify['search-rounded']}
-						size={(data?.size ?? 'sm') as Size}
-						class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-					/>
-				{/snippet}
-			</Input>
+		<div class="admin-search" data-suggest>
+			{#if isMobile && !mobileSearchOpen}
+				<button
+					type="button"
+					class="mobile-caption-icon"
+					aria-label={lang === 'vi' ? 'Tìm kiếm' : 'Search'}
+					data-test="brands-mobile-search-open"
+					onclick={() => {
+						// flushSync mount field + focus TRONG user gesture (iOS Safari
+						// chỉ mở keyboard khi focus nằm trong gesture).
+						flushSync(() => {
+							mobileSearchOpen = true;
+							suggestOpen = true;
+						});
+						mobileSearchInputInstance?.configs.focus();
+					}}
+				>
+					<Icon icon={iconify['search-rounded']} size="sm" />
+				</button>
+			{:else}
+				<Input
+					bind:this={mobileSearchInputInstance}
+					type="text"
+					placeholder={pageContents.searchPlaceholder[lang]}
+					bind:value={searchQuery}
+					events={[
+						{
+							events: {
+								focus: {
+									handler() {
+										searchFocused = true;
+										suggestOpen = true;
+									}
+								},
+								blur: {
+									handler() {
+										searchFocused = false;
+										suggestOpen = false;
+										saveSearchKeyword();
+										// mobile: rỗng → thu về icon (có từ khoá → giữ field)
+										if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
+									}
+								}
+							}
+						}
+					]}
+				>
+					{#snippet leading(data)}
+						{#if loading}
+							<span class="admin-search-loading">
+								<Spinner size="xs" pattern="circle" />
+							</span>
+						{:else}
+							<Icon
+								icon={iconify['search-rounded']}
+								size={(data?.size ?? 'sm') as Size}
+								class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+							/>
+						{/if}
+					{/snippet}
+				</Input>
+			{/if}
+			{#if suggestOpen && recentKeywordsFiltered.length > 0}
+				<div class="suggest-popover" role="listbox">
+					<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
+					{#each recentKeywordsFiltered as kw (kw)}
+						<button
+							type="button"
+							class="suggest-item"
+							role="option"
+							aria-selected="false"
+							onmousedown={(e) => e.preventDefault()}
+							onclick={() => {
+								searchQuery = kw;
+								suggestOpen = false;
+								pageNumber = 1;
+								void fetchBrands();
+							}}
+						>
+							{kw}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
-		<Checkbox bind:checked={showDeleted}>
-			{pageContents.showDeleted[lang]}
-		</Checkbox>
+		{#if !isMobile}
+			<!-- Desktop: nút tune mở setting modal (showDeleted + sort) -->
+			<Button
+				color="default"
+				variant="outline"
+				size="sm"
+				onClick={() => {
+					settingModalDisplay = true;
+				}}
+				aria-label={pageContents.settings.title[lang]}
+				data-test="brands-header-setting-btn"
+			>
+				<Icon icon={iconify['tune-rounded']} size="sm" />
+			</Button>
+		{:else}
+			<!-- Mobile: icon tune mở setting modal (thay Select filter trần) -->
+			<button
+				type="button"
+				class="mobile-caption-icon"
+				aria-label={pageContents.settings.title[lang]}
+				data-test="brands-mobile-filter-btn"
+				onclick={() => {
+					settingModalDisplay = true;
+				}}
+			>
+				<Icon icon={iconify['tune-rounded']} size="sm" />
+			</button>
+		{/if}
 	</div>
 
 	<!-- ── Trạng thái loading/first-load error ── -->
@@ -583,15 +1009,17 @@
 	{/if}
 
 	<!-- ── Bảng brands (DataTable + snippet actions) ── -->
-	<div class="admin-table-wrap">
+	<div class="admin-table-wrap" bind:this={wrapEl} onscroll={onTableScroll}>
 		<DataTable
 			data={brandsAny}
 			{columns}
 			pageSize={pageSize}
 			showPagination={false}
 			sortable
-			searchable
-			searchPlaceholder={pageContents.searchPlaceholder}
+			bind:sortColumn={sortField}
+			bind:sortDirection={sortDirection}
+			onSortChange={onBrandsSortChange}
+			searchQuery={searchQuery ?? ''}
 			resizable={{ enabled: true, fit: true }}
 			loading={loading}
 			visual={{ striped: true, hoverable: true }}
@@ -603,6 +1031,14 @@
 			mobileTapMode="callback"
 			onRowClick={(row) => openEditModal(row as unknown as BrandListItem)}
 			cardFields={['brand', 'slug', 'status', 'updated']}
+			selectable
+			showIndex
+			indexCheckboxes
+			checkOnRowClick
+			selectionTools={false}
+			getRowId={(row) => String((row as unknown as BrandListItem)._id ?? '')}
+			selection={selectedIds}
+			onSelectionChange={(ids) => (selectedIds = [...ids])}
 			data-test="brands-datatable"
 		>
 			{#snippet actionsContent(row)}
@@ -623,6 +1059,35 @@
 				</div>
 			{/snippet}
 		</DataTable>
+
+		{#if selectedIds.length > 0}
+			<!-- Batch54: bulk-bar khi chọn ≥1 row (pattern suppliers — cạnh table,
+			mobile fixed đáy viewport; ẩn khi đang cuộn qua .is-scrolling). -->
+			<div class="bulk-row" data-test="brands-bulk-row">
+				<div class="bulk-bar" data-test="brands-bulk-bar">
+					<span class="bulk-count"
+						>{pageContents.bulk.selected[lang].replace('{count}', String(bulkDisplayCount))}</span
+					>
+					<Button color="primary" variant="soft" size="sm" onClick={bulkCopySelected}>
+						{pageContents.bulk.copy[lang]}
+					</Button>
+					<Button
+						color="error"
+						variant="soft"
+						size="sm"
+						onClick={() => {
+							bulkDeleteDisplay = true;
+						}}
+						data-test="brands-bulk-delete"
+					>
+						{pageContents.bulk.delete[lang]}
+					</Button>
+					<Button color="default" variant="ghost" size="sm" onClick={clearBrandsSelection}>
+						<Icon icon={iconify['close-rounded']} size="sm" />
+					</Button>
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	<!-- ── Pagination server-side ── -->
@@ -657,13 +1122,118 @@
 		</div>
 	</footer>
 
+	<!-- ── Batch54: FAB mobile (pattern suppliers — 3 nút create/setting/search;
+	     ẩn khi chưa cuộn + khi đang cuộn; desktop display:none ≥768px) ── -->
+	<div
+		class="fab-group"
+		class:fab-hidden={isMobile && !tableScrolled}
+		class:is-scrolling={scrollActive && isMobile}
+	>
+		<button
+			type="button"
+			class="fab fab--primary"
+			aria-label={pageContents.addBrand[lang]}
+			data-test="brands-fab"
+			onclick={openCreateModal}
+		>
+			<Icon icon={iconify['add-rounded']} />
+		</button>
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={pageContents.settings.title[lang]}
+			data-test="brands-fab-setting"
+			onclick={() => {
+				settingModalDisplay = true;
+				scrollActive = false;
+			}}
+		>
+			<Icon icon={iconify['tune-rounded']} />
+		</button>
+		<button
+			type="button"
+			class="fab fab--secondary"
+			aria-label={lang === 'vi' ? 'Tìm kiếm' : 'Search'}
+			data-test="brands-fab-search-btn"
+			onclick={() => {
+				flushSync(() => {
+					mobileSearchOpen = true;
+					suggestOpen = true;
+					scrollActive = false;
+				});
+				mobileSearchInputInstance?.configs.focus();
+			}}
+		>
+			<Icon icon={iconify['search-rounded']} />
+		</button>
+	</div>
+
 	<!-- ── Create/Edit Modal ── -->
-	<Modal bind:display={modalOpen} onClose={closeModals} onCloseAttempt={closeGuard.attemptClose} size="md">
+	<Modal
+		bind:display={modalOpen}
+		onClose={closeModals}
+		onCloseAttempt={closeGuard.attemptClose}
+		size="md"
+		class="supplier-modal-root"
+		autoFocus={false}
+	>
 		<ModalContainer>
-			<ModalHeader>
-				<h2 class="modal-title">
-					{editingBrand ? pageContents.editTitle[lang] : pageContents.createTitle[lang]}
-				</h2>
+			<ModalHeader actionButtons={{ close: { display: !isMobile } }}>
+				<!-- Batch54: breadcrumb modal title (pattern suppliers B16/B18) —
+				crumb page title (tap = đóng về list) › active (name/create). Tràn →
+				item đầu ẩn vào popover more (đo scrollWidth rAF + RO). -->
+				<div class="supplier-modal-title" bind:this={crumbNavEl}>
+					{#if isMobile && crumbOverflow > 0}
+						<button
+							type="button"
+							class="supplier-modal-title__more"
+							data-test="brands-crumb-more"
+							aria-label={pageContents.crumbMore[lang]}
+							aria-expanded={crumbMoreOpen}
+							onclick={() => (crumbMoreOpen = !crumbMoreOpen)}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</button>
+						{#if crumbMoreOpen}
+							<div class="supplier-crumb-popover" role="menu">
+								<button
+									type="button"
+									class="supplier-crumb-popover__item"
+									onclick={() => {
+										crumbMoreOpen = false;
+										closeGuard.attemptClose();
+									}}
+								>
+									{pageContents.title[lang]}
+								</button>
+							</div>
+						{/if}
+					{/if}
+					{#if !isMobile || crumbOverflow === 0}
+						{#if isMobile}
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
+								onclick={() => closeGuard.attemptClose()}
+							>
+								{pageContents.title[lang]}
+							</button>
+						{:else}
+							<span class="supplier-modal-title__label">{pageContents.title[lang]}</span>
+						{/if}
+					{/if}
+					{#if editingBrand && formData.name}
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active"
+							>{formData.name}</span
+						>
+					{:else if !editingBrand}
+						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+						<span class="supplier-modal-title__name supplier-modal-title__name--active"
+							>{pageContents.addBrand[lang]}</span
+						>
+					{/if}
+				</div>
 			</ModalHeader>
 			<ModalBody class="modal-body">
 				<div class="grid-2">
@@ -770,6 +1340,112 @@
 		continueLabel={{ vi: 'Tiếp tục chỉnh sửa', en: 'Keep editing' }[lang]}
 		onDiscard={closeGuard.confirmDiscard}
 	/>
+
+	<!-- ── Batch54: Setting modal (showDeleted + sort) — pattern suppliers; mở từ
+	     nút tune desktop / icon mobile + FAB. Select fullscreen trên mobile. ── -->
+	{#if settingModalDisplay}
+		<Modal bind:display={settingModalDisplay} size="sm">
+			<ModalContainer>
+				<ModalHeader>{pageContents.settings.title[lang]}</ModalHeader>
+				<ModalBody>
+					<div class="setting-form" data-test="brands-setting-modal">
+						<TextField name="brands-setting-show-deleted">
+							<Label>{pageContents.settings.showDeleted[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingShowDeleted}
+								fullscreen={isMobile}
+								options={[
+									{ value: 'false', label: lang === 'vi' ? 'Không' : 'No' },
+									{ value: 'true', label: lang === 'vi' ? 'Có' : 'Yes' }
+								]}
+								data-test="brands-setting-show-deleted"
+							/>
+						</TextField>
+						<TextField name="brands-setting-sort">
+							<Label>{pageContents.settings.sortBy[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingSortField}
+								options={settingSortOptions}
+								clearable
+								fullscreen={isMobile}
+								placeholder={pageContents.settings.sortBy[lang]}
+								data-test="brands-setting-sort"
+							/>
+						</TextField>
+						<TextField name="brands-setting-direction">
+							<Label>{pageContents.settings.sortDirection[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingSortDirection}
+								options={[
+									{ value: 'asc', label: pageContents.settings.asc[lang] },
+									{ value: 'desc', label: pageContents.settings.desc[lang] }
+								]}
+								fullscreen={isMobile}
+								data-test="brands-setting-direction"
+							/>
+						</TextField>
+					</div>
+				</ModalBody>
+				<ModalFooter class="modal-footer">
+					<Button
+						color="secondary"
+						variant="outline"
+						disabled={settingSortField === '' && settingShowDeleted !== 'true'}
+						onClick={() => {
+							settingSortField = '';
+							settingSortDirection = 'desc';
+							settingShowDeleted = 'false';
+						}}
+					>
+						{pageContents.settings.reset[lang]}
+					</Button>
+					<Button
+						color="primary"
+						data-test="brands-setting-apply"
+						onClick={applyBrandsSettings}
+					>
+						{pageContents.settings.apply[lang]}
+					</Button>
+				</ModalFooter>
+			</ModalContainer>
+		</Modal>
+	{/if}
+
+	<!-- ── Batch54: AlertDialog bulk-delete (pattern suppliers) ── -->
+	{#if bulkDeleteDisplay}
+		<AlertDialog
+			bind:open={bulkDeleteDisplay}
+			title={pageContents.bulk.title[lang]}
+			description={pageContents.bulk.desc[lang]}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.bulk.title[lang]}</AlertDialog.Title>
+					<AlertDialog.Description
+						>{pageContents.bulk.desc[lang].replace('{count}', String(bulkDisplayCount))}</AlertDialog.Description
+					>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="danger"
+						disabled={bulkDeleting}
+						onselect={() => {
+							void bulkDeleteSelected();
+						}}
+					>
+						{pageContents.bulk.confirm[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
 </section>
 
 <style lang="scss">
@@ -781,6 +1457,11 @@
 		max-width: 1280px;
 		margin: 0 auto;
 		width: 100%;
+
+		&.is-scrolling .bulk-row {
+			opacity: 0;
+			pointer-events: none;
+		}
 
 		@media (max-width: 720px) {
 			padding: 1rem;
@@ -999,5 +1680,324 @@
 	   anchor scoped .modal-footer khong match. */
 	:global(.modal-footer [data-test='brand-modal-delete']) {
 		margin-right: auto;
+	}
+
+	/* ═══ Batch54: search suggest + mobile icon + bulk + FAB + modal crumb ═══ */
+
+	/* ── Search area: relative để suggest-popover neo đúng (gộp rule cũ) ── */
+	.admin-search {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.admin-search-loading {
+		display: inline-flex;
+		align-items: center;
+		width: 1.25rem;
+	}
+
+	/* ── Suggest keywords popover (pattern suppliers 7491+) ── */
+	.suggest-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		min-width: 14rem;
+		max-height: 16rem;
+		overflow-y: auto;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--box-shadow-lg, 0 10px 30px hsl(0 0% 0% / 0.12));
+		padding: 0.35rem;
+	}
+
+	.suggest-title {
+		margin: 0.25rem 0.5rem 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-size: 0.72rem;
+		color: var(--foreground-500);
+	}
+
+	.suggest-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground);
+		font-size: 0.85rem;
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	/* ── Mobile icon buttons trong caption/tools (pattern suppliers) ── */
+	.mobile-caption-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--default-300);
+		background: var(--default-50, transparent);
+		color: var(--foreground);
+		cursor: pointer;
+
+		&:hover {
+			background: var(--default-100);
+		}
+	}
+
+	/* ── Bulk bar (pattern suppliers) ── */
+	.bulk-row {
+		display: flex;
+		justify-content: center;
+	}
+
+	.bulk-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.bulk-count {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+
+	@media (max-width: 767px) {
+		.bulk-row {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: calc(2.75rem + 0.75rem);
+			z-index: 310;
+			padding: 0.5rem 0.75rem;
+			padding-right: 4.75rem;
+			background: var(--background);
+			border-top: 1px solid var(--default-300);
+			transition: opacity 150ms ease;
+		}
+	}
+
+	/* ── FAB mobile (pattern suppliers 7886+) ── */
+	.fab-group {
+		position: fixed;
+		right: 1rem;
+		bottom: 7.25rem;
+		z-index: 400;
+		display: flex;
+		flex-direction: column-reverse;
+		align-items: center;
+		gap: 0.6rem;
+		transition: opacity 200ms ease;
+
+		&.fab-hidden {
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		&.is-scrolling {
+			opacity: 0;
+			pointer-events: none;
+		}
+	}
+
+	@media (min-width: 768px) {
+		.fab-group {
+			display: none;
+		}
+	}
+
+	.fab {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 9999px;
+		border: 1px solid var(--default-300);
+		box-shadow: var(--shadow-md, 0 4px 12px hsl(0 0% 0% / 0.15));
+		cursor: pointer;
+		transition:
+			transform 120ms ease,
+			box-shadow 120ms ease,
+			opacity 200ms ease;
+
+		&:active {
+			transform: scale(0.96);
+		}
+	}
+
+	.fab--primary {
+		width: 3.25rem;
+		height: 3.25rem;
+		background: var(--primary);
+		color: var(--primary-contrast, #fff);
+		border-color: transparent;
+	}
+
+	.fab--secondary {
+		width: 2.75rem;
+		height: 2.75rem;
+		background: var(--background);
+		color: var(--foreground);
+	}
+
+	@media (max-width: 767px) {
+		.admin-pagination {
+			padding-right: 4.75rem;
+		}
+	}
+
+	/* ── Modal breadcrumb title (pattern suppliers 7985+) ── */
+	.supplier-modal-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+		position: relative;
+		z-index: 3;
+	}
+
+	.supplier-modal-title__more {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		margin-left: -0.25rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--foreground-500);
+		cursor: pointer;
+		flex-shrink: 0;
+
+		&:hover {
+			background: hsl(0 0% 0% / 0.06);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+		}
+	}
+
+	.supplier-crumb-popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 10rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--box-shadow-lg, 0 10px 30px hsl(0 0% 0% / 0.12));
+	}
+
+	.supplier-crumb-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		text-align: left;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground-600);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+	}
+
+	.supplier-modal-title__label {
+		flex-shrink: 0;
+		font-weight: 600;
+	}
+
+	.supplier-modal-title__crumb {
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font: inherit;
+		font-weight: 600;
+		color: var(--foreground-500);
+		cursor: pointer;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.supplier-modal-title__name {
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		color: var(--foreground-500);
+		font-weight: 400;
+
+		&--active {
+			color: var(--foreground);
+			font-weight: 600;
+		}
+	}
+
+	.supplier-modal-title__name[aria-hidden='true'] {
+		flex: none;
+		overflow: visible;
+	}
+
+	/* ── Modal fullscreen mobile (pattern suppliers B7 — fixed inset 0, KHÔNG
+	   vh/dvh — iOS ≤15.3 chết). Áp cho modal có class supplier-modal-root. ── */
+	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+		:global(.modal-root.supplier-modal-root) {
+			padding: 0;
+			align-items: stretch;
+		}
+
+		:global(.supplier-modal-root .modal-container-root) {
+			position: fixed;
+			inset: 0;
+			width: 100% !important;
+			max-width: none;
+			max-height: none;
+			border-radius: 0;
+			margin: 0;
+		}
+
+		:global(.supplier-modal-root .modal-header-root) {
+			padding-block: 0.5rem;
+			justify-content: flex-start;
+		}
+
+		.supplier-modal-title {
+			flex: 1 1 auto;
+		}
+	}
+
+	/* ── Setting modal form ── */
+	.setting-form {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
 	}
 </style>
