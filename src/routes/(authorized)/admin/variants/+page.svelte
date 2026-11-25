@@ -151,6 +151,25 @@
 			cancel: { vi: 'Huỷ', en: 'Cancel' },
 			created: { vi: 'Đã tạo sản phẩm — chọn lại trong danh sách', en: 'Product created — pick it from the list' }
 		},
+		// ── B55: more-menu footer + stats modal ──
+		more: {
+			label: { vi: 'Tuỳ chọn khác', en: 'More options' },
+			stats: { vi: 'Thông tin', en: 'Info' },
+			delete: { vi: 'Xoá biến thể', en: 'Delete variant' },
+			deleteTitle: { vi: 'Xoá biến thể?', en: 'Delete variant?' },
+			deleteDesc: {
+				vi: 'Biến thể này sẽ bị xoá vĩnh viễn khỏi hệ thống.',
+				en: 'This variant will be permanently removed.'
+			},
+			deleteConfirm: { vi: 'Xoá', en: 'Delete' }
+		},
+		statsModal: {
+			title: { vi: 'Thông tin biến thể', en: 'Variant info' },
+			product: { vi: 'Sản phẩm', en: 'Product' },
+			price: { vi: 'Giá bán', en: 'Price' },
+			status: { vi: 'Trạng thái', en: 'Status' },
+			created: { vi: 'Tạo lúc', en: 'Created' }
+		},
 		createNew: { vi: 'Tạo mới "{value}"', en: 'Create new "{value}"' },
 		states: {
 			loadFailed: { vi: 'Không tải được danh sách biến thể', en: 'Failed to load variants' },
@@ -240,7 +259,7 @@
 	let quickCreateDisplay = $state(false);
 	let quickCreateName = $state('');
 	let quickCreateBusy = $state(false);
-	let quickCreatePendingValue = '';
+	let quickCreatePendingValue = $state('');
 	// Modal crumb overflow (more-popover)
 	let crumbTitleEl: HTMLElement | undefined = $state(undefined);
 	let crumbMoreOpen = $state(false);
@@ -249,6 +268,13 @@
 	let qcCrumbTitleEl: HTMLElement | undefined = $state(undefined);
 	let qcCrumbMoreOpen = $state(false);
 	let qcCrumbHidden = $state(false);
+	// ── B55: more-menu footer (stats/delete) — pattern suppliers more-wrap ──
+	let variantMoreOpen = $state(false);
+	let variantMoreEl: HTMLElement | undefined = $state(undefined);
+	let variantDeleteDisplay = $state(false);
+	let variantStatsDisplay = $state(false);
+	// Variant chờ xác nhận xoá từ row action (deleteVariant không còn window.confirm)
+	let pendingDeleteVariant = $state<VariantListItem | undefined>(undefined);
 
 	const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -282,6 +308,14 @@
 		imageUrl: '',
 		status: 'active'
 	});
+
+	// B55: tái sử dụng Select component — options trạng thái biến thể.
+	const variantStatusOptions = [
+		{ value: 'active', label: 'Active' },
+		{ value: 'inactive', label: 'Inactive' },
+		{ value: 'draft', label: 'Draft' },
+		{ value: 'discontinued', label: 'Discontinued' }
+	];
 
 	// % lợi nhuận (P2): (price − cost) / cost — đủ 2 giá > 0 mới tính.
 	let profitPercent = $derived.by(() => {
@@ -446,6 +480,7 @@
 		if (current === lastProduct) return;
 		lastProduct = current;
 		pageNumber = 1;
+		searching = true;
 		void fetchVariants();
 	});
 
@@ -704,6 +739,17 @@
 		};
 		document.addEventListener('mousedown', onDown);
 		return () => document.removeEventListener('mousedown', onDown);
+	});
+	$effect(() => {
+		// B55: outside-click đóng more-menu footer — pattern suppliers.
+		if (!variantMoreOpen) return;
+		const onDocClick = (event: MouseEvent) => {
+			const t = event.target as Node | null;
+			if (variantMoreEl && t && variantMoreEl.contains(t)) return;
+			variantMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
 	});
 	// Quick-create modal crumb measure (2 nấc — không cần popover guard loop dài)
 	const measureQcCrumbOverflow = async () => {
@@ -1191,10 +1237,27 @@
 		}
 	}
 
+	// B55: filter product trong captionTools — onValueChange refetch (pattern suppliers onFilterChange).
+	function onCaptionFilterChange() {
+		pageNumber = 1;
+		void fetchVariants();
+	}
+
+	// ── B55: more-menu footer — item hành động ──
+	function moreOpenStats() {
+		variantMoreOpen = false;
+		variantStatsDisplay = true;
+	}
+
+	function moreOpenDelete() {
+		variantMoreOpen = false;
+		variantDeleteDisplay = true;
+	}
+
 	// Delete variant — fetchSecure POST delete (documentKey trong body).
 	async function deleteVariant(variant: VariantListItem) {
 		if (!encryptionKeys) return;
-		if (!confirm(`Delete "${variant.displayName}" (SKU: ${variant.sku})? This action cannot be undone.`)) return;
+		// B55: xác nhận xoá chuyển qua AlertDialog more-menu (variants-more-delete).
 
 		try {
 			const response = await encryption.fetchSecure(
@@ -1204,6 +1267,9 @@
 			);
 			if (response.ok) {
 				showToast(resolveServerMessage(response.message, lang, pageContents.states.deleted));
+				// Đóng modal form nếu đang mở (xoá từ more-menu — pattern suppliers)
+				closeModals();
+				pendingDeleteVariant = undefined;
 				void fetchVariants();
 			} else {
 				showToast(
@@ -1229,6 +1295,7 @@
 	function closeModals() {
 		dirtyCloseDisplay = false;
 		modalOpen = false;
+		variantMoreOpen = false;
 		resetForm();
 	}
 
@@ -1270,120 +1337,6 @@
 		</div>
 	</header>
 
-	<!-- ── Bộ lọc + search suggest + setting (pattern suppliers captionTools) ── -->
-	<div class="admin-filters">
-		<div class="admin-search" data-suggest>
-			{#if isMobile && !mobileSearchOpen}
-				<button
-					type="button"
-					class="mobile-caption-icon"
-					data-test="variants-mobile-search-open"
-					onclick={() => {
-						flushSync(() => {
-							mobileSearchOpen = true;
-							suggestOpen = true;
-						});
-						mobileSearchInputInstance?.configs.focus();
-					}}
-					aria-label={pageContents.searchPlaceholder[lang]}
-				>
-					<Icon icon={iconify['search-rounded']} size="sm" />
-				</button>
-			{:else}
-				<Input
-					bind:this={mobileSearchInputInstance}
-					placeholder={pageContents.searchPlaceholder[lang]}
-					bind:value={searchQuery}
-					events={[
-						{
-							events: {
-								focus: {
-									handler() {
-										searchFocused = true;
-										suggestOpen = true;
-									}
-								},
-								blur: {
-									handler() {
-										searchFocused = false;
-										suggestOpen = false;
-										saveSearchKeyword();
-										if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
-									}
-								}
-							}
-						}
-					]}
-				>
-					{#snippet leading(data)}
-						{#if searching}
-							<span class="admin-search-loading">
-								<Spinner size="xs" pattern="circle" />
-							</span>
-						{:else}
-							<Icon
-								icon={iconify['search-rounded']}
-								size={(data?.size ?? 'sm') as Size}
-								class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-							/>
-						{/if}
-					{/snippet}
-				</Input>
-				{#if suggestOpen && recentKeywordsFiltered.length > 0}
-					<div class="suggest-popover" role="listbox" data-suggest>
-						<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
-						{#each recentKeywordsFiltered as kw (kw)}
-							<button
-								type="button"
-								class="suggest-item"
-								role="option"
-								onmousedown={(e) => e.preventDefault()}
-								onclick={() => {
-									searchQuery = kw;
-									suggestOpen = false;
-									pageNumber = 1;
-									void fetchVariants();
-								}}
-							>
-								{kw}
-							</button>
-						{/each}
-					</div>
-				{/if}
-			{/if}
-		</div>
-		{#if !isMobile}
-			<Checkbox bind:checked={showDeleted}>
-				{pageContents.showDeleted[lang]}
-			</Checkbox>
-		{/if}
-		{#if isMobile}
-			<button
-				type="button"
-				class="mobile-caption-icon"
-				data-test="variants-mobile-filter-btn"
-				onclick={() => {
-				settingModalDisplay = true;
-			}}
-				aria-label={pageContents.settings.title[lang]}
-			>
-				<Icon icon={iconify['tune-rounded']} size="sm" />
-			</button>
-		{:else}
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				data-test="variants-header-setting-btn"
-				onclick={() => {
-				settingModalDisplay = true;
-			}}
-			>
-				{pageContents.settings.title[lang]}
-			</Button>
-		{/if}
-	</div>
-
 	<!-- ── Trạng thái loading/first-load error ── -->
 	{#if loadError}
 		<div class="admin-state admin-state--error" data-test="variants-load-error">{loadError}</div>
@@ -1401,8 +1354,6 @@
 			bind:sortColumn={dataTableSortColumn}
 			bind:sortDirection={dataTableSortDirection}
 			onSortChange={onVariantSortChange}
-			searchable
-			searchPlaceholder={{ vi: 'Tìm biến thể…', en: 'Search variants…' }}
 			resizable={{ enabled: true, fit: true }}
 			loading={loading || searching}
 			searchQuery={searchQuery ?? ''}
@@ -1431,6 +1382,141 @@
 			}
 			data-test="variants-datatable"
 		>
+			{#snippet captionTools()}
+			<!-- ── B55: Bộ lọc + search suggest + setting (pattern suppliers captionTools) ── -->
+				<div class="admin-search" data-suggest>
+					{#if isMobile && !mobileSearchOpen}
+						<button
+							type="button"
+							class="mobile-caption-icon"
+							data-test="variants-mobile-search-open"
+							onclick={() => {
+								flushSync(() => {
+									mobileSearchOpen = true;
+									suggestOpen = true;
+								});
+								mobileSearchInputInstance?.configs.focus();
+							}}
+							aria-label={pageContents.searchPlaceholder[lang]}
+						>
+							<Icon icon={iconify['search-rounded']} size="sm" />
+						</button>
+					{:else}
+						<Input
+							bind:this={mobileSearchInputInstance}
+							placeholder={pageContents.searchPlaceholder[lang]}
+							bind:value={searchQuery}
+							events={[
+								{
+									events: {
+										focus: {
+											handler() {
+												searchFocused = true;
+												suggestOpen = true;
+											}
+										},
+										blur: {
+											handler() {
+												searchFocused = false;
+												suggestOpen = false;
+												saveSearchKeyword();
+												if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
+											}
+										}
+									}
+								}
+							]}
+						>
+							{#snippet leading(data)}
+								{#if searching}
+									<span class="admin-search-loading">
+										<Spinner size="xs" pattern="circle" />
+									</span>
+								{:else}
+									<Icon
+										icon={iconify['search-rounded']}
+										size={(data?.size ?? 'sm') as Size}
+										class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+									/>
+								{/if}
+							{/snippet}
+						</Input>
+						{#if suggestOpen && recentKeywordsFiltered.length > 0}
+							<div class="suggest-popover" role="listbox" data-suggest>
+								<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
+								{#each recentKeywordsFiltered as kw (kw)}
+									<button
+										type="button"
+										class="suggest-item"
+										role="option"
+										aria-selected="false"
+										onmousedown={(e) => e.preventDefault()}
+										onclick={() => {
+											searchQuery = kw;
+											suggestOpen = false;
+											pageNumber = 1;
+											void fetchVariants();
+										}}
+									>
+										{kw}
+									</button>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+				</div>
+				{#if !isMobile}
+					<!-- B55: filter product VÀO caption (pattern suppliers) — bỏ Checkbox showDeleted (còn ở setting modal). -->
+					<Select
+						class="admin-filter-select"
+						size="sm"
+						bind:value={selectedProduct}
+						options={settingProductOptions}
+						remoteSearch
+						loadOptions={loadFormProductOptions}
+						searchable
+						clearable
+						placeholder={pageContents.allProducts[lang]}
+						onValueChange={onCaptionFilterChange}
+						data-test="variants-filter-product"
+					/>
+				{/if}
+				<div class="admin-actions-group">
+					{#if isMobile}
+					<button
+						type="button"
+						class="mobile-caption-icon"
+						data-test="variants-mobile-filter-btn"
+						onclick={() => (settingModalDisplay = true)}
+						aria-label={pageContents.settings.title[lang]}
+					>
+						<Icon icon={iconify['tune-rounded']} size="sm" />
+					</button>
+					{:else}
+					<Button
+						color="default"
+						variant="outline"
+						size="sm"
+						data-test="variants-header-setting-btn"
+						onclick={() => {
+							settingModalDisplay = true;
+						}}
+					>
+						<Icon icon={iconify['tune-rounded']} size="sm" />
+					</Button>
+					{/if}
+					<!-- Quy ước màu nút: create = success -->
+					{#if isMobile}
+						<Button color="success" size="sm" onClick={openCreateModal} aria-label={pageContents.addVariant[lang]} data-test="variants-create-btn">
+							<Icon icon={iconify['add-rounded']} size="sm" />
+						</Button>
+					{:else}
+						<Button color="success" size="sm" onClick={openCreateModal} data-test="variants-create-btn">
+							{pageContents.addVariant[lang]}
+						</Button>
+					{/if}
+				</div>
+			{/snippet}
 			{#snippet actionsContent(row)}
 				{@const variant = row as unknown as VariantListItem}
 				<div class="row-actions">
@@ -1441,7 +1527,10 @@
 						variant="ghost"
 						size="sm"
 						color="error"
-						onClick={() => deleteVariant(variant)}
+						onClick={() => {
+							pendingDeleteVariant = variant;
+							variantDeleteDisplay = true;
+						}}
 						data-test="variant-action-delete"
 					>
 						{pageContents.deleteAction[lang]}
@@ -1805,16 +1894,13 @@
 						</TextField>
 						<TextField name="variant-status">
 							<Label>{pageContents.statusLabel[lang]}</Label>
-							<select
-								class="modal-select"
+							<!-- B55: Select component thay select raw (tái sử dụng hệ thống). -->
+							<Select
 								bind:value={formData.status}
-								aria-label={pageContents.statusLabel[lang]}
-							>
-								<option value="active">Active</option>
-								<option value="inactive">Inactive</option>
-								<option value="draft">Draft</option>
-								<option value="discontinued">Discontinued</option>
-							</select>
+								options={variantStatusOptions}
+								clearable={false}
+								name="variant-status"
+							/>
 						</TextField>
 					</div>
 
@@ -1880,21 +1966,49 @@
 			</ModalBody>
 			<ModalFooter class="modal-footer">
 				{#if editingVariant}
-					<!-- B5: mobile tap row mở modal edit — nút Xoá để xóa ngay từ modal. -->
-					<Button
-						variant="ghost"
-						color="error"
-						disabled={formSubmitting}
-						data-test="variant-modal-delete"
-						onClick={() => {
-							const variant = editingVariant;
-							closeModals();
-							if (variant) void deleteVariant(variant);
-						}}
-					>
-						{pageContents.deleteAction[lang]}
-					</Button>
+					<!-- B55: more-menu (stats/delete) thay nút Xoá ghost — pattern suppliers more-wrap. -->
+					<div class="supplier-more-wrap" bind:this={variantMoreEl}>
+						<Button
+							variant="ghost"
+							color="default"
+							aspect-square
+							aria-label={pageContents.more.label[lang]}
+							aria-expanded={variantMoreOpen}
+							disabled={formSubmitting}
+							data-test="variants-more-btn"
+							onclick={() => {
+								variantMoreOpen = !variantMoreOpen;
+							}}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</Button>
+						{#if variantMoreOpen}
+							<div class="supplier-more-popover" role="menu">
+								<button
+									type="button"
+									class="supplier-more-popover__item"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenStats}
+									data-test="variants-more-stats"
+								>
+									{pageContents.more.stats[lang]}
+								</button>
+								<button
+									type="button"
+									class="supplier-more-popover__item supplier-more-popover__item--danger"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenDelete}
+									data-test="variants-more-delete"
+								>
+									{pageContents.more.delete[lang]}
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/if}
+				<span class="supplier-footer-spacer"></span>
 				<Button
 					variant="outline"
 					onClick={() => { closeGuard.attemptClose(); }}
@@ -2127,6 +2241,75 @@
 			</AlertDialog.Content>
 		</AlertDialog>
 	{/if}
+
+	<!-- ── B55: AlertDialog xác nhận xoá từ more-menu footer ── -->
+	{#if variantDeleteDisplay}
+		<AlertDialog
+			bind:open={variantDeleteDisplay}
+			title={pageContents.more.deleteTitle[lang]}
+			description={pageContents.more.deleteDesc[lang]}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.more.deleteTitle[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>{pageContents.more.deleteDesc[lang]}</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="danger"
+						disabled={formSubmitting}
+						onselect={() => {
+							const variant = pendingDeleteVariant ?? editingVariant;
+							pendingDeleteVariant = undefined;
+							variantDeleteDisplay = false;
+							if (variant) void deleteVariant(variant);
+						}}
+						data-test="variants-more-delete-confirm"
+					>
+						{pageContents.more.deleteConfirm[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
+	<!-- ── B55: AlertDialog stats (info — fields từ editingVariant, không fetch thêm) ── -->
+	{#if variantStatsDisplay}
+		<AlertDialog bind:open={variantStatsDisplay} title={pageContents.statsModal.title[lang]}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="info">
+					<AlertDialog.Title>{pageContents.statsModal.title[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>{editingVariant?.displayName}</AlertDialog.Description>
+				</AlertDialog.Header>
+				{#if editingVariant}
+					<div class="stats-rows">
+						<div class="stats-row">
+							<span class="stats-label">{pageContents.statsModal.product[lang]}</span>
+							<span class="stats-value">{productNameById.get(editingVariant.productId) || '—'}</span>
+						</div>
+						<div class="stats-row">
+							<span class="stats-label">{pageContents.statsModal.price[lang]}</span>
+							<span class="stats-value">{formatPrice(editingVariant.price)}</span>
+						</div>
+						<div class="stats-row">
+							<span class="stats-label">{pageContents.statsModal.status[lang]}</span>
+							<span class="stats-value">{editingVariant.status}</span>
+						</div>
+						<div class="stats-row">
+							<span class="stats-label">{pageContents.statsModal.created[lang]}</span>
+							<span class="stats-value">{editingVariant.createdAt ? formatDate(editingVariant.createdAt) : '—'}</span>
+						</div>
+					</div>
+				{/if}
+				<AlertDialog.Footer>
+					<AlertDialog.Action color="primary" onselect={() => (variantStatsDisplay = false)}>
+						{pageContents.cancel[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
 </section>
 
 <style lang="scss">
@@ -2170,29 +2353,67 @@
 		gap: 0.75rem;
 	}
 
-	.admin-filters {
-		display: flex;
-		flex-wrap: wrap;
+	/* ── B55: captionTools (pattern suppliers) ── */
+	.admin-search {
+		position: relative;
+		display: inline-flex;
 		align-items: center;
-		gap: 1rem;
+	}
 
-		/* B5: sticky dưới admin header (mobile — var đo bằng ResizeObserver
-		   trên .admin-inset). margin-block âm giữ nhịp gap 1rem của .admin-page. */
-		@media (max-width: 767px) {
-			position: sticky;
-			top: var(--admin-header-h, 0px);
-			z-index: 400;
-			background: var(--background, #fff);
-			padding-block: 0.25rem;
-			margin-block: -1rem;
+	.admin-actions-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	:global(.datatable-caption-tools .admin-filter-select) {
+		width: 10rem;
+		max-width: 10rem;
+		flex-shrink: 0;
+
+		:global(.select-trigger) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--default-50, transparent);
+			font-size: 0.85rem;
 		}
 	}
 
-	.admin-search {
-		position: relative;
-		flex: 1;
-		min-width: 220px;
-		max-width: 320px;
+	/* Scroll → caption collapsed (mobile): thu nhỏ tools (search/select/btn). */
+	@media (max-width: 767px) {
+		:global(.datatable-root.caption-collapsed) {
+			:global(.datatable-caption-tools .admin-search .input-root),
+			:global(.datatable-caption-tools .admin-filter-select .select-trigger) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+			}
+
+			:global(.datatable-caption-tools .admin-actions-group .button-root) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+				padding-inline: 0.625rem;
+			}
+
+			:global(.datatable-caption-tools .bulk-bar) {
+				height: 1.75rem;
+			}
+		}
+	}
+
+	/* Mobile đang cuộn → ẨN row tools bằng opacity (Input vẫn mounted —
+	   không emit undefined qua bind:value → không reload storm). */
+	:global(.datatable-root.tools-hidden-mobile) {
+		@media (max-width: 767px) {
+			:global(.datatable-caption-tools .admin-search:not(:has(.mobile-filter-popover))),
+			:global(.datatable-caption-tools .admin-actions-group:not(:has(.mobile-filter-popover))) {
+				opacity: 0;
+				pointer-events: none;
+				transition: opacity 150ms ease;
+			}
+		}
 	}
 
 	.admin-select {
@@ -2290,18 +2511,6 @@
 			color: var(--foreground);
 			font-size: 0.8125rem;
 		}
-	}
-
-	.modal-title {
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.modal-body {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
 	}
 
 	.grid-2 {
@@ -2402,16 +2611,6 @@
 		margin: 0;
 	}
 
-	.modal-select {
-		width: 100%;
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		border: 1px solid var(--default-300);
-		background: var(--background);
-		color: var(--foreground);
-		font: inherit;
-	}
-
 	.modal-input {
 		flex: 1;
 		min-width: 0;
@@ -2458,19 +2657,90 @@
 		padding-top: 1.75rem;
 	}
 
-	.modal-footer {
+	/* B55: spacer đẩy nhóm Save/Cancel sang phải (more-wrap chiếm bên trái). */
+	:global(.modal-footer-root .supplier-footer-spacer) {
+		flex: 1;
+	}
+
+	/* ── B55: more-menu footer (pattern suppliers more-wrap) ── */
+	.supplier-more-wrap {
+		position: relative;
+	}
+
+	.supplier-more-popover {
+		position: absolute;
+		bottom: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
 		display: flex;
-		justify-content: flex-end;
-		gap: 0.75rem;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 11rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--box-shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
 	}
 
-	/* B5: nút Xoá trong modal edit — đẩy sang trái (tách khỏi nhóm Cancel/Save). */
-	/* B5: :global toan phan — footer render qua ModalFooter (scope khac),
-	   anchor scoped .modal-footer khong match. */
-	:global(.modal-footer [data-test='variant-modal-delete']) {
-		margin-right: auto;
+	.supplier-more-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground-600);
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
 	}
 
+	.supplier-more-popover__item--danger {
+		color: var(--error, hsl(356.95 95.9% 57.72%));
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--error-50, hsl(356.95 95.9% 57.72% / 0.08));
+		}
+	}
+
+	/* ── B55: stats dialog rows ── */
+	.stats-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.25rem 0;
+	}
+
+	.stats-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+		font-size: 0.875rem;
+	}
+
+	.stats-label {
+		color: var(--foreground-600);
+	}
+
+	.stats-value {
+		font-weight: 500;
+		text-align: right;
+	}
 	/* ── B54: search suggest + mobile caption icon ── */
 	.admin-search-loading {
 		display: inline-flex;
@@ -2532,7 +2802,7 @@
 		}
 	}
 	@media (max-width: 767px) {
-		:global(.admin-filters .admin-actions-group .button-root) {
+		:global(.datatable-caption-tools .admin-actions-group .button-root) {
 			height: 2.25rem;
 			min-height: 2.25rem;
 		}
@@ -2624,9 +2894,6 @@
 		color: var(--foreground);
 	}
 	@media (max-width: 767px) {
-		.admin-page--fullheight {
-			padding-bottom: 12rem;
-		}
 		.admin-pagination {
 			padding-right: 4.75rem;
 		}

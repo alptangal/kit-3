@@ -6,7 +6,7 @@
 	// không bao giờ render. Chuyển sang encryption.fetchSecure POST.
 	import { onMount, flushSync, tick } from 'svelte';
 	import { AlertDialog, Button, DataTable, Pagination, Spinner } from '$components/element';
-	import { ImageUpload, Input, Label, TextField, Select } from '$components/form';
+	import { ImageUpload, Input, Label, TextField, Select, Textarea } from '$components/form';
 	import { Checkbox } from '$components/form/checkbox';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
@@ -136,6 +136,23 @@
 			createNew: { vi: 'Tạo mới "{value}"', en: 'Create new "{value}"' },
 			nameLabel: { vi: 'Tên', en: 'Name' },
 			failed: { vi: 'Tạo mới thất bại. Vui lòng thử lại.', en: 'Failed to create. Please try again.' }
+		},
+		// ── B55: more menu + stats modal + delete confirm ──
+		more: {
+			label: { vi: 'Thêm tuỳ chọn', en: 'More options' },
+			stats: { vi: 'Thống kê', en: 'Statistics' },
+			delete: { vi: 'Xoá', en: 'Delete' }
+		},
+		statsModal: {
+			title: { vi: 'Thống kê', en: 'Statistics' },
+			variants: { vi: 'Số biến thể', en: 'Variants' },
+			close: { vi: 'Đóng', en: 'Close' }
+		},
+		deleteConfirm: {
+			title: { vi: 'Xoá sản phẩm', en: 'Delete product' },
+			desc: { vi: 'Sản phẩm sẽ bị xoá vĩnh viễn. Hành động này không thể hoàn tác.', en: 'The product will be permanently deleted. This action cannot be undone.' },
+			cancel: { vi: 'Huỷ', en: 'Cancel' },
+			confirm: { vi: 'Xoá', en: 'Delete' }
 		}
 	};
 
@@ -150,6 +167,7 @@
 	let categories = $state<OptionItem[]>([]);
 	let brands = $state<OptionItem[]>([]);
 	let loading = $state(false);
+let searching = $state(false);
 	let loadError = $state<string | undefined>(undefined);
 	let loadedOnce = $state(false);
 	let total = $state(0);
@@ -163,6 +181,14 @@
 	// ── Options cho component Select (searchable) — category/brand filter + modal ──
 	const categorySelectOptions = $derived(categories.map((c) => ({ value: c._id, label: c.name })));
 	const brandSelectOptions = $derived(brands.map((b) => ({ value: b._id, label: b.name })));
+
+	// Options cho Select status trong form modal (label giữ tiếng Anh như option RAW cũ).
+	const productStatusOptions = [
+		{ value: 'active', label: 'Active' },
+		{ value: 'inactive', label: 'Inactive' },
+		{ value: 'draft', label: 'Draft' },
+		{ value: 'discontinued', label: 'Discontinued' }
+	];
 
 	// ── B54: isMobile + scroll state (pattern suppliers — minimal) ──
 	const isMobile = $derived(client.browser?.isMobile ?? false);
@@ -494,6 +520,16 @@
 	let formErrors = $state<Record<string, string>>({});
 	let formSubmitting = $state(false);
 
+	// ── B55: more menu trong footer modal (Thống kê + Xoá) ──
+	let productMoreOpen = $state(false);
+	let productMoreEl = $state<HTMLElement | null>(null);
+	let productDeleteDisplay = $state(false);
+	let productStatsDisplay = $state(false);
+	let productStatsLoading = $state(false);
+	let productStatsData = $state<{ variants: number } | undefined>(undefined);
+	// Product chờ xác nhận xoá từ row action (deleteProduct không còn window.confirm)
+	let pendingDeleteProduct = $state<ProductListItem | undefined>(undefined);
+
 	// ── B9 draft autosave ──
 	// draftOn: flag từ system settings (getPublicDefaults → layout data.system);
 	// draftFormKey: form đang mở (đổi khi mở create/edit khác row).
@@ -550,6 +586,7 @@
 				encryptionKeys
 			);
 			loading = false;
+			searching = false;
 			if (response.ok) {
 				const data = response.data as
 					| { items?: ProductListItem[]; total?: number; page?: number }
@@ -567,6 +604,7 @@
 			}
 		} catch (err) {
 			loading = false;
+			searching = false;
 			loadError = resolveServerMessage(undefined, lang, pageContents.states.loadFailed);
 			if (import.meta.env.DEV) console.error('[products] fetch error:', err);
 		}
@@ -617,6 +655,7 @@
 			searchArmed = true;
 			return;
 		}
+		searching = true;
 		clearTimeout(searchDebounce);
 		searchDebounce = setTimeout(() => {
 			pageNumber = 1;
@@ -639,6 +678,7 @@
 		if (current === lastShowDeleted) return;
 		lastShowDeleted = current;
 		pageNumber = 1;
+		searching = true;
 		void fetchProducts();
 	});
 
@@ -654,6 +694,7 @@
 		if (current === lastCategory) return;
 		lastCategory = current;
 		pageNumber = 1;
+		searching = true;
 		void fetchProducts();
 	});
 
@@ -669,7 +710,20 @@
 		if (current === lastBrand) return;
 		lastBrand = current;
 		pageNumber = 1;
+		searching = true;
 		void fetchProducts();
+	});
+
+	// ── B55: outside-click đóng more popover (pattern suppliers) ──
+	$effect(() => {
+		if (!productMoreOpen) return;
+		const onDocMousedown = (event: MouseEvent) => {
+			const target = event.target as Node | null;
+			if (productMoreEl && target && productMoreEl.contains(target)) return;
+			productMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocMousedown, true);
+		return () => document.removeEventListener('mousedown', onDocMousedown, true);
 	});
 
 	// Pagination — server-side: effect theo dõi pageNumber + pageSize refetch.
@@ -956,7 +1010,6 @@
 	// Delete product — fetchSecure POST delete (documentKey trong body).
 	async function deleteProduct(product: ProductListItem) {
 		if (!encryptionKeys) return;
-		if (!confirm(`Delete "${product.name}"? This action cannot be undone.`)) return;
 
 		try {
 			const response = await encryption.fetchSecure(
@@ -966,6 +1019,9 @@
 			);
 			if (response.ok) {
 				showToast(resolveServerMessage(response.message, lang, pageContents.states.deleted));
+				// Đóng modal form nếu đang mở (xoá từ more-menu — pattern suppliers)
+				closeModals();
+				pendingDeleteProduct = undefined;
 				void fetchProducts();
 			} else {
 				showToast(
@@ -977,6 +1033,43 @@
 			showToast(pageContents.states.networkError[lang], 'error');
 			if (import.meta.env.DEV) console.error('[products] delete error:', err);
 		}
+	}
+
+	// ── B55: more menu handlers ──
+	function moreOpenStats() {
+		productMoreOpen = false;
+		productStatsDisplay = true;
+		productStatsData = undefined;
+		void loadProductStats();
+	}
+
+	async function loadProductStats() {
+		if (!encryptionKeys || !editingProduct || productStatsLoading) return;
+		productStatsLoading = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/variants/list',
+				{ method: 'POST', body: { page: 1, pageSize: 1, productId: editingProduct._id } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as { total?: number } | undefined;
+				productStatsData = { variants: data?.total ?? 0 };
+			} else {
+				productStatsDisplay = false;
+				showToast(pageContents.states.networkError[lang], 'error');
+			}
+		} catch {
+			productStatsDisplay = false;
+			showToast(pageContents.states.networkError[lang], 'error');
+		} finally {
+			productStatsLoading = false;
+		}
+	}
+
+	function moreOpenDelete() {
+		productMoreOpen = false;
+		productDeleteDisplay = true;
 	}
 
 	// Toast chuẩn hoá — client.browser?.toasts (pattern users/brands page).
@@ -991,6 +1084,7 @@
 	function closeModals() {
 		dirtyCloseDisplay = false;
 		modalOpen = false;
+		productMoreOpen = false;
 		resetForm();
 	}
 
@@ -1082,150 +1176,6 @@
 		</button>
 	</div>
 
-	<!-- ── Bộ lọc ── -->
-	<div class="admin-filters">
-		<div class="admin-search" data-suggest>
-			{#if isMobile && !mobileSearchOpen}
-				<button
-					type="button"
-					class="mobile-caption-icon"
-					aria-label={pageContents.search[lang]}
-					data-test="products-mobile-search-open"
-					onclick={() => {
-						flushSync(() => {
-							mobileSearchOpen = true;
-							suggestOpen = true;
-						});
-						mobileSearchInputInstance?.configs.focus();
-					}}
-				>
-					<Icon icon={iconify['search-rounded']} size="sm" />
-				</button>
-			{:else}
-				<Input
-					bind:this={mobileSearchInputInstance}
-					type="text"
-					size="sm"
-					placeholder={pageContents.searchPlaceholder[lang]}
-					bind:value={searchQuery}
-					events={[
-						{
-							events: {
-								focus: {
-									handler() {
-										searchFocused = true;
-										suggestOpen = true;
-									}
-								},
-								blur: {
-									handler() {
-										searchFocused = false;
-										suggestOpen = false;
-										saveSearchKeyword();
-										if (isMobile && !searchQuery.trim()) mobileSearchOpen = false;
-									}
-								}
-							}
-						}
-					]}
-				>
-					{#snippet leading(data)}
-						{#if loading}
-							<span class="admin-search-loading">
-								<Spinner size="xs" pattern="circle" />
-							</span>
-						{:else}
-							<Icon
-								icon={iconify['search-rounded']}
-								size={(data?.size ?? 'sm') as Size}
-								class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-							/>
-						{/if}
-					{/snippet}
-				</Input>
-				{#if suggestOpen && recentKeywordsFiltered.length > 0}
-					<div class="suggest-popover" role="listbox">
-						<p class="suggest-title">{pageContents.suggest[lang]}</p>
-						{#each recentKeywordsFiltered as kw (kw)}
-							<button
-								type="button"
-								class="suggest-item"
-								role="option"
-								aria-selected="false"
-								onmousedown={(e) => e.preventDefault()}
-								onclick={() => {
-									searchQuery = kw;
-									suggestOpen = false;
-									pageNumber = 1;
-									void fetchProducts();
-								}}
-							>
-								{kw}
-							</button>
-						{/each}
-					</div>
-				{/if}
-			{/if}
-		</div>
-		{#if !isMobile}
-			<Select
-				class="admin-filter-select"
-				bind:value={selectedCategory}
-				options={categorySelectOptions}
-				searchable
-				clearable
-				placeholder={pageContents.allCategories[lang]}
-				name="category-filter"
-				data-test="products-filter-category"
-			/>
-			<Select
-				class="admin-filter-select"
-				bind:value={selectedBrand}
-				options={brandSelectOptions}
-				searchable
-				clearable
-				placeholder={pageContents.allBrands[lang]}
-				name="brand-filter"
-				data-test="products-filter-brand"
-			/>
-			<Checkbox bind:checked={showDeleted}>
-				{pageContents.showDeleted[lang]}
-			</Checkbox>
-		{/if}
-		<div class="admin-actions-group">
-			{#if isMobile}
-				<button
-					type="button"
-					class="mobile-caption-icon"
-					aria-label={pageContents.settings.title[lang]}
-					data-test="products-mobile-filter-btn"
-					onclick={() => {
-						settingModalDisplay = true;
-						scrollActive = false;
-					}}
-				>
-					<Icon icon={iconify['tune-rounded']} size="sm" />
-				</button>
-			{:else}
-				<Button
-					color="default"
-					variant="outline"
-					size="sm"
-					onClick={() => {
-						settingCategory = selectedCategory;
-						settingBrand = selectedBrand;
-						settingShowDeleted = showDeleted;
-						settingModalDisplay = true;
-					}}
-					aria-label={pageContents.settings.title[lang]}
-					data-test="products-header-setting-btn"
-				>
-					<Icon icon={iconify['tune-rounded']} size="sm" />
-				</Button>
-			{/if}
-		</div>
-	</div>
-
 	<!-- ── Trạng thái loading/first-load error ── -->
 	{#if loadError}
 		<div class="admin-state admin-state--error" data-test="products-load-error">{loadError}</div>
@@ -1239,10 +1189,9 @@
 			pageSize={pageSize}
 			showPagination={false}
 			sortable
-			searchable
-			searchPlaceholder={{ vi: 'Tìm sản phẩm…', en: 'Search products…' }}
+			searchQuery={searchQuery ?? ''}
 			resizable={{ enabled: true, fit: true }}
-			loading={loading}
+			loading={loading || searching}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.empty[lang]}
 			loadingLabel={pageContents.loading[lang]}
@@ -1270,6 +1219,158 @@
 				.join(' ') || undefined}
 			data-test="products-datatable"
 		>
+			{#snippet captionTools()}
+				<div class="admin-search" data-suggest>
+					{#if isMobile && !mobileSearchOpen}
+						<button
+							type="button"
+							class="mobile-caption-icon"
+							aria-label={pageContents.search[lang]}
+							data-test="products-mobile-search-open"
+							onclick={() => {
+								flushSync(() => {
+									mobileSearchOpen = true;
+									suggestOpen = true;
+								});
+								mobileSearchInputInstance?.configs.focus();
+							}}
+						>
+							<Icon icon={iconify['search-rounded']} size="sm" />
+						</button>
+					{:else}
+						<Input
+							bind:this={mobileSearchInputInstance}
+							type="text"
+							size="sm"
+							placeholder={pageContents.searchPlaceholder[lang]}
+							bind:value={searchQuery}
+							events={[
+								{
+									events: {
+										focus: {
+											handler() {
+												searchFocused = true;
+												suggestOpen = true;
+											}
+										},
+										blur: {
+											handler() {
+												searchFocused = false;
+												suggestOpen = false;
+												saveSearchKeyword();
+												if (isMobile && !searchQuery.trim()) mobileSearchOpen = false;
+											}
+										}
+									}
+								}
+							]}
+						>
+							{#snippet leading(data)}
+								{#if searching}
+									<span class="admin-search-loading">
+										<Spinner size="xs" pattern="circle" />
+									</span>
+								{:else}
+									<Icon
+										icon={iconify['search-rounded']}
+										size={(data?.size ?? 'sm') as Size}
+										class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+									/>
+								{/if}
+							{/snippet}
+						</Input>
+						{#if suggestOpen && recentKeywordsFiltered.length > 0}
+							<div class="suggest-popover" role="listbox">
+								<p class="suggest-title">{pageContents.suggest[lang]}</p>
+								{#each recentKeywordsFiltered as kw (kw)}
+									<button
+										type="button"
+										class="suggest-item"
+										role="option"
+										aria-selected="false"
+										onmousedown={(e) => e.preventDefault()}
+										onclick={() => {
+											searchQuery = kw;
+											suggestOpen = false;
+											pageNumber = 1;
+											void fetchProducts();
+										}}
+									>
+										{kw}
+									</button>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+					</div>
+					{#if !isMobile}
+						<Select
+							class="admin-filter-select"
+							bind:value={selectedCategory}
+							options={categorySelectOptions}
+							searchable
+							clearable
+							placeholder={pageContents.allCategories[lang]}
+							name="category-filter"
+							data-test="products-filter-category"
+						/>
+						<Select
+							class="admin-filter-select"
+							bind:value={selectedBrand}
+							options={brandSelectOptions}
+							searchable
+							clearable
+							placeholder={pageContents.allBrands[lang]}
+							name="brand-filter"
+							data-test="products-filter-brand"
+						/>
+						<Checkbox bind:checked={showDeleted}>
+							{pageContents.showDeleted[lang]}
+						</Checkbox>
+					{/if}
+					<div class="admin-actions-group">
+						{#if isMobile}
+							<button
+								type="button"
+								class="mobile-caption-icon"
+								aria-label={pageContents.settings.title[lang]}
+								data-test="products-mobile-filter-btn"
+								onclick={() => {
+									settingModalDisplay = true;
+									scrollActive = false;
+								}}
+							>
+								<Icon icon={iconify['tune-rounded']} size="sm" />
+							</button>
+						{:else}
+							<Button
+								color="default"
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									settingCategory = selectedCategory;
+									settingBrand = selectedBrand;
+									settingShowDeleted = showDeleted;
+									settingModalDisplay = true;
+								}}
+								aria-label={pageContents.settings.title[lang]}
+								data-test="products-header-setting-btn"
+							>
+								<Icon icon={iconify['tune-rounded']} size="sm" />
+							</Button>
+						{/if}
+						<!-- Quy ước màu nút: create = success -->
+						{#if isMobile}
+							<Button color="success" size="sm" onClick={openCreateModal} aria-label={pageContents.addProduct[lang]} data-test="products-create-btn">
+								<Icon icon={iconify['add-rounded']} size="sm" />
+							</Button>
+						{:else}
+							<Button color="success" size="sm" onClick={openCreateModal} data-test="products-create-btn">
+								{pageContents.addProduct[lang]}
+							</Button>
+						{/if}
+					</div>
+			{/snippet}
 			{#snippet actionsContent(row)}
 				{@const product = row as unknown as ProductListItem}
 				<div class="row-actions">
@@ -1280,7 +1381,10 @@
 						variant="ghost"
 						size="sm"
 						color="error"
-						onClick={() => deleteProduct(product)}
+						onClick={() => {
+							pendingDeleteProduct = product;
+							productDeleteDisplay = true;
+						}}
 						data-test="product-action-delete"
 					>
 						{pageContents.deleteAction[lang]}
@@ -1433,17 +1537,14 @@
 					{/if}
 				</TextField>
 
-				<div>
-					<label for="product-description" class="modal-field-label">{pageContents.descLabel[lang]}</label>
-					<textarea
-						id="product-description"
-						class="modal-textarea"
+				<TextField name="product-description">
+					<Label>{pageContents.descLabel[lang]}</Label>
+					<Textarea
+						bind:value={formData.description}
 						rows={3}
-						value={formData.description}
-						oninput={(e) => (formData.description = (e.target as HTMLTextAreaElement).value)}
-						placeholder={lang === 'vi' ? 'Nhập mô tả sản phẩm…' : 'Enter product description…'}
-					></textarea>
-				</div>
+						placeholder={{ vi: 'Nhập mô tả sản phẩm…', en: 'Enter product description…' }}
+					/>
+				</TextField>
 
 				<div class="grid-2">
 					<TextField name="product-category">
@@ -1516,16 +1617,7 @@
 					</TextField>
 					<TextField name="product-status">
 						<Label>{pageContents.statusLabel[lang]}</Label>
-						<select
-							class="modal-select"
-							bind:value={formData.status}
-							aria-label={pageContents.statusLabel[lang]}
-						>
-							<option value="active">Active</option>
-							<option value="inactive">Inactive</option>
-							<option value="draft">Draft</option>
-							<option value="discontinued">Discontinued</option>
-						</select>
+						<Select bind:value={formData.status} options={productStatusOptions} clearable={false} name="product-status" />
 					</TextField>
 				</div>
 
@@ -1592,21 +1684,49 @@
 			</ModalBody>
 			<ModalFooter class="modal-footer">
 				{#if editingProduct}
-					<!-- B5: mobile tap row mở modal edit — nút Xoá để xóa ngay từ modal. -->
-					<Button
-						variant="ghost"
-						color="error"
-						disabled={formSubmitting}
-						data-test="product-modal-delete"
-						onClick={() => {
-							const product = editingProduct;
-							closeModals();
-							if (product) void deleteProduct(product);
-						}}
-					>
-						{pageContents.deleteAction[lang]}
-					</Button>
+					<!-- B55: more menu (Thống kê + Xoá) — pattern suppliers more-wrap. -->
+					<div class="product-more-wrap" bind:this={productMoreEl}>
+						<Button
+							variant="ghost"
+							color="default"
+							aspect-square
+							aria-label={pageContents.more.label[lang]}
+							aria-expanded={productMoreOpen}
+							disabled={formSubmitting}
+							data-test="product-more-btn"
+							onclick={() => {
+								productMoreOpen = !productMoreOpen;
+							}}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</Button>
+						{#if productMoreOpen}
+							<div class="product-more-popover" role="menu">
+								<button
+									type="button"
+									class="product-more-popover__item"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenStats}
+									data-test="product-more-stats"
+								>
+									{pageContents.more.stats[lang]}
+								</button>
+								<button
+									type="button"
+									class="product-more-popover__item product-more-popover__item--danger"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenDelete}
+									data-test="product-more-delete"
+								>
+									{pageContents.more.delete[lang]}
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/if}
+				<span class="modal-footer-spacer"></span>
 				<Button
 					variant="outline"
 					onClick={() => { closeGuard.attemptClose(); }}
@@ -1793,6 +1913,61 @@
 		</AlertDialog>
 	{/if}
 
+	<!-- ── B55: xác nhận xoá product (AlertDialog thay window.confirm) ── -->
+	{#if productDeleteDisplay}
+		<AlertDialog bind:open={productDeleteDisplay}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.deleteConfirm.title[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>
+						{pageContents.deleteConfirm.desc[lang]}
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel disabled={formSubmitting}>
+						{pageContents.deleteConfirm.cancel[lang]}
+					</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="danger"
+						disabled={formSubmitting}
+						data-test="product-delete-confirm"
+						onselect={() => {
+							const product = pendingDeleteProduct ?? editingProduct;
+							pendingDeleteProduct = undefined;
+							productDeleteDisplay = false;
+							if (product) void deleteProduct(product);
+						}}
+					>
+						{pageContents.deleteConfirm.confirm[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
+	<!-- ── B55: modal thống kê product ── -->
+	{#if productStatsDisplay}
+		<AlertDialog bind:open={productStatsDisplay}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="info">
+					<AlertDialog.Title>{pageContents.statsModal.title[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>
+						{editingProduct ? editingProduct.name : ''}
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<span class="product-stats-value">
+						{pageContents.statsModal.variants[lang]}:
+						{productStatsLoading ? '…' : String(productStatsData?.variants ?? 0)}
+					</span>
+					<AlertDialog.Cancel data-test="product-stats-close">
+						{pageContents.statsModal.close[lang]}
+					</AlertDialog.Cancel>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
 	<!-- ── P3: dialog xác nhận khi đóng modal mà form còn dirty ── -->
 	<DirtyCloseDialog
 		bind:open={dirtyCloseDisplay}
@@ -1848,31 +2023,13 @@
 		gap: 0.75rem;
 	}
 
-	.admin-filters {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 1rem;
-
-		/* B5: sticky dưới admin header (mobile — var đo bằng ResizeObserver
-		   trên .admin-inset). margin-block âm giữ nhịp gap 1rem của .admin-page. */
-		@media (max-width: 767px) {
-			position: sticky;
-			top: var(--admin-header-h, 0px);
-			z-index: 400;
-			background: var(--background, #fff);
-			padding-block: 0.25rem;
-			margin-block: -1rem;
-		}
-	}
-
 	.admin-search {
 		position: relative;
 		display: inline-flex;
 		align-items: center;
 		flex: 1;
-		min-width: 220px;
-		max-width: 320px;
+		min-width: 0;
+		max-width: none;
 	}
 
 	.admin-select {
@@ -1884,22 +2041,51 @@
 		font-size: 0.875rem;
 	}
 
-	// Component Select trong admin-filters (searchable category/brand):
-	// class đặt trên .select-root (as=div) — element mang hash Select nên rule
-	// scoped `.admin-filter-select.s-<trang>` không match (bẫy scoped). Nhắm qua
-	// anchor .admin-filters + :global() — trước đây width:100% mặc định của
-	// .select-root thắng → mỗi select full-row → filter bar wrap 4 hàng.
-	.admin-filters :global(.admin-filter-select) {
-		width: auto;
-		min-width: 11rem;
-		max-width: 16rem;
+	// Component Select trong captionTools (searchable category/brand): class đặt
+	// trên .select-root (as=div) — element mang hash Select nên rule scoped
+	// `.admin-filter-select.s-<trang>` không match (bẫy scoped). Nhắm qua anchor
+	// .datatable-caption-tools + :global() (pattern suppliers B55).
+	:global(.datatable-caption-tools .admin-filter-select) {
+		width: 10rem;
+		max-width: 10rem;
+		flex-shrink: 0;
 
 		:global(.select-trigger) {
+			height: 2.25rem;
 			min-height: 2.25rem;
 			border-radius: 0.5rem;
 			border: 1px solid var(--default-300);
-			background: var(--background);
-			font-size: 0.875rem;
+			background: var(--default-50, transparent);
+			font-size: 0.85rem;
+		}
+	}
+
+	// B55: caption-collapsed — co chiều cao controls trên mobile khi cuộn.
+	:global(.datatable-root.caption-collapsed) {
+		@media (max-width: 767px) {
+			:global(.datatable-caption-tools .admin-search .input-root),
+			:global(.datatable-caption-tools .admin-filter-select .select-trigger) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+			}
+
+			:global(.datatable-caption-tools .admin-actions-group .button-root) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+				padding-inline: 0.625rem;
+			}
+		}
+	}
+
+	// B55: tools-hidden-mobile — ẩn tools khi cuộn trên mobile (giữ mobile-filter-popover).
+	:global(.datatable-root.tools-hidden-mobile) {
+		@media (max-width: 767px) {
+			:global(.datatable-caption-tools .admin-search:not(:has(.mobile-filter-popover))),
+			:global(.datatable-caption-tools .admin-actions-group:not(:has(.mobile-filter-popover))) {
+				opacity: 0;
+				pointer-events: none;
+				transition: opacity 150ms ease;
+			}
 		}
 	}
 
@@ -1997,12 +2183,6 @@
 		color: var(--foreground);
 	}
 
-	.modal-body {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
 	.grid-2 {
 		display: grid;
 		gap: 1rem;
@@ -2013,14 +2193,6 @@
 		}
 	}
 
-	.modal-field-label {
-		display: block;
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--foreground);
-		margin-bottom: 0.5rem;
-	}
-
 	.field-error {
 		display: block;
 		font-size: 0.75rem;
@@ -2028,28 +2200,20 @@
 		margin-top: 0.25rem;
 	}
 
-	.modal-select {
+	// Component Select trong modal (searchable category/brand): class đặt trên
+	// .select-root; trigger style khớp .modal-select.
+	/* class đặt trên component Select (hash khác) — B53.2: phải :global top-level */
+	/* class đặt trên component Select (hash khác) — B53.2: :global() FULL-qualified */
+	:global(.modal-filter-select) {
 		width: 100%;
-		padding: 0.5rem 0.75rem;
+	}
+
+	:global(.modal-filter-select .select-trigger) {
+		width: 100%;
 		border-radius: 0.5rem;
 		border: 1px solid var(--default-300);
 		background: var(--background);
-		color: var(--foreground);
 		font: inherit;
-	}
-
-	// Component Select trong modal (searchable category/brand): class đặt trên
-	// .select-root; trigger style khớp .modal-select.
-	.modal-filter-select {
-		width: 100%;
-
-		:global(.select-trigger) {
-			width: 100%;
-			border-radius: 0.5rem;
-			border: 1px solid var(--default-300);
-			background: var(--background);
-			font: inherit;
-		}
 	}
 
 	.modal-input {
@@ -2060,22 +2224,6 @@
 		border: 1px solid var(--default-300);
 		background: var(--background);
 		color: var(--foreground);
-		font: inherit;
-
-		&:focus {
-			outline: 2px solid var(--primary);
-			outline-offset: -1px;
-		}
-	}
-
-	.modal-textarea {
-		width: 100%;
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		border: 1px solid var(--default-300);
-		background: var(--background);
-		color: var(--foreground);
-		resize: none;
 		font: inherit;
 
 		&:focus {
@@ -2107,17 +2255,73 @@
 		width: 100%;
 	}
 
-	.modal-footer {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.75rem;
+	// B55: spacer đẩy nhóm Cancel/Save sang phải trong ModalFooter (scope khác
+	// nên :global full — pattern suppliers .supplier-footer-spacer).
+	:global(.modal-footer-root .modal-footer-spacer) {
+		flex: 1;
 	}
 
-	/* B5: nút Xoá trong modal edit — đẩy sang trái (tách khỏi nhóm Cancel/Save). */
-	/* B5: :global toan phan — footer render qua ModalFooter (scope khac),
-	   anchor scoped .modal-footer khong match. */
-	:global(.modal-footer [data-test='product-modal-delete']) {
-		margin-right: auto;
+	/* ── B55: more-menu footer form modal (clone pattern suppliers more-wrap). ── */
+	.product-more-wrap {
+		position: relative;
+	}
+
+	.product-more-popover {
+		position: absolute;
+		bottom: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 11rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		/* Token đúng là --box-shadow-lg (--shadow-lg không tồn tại — Batch 18) */
+		box-shadow: var(--box-shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+	}
+
+	.product-more-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		/* --foreground-600 AA 7.0:1 (--foreground-500 light 4.41:1 fail sát) */
+		color: var(--foreground-600);
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	.product-more-popover__item--danger {
+		color: var(--error, hsl(356.95 95.9% 57.72%));
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--error-50, hsl(356.95 95.9% 57.72% / 0.08));
+		}
+	}
+
+	.product-stats-value {
+		padding-inline-end: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--foreground-600);
 	}
 
 	/* ═══════════ B54: search suggest + mobile caption + bulk + FAB + crumb ═══════════ */

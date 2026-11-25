@@ -10,7 +10,7 @@
 	// more-popover + skeleton. Sort CHỐT client-side (listBrands không sort server).
 	import { onMount, flushSync, tick } from 'svelte';
 	import { Button, DataTable, Pagination, AlertDialog, Spinner } from '$components/element';
-	import { ImageUpload, Input, Label, TextField, Select } from '$components/form';
+	import { ImageUpload, Input, Label, TextField, Select, Textarea } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
 	import { ModalHeader } from '$components/modal/Header';
@@ -101,6 +101,19 @@
 		suggest: {
 			title: { vi: 'Từ khoá đã tìm', en: 'Recent searches' }
 		},
+		// B55 mục 6: more menu footer modal (thống kê + xoá qua AlertDialog)
+		more: {
+			label: { vi: 'Thêm thao tác', en: 'More actions' },
+			stats: { vi: 'Thống kê', en: 'Statistics' },
+			delete: { vi: 'Xoá thương hiệu', en: 'Delete brand' },
+			deleteTitle: { vi: 'Xoá thương hiệu này?', en: 'Delete this brand?' },
+			deleteDesc: {
+				vi: 'Thương hiệu sẽ bị xoá vĩnh viễn khỏi hệ thống.',
+				en: 'The brand will be permanently removed.'
+			},
+			deleteConfirm: { vi: 'Xoá', en: 'Delete' },
+			statsModal: { products: { vi: 'Số sản phẩm', en: 'Products' } }
+		},
 		// Batch54: nút more khi breadcrumb modal tràn
 		crumbMore: { vi: 'Xem đường dẫn', en: 'Show path' },
 		states: {
@@ -127,6 +140,8 @@
 	// State
 	let brands = $state<BrandListItem[]>([]);
 	let loading = $state(false);
+	// B55 mục 4: trạng thái đang xử lý search (debounce → fetch xong) — animation
+	let searching = $state(false);
 	let loadError = $state<string | undefined>(undefined);
 	let loadedOnce = $state(false);
 	let total = $state(0);
@@ -152,6 +167,12 @@
 	let draftRestoreDisplay = $state(false);
 	let draftUserId: string = '';
 	let draftAutosaveArmed = false;
+
+	// B55 mục 2: options Select status (component Select thay select raw)
+	const brandStatusOptions = [
+		{ value: 'active', label: 'Active' },
+		{ value: 'inactive', label: 'Inactive' }
+	];
 
 	// Form state
 	let formData = $state({
@@ -193,6 +214,16 @@
 		const all = getSearchKeywords(PREFS_KEY);
 		return q ? all.filter((k) => k.toLowerCase().includes(q)) : all;
 	});
+
+	// ── B55 mục 6: more menu footer modal (pattern suppliers B20) ──
+	let brandMoreOpen = $state(false);
+	let brandMoreEl = $state<HTMLElement | undefined>(undefined);
+	let brandDeleteDisplay = $state(false);
+	let brandStatsDisplay = $state(false);
+	let brandStatsLoading = $state(false);
+	let brandStatsData = $state<{ products: number } | undefined>(undefined);
+	// Brand chờ xác nhận xoá từ row action (deleteBrand không còn window.confirm)
+	let pendingDeleteBrand = $state<BrandListItem | undefined>(undefined);
 
 	// Sort — CHỐT client-side (listBrands chỉ nhận page/pageSize/includeDeleted/search).
 	// DataTable sortable tự sort data đã load; onSortChange chỉ persist prefs.
@@ -473,6 +504,7 @@
 				encryptionKeys
 			);
 			loading = false;
+			searching = false; // B55: search xong (cả ok lẫn lỗi response)
 			if (response.ok) {
 				const data = response.data as
 					| { brands?: BrandListItem[]; total?: number; page?: number }
@@ -490,6 +522,7 @@
 			}
 		} catch (err) {
 			loading = false;
+			searching = false;
 			loadError = resolveServerMessage(undefined, lang, pageContents.states.loadFailed);
 			if (import.meta.env.DEV) console.error('[brands] fetch error:', err);
 		}
@@ -506,6 +539,7 @@
 			return;
 		}
 		clearTimeout(searchDebounce);
+		searching = true; // B55: đang xử lý search — bật ngay khi gõ, tắt khi fetch xong
 		searchDebounce = setTimeout(() => {
 			pageNumber = 1;
 			void fetchBrands();
@@ -796,10 +830,50 @@
 		}
 	}
 
+	// ── B55 mục 6: more menu handlers ──
+	function moreOpenStats() {
+		brandMoreOpen = false;
+		brandStatsDisplay = true;
+		brandStatsData = undefined;
+		void loadBrandStats();
+	}
+
+	function moreOpenDelete() {
+		brandMoreOpen = false;
+		brandDeleteDisplay = true;
+	}
+
+	// Thống kê: tổng số sản phẩm thuộc brand (pageSize 1 — chỉ cần total).
+	async function loadBrandStats() {
+		if (!encryptionKeys || !editingBrand || brandStatsLoading) return;
+		brandStatsLoading = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/products/list',
+				{ method: 'POST', body: { page: 1, pageSize: 1, brandId: editingBrand._id } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as { total?: number } | undefined;
+				brandStatsData = { products: data?.total ?? 0 };
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.states.operationFailed), 'error');
+				brandStatsDisplay = false;
+			}
+		} catch (err) {
+			showToast(pageContents.states.networkError[lang], 'error');
+			brandStatsDisplay = false;
+			if (import.meta.env.DEV) console.error('[brands] stats error:', err);
+		} finally {
+			brandStatsLoading = false;
+		}
+	}
+
 	// Delete brand — fetchSecure POST delete (documentKey trong body).
+	// B55 mục 6: window.confirm bỏ — xác nhận qua AlertDialog brandDeleteDisplay
+	// (more-menu footer hoặc row action đều mở dialog trước khi gọi).
 	async function deleteBrand(brand: BrandListItem) {
 		if (!encryptionKeys) return;
-		if (!confirm(`Delete "${brand.name}"? This action cannot be undone.`)) return;
 
 		try {
 			const response = await encryption.fetchSecure(
@@ -811,6 +885,9 @@
 				showToast(
 					resolveServerMessage(response.message, lang, pageContents.states.deleted)
 				);
+				// Đóng modal form nếu đang mở (xoá từ more-menu — pattern suppliers)
+				closeModals();
+				pendingDeleteBrand = undefined;
 				void fetchBrands();
 			} else {
 				showToast(
@@ -836,8 +913,24 @@
 	function closeModals() {
 		dirtyCloseDisplay = false;
 		modalOpen = false;
+		brandMoreOpen = false;
+		brandDeleteDisplay = false;
+		brandStatsDisplay = false;
+		pendingDeleteBrand = undefined;
 		resetForm();
 	}
+
+	// B55 mục 6: outside-click đóng more-menu footer (mousedown — pattern suppliers).
+	$effect(() => {
+		if (!brandMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (brandMoreEl && t && brandMoreEl.contains(t)) return;
+			brandMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
 
 	// Initial load
 	// B8 realtime: refetch list khi collection thay đổi từ client khác
@@ -887,121 +980,8 @@
 
 	<!-- ── Bộ lọc (Batch54: search 3 nhánh pattern suppliers — mobile icon mở
 	     field + suggest popover từ khoá; showDeleted chuyển vào setting modal) ── -->
-	<div class="admin-filters">
-		<div class="admin-search" data-suggest>
-			{#if isMobile && !mobileSearchOpen}
-				<button
-					type="button"
-					class="mobile-caption-icon"
-					aria-label={lang === 'vi' ? 'Tìm kiếm' : 'Search'}
-					data-test="brands-mobile-search-open"
-					onclick={() => {
-						// flushSync mount field + focus TRONG user gesture (iOS Safari
-						// chỉ mở keyboard khi focus nằm trong gesture).
-						flushSync(() => {
-							mobileSearchOpen = true;
-							suggestOpen = true;
-						});
-						mobileSearchInputInstance?.configs.focus();
-					}}
-				>
-					<Icon icon={iconify['search-rounded']} size="sm" />
-				</button>
-			{:else}
-				<Input
-					bind:this={mobileSearchInputInstance}
-					type="text"
-					placeholder={pageContents.searchPlaceholder[lang]}
-					bind:value={searchQuery}
-					events={[
-						{
-							events: {
-								focus: {
-									handler() {
-										searchFocused = true;
-										suggestOpen = true;
-									}
-								},
-								blur: {
-									handler() {
-										searchFocused = false;
-										suggestOpen = false;
-										saveSearchKeyword();
-										// mobile: rỗng → thu về icon (có từ khoá → giữ field)
-										if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
-									}
-								}
-							}
-						}
-					]}
-				>
-					{#snippet leading(data)}
-						{#if loading}
-							<span class="admin-search-loading">
-								<Spinner size="xs" pattern="circle" />
-							</span>
-						{:else}
-							<Icon
-								icon={iconify['search-rounded']}
-								size={(data?.size ?? 'sm') as Size}
-								class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-							/>
-						{/if}
-					{/snippet}
-				</Input>
-			{/if}
-			{#if suggestOpen && recentKeywordsFiltered.length > 0}
-				<div class="suggest-popover" role="listbox">
-					<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
-					{#each recentKeywordsFiltered as kw (kw)}
-						<button
-							type="button"
-							class="suggest-item"
-							role="option"
-							aria-selected="false"
-							onmousedown={(e) => e.preventDefault()}
-							onclick={() => {
-								searchQuery = kw;
-								suggestOpen = false;
-								pageNumber = 1;
-								void fetchBrands();
-							}}
-						>
-							{kw}
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-		{#if !isMobile}
-			<!-- Desktop: nút tune mở setting modal (showDeleted + sort) -->
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				onClick={() => {
-					settingModalDisplay = true;
-				}}
-				aria-label={pageContents.settings.title[lang]}
-				data-test="brands-header-setting-btn"
-			>
-				<Icon icon={iconify['tune-rounded']} size="sm" />
-			</Button>
-		{:else}
-			<!-- Mobile: icon tune mở setting modal (thay Select filter trần) -->
-			<button
-				type="button"
-				class="mobile-caption-icon"
-				aria-label={pageContents.settings.title[lang]}
-				data-test="brands-mobile-filter-btn"
-				onclick={() => {
-					settingModalDisplay = true;
-				}}
-			>
-				<Icon icon={iconify['tune-rounded']} size="sm" />
-			</button>
-		{/if}
-	</div>
+	<!-- B55 mục 5: search + setting + create dời vào captionTools của DataTable
+	     (đồng bộ suppliers — cùng 1 row, search input chiếm phần còn lại). -->
 
 	<!-- ── Trạng thái loading/first-load error ── -->
 	{#if loadError}
@@ -1021,7 +1001,7 @@
 			onSortChange={onBrandsSortChange}
 			searchQuery={searchQuery ?? ''}
 			resizable={{ enabled: true, fit: true }}
-			loading={loading}
+			loading={loading || searching}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.empty[lang]}
 			loadingLabel={pageContents.loading[lang]}
@@ -1039,19 +1019,165 @@
 			getRowId={(row) => String((row as unknown as BrandListItem)._id ?? '')}
 			selection={selectedIds}
 			onSelectionChange={(ids) => (selectedIds = [...ids])}
+			// B55 mục 3+5: gộp class expression (class:directive chết trên component)
+			class={[
+				tableScrolled && isMobile ? 'caption-collapsed' : undefined,
+				scrollActive && isMobile ? 'tools-hidden-mobile' : undefined
+			]
+				.filter(Boolean)
+				.join(' ') || undefined}
 			data-test="brands-datatable"
 		>
+			{#snippet captionTools()}
+				<!-- B55 mục 5: search 3 nhánh pattern suppliers (mobile icon flushSync →
+				     field + suggest popover). searchQuery ?? '' — unmount emit undefined. -->
+				<div class="admin-search" data-suggest>
+					{#if isMobile && !mobileSearchOpen}
+						<button
+							type="button"
+							class="mobile-caption-icon"
+							aria-label={lang === 'vi' ? 'Tìm kiếm' : 'Search'}
+							data-test="brands-mobile-search-open"
+							onclick={() => {
+								// flushSync mount field + focus TRONG user gesture (iOS Safari
+								// chỉ mở keyboard khi focus nằm trong gesture).
+								flushSync(() => {
+									mobileSearchOpen = true;
+									suggestOpen = true;
+								});
+								mobileSearchInputInstance?.configs.focus();
+							}}
+						>
+							<Icon icon={iconify['search-rounded']} size="sm" />
+						</button>
+					{:else}
+						<Input
+							bind:this={mobileSearchInputInstance}
+							type="text"
+							placeholder={pageContents.searchPlaceholder[lang]}
+							bind:value={searchQuery}
+							events={[
+								{
+									events: {
+										focus: {
+											handler() {
+												searchFocused = true;
+												suggestOpen = true;
+											}
+										},
+										blur: {
+											handler() {
+												searchFocused = false;
+												suggestOpen = false;
+												saveSearchKeyword();
+												// mobile: rỗng → thu về icon (có từ khoá → giữ field)
+												if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
+											}
+										}
+									}
+								}
+							]}
+						>
+							{#snippet leading(data)}
+								{#if searching}
+									<!-- B55 mục 4: đang xử lý search → spinner thay icon -->
+									<span class="admin-search-loading">
+										<Spinner size="xs" pattern="circle" />
+									</span>
+								{:else}
+									<Icon
+										icon={iconify['search-rounded']}
+										size={(data?.size ?? 'sm') as Size}
+										class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+									/>
+								{/if}
+							{/snippet}
+						</Input>
+					{/if}
+					{#if suggestOpen && recentKeywordsFiltered.length > 0}
+						<div class="suggest-popover" role="listbox">
+							<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
+							{#each recentKeywordsFiltered as kw (kw)}
+								<button
+									type="button"
+									class="suggest-item"
+									role="option"
+									aria-selected="false"
+									onmousedown={(e) => e.preventDefault()}
+									onclick={() => {
+										searchQuery = kw;
+										suggestOpen = false;
+										pageNumber = 1;
+										void fetchBrands();
+									}}
+								>
+									{kw}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<div class="admin-actions-group">
+					{#if isMobile}
+						<button
+							type="button"
+							class="mobile-caption-icon"
+							aria-label={pageContents.settings.title[lang]}
+							data-test="brands-mobile-filter-btn"
+							onclick={() => {
+								settingModalDisplay = true;
+								scrollActive = false;
+							}}
+						>
+							<Icon icon={iconify['tune-rounded']} size="sm" />
+						</button>
+					{:else}
+						<Button
+							color="default"
+							variant="outline"
+							size="sm"
+							onClick={() => {
+								settingModalDisplay = true;
+							}}
+							aria-label={pageContents.settings.title[lang]}
+							data-test="brands-header-setting-btn"
+						>
+							<Icon icon={iconify['tune-rounded']} size="sm" />
+						</Button>
+					{/if}
+					<!-- Quy ước màu nút: create = success. Desktop giữ text, mobile icon. -->
+					{#if isMobile}
+						<Button
+							color="success"
+							size="sm"
+							onClick={openCreateModal}
+							aria-label={pageContents.addBrand[lang]}
+							data-test="brands-create-btn"
+						>
+							<Icon icon={iconify['add-rounded']} size="sm" />
+						</Button>
+					{:else}
+						<Button color="success" size="sm" onClick={openCreateModal} data-test="brands-create-btn">
+							{pageContents.addBrand[lang]}
+						</Button>
+					{/if}
+				</div>
+			{/snippet}
 			{#snippet actionsContent(row)}
 				{@const brand = row as unknown as BrandListItem}
 				<div class="row-actions">
 					<Button variant="ghost" size="sm" onClick={() => openEditModal(brand)} data-test="brand-action-edit">
 						{pageContents.editAction[lang]}
 					</Button>
+					<!-- B55: xoá qua AlertDialog confirm (window.confirm đã bỏ) -->
 					<Button
 						variant="ghost"
 						size="sm"
 						color="error"
-						onClick={() => deleteBrand(brand)}
+						onClick={() => {
+							pendingDeleteBrand = brand;
+							brandDeleteDisplay = true;
+						}}
 						data-test="brand-action-delete"
 					>
 						{pageContents.deleteAction[lang]}
@@ -1260,47 +1386,71 @@
 				     thay URL input tay — bind cùng field formData.logoUrl -->
 				<ImageUpload bind:value={formData.logoUrl} label={pageContents.logoLabel[lang]} />
 
-				<div>
-					<label for="brand-description" class="modal-field-label">{pageContents.descLabel[lang]}</label>
-					<textarea
-						id="brand-description"
-						class="modal-textarea"
+				<TextField name="brand-description">
+					<Label>{pageContents.descLabel[lang]}</Label>
+					<Textarea
+						bind:value={formData.description}
 						rows={3}
-						value={formData.description}
-						oninput={(e) => (formData.description = (e.target as HTMLTextAreaElement).value)}
-						placeholder={lang === 'vi' ? 'Nhập mô tả thương hiệu…' : 'Enter brand description…'}
-					></textarea>
-				</div>
+						placeholder={{ vi: 'Nhập mô tả thương hiệu…', en: 'Enter brand description…' }}
+					/>
+				</TextField>
 
 				<TextField name="brand-status">
 					<Label>{pageContents.statusLabel[lang]}</Label>
-					<select
-						class="modal-select"
+					<Select
 						bind:value={formData.status}
-						aria-label={pageContents.statusLabel[lang]}
-					>
-						<option value="active">Active</option>
-						<option value="inactive">Inactive</option>
-					</select>
+						options={brandStatusOptions}
+						clearable={false}
+						name="brand-status"
+					/>
 				</TextField>
 			</ModalBody>
 			<ModalFooter class="modal-footer">
 				{#if editingBrand}
-					<!-- B5: mobile tap row mở modal edit — nút Xoá để xóa ngay từ modal. -->
-					<Button
-						variant="ghost"
-						color="error"
-						disabled={formSubmitting}
-						data-test="brand-modal-delete"
-						onClick={() => {
-							const brand = editingBrand;
-							closeModals();
-							if (brand) void deleteBrand(brand);
-						}}
-					>
-						{pageContents.deleteAction[lang]}
-					</Button>
+					<!-- B55 mục 6: nút Xoá → icon more mở popover (thống kê / xoá).
+					     Bọc div relative làm anchor + outside-click guard brandMoreEl. -->
+					<div class="brand-more-wrap" bind:this={brandMoreEl}>
+						<Button
+							variant="ghost"
+							color="default"
+							aspect-square
+							aria-label={pageContents.more.label[lang]}
+							aria-expanded={brandMoreOpen}
+							disabled={formSubmitting}
+							data-test="brand-more-btn"
+							onclick={() => {
+								brandMoreOpen = !brandMoreOpen;
+							}}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</Button>
+						{#if brandMoreOpen}
+							<div class="brand-more-popover" role="menu">
+								<button
+									type="button"
+									class="brand-more-popover__item"
+									role="menuitem"
+									disabled={brandStatsLoading}
+									onclick={moreOpenStats}
+									data-test="brand-more-stats"
+								>
+									{pageContents.more.stats[lang]}
+								</button>
+								<button
+									type="button"
+									class="brand-more-popover__item brand-more-popover__item--danger"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenDelete}
+									data-test="brand-more-delete"
+								>
+									{pageContents.more.delete[lang]}
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/if}
+				<span class="brand-footer-spacer"></span>
 				<Button
 					variant="outline"
 					onClick={() => { closeGuard.attemptClose(); }}
@@ -1446,6 +1596,58 @@
 			</AlertDialog.Content>
 		</AlertDialog>
 	{/if}
+
+	<!-- ── B55 mục 6: AlertDialog xác nhận xoá 1 brand (more-menu / row action) ── -->
+	{#if brandDeleteDisplay}
+		<AlertDialog
+			bind:open={brandDeleteDisplay}
+			title={pageContents.more.deleteTitle[lang]}
+			description={pageContents.more.deleteDesc[lang]}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.more.deleteTitle[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>{pageContents.more.deleteDesc[lang]}</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="danger"
+						onselect={() => {
+							const brand = pendingDeleteBrand ?? editingBrand;
+							pendingDeleteBrand = undefined;
+							if (brand) void deleteBrand(brand);
+						}}
+						data-test="brand-delete-confirm"
+					>
+						{pageContents.more.deleteConfirm[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
+	<!-- ── B55 mục 6: AlertDialog thống kê brand (số sản phẩm liên quan) ── -->
+	{#if brandStatsDisplay}
+		<AlertDialog bind:open={brandStatsDisplay} title={pageContents.more.stats[lang]}>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="info">
+					<AlertDialog.Title>{pageContents.more.stats[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>{editingBrand?.name ?? ''}</AlertDialog.Description>
+				</AlertDialog.Header>
+				<!-- B55: số liệu thống kê (brandStatsData từ /api/admin/products/list) -->
+				<div class="brand-stats-row">
+					<span class="brand-stats-row__label">{pageContents.more.statsModal.products[lang]}</span>
+					<span class="brand-stats-row__value" data-test="brand-stats-products">
+						{#if brandStatsLoading || brandStatsData === undefined}…{:else}{brandStatsData.products}{/if}
+					</span>
+				</div>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.cancel[lang]}</AlertDialog.Cancel>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
 </section>
 
 <style lang="scss">
@@ -1494,29 +1696,9 @@
 		gap: 0.75rem;
 	}
 
-	.admin-filters {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 1rem;
-
-		/* B5: sticky dưới admin header (mobile — var đo bằng ResizeObserver
-		   trên .admin-inset). margin-block âm giữ nhịp gap 1rem của .admin-page. */
-		@media (max-width: 767px) {
-			position: sticky;
-			top: var(--admin-header-h, 0px);
-			z-index: 400;
-			background: var(--background, #fff);
-			padding-block: 0.25rem;
-			margin-block: -1rem;
-		}
-	}
-
-	.admin-search {
-		flex: 1;
-		min-width: 220px;
-		max-width: 320px;
-	}
+	/* B55 mục 5: .admin-filters bỏ — search + tools dời vào captionTools của
+	   DataTable (cùng 1 row). .admin-search rule Batch54 (relative inline-flex)
+	   giữ nguyên + bổ sung flex:1 bên dưới. */
 
 	.admin-state {
 		padding: 0.75rem 1rem;
@@ -1606,18 +1788,6 @@
 		}
 	}
 
-	.modal-title {
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: var(--foreground);
-	}
-
-	.modal-body {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
 	.grid-2 {
 		display: grid;
 		gap: 1rem;
@@ -1628,14 +1798,6 @@
 		}
 	}
 
-	.modal-field-label {
-		display: block;
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--foreground);
-		margin-bottom: 0.5rem;
-	}
-
 	.field-error {
 		display: block;
 		font-size: 0.75rem;
@@ -1643,52 +1805,166 @@
 		margin-top: 0.25rem;
 	}
 
-	.modal-select {
-		width: 100%;
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		border: 1px solid var(--default-300);
-		background: var(--background);
-		color: var(--foreground);
-		font: inherit;
-	}
-
-	.modal-textarea {
-		width: 100%;
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		border: 1px solid var(--default-300);
-		background: var(--background);
-		color: var(--foreground);
-		resize: none;
-		font: inherit;
-
-		&:focus {
-			outline: 2px solid var(--primary);
-			outline-offset: -1px;
-		}
-	}
-
-	.modal-footer {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.75rem;
-	}
-
 	/* B5: nút Xoá trong modal edit — đẩy sang trái (tách khỏi nhóm Cancel/Save). */
 	/* B5: :global toan phan — footer render qua ModalFooter (scope khac),
 	   anchor scoped .modal-footer khong match. */
-	:global(.modal-footer [data-test='brand-modal-delete']) {
-		margin-right: auto;
+	/* B55 mục 6: nút Xoá thay bằng more-wrap — spacer đẩy Save/Cancel sang phải
+	   (footer element class thật .modal-footer-root — scoped anchor không match). */
+	:global(.modal-footer-root .brand-footer-spacer) {
+		flex: 1;
+	}
+
+	/* B55 mục 6: more-menu footer (clone suppliers B20) */
+	.brand-stats-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.5rem 0;
+	}
+
+	.brand-stats-row__label {
+		color: var(--muted, var(--foreground));
+		font-size: 0.875rem;
+	}
+
+	.brand-stats-row__value {
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--foreground);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.brand-more-wrap {
+		position: relative;
+	}
+
+	.brand-more-popover {
+		position: absolute;
+		bottom: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 11rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--box-shadow-lg, 0 10px 30px hsl(0 0% 0% / 0.12));
+	}
+
+	.brand-more-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground-600, var(--foreground));
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	.brand-more-popover__item--danger {
+		color: var(--danger, hsl(356.95 95.9% 57.72%));
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: color-mix(in srgb, var(--danger, hsl(356.95 95.9% 57.72%)) 8%, transparent);
+		}
 	}
 
 	/* ═══ Batch54: search suggest + mobile icon + bulk + FAB + modal crumb ═══ */
 
 	/* ── Search area: relative để suggest-popover neo đúng (gộp rule cũ) ── */
+	/* B55 mục 3: search input chiếm PHẦN CÒN LẠI của row caption-tools
+	   (setting/create chỉ chiếm phần vừa đủ). */
 	.admin-search {
 		position: relative;
 		display: inline-flex;
 		align-items: center;
+		flex: 1;
+		min-width: 0;
+		max-width: 420px;
+	}
+
+	/* Select filter trong captionTools (brands chưa dùng — giữ pattern suppliers
+	   cho nhất quán; selector scoped không match element mang hash → :global()). */
+	:global(.datatable-caption-tools .admin-filter-select) {
+		width: 10rem;
+		max-width: 10rem;
+		flex-shrink: 0;
+
+		:global(.select-trigger) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--default-50, transparent);
+			font-size: 0.85rem;
+		}
+	}
+
+	/* B55: cuộn → caption collapsed — thu nhỏ tools CHỈ mobile (pattern suppliers). */
+	@media (max-width: 767px) {
+		:global(.datatable-root.caption-collapsed) {
+			:global(.datatable-caption-tools .admin-search .input-root),
+			:global(.datatable-caption-tools .admin-filter-select .select-trigger) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+			}
+
+			:global(.datatable-caption-tools .admin-actions-group .button-root) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+				padding-inline: 0.625rem;
+			}
+		}
+	}
+
+	/* B55: mobile đang cuộn → ẨN row tools bằng opacity (giữ flow height —
+	   display:none co flow che row cuối). Class do page đặt trên DataTable root. */
+	:global(.datatable-root.tools-hidden-mobile) {
+		@media (max-width: 767px) {
+			:global(.datatable-caption-tools .admin-search:not(:has(.suggest-popover))),
+			:global(.datatable-caption-tools .admin-actions-group:not(:has(.mobile-filter-popover))) {
+				opacity: 0;
+				pointer-events: none;
+				transition: opacity 150ms ease;
+			}
+		}
+	}
+
+	/* B55: mobile nút Button trong caption-tools thu 2.25rem (size-sm mặc định
+	   2.75rem — lệch icon 2.25rem cùng group). */
+	@media (max-width: 767px) {
+		:global(.datatable-caption-tools .admin-actions-group .button-root) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+		}
+	}
+
+	.admin-actions-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		flex-shrink: 0;
 	}
 
 	.admin-search-loading {

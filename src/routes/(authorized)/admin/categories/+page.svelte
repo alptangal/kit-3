@@ -108,6 +108,20 @@
 			delete: { vi: 'Xoá', en: 'Delete' },
 			selected: { vi: 'Đã chọn {count}', en: 'Selected {count}' }
 		},
+		// B55 mục 6: more-menu footer modal (thống kê / xoá) — pattern suppliers.
+		more: {
+			label: { vi: 'Tuỳ chọn khác', en: 'More options' },
+			stats: { vi: 'Thống kê', en: 'Statistics' },
+			delete: { vi: 'Xoá danh mục', en: 'Delete category' },
+			deleteTitle: { vi: 'Xoá danh mục?', en: 'Delete category?' },
+			deleteDesc: {
+				vi: 'Danh mục này sẽ bị xoá vĩnh viễn khỏi hệ thống.',
+				en: 'This category will be permanently removed.'
+			},
+			deleteConfirm: { vi: 'Xoá', en: 'Delete' },
+			statsModal: { vi: 'Thống kê danh mục', en: 'Category statistics' },
+			statsChildren: { vi: 'Số danh mục con', en: 'Child categories' }
+		},
 		states: {
 			loadFailed: { vi: 'Không tải được danh sách danh mục', en: 'Failed to load categories' },
 			created: { vi: 'Đã tạo danh mục', en: 'Category created' },
@@ -131,6 +145,9 @@
 	// State
 	let categories = $state<CategoryListItem[]>([]);
 	let loading = $state(false);
+	// B55 mục 4: trạng thái "đang xử lý" cho search/filter (debounce 300ms +
+	// fetch) — tách khỏi loading để spinner search hoạt động riêng.
+	let searching = $state(false);
 	let loadError = $state<string | undefined>(undefined);
 	let loadedOnce = $state(false);
 	let total = $state(0);
@@ -217,6 +234,7 @@
 				encryptionKeys
 			);
 			loading = false;
+			searching = false;
 			if (response.ok) {
 				const data = response.data as
 					| { categories?: CategoryListItem[]; total?: number; page?: number }
@@ -234,6 +252,7 @@
 			}
 		} catch (err) {
 			loading = false;
+			searching = false;
 			loadError = resolveServerMessage(undefined, lang, pageContents.states.loadFailed);
 			if (import.meta.env.DEV) console.error('[categories] fetch error:', err);
 		}
@@ -250,6 +269,8 @@
 			return;
 		}
 		clearTimeout(searchDebounce);
+		// B55 mục 4: bật searching ngay khi gõ (feedback trước debounce).
+		searching = true;
 		searchDebounce = setTimeout(() => {
 			if (pageNumber === 1) void fetchCategories();
 			else pageNumber = 1;
@@ -266,6 +287,8 @@
 			deletedToggleArmed = true;
 			return;
 		}
+		// B55 mục 4: toggle filter (setting modal Apply) → searching như search.
+		searching = true;
 		if (pageNumber === 1) void fetchCategories();
 		else pageNumber = 1;
 	});
@@ -452,6 +475,19 @@
 		}
 		return options;
 	});
+
+	// B55 mục 2: options cho Select parent trong modal — thêm đầu mục
+	// "Không có (cấp cao nhất)" với value '' (formData.parentId mặc định '').
+	const parentSelectOptions = $derived([
+		{ value: '', label: pageContents.parentNone[lang] },
+		...availableParents
+	]);
+
+	// B55 mục 2: options Select status trong modal.
+	const categoryStatusOptions = [
+		{ value: 'active', label: 'Active' },
+		{ value: 'inactive', label: 'Inactive' }
+	];
 
 	// Open create modal
 	function openCreateModal() {
@@ -654,9 +690,10 @@
 
 	// Delete category — fetchSecure POST delete (documentKey trong body).
 	// Server chặn xoá khi có children hoặc đang dùng bởi product (toast error).
+	// B55 mục 6: confirm chuyển sang AlertDialog (categoryDeleteDisplay) —
+	// bỏ window.confirm native.
 	async function deleteCategory(category: CategoryListItem) {
 		if (!encryptionKeys) return;
-		if (!confirm(`Delete "${category.name}"? This action cannot be undone.`)) return;
 
 		try {
 			const response = await encryption.fetchSecure(
@@ -666,6 +703,8 @@
 			);
 			if (response.ok) {
 				showToast(resolveServerMessage(response.message, lang, pageContents.states.deleted));
+				// Đóng modal form nếu đang mở (xoá từ more-menu — pattern suppliers)
+				closeModals();
 				void fetchCategories();
 			} else {
 				showToast(
@@ -691,8 +730,47 @@
 	function closeModals() {
 		dirtyCloseDisplay = false;
 		modalOpen = false;
+		// B55 mục 6: reset more-menu + dialogs khi đóng modal.
+		categoryMoreOpen = false;
+		categoryDeleteDisplay = false;
+		categoryStatsDisplay = false;
 		resetForm();
 	}
+
+	// ── B55 mục 6: more-menu footer modal (pattern suppliers Batch 20) ──
+	let categoryMoreOpen = $state(false);
+	let categoryMoreEl = $state<HTMLElement | null>(null);
+	let categoryDeleteDisplay = $state(false);
+	let categoryStatsDisplay = $state(false);
+
+	function moreOpenStats() {
+		categoryMoreOpen = false;
+		categoryStatsDisplay = true;
+	}
+
+	function moreOpenDelete() {
+		categoryMoreOpen = false;
+		categoryDeleteDisplay = true;
+	}
+
+	// Thống kê: số danh mục con — đếm client từ list đã load (không fetch).
+	const editingChildrenCount = $derived.by(() => {
+		const cat = editingCategory;
+		if (!cat) return 0;
+		return categories.filter((c) => c.parentId === cat._id).length;
+	});
+
+	$effect(() => {
+		// Outside-click đóng more-menu footer (mousedown — pattern suppliers).
+		if (!categoryMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (categoryMoreEl && t && categoryMoreEl.contains(t)) return;
+			categoryMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
 
 	// ── B54: search suggest từ khoá (pattern suppliers) ──
 	// Lưu từ khoá khi blur (có nội dung) — recordSearchKeyword routeKey.
@@ -973,137 +1051,9 @@
 			<h1 class="admin-title">{pageContents.title[lang]}</h1>
 			<p class="admin-subtitle">{pageContents.subtitle[lang]}</p>
 		</div>
-		<div class="admin-header-actions">
-			<!-- B54: mobile create qua FAB primary — ẩn nút header tránh trùng. -->
-			{#if !isMobile}
-				<!-- Quy ước màu nút: create = success -->
-				<Button color="success" onClick={openCreateModal}>
-					{pageContents.addCategory[lang]}
-				</Button>
-			{/if}
-		</div>
+		<!-- B55 mục 5: create chuyển vào caption tools (pattern suppliers) —
+		     bỏ nút header tránh trùng chức năng (mobile đã có FAB). -->
 	</header>
-
-	<!-- ── Bộ lọc: search suggest (3 nhánh mobile/desktop) + setting ── -->
-	<div class="admin-filters">
-		<div class="admin-search" data-suggest>
-			{#if isMobile && !mobileSearchOpen}
-				<!-- mobile 2c: search icon → click mở text field (autofocus);
-				     đóng khi blur RỖNG (có từ khoá → giữ field) -->
-				<button
-					type="button"
-					class="mobile-caption-icon"
-					aria-label={pageContents.searchMobile[lang]}
-					data-test="categories-mobile-search-open"
-					onclick={() => {
-						// flushSync mount field + focus TRONG user gesture (iOS Safari
-						// chỉ mở keyboard khi focus nằm trong gesture).
-						flushSync(() => {
-							mobileSearchOpen = true;
-							suggestOpen = true;
-						});
-						mobileSearchInputInstance?.configs.focus();
-					}}
-				>
-					<Icon icon={iconify['search-rounded']} size="sm" />
-				</button>
-			{:else}
-				<Input
-					bind:this={mobileSearchInputInstance}
-					type="text"
-					placeholder={pageContents.searchPlaceholder[lang]}
-					bind:value={searchQuery}
-					events={[
-						{
-							events: {
-								focus: {
-									handler() {
-										searchFocused = true;
-										suggestOpen = true;
-									}
-								},
-								blur: {
-									handler() {
-										searchFocused = false;
-										suggestOpen = false;
-										saveSearchKeyword();
-										// mobile: rỗng → thu về icon (có từ khoá → giữ field)
-										if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
-									}
-								}
-							}
-						}
-					]}
-				>
-					{#snippet leading(data)}
-						{#if loading}
-							<span class="admin-search-loading">
-								<Spinner size="xs" pattern="circle" />
-							</span>
-						{:else}
-							<Icon
-								icon={iconify['search-rounded']}
-								size={(data?.size ?? 'sm') as Size}
-								class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
-							/>
-						{/if}
-					{/snippet}
-				</Input>
-			{/if}
-			{#if suggestOpen && recentKeywordsFiltered.length > 0}
-				<div class="suggest-popover" role="listbox">
-					<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
-					{#each recentKeywordsFiltered as kw (kw)}
-						<button
-							type="button"
-							class="suggest-item"
-							role="option"
-							aria-selected="false"
-							// preventDefault giữ focus input (mousedown không blur)
-							onmousedown={(e) => e.preventDefault()}
-							onclick={() => {
-								searchQuery = kw;
-								suggestOpen = false;
-								if (pageNumber === 1) void fetchCategories();
-								else pageNumber = 1;
-							}}
-						>
-							{kw}
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-
-		<!-- B54: setting modal (sort + showDeleted) — desktop outline tune,
-		     mobile icon (thay Select filter trần — categories không có). -->
-		{#if isMobile}
-			<button
-				type="button"
-				class="mobile-caption-icon"
-				aria-label={pageContents.settings.title[lang]}
-				data-test="categories-mobile-filter-btn"
-				onclick={() => {
-					settingModalDisplay = true;
-				}}
-			>
-				<Icon icon={iconify['tune-rounded']} size="sm" />
-			</button>
-		{:else}
-			<Button
-				color="default"
-				variant="outline"
-				size="sm"
-				onClick={() => {
-					settingModalDisplay = true;
-				}}
-				aria-label={pageContents.settings.title[lang]}
-				data-test="categories-setting-btn"
-			>
-				<Icon icon={iconify['tune-rounded']} size="sm" />
-			</Button>
-		{/if}
-	</div>
 
 	<!-- ── Trạng thái loading/first-load error ── -->
 	{#if loadError}
@@ -1124,7 +1074,7 @@
 			// highlight theo query trang (search thật do server làm)
 			searchQuery={searchQuery ?? ''}
 			resizable={{ enabled: true, fit: true }}
-			loading={loading}
+			loading={loading || searching}
 			visual={{ striped: true, hoverable: true }}
 			emptyLabel={pageContents.empty[lang]}
 			loadingLabel={pageContents.loading[lang]}
@@ -1144,9 +1094,152 @@
 			mobileTapMode="callback"
 			onRowClick={(row) => openEditModal(row as unknown as CategoryListItem)}
 			cardFields={['category', 'slug', 'status', 'updated']}
+			class={[
+				tableScrolled && isMobile ? 'caption-collapsed' : undefined,
+				scrollActive && isMobile ? 'tools-hidden-mobile' : undefined
+			].filter(Boolean).join(' ') || undefined}
 			data-test="categories-datatable"
 		>
 			{#snippet captionTools()}
+				<!-- B55 mục 5: search + setting + create vào caption row (pattern
+				     suppliers) — luôn 1 row, search chiếm phần còn lại. -->
+				<div class="admin-search" data-suggest>
+					{#if isMobile && !mobileSearchOpen}
+						<!-- mobile 2c: search icon → click mở text field (autofocus);
+						     đóng khi blur RỖNG (có từ khoá → giữ field) -->
+						<button
+							type="button"
+							class="mobile-caption-icon"
+							aria-label={pageContents.searchMobile[lang]}
+							data-test="categories-mobile-search-open"
+							onclick={() => {
+								// flushSync mount field + focus TRONG user gesture (iOS Safari
+								// chỉ mở keyboard khi focus nằm trong gesture).
+								flushSync(() => {
+									mobileSearchOpen = true;
+									suggestOpen = true;
+								});
+								mobileSearchInputInstance?.configs.focus();
+							}}
+						>
+							<Icon icon={iconify['search-rounded']} size="sm" />
+						</button>
+					{:else}
+						<Input
+							bind:this={mobileSearchInputInstance}
+							type="text"
+							placeholder={pageContents.searchPlaceholder[lang]}
+							bind:value={searchQuery}
+							events={[
+								{
+									events: {
+										focus: {
+											handler() {
+												searchFocused = true;
+												suggestOpen = true;
+											}
+										},
+										blur: {
+											handler() {
+												searchFocused = false;
+												suggestOpen = false;
+												saveSearchKeyword();
+												// mobile: rỗng → thu về icon (có từ khoá → giữ field)
+												if (isMobile && !str(searchQuery).trim()) mobileSearchOpen = false;
+											}
+										}
+									}
+								}
+							]}
+						>
+							{#snippet leading(data)}
+								{#if searching}
+									<!-- B55 mục 4: đang chờ kết quả search/filter → icon thành spinner -->
+									<span class="admin-search-loading">
+										<Spinner size="xs" pattern="circle" />
+									</span>
+								{:else}
+									<Icon
+										icon={iconify['search-rounded']}
+										size={(data?.size ?? 'sm') as Size}
+										class={mergeIconClasses(data?.defaultStyles, 'admin-search-icon')}
+									/>
+								{/if}
+							{/snippet}
+						</Input>
+					{/if}
+					{#if suggestOpen && recentKeywordsFiltered.length > 0}
+						<div class="suggest-popover" role="listbox">
+							<p class="suggest-title">{pageContents.suggest.title[lang]}</p>
+							{#each recentKeywordsFiltered as kw (kw)}
+								<button
+									type="button"
+									class="suggest-item"
+									role="option"
+									aria-selected="false"
+									// preventDefault giữ focus input (mousedown không blur)
+									onmousedown={(e) => e.preventDefault()}
+									onclick={() => {
+										searchQuery = kw;
+										suggestOpen = false;
+										if (pageNumber === 1) void fetchCategories();
+										else pageNumber = 1;
+									}}
+								>
+									{kw}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<!-- B54: setting modal (sort + showDeleted) — desktop outline tune,
+				     mobile icon (categories không có Select filter trang). -->
+				<div class="admin-actions-group">
+					{#if isMobile}
+						<button
+							type="button"
+							class="mobile-caption-icon"
+							aria-label={pageContents.settings.title[lang]}
+							data-test="categories-mobile-filter-btn"
+							onclick={() => {
+								settingModalDisplay = true;
+							}}
+						>
+							<Icon icon={iconify['tune-rounded']} size="sm" />
+						</button>
+					{:else}
+						<Button
+							color="default"
+							variant="outline"
+							size="sm"
+							onClick={() => {
+								settingModalDisplay = true;
+							}}
+							aria-label={pageContents.settings.title[lang]}
+							data-test="categories-setting-btn"
+						>
+							<Icon icon={iconify['tune-rounded']} size="sm" />
+						</Button>
+					{/if}
+					<!-- Quy ước màu nút: create = success. Mobile icon-only (FAB chỉ
+					     hiện khi đã cuộn — đây là lối create khi chưa cuộn). -->
+					{#if isMobile}
+						<Button
+							color="success"
+							size="sm"
+							onClick={openCreateModal}
+							aria-label={pageContents.addCategory[lang]}
+							data-test="categories-create-btn"
+						>
+							<Icon icon={iconify['add-rounded']} size="sm" />
+						</Button>
+					{:else}
+						<Button color="success" size="sm" onClick={openCreateModal} data-test="categories-create-btn">
+							{pageContents.addCategory[lang]}
+						</Button>
+					{/if}
+				</div>
 				{#if selectedIds.length > 0}
 					<!-- bulk-bar khi chọn ≥1 row — mobile fixed đáy (trên pagination) -->
 					<div class="bulk-row" data-test="categories-bulk-row">
@@ -1181,11 +1274,16 @@
 					<Button variant="ghost" size="sm" onClick={() => openEditModal(category)} data-test="category-action-edit">
 						{pageContents.editAction[lang]}
 					</Button>
+					<!-- B55 mục 6: window.confirm đã bỏ → Delete mở AlertDialog xác nhận
+					     (editingCategory = row để dialog hiển thị đúng tên). -->
 					<Button
 						variant="ghost"
 						size="sm"
 						color="error"
-						onClick={() => deleteCategory(category)}
+						onClick={() => {
+							editingCategory = category;
+							categoryDeleteDisplay = true;
+						}}
 						data-test="category-action-delete"
 					>
 						{pageContents.deleteAction[lang]}
@@ -1318,47 +1416,75 @@
 
 				<TextField name="category-parent">
 					<Label>{pageContents.parentLabel[lang]}</Label>
-					<select
-						class="modal-select"
+					<!-- B55 mục 2: tái sử dụng Select component thay select raw. -->
+					<Select
 						bind:value={formData.parentId}
-						aria-label={pageContents.parentLabel[lang]}
-					>
-						<option value="">{pageContents.parentNone[lang]}</option>
-						{#each availableParents as parent (parent.value)}
-							<option value={parent.value}>{parent.label}</option>
-						{/each}
-					</select>
+						options={parentSelectOptions}
+						searchable
+						clearable
+						placeholder={pageContents.parentNone[lang]}
+						name="category-parent"
+					/>
 				</TextField>
 
 				<TextField name="category-status">
 					<Label>{pageContents.statusLabel[lang]}</Label>
-					<select
-						class="modal-select"
+					<!-- B55 mục 2: Select component — status không cho clear. -->
+					<Select
 						bind:value={formData.status}
-						aria-label={pageContents.statusLabel[lang]}
-					>
-						<option value="active">Active</option>
-						<option value="inactive">Inactive</option>
-					</select>
+						options={categoryStatusOptions}
+						clearable={false}
+						name="category-status"
+					/>
 				</TextField>
 			</ModalBody>
 			<ModalFooter class="modal-footer">
 				{#if editingCategory}
-					<!-- B5: mobile tap row mở modal edit — nút Xoá để xóa ngay từ modal. -->
-					<Button
-						variant="ghost"
-						color="error"
-						disabled={formSubmitting}
-						data-test="category-modal-delete"
-						onClick={() => {
-							const category = editingCategory;
-							closeModals();
-							if (category) void deleteCategory(category);
-						}}
-					>
-						{pageContents.deleteAction[lang]}
-					</Button>
+					<!-- B55 mục 6: thay nút Xoá bằng icon more mở popover
+					     (thống kê / xoá qua AlertDialog) — pattern suppliers Batch 20.
+					     Bọc div relative làm anchor + guard outside-click. -->
+					<div class="category-more-wrap" bind:this={categoryMoreEl}>
+						<Button
+							variant="ghost"
+							color="default"
+							aspect-square
+							aria-label={pageContents.more.label[lang]}
+							aria-expanded={categoryMoreOpen}
+							disabled={formSubmitting}
+							data-test="category-more-btn"
+							onclick={() => {
+								categoryMoreOpen = !categoryMoreOpen;
+							}}
+						>
+							<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+						</Button>
+						{#if categoryMoreOpen}
+							<div class="category-more-popover" role="menu">
+								<button
+									type="button"
+									class="category-more-popover__item"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenStats}
+									data-test="category-more-stats"
+								>
+									{pageContents.more.stats[lang]}
+								</button>
+								<button
+									type="button"
+									class="category-more-popover__item category-more-popover__item--danger"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenDelete}
+									data-test="category-more-delete"
+								>
+									{pageContents.more.delete[lang]}
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/if}
+				<span class="category-footer-spacer"></span>
 				<Button
 					variant="outline"
 					onClick={() => { closeGuard.attemptClose(); }}
@@ -1487,6 +1613,62 @@
 		</AlertDialog>
 	{/if}
 
+	<!-- ── B55 mục 6: AlertDialog confirm xoá 1 danh mục từ more-menu ── -->
+	{#if categoryDeleteDisplay}
+		<AlertDialog
+			bind:open={categoryDeleteDisplay}
+			title={pageContents.more.deleteTitle[lang]}
+			description={pageContents.more.deleteDesc[lang]}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="danger">
+					<AlertDialog.Title>{pageContents.more.deleteTitle[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>
+						{pageContents.more.deleteDesc[lang]} «{editingCategory?.name ?? ''}»
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>{pageContents.bulk.cancel[lang]}</AlertDialog.Cancel>
+					<AlertDialog.Action
+						color="danger"
+						disabled={formSubmitting}
+						onselect={() => {
+							const category = editingCategory;
+							closeModals();
+							if (category) void deleteCategory(category);
+						}}
+						data-test="category-more-delete-confirm"
+					>
+						{pageContents.more.deleteConfirm[lang]}
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
+	<!-- ── B55 mục 6: AlertDialog thống kê (số danh mục con — đếm client) ── -->
+	{#if categoryStatsDisplay}
+		<AlertDialog
+			bind:open={categoryStatsDisplay}
+			title={pageContents.more.statsModal[lang]}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header variant="info">
+					<AlertDialog.Title>{pageContents.more.statsModal[lang]}</AlertDialog.Title>
+					<AlertDialog.Description>
+						«{editingCategory?.name ?? ''}» — {pageContents.more.statsChildren[lang]}:{' '}
+						{editingChildrenCount}
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel data-test="category-more-stats-close">
+						{pageContents.cancel[lang]}
+					</AlertDialog.Cancel>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog>
+	{/if}
+
 	<!-- ── B9: dialog hỏi khôi phục bản nháp ── -->
 	<DraftRestoreDialog
 		bind:display={draftRestoreDisplay}
@@ -1591,31 +1773,9 @@
 		margin-top: 0.25rem;
 	}
 
-	.admin-header-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-	}
-
-	.admin-filters {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 1rem;
-
-		/* B5: sticky dưới admin header (mobile — var đo bằng ResizeObserver
-		   trên .admin-inset). margin-block âm giữ nhịp gap 1rem của .admin-page. */
-		@media (max-width: 767px) {
-			position: sticky;
-			top: var(--admin-header-h, 0px);
-			z-index: 400;
-			background: var(--background, #fff);
-			padding-block: 0.25rem;
-			margin-block: -1rem;
-		}
-	}
-
-	/* B54: search suggest — position relative làm mốc popover (pattern suppliers). */
+	/* B55 mục 5: search VÀO caption của DataTable (bỏ .admin-filters row) —
+	   luôn cùng row với setting/create; search chiếm phần còn lại của row
+	   (flex:1) sau khi setting/create chiếm phần của chúng. */
 	.admin-search {
 		position: relative;
 		display: inline-flex;
@@ -1623,10 +1783,6 @@
 		flex: 1;
 		min-width: 220px;
 		max-width: 320px;
-	}
-
-	.admin-search-icon {
-		opacity: 0.6;
 	}
 
 	.admin-search-loading {
@@ -1695,6 +1851,136 @@
 		&:hover {
 			background: var(--default-100);
 		}
+	}
+
+	/* ── B55 mục 5: caption tools (pattern suppliers) ── */
+	.admin-actions-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	/* Mobile: Button size-sm (2.75rem) KHÔNG bằng nút icon (2.25rem) trong
+	   cùng group → thu Button về 2.25rem CHỈ mobile; caption-collapsed co
+	   1.75rem giữ nguyên. */
+	@media (max-width: 767px) {
+		:global(.datatable-caption-tools .admin-actions-group .button-root) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+		}
+	}
+
+	/* Select filter (nếu trang thêm sau) trong caption — width cố định 10rem
+	   (pattern suppliers). */
+	:global(.datatable-caption-tools .admin-filter-select) {
+		width: 10rem;
+		max-width: 10rem;
+		flex-shrink: 0;
+
+		:global(.select-trigger) {
+			height: 2.25rem;
+			min-height: 2.25rem;
+			border-radius: 0.5rem;
+			border: 1px solid var(--default-300);
+			background: var(--default-50, transparent);
+			font-size: 0.85rem;
+		}
+	}
+
+	/* Scroll → caption collapsed (mobile): thu nhỏ tools (search/btn). */
+	@media (max-width: 767px) {
+		:global(.datatable-root.caption-collapsed) {
+			:global(.datatable-caption-tools .admin-search .input-root) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+			}
+
+			:global(.datatable-caption-tools .admin-actions-group .button-root) {
+				height: 1.75rem;
+				min-height: 1.75rem;
+				padding-inline: 0.625rem;
+			}
+
+			:global(.datatable-caption-tools .bulk-bar) {
+				height: 1.75rem;
+			}
+		}
+	}
+
+	/* B55: mobile đang cuộn → ẨN row tools (opacity — giữ flow height).
+	   Bulk-bar vẫn hiện (user đang thao tác). */
+	:global(.datatable-root.tools-hidden-mobile) {
+		@media (max-width: 767px) {
+			:global(.datatable-caption-tools .admin-search),
+			:global(.datatable-caption-tools .admin-actions-group) {
+				opacity: 0;
+				pointer-events: none;
+				transition: opacity 150ms ease;
+			}
+		}
+	}
+
+	/* ── B55 mục 6: more-menu footer modal (clone suppliers) ── */
+	.category-more-wrap {
+		position: relative;
+	}
+
+	.category-more-popover {
+		position: absolute;
+		bottom: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 11rem;
+		padding: 0.35rem;
+		background: var(--background);
+		border: 1px solid var(--default-300);
+		border-radius: 0.65rem;
+		box-shadow: var(--box-shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+	}
+
+	.category-more-popover__item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--foreground-600);
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--default-100, var(--default-200));
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+	}
+
+	.category-more-popover__item--danger {
+		color: var(--error, hsl(356.95 95.9% 57.72%));
+
+		&:hover:not(:disabled),
+		&:focus-visible {
+			background: var(--error-50, hsl(356.95 95.9% 57.72% / 0.08));
+		}
+	}
+
+	/* Footer form modal: more-menu trái — spacer đẩy Save/Cancel sang phải
+	   (footer là flex justify-end; spacer flex:1 chiếm khoảng giữa).
+	   Class thật của footer element là .modal-footer-root (Footer/Main.svelte). */
+	:global(.modal-footer-root .category-footer-spacer) {
+		flex: 1;
 	}
 
 	/* B54: form trong setting modal (pattern suppliers .setting-form). */
@@ -2088,12 +2374,6 @@
 		}
 	}
 
-	.modal-body {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
 	.grid-2 {
 		display: grid;
 		gap: 1rem;
@@ -2109,28 +2389,5 @@
 		font-size: 0.75rem;
 		color: var(--danger, #ef4444);
 		margin-top: 0.25rem;
-	}
-
-	.modal-select {
-		width: 100%;
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		border: 1px solid var(--default-300);
-		background: var(--background);
-		color: var(--foreground);
-		font: inherit;
-	}
-
-	.modal-footer {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.75rem;
-	}
-
-	/* B5: nút Xoá trong modal edit — đẩy sang trái (tách khỏi nhóm Cancel/Save). */
-	/* B5: :global toan phan — footer render qua ModalFooter (scope khac),
-	   anchor scoped .modal-footer khong match. */
-	:global(.modal-footer [data-test='category-modal-delete']) {
-		margin-right: auto;
 	}
 </style>
