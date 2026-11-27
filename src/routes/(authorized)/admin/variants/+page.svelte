@@ -161,7 +161,19 @@
 				vi: 'Biến thể này sẽ bị xoá vĩnh viễn khỏi hệ thống.',
 				en: 'This variant will be permanently removed.'
 			},
-			deleteConfirm: { vi: 'Xoá', en: 'Delete' }
+			deleteConfirm: { vi: 'Xoá', en: 'Delete' },
+			analytics: { vi: 'Phân tích nhập hàng', en: 'Purchase analytics' },
+			analyticsTitle: { vi: 'Thống kê nhập hàng', en: 'Purchase statistics' },
+			analyticsLoading: { vi: 'Đang tải thống kê…', en: 'Loading statistics…' },
+			analyticsEmpty: { vi: 'Chưa có đơn nhập nào được ghi nhận', en: 'No purchase orders recorded yet' },
+			analyticsOrderCount: { vi: 'Số đơn đã nhập', en: 'Orders received' },
+			analyticsTotalQuantity: { vi: 'Tổng lượng hàng', en: 'Total quantity' },
+			analyticsTotalValue: { vi: 'Tổng giá trị', en: 'Total value' },
+			analyticsMonthly: { vi: 'Theo tháng', en: 'By month' },
+			analyticsColPeriod: { vi: 'Tháng', en: 'Period' },
+			analyticsColOrders: { vi: 'Đơn', en: 'Orders' },
+			analyticsColQty: { vi: 'Lượng', en: 'Quantity' },
+			analyticsColValue: { vi: 'Giá trị', en: 'Value' }
 		},
 		statsModal: {
 			title: { vi: 'Thông tin biến thể', en: 'Variant info' },
@@ -228,6 +240,10 @@
 	let settingSortDirection = $state<'asc' | 'desc'>('desc');
 	// Scroll state (ẩn bulk-bar / FAB khi cuộn)
 	let tableScrolled = $state(false);
+	// B56: at-bottom — cuộn tới đáy bảng → bỏ padding-block page (mở rộng row);
+	// paginationPopped: tick 450ms kích at-bottom một lần (pattern suppliers).
+	let wrapAtBottom = $state(false);
+	let paginationPopped = $state(false);
 	let scrollActive = $state(false);
 	let scrollRaf = 0;
 	let scrollActiveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -260,6 +276,10 @@
 	let quickCreateName = $state('');
 	let quickCreateBusy = $state(false);
 	let quickCreatePendingValue = $state('');
+	// B56: breadcrumb modal Phân tích.
+	let anaCrumbNavEl = $state<HTMLElement | undefined>(undefined);
+	let anaCrumbOverflow = $state(0);
+	let anaCrumbMoreOpen = $state(false);
 	// Modal crumb overflow (more-popover)
 	let crumbTitleEl: HTMLElement | undefined = $state(undefined);
 	let crumbMoreOpen = $state(false);
@@ -273,6 +293,12 @@
 	let variantMoreEl: HTMLElement | undefined = $state(undefined);
 	let variantDeleteDisplay = $state(false);
 	let variantStatsDisplay = $state(false);
+	// B56: analytics modal (phân tích nhập hàng theo biến thể).
+	let variantAnalyticsDisplay = $state(false);
+	let variantAnalyticsLoading = $state(false);
+	let variantAnalyticsData = $state<
+		{ orderCount: number; totalQuantity: number; totalValue: number; monthly: Array<{ period: string; orderCount: number; quantity: number; value: number }> } | undefined
+	>(undefined);
 	// Variant chờ xác nhận xoá từ row action (deleteVariant không còn window.confirm)
 	let pendingDeleteVariant = $state<VariantListItem | undefined>(undefined);
 
@@ -545,7 +571,17 @@
 		scrollRaf = requestAnimationFrame(() => {
 			scrollRaf = 0;
 			markScrollActive(el.scrollTop, el.scrollHeight - el.clientHeight);
-			tableScrolled = el.scrollTop > 8;
+			const scrollTop = el.scrollTop;
+			const scrollable = el.scrollHeight > el.clientHeight + 4;
+			const atBottom = scrollable && scrollTop + el.clientHeight >= el.scrollHeight - 4;
+			tableScrolled = scrollTop > 8;
+			wrapAtBottom = atBottom;
+			if (atBottom && !paginationPopped) {
+				paginationPopped = true;
+				setTimeout(() => (paginationPopped = false), 450);
+			} else if (!atBottom) {
+				paginationPopped = false;
+			}
 		});
 	};
 	const onWindowScroll = () => {
@@ -559,6 +595,15 @@
 			const top = scrollEl ? scrollEl.scrollTop : window.scrollY;
 			markScrollActive(top, (scrollEl ? scrollEl.scrollHeight - scrollEl.clientHeight : 0));
 			tableScrolled = top > 8;
+			const totalH = scrollEl ? scrollEl.scrollHeight : document.documentElement.scrollHeight;
+			const viewH = scrollEl ? scrollEl.clientHeight : window.innerHeight;
+			wrapAtBottom = top + viewH >= totalH - 4;
+			if (wrapAtBottom && !paginationPopped) {
+				paginationPopped = true;
+				setTimeout(() => (paginationPopped = false), 450);
+			} else if (!wrapAtBottom) {
+				paginationPopped = false;
+			}
 			void target;
 		});
 	};
@@ -729,6 +774,28 @@
 		if (!modalOpen) {
 			variantsCrumbHidden = false;
 			crumbMoreOpen = false;
+		}
+	});
+
+	$effect(() => {
+		void variantAnalyticsDisplay;
+		void variantAnalyticsLoading;
+		void editingVariant?.displayName;
+		void isMobile;
+		void lang;
+		const raf = requestAnimationFrame(() => void measureTitleCrumbs(anaCrumbNavEl, !isMobile, () => anaCrumbOverflow, (v) => (anaCrumbOverflow = v)));
+		const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureTitleCrumbs(anaCrumbNavEl, !isMobile, () => anaCrumbOverflow, (v) => (anaCrumbOverflow = v))));
+		if (anaCrumbNavEl) ro.observe(anaCrumbNavEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+
+	$effect(() => {
+		if (!variantAnalyticsDisplay) {
+			anaCrumbOverflow = 0;
+			anaCrumbMoreOpen = false;
 		}
 	});
 	$effect(() => {
@@ -1249,6 +1316,46 @@
 		variantStatsDisplay = true;
 	}
 
+	// B56: phân tích nhập hàng theo biến thể (endpoint analytics/query).
+	async function loadVariantAnalytics() {
+		if (!encryptionKeys || !editingVariant || variantAnalyticsLoading) return;
+		variantAnalyticsLoading = true;
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/analytics/query',
+				{ method: 'POST', body: { type: 'variant-summary', variantId: editingVariant._id } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				variantAnalyticsData = response.data as {
+					orderCount: number;
+					totalQuantity: number;
+					totalValue: number;
+					monthly: Array<{ period: string; orderCount: number; quantity: number; value: number }>;
+				} | undefined;
+			} else {
+				variantAnalyticsDisplay = false;
+				showToast(pageContents.states.networkError[lang], 'error');
+			}
+		} catch {
+			variantAnalyticsDisplay = false;
+			showToast(pageContents.states.networkError[lang], 'error');
+		} finally {
+			variantAnalyticsLoading = false;
+		}
+	}
+
+	function moreOpenAnalytics() {
+		variantMoreOpen = false;
+		variantAnalyticsDisplay = true;
+		variantAnalyticsData = undefined;
+		void loadVariantAnalytics();
+	}
+
+	function formatMoney(value: number | undefined | null): string {
+		return new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(value ?? 0);
+	}
+
 	function moreOpenDelete() {
 		variantMoreOpen = false;
 		variantDeleteDisplay = true;
@@ -1320,7 +1427,8 @@
 <svelte:window onscroll={onWindowScroll} />
 
 <section
-	class="admin-page"
+	class="admin-page admin-page--fullheight"
+	class:at-bottom={wrapAtBottom}
 	class:is-scrolled={tableScrolled && isMobile}
 	class:is-scrolling={scrollActive && isMobile}
 >
@@ -1608,7 +1716,7 @@
 	{/if}
 
 	<!-- ── Pagination server-side ── -->
-	<footer class="admin-pagination">
+	<footer class="admin-pagination" class:pagination-pop={paginationPopped && isMobile}>
 		<span class="total-count">{pageContents.totalCount[lang].replace('{n}', String(total))}</span>
 		<div class="page-controls">
 			<Pagination
@@ -1996,6 +2104,16 @@
 								</button>
 								<button
 									type="button"
+									class="supplier-more-popover__item"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenAnalytics}
+									data-test="variants-more-analytics"
+								>
+									{pageContents.more.analytics[lang]}
+								</button>
+								<button
+									type="button"
 									class="supplier-more-popover__item supplier-more-popover__item--danger"
 									role="menuitem"
 									disabled={formSubmitting}
@@ -2274,41 +2392,199 @@
 		</AlertDialog>
 	{/if}
 
-	<!-- ── B55: AlertDialog stats (info — fields từ editingVariant, không fetch thêm) ── -->
+	<!-- ── B56: Modal Thông tin biến thể (breadcrumb 3 nấc mobile, giữ 4 fields) ── -->
 	{#if variantStatsDisplay}
-		<AlertDialog bind:open={variantStatsDisplay} title={pageContents.statsModal.title[lang]}>
-			<AlertDialog.Content>
-				<AlertDialog.Header variant="info">
-					<AlertDialog.Title>{pageContents.statsModal.title[lang]}</AlertDialog.Title>
-					<AlertDialog.Description>{editingVariant?.displayName}</AlertDialog.Description>
-				</AlertDialog.Header>
-				{#if editingVariant}
-					<div class="stats-rows">
-						<div class="stats-row">
-							<span class="stats-label">{pageContents.statsModal.product[lang]}</span>
-							<span class="stats-value">{productNameById.get(editingVariant.productId) || '—'}</span>
+		<Modal bind:display={variantStatsDisplay} size="sm" class="supplier-modal-root">
+			<ModalContainer>
+				<ModalHeader actionButtons={{ close: { display: !isMobile } }}>
+					{#if isMobile}
+						<div class="supplier-modal-title">
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
+								onclick={() => (variantStatsDisplay = false)}
+							>
+								{pageContents.title[lang]}
+							</button>
+							<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+							<button
+								type="button"
+								class="supplier-modal-title__name supplier-modal-title__crumb"
+								onclick={() => (variantStatsDisplay = false)}
+							>
+								{editingVariant?.displayName ?? ''}
+							</button>
+							<span class="supplier-modal-title__name supplier-modal-title__name--active">
+								{pageContents.statsModal.title[lang]}
+							</span>
 						</div>
-						<div class="stats-row">
-							<span class="stats-label">{pageContents.statsModal.price[lang]}</span>
-							<span class="stats-value">{formatPrice(editingVariant.price)}</span>
+					{:else}
+						{pageContents.statsModal.title[lang]}{editingVariant?.displayName ? ` — ${editingVariant.displayName}` : ''}
+					{/if}
+				</ModalHeader>
+				<ModalBody>
+					{#if editingVariant}
+						<div class="stats-rows">
+							<div class="stats-row">
+								<span class="stats-label">{pageContents.statsModal.product[lang]}</span>
+								<span class="stats-value">{productNameById.get(editingVariant.productId) || '—'}</span>
+							</div>
+							<div class="stats-row">
+								<span class="stats-label">{pageContents.statsModal.price[lang]}</span>
+								<span class="stats-value">{formatPrice(editingVariant.price)}</span>
+							</div>
+							<div class="stats-row">
+								<span class="stats-label">{pageContents.statsModal.status[lang]}</span>
+								<span class="stats-value">{editingVariant.status}</span>
+							</div>
+							<div class="stats-row">
+								<span class="stats-label">{pageContents.statsModal.created[lang]}</span>
+								<span class="stats-value">{editingVariant.createdAt ? formatDate(editingVariant.createdAt) : '—'}</span>
+							</div>
 						</div>
-						<div class="stats-row">
-							<span class="stats-label">{pageContents.statsModal.status[lang]}</span>
-							<span class="stats-value">{editingVariant.status}</span>
-						</div>
-						<div class="stats-row">
-							<span class="stats-label">{pageContents.statsModal.created[lang]}</span>
-							<span class="stats-value">{editingVariant.createdAt ? formatDate(editingVariant.createdAt) : '—'}</span>
-						</div>
-					</div>
-				{/if}
-				<AlertDialog.Footer>
-					<AlertDialog.Action color="primary" onselect={() => (variantStatsDisplay = false)}>
+					{/if}
+				</ModalBody>
+				<ModalFooter>
+					<Button variant="outline" onclick={() => { variantStatsDisplay = false; }} data-test="variants-info-close">
 						{pageContents.cancel[lang]}
-					</AlertDialog.Action>
-				</AlertDialog.Footer>
-			</AlertDialog.Content>
-		</AlertDialog>
+					</Button>
+				</ModalFooter>
+			</ModalContainer>
+		</Modal>
+	{/if}
+
+	<!-- ── B56: Modal Phân tích nhập hàng theo biến thể ── -->
+	{#if variantAnalyticsDisplay}
+		<Modal bind:display={variantAnalyticsDisplay} size="sm" class="supplier-analytics-modal-root">
+			<ModalContainer>
+				<ModalHeader actionButtons={{ close: { display: !isMobile } }}>
+					{#if isMobile}
+						<div class="supplier-modal-title" bind:this={anaCrumbNavEl}>
+							{#if anaCrumbOverflow > 0}
+								<button
+									type="button"
+									class="supplier-modal-title__more"
+									aria-label={pageContents.crumbMore[lang]}
+									aria-expanded={anaCrumbMoreOpen}
+									onclick={() => (anaCrumbMoreOpen = !anaCrumbMoreOpen)}
+								>
+									<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+								</button>
+							{/if}
+							{#if anaCrumbMoreOpen}
+								<div class="supplier-crumb-popover" role="menu">
+									{#if anaCrumbOverflow >= 1}
+										<button
+											type="button"
+											class="supplier-crumb-popover__item"
+											role="menuitem"
+											onclick={() => {
+												anaCrumbMoreOpen = false;
+												variantAnalyticsDisplay = false;
+												closeGuard.attemptClose();
+											}}
+										>
+											{pageContents.title[lang]}
+										</button>
+									{/if}
+									{#if anaCrumbOverflow >= 2}
+										<button
+											type="button"
+											class="supplier-crumb-popover__item"
+											role="menuitem"
+											onclick={() => {
+												anaCrumbMoreOpen = false;
+												variantAnalyticsDisplay = false;
+											}}
+										>
+											{editingVariant?.displayName ?? ''}
+										</button>
+									{/if}
+								</div>
+							{/if}
+							{#if anaCrumbOverflow < 1}
+								<button
+									type="button"
+									class="supplier-modal-title__label supplier-modal-title__crumb"
+									onclick={() => {
+										variantAnalyticsDisplay = false;
+										closeGuard.attemptClose();
+									}}
+								>
+									{pageContents.title[lang]}
+								</button>
+							{/if}
+							{#if anaCrumbOverflow < 2}
+								<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+								<button
+									type="button"
+									class="supplier-modal-title__name supplier-modal-title__crumb"
+									onclick={() => (variantAnalyticsDisplay = false)}
+								>
+									{editingVariant?.displayName ?? ''}
+								</button>
+							{/if}
+							<span class="supplier-modal-title__name supplier-modal-title__name--active">
+								{pageContents.more.analyticsTitle[lang]}
+							</span>
+						</div>
+					{:else}
+						{pageContents.more.analyticsTitle[lang]}{editingVariant?.displayName ? ` — ${editingVariant.displayName}` : ''}
+					{/if}
+				</ModalHeader>
+				<ModalBody>
+					{#if variantAnalyticsLoading}
+						<div class="history-state">{pageContents.more.analyticsLoading[lang]}</div>
+					{:else if !variantAnalyticsData || variantAnalyticsData.orderCount === 0}
+						<div class="history-state">{pageContents.more.analyticsEmpty[lang]}</div>
+					{:else}
+						<div class="supplier-analytics" data-test="variants-analytics-panel">
+							<div class="supplier-analytics__totals">
+								<div class="supplier-analytics__stat">
+									<span class="supplier-analytics__stat-value">
+										{new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(variantAnalyticsData.orderCount)}
+									</span>
+									<span class="supplier-analytics__stat-label">{pageContents.more.analyticsOrderCount[lang]}</span>
+								</div>
+								<div class="supplier-analytics__stat">
+									<span class="supplier-analytics__stat-value">
+										{new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(variantAnalyticsData.totalQuantity)}
+									</span>
+									<span class="supplier-analytics__stat-label">{pageContents.more.analyticsTotalQuantity[lang]}</span>
+								</div>
+								<div class="supplier-analytics__stat">
+									<span class="supplier-analytics__stat-value">{formatMoney(variantAnalyticsData.totalValue)}</span>
+									<span class="supplier-analytics__stat-label">{pageContents.more.analyticsTotalValue[lang]}</span>
+								</div>
+							</div>
+							{#if variantAnalyticsData.monthly.length > 0}
+								<div class="supplier-analytics__monthly-title">{pageContents.more.analyticsMonthly[lang]}</div>
+								<table class="supplier-analytics__table">
+									<thead>
+										<tr>
+											<th>{pageContents.more.analyticsColPeriod[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColOrders[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColQty[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColValue[lang]}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each variantAnalyticsData.monthly as m (m.period)}
+											<tr>
+												<td>{m.period}</td>
+												<td class="num">{new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(m.orderCount)}</td>
+												<td class="num">{new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(m.quantity)}</td>
+												<td class="num">{formatMoney(m.value)}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							{/if}
+						</div>
+					{/if}
+				</ModalBody>
+			</ModalContainer>
+		</Modal>
 	{/if}
 </section>
 
@@ -2325,6 +2601,45 @@
 		@media (max-width: 720px) {
 			padding: 1rem;
 		}
+	}
+
+	/* B56: fullheight (pattern suppliers) — page chiếm trọn khung, wrap tự cuộn;
+	   ZERO 3 var sticky của layout để caption/th sticky bám đỉnh wrap. */
+	.admin-page--fullheight {
+		height: 100%;
+		max-width: none;
+		gap: 0.75rem;
+		padding: 1rem 1.25rem;
+		transition: padding 200ms ease, gap 200ms ease;
+		--admin-header-h: 0px;
+		--admin-filters-h: 0px;
+		--admin-page-header-h: 0px;
+
+		@media (max-width: 767px) {
+			padding: 0.75rem;
+		}
+
+		@media (max-width: 767px) {
+			&.is-scrolled,
+			&.is-scrolling {
+				gap: 0.375rem;
+				padding-block: 0.5rem;
+			}
+		}
+	}
+
+	/* Cuộn tới đáy: bỏ padding block page (pattern suppliers at-bottom). */
+	.admin-page--fullheight.at-bottom {
+		@media (max-width: 767px) {
+			padding-block: 0;
+		}
+	}
+
+	/* B56: wrap tự cuộn dọc trong page fullheight (pattern suppliers). */
+	.admin-page--fullheight .admin-table-wrap {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
 	}
 
 	.admin-header {
@@ -2473,14 +2788,26 @@
 		gap: 0.75rem;
 		padding-top: 0.25rem;
 
-		/* B5: sticky đáy viewport khi list dài hơn màn hình (mobile). */
-		@media (max-width: 767px) {
-			position: sticky;
-			bottom: 0;
-			z-index: 300;
-			background: var(--background, #fff);
-			padding-block: 0.5rem;
-			margin-block: -1rem;
+	}
+
+	/* B56: pop-anim (pattern suppliers — flash khi pagination hiện lại đáy). */
+	.pagination-pop.admin-pagination {
+		animation: pagination-pop-anim 450ms ease-out;
+	}
+	@keyframes pagination-pop-anim {
+		0% {
+			transform: scale(0.94);
+		}
+		60% {
+			transform: scale(1.04);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.pagination-pop.admin-pagination {
+			animation: none;
 		}
 	}
 
@@ -2741,6 +3068,87 @@
 		font-weight: 500;
 		text-align: right;
 	}
+
+	/* ── B56: analytics modal (pattern suppliers) ── */
+	.history-state {
+		padding: 2rem 1rem;
+		text-align: center;
+		color: var(--color-text-muted, var(--muted, #6b7280));
+		font-size: 0.9rem;
+	}
+
+	.supplier-analytics {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.supplier-analytics__totals {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+
+	.supplier-analytics__stat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		padding: 0.5rem 0.6rem;
+		border: 1px solid var(--default-300, hsl(0 0% 88%));
+		border-radius: 0.625rem;
+		background: var(--default-50, hsl(0 0% 98%));
+		min-width: 0;
+	}
+
+	.supplier-analytics__stat-value {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-weight: 600;
+		font-size: 0.9375rem;
+		color: var(--foreground);
+	}
+
+	.supplier-analytics__stat-label {
+		font-size: 0.75rem;
+		color: var(--foreground-600);
+	}
+
+	.supplier-analytics__monthly-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--foreground);
+		margin-bottom: 0.35rem;
+	}
+
+	.supplier-analytics__table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8125rem;
+
+		th,
+		td {
+			padding: 0.3rem 0.45rem;
+			border-bottom: 1px solid var(--default-200, hsl(0 0% 92%));
+			text-align: left;
+			color: var(--foreground-600);
+		}
+
+		th {
+			font-weight: 600;
+			color: var(--foreground);
+		}
+
+		th.num,
+		td.num {
+			text-align: right;
+			font-variant-numeric: tabular-nums;
+		}
+
+		tbody tr:last-child td {
+			border-bottom: 0;
+		}
+	}
 	/* ── B54: search suggest + mobile caption icon ── */
 	.admin-search-loading {
 		display: inline-flex;
@@ -2894,8 +3302,28 @@
 		color: var(--foreground);
 	}
 	@media (max-width: 767px) {
+		.admin-page--fullheight {
+			padding-bottom: 12rem;
+		}
+
 		.admin-pagination {
 			padding-right: 4.75rem;
+		}
+	}
+
+	/* B56: pagination cố định sát đáy viewport mobile (pattern suppliers —
+	   footer tách khỏi flow; FAB bottom 7.25rem > pagination không đè). */
+	@media (max-width: 767px) {
+		.admin-page--fullheight .admin-pagination {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 300;
+			padding: 0.5rem 0.75rem 0.75rem;
+			padding-right: 4.75rem; /* chừa chỗ FAB phải */
+			background: var(--background);
+			border-top: 1px solid var(--default-300);
 		}
 	}
 
@@ -3006,6 +3434,31 @@
 			padding-block: 0.5rem;
 			justify-content: flex-start;
 		}
+
+	/* B56: modal analytics full-size mobile — copy suppliers block với class riêng
+	   .supplier-analytics-modal-root (desktop modal vẫn size sm giữa màn hình). */
+	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+		:global(.modal-root.supplier-analytics-modal-root) {
+			padding: 0;
+			align-items: stretch;
+		}
+		:global(.supplier-analytics-modal-root .modal-container-root) {
+			position: fixed;
+			inset: 0;
+			width: 100% !important; /* thắng .size-sm/.size-lg — scoped CSS load sau page CSS */
+			max-width: none;
+			max-height: none;
+			border-radius: 0;
+			margin: 0;
+		}
+		:global(.supplier-analytics-modal-root .modal-header-root) {
+			padding-block: 0.5rem;
+			justify-content: flex-start;
+		}
+		.supplier-modal-title {
+			flex: 1 1 auto;
+		}
+	}
 	}
 	:global(.supplier-modal-root .modal-container-root .modal-close-button) {
 		--color: var(--foreground-500, #6b7280) !important;

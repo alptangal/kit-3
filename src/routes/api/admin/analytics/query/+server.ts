@@ -1,5 +1,5 @@
 // src/routes/api/admin/analytics/query/+server.ts
-// POST { type: 'cost-trend' | 'supplier-comparison' | 'purchase-volume' | 'stock-trend' | 'price-trend' | 'supplier-summary', ...params }
+// POST { type: 'cost-trend' | 'supplier-comparison' | 'purchase-volume' | 'stock-trend' | 'price-trend' | 'supplier-summary' | 'product-summary' | 'variant-summary' | 'brand-summary' | 'category-summary', ...params }
 // 1 route duy nhất cho toàn bộ thống kê — switch theo type gọi AnalyticsService.
 
 import type { RequestHandler } from './$types';
@@ -12,7 +12,7 @@ import {
 } from '$lib/server/admin/api';
 import { AnalyticsService } from '$lib/server/db/analytics';
 
-const VALID_TYPES = ['cost-trend', 'supplier-comparison', 'purchase-volume', 'stock-trend', 'price-trend', 'supplier-summary'] as const;
+const VALID_TYPES = ['cost-trend', 'supplier-comparison', 'purchase-volume', 'stock-trend', 'price-trend', 'supplier-summary', 'product-summary', 'variant-summary', 'brand-summary', 'category-summary'] as const;
 type AnalyticsType = (typeof VALID_TYPES)[number];
 
 export const POST: RequestHandler = async (event) => {
@@ -24,6 +24,9 @@ export const POST: RequestHandler = async (event) => {
 			variantId?: string;
 			branchId?: string;
 			supplierId?: string;
+			productId?: string;
+			brandId?: string;
+			categoryId?: string;
 			from?: string;
 			to?: string;
 			groupBy?: string;
@@ -59,6 +62,14 @@ export const POST: RequestHandler = async (event) => {
 			ReturnType<typeof AnalyticsService.stockTrend>
 		> | Awaited<ReturnType<typeof AnalyticsService.priceTrend>> | Awaited<
 			ReturnType<typeof AnalyticsService.supplierSummary>
+		> | Awaited<
+			ReturnType<typeof AnalyticsService.productSummary>
+		> | Awaited<
+			ReturnType<typeof AnalyticsService.variantSummary>
+		> | Awaited<
+			ReturnType<typeof AnalyticsService.brandSummary>
+		> | Awaited<
+			ReturnType<typeof AnalyticsService.categorySummary>
 		>;
 
 		switch (type as AnalyticsType) {
@@ -80,6 +91,34 @@ export const POST: RequestHandler = async (event) => {
 			case 'supplier-summary':
 				result = await AnalyticsService.supplierSummary(actor, {
 					supplierId: params.supplierId ?? '',
+					from: params.from,
+					to: params.to
+				});
+				break;
+			case 'product-summary':
+				result = await AnalyticsService.productSummary(actor, {
+					productId: params.productId ?? '',
+					from: params.from,
+					to: params.to
+				});
+				break;
+			case 'variant-summary':
+				result = await AnalyticsService.variantSummary(actor, {
+					variantId: params.variantId ?? '',
+					from: params.from,
+					to: params.to
+				});
+				break;
+			case 'brand-summary':
+				result = await AnalyticsService.brandSummary(actor, {
+					brandId: params.brandId ?? '',
+					from: params.from,
+					to: params.to
+				});
+				break;
+			case 'category-summary':
+				result = await AnalyticsService.categorySummary(actor, {
+					categoryId: params.categoryId ?? '',
 					from: params.from,
 					to: params.to
 				});

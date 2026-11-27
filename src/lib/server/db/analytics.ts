@@ -22,6 +22,9 @@ const cbStockMovements = cbData('stock_movements');
 const cbInventoryStock = cbData('inventory_stock');
 const cbVariants = cbData('product_variants');
 const cbSuppliers = cbData('suppliers');
+const cbProducts = cbData('products');
+const cbBrands = cbData('brands');
+const cbCategories = cbData('categories');
 
 const priceHistoryKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`price_history\``;
 const purchaseOrdersKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`purchase_orders\``;
@@ -29,6 +32,9 @@ const stockMovementsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`stock
 const inventoryStockKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`inventory_stock\``;
 const variantsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`product_variants\``;
 const suppliersKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`suppliers\``;
+const productsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`products\``;
+const brandsKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`brands\``;
+const categoriesKeyspace = `\`${cb_bucketName}\`.\`${cb_scopeName}\`.\`categories\``;
 
 const analyticsMessages = {
 	permissionDenied: {
@@ -62,10 +68,14 @@ const analyticsMessages = {
 	supplierIdRequired: {
 		vi: 'Thiếu nhà cung cấp cần thống kê',
 		en: 'Supplier is required for this analytics query'
+	} as TranslateContent,
+	entityIdRequired: {
+		vi: 'Thiếu bản ghi cần thống kê',
+		en: 'Target record is required for this analytics query'
 	} as TranslateContent
 } as const;
 
-/** Kết quả tổng quan nhập hàng theo NCC (batch 20 — more-menu analytics). */
+/** Kết quả tổng quan nhập hàng (batch 20; batch 56 tái dùng cho product/variant/brand/category summary). */
 export interface SupplierSummaryResult {
 	success: boolean;
 	messages?: TranslateContent;
@@ -286,6 +296,11 @@ function buildRangeFilter(
 
 function parseGroupBy(raw: unknown): StatsGroupBy {
 	return raw === 'week' || raw === 'month' ? raw : 'day';
+}
+
+/** Batch 56: khung kết quả rỗng dùng chung cho các summary theo entity. */
+function summaryEmpty(success: boolean, messages?: TranslateContent): SupplierSummaryResult {
+	return { success, messages, orderCount: 0, totalQuantity: 0, totalValue: 0, monthly: [] };
 }
 
 function isValidDateStr(v: unknown): boolean {
@@ -1009,5 +1024,164 @@ export class AnalyticsService {
 			totalValue: Math.round(totalValue * 100) / 100,
 			monthly
 		};
+	}
+
+	/**
+	 * Batch 56: variantIds của danh sách productId (1 query IN — escape id như supplierPriceComparison).
+	 */
+	private static async variantIdsOfProducts(productIds: string[]): Promise<string[] | null> {
+		if (productIds.length === 0) return [];
+		const res = await cbVariants.document.query({
+			statement: `SELECT META().id AS _id FROM ${variantsKeyspace} WHERE productId IN [${productIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ')}] LIMIT 1000`,
+			readonly: true
+		});
+		if (!res.ok) return null;
+		return ((res.data?.results ?? []) as { _id: string }[]).map((r) => r._id);
+	}
+
+	/**
+	 * Batch 56: aggregate JS các PO received có item.variantId thuộc variantIds
+	 * (pattern supplierSummary) — trả cùng shape SupplierSummaryResult.
+	 */
+	private static async entitySummary(
+		actor: ActorContext,
+		entityId: string,
+		variantIds: string[],
+		from?: string,
+		to?: string
+	): Promise<SupplierSummaryResult> {
+		const empty = summaryEmpty(true);
+		const denied = await this.requirePermission(actor, 'analytics:read');
+		if (denied) return { ...empty, success: false, messages: denied.messages };
+		if (!entityId) return { ...empty, success: false, messages: analyticsMessages.entityIdRequired };
+		if (variantIds.length === 0) return empty;
+		if ((from && !isValidDateStr(from)) || (to && !isValidDateStr(to))) {
+			return { ...empty, success: false, messages: analyticsMessages.invalidRange };
+		}
+
+		// Scope own_branch như supplierSummary — non-owner chỉ thấy PO chi nhánh mình.
+		const conditions: string[] = [`status = 'received'`];
+		const args: (string | number)[] = [];
+		if (actor.roleName !== 'owner') {
+			const scope = await PermissionChecker.getScope(actor.roleName, 'analytics:read');
+			if (scope === 'own_branch') {
+				if (!actor.branchId) return { ...empty, success: false, messages: analyticsMessages.permissionDenied };
+				conditions.push(`branchId = $${args.length + 1}`);
+				args.push(actor.branchId);
+			}
+		}
+		buildRangeFilter(conditions, args, 'receivedAt', from, to);
+		const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+		const res = await cbPurchaseOrders.document.query({
+			statement: `SELECT META().id AS _id, items, receivedAt, createdAt FROM ${purchaseOrdersKeyspace} ${where} LIMIT 1000`,
+			args,
+			readonly: true
+		});
+		if (!res.ok) return { ...empty, success: false, messages: analyticsMessages.queryFailed };
+
+		// Chỉ cộng item variantId khớp; PO tính là đơn khi có ít nhất 1 item khớp.
+		const wanted = new Set(variantIds);
+		const byMonth = new Map<string, { orderCount: number; quantity: number; value: number }>();
+		let orderCount = 0;
+		let totalQuantity = 0;
+		let totalValue = 0;
+		for (const po of (res.data?.results ?? []) as PODoc[]) {
+			let matched = false;
+			let poQty = 0;
+			let poValue = 0;
+			for (const item of po.items ?? []) {
+				if (!wanted.has(item.variantId)) continue;
+				matched = true;
+				const qty = typeof item.quantity === 'number' ? item.quantity : 0;
+				const cost = typeof item.unitCost === 'number' ? item.unitCost : 0;
+				poQty += qty;
+				poValue += qty * cost;
+			}
+			if (!matched) continue;
+			orderCount += 1;
+			totalQuantity += poQty;
+			totalValue += poValue;
+			const at = po.receivedAt ?? po.createdAt ?? '';
+			const period = at ? periodOf(at, 'month') : 'unknown';
+			const agg = byMonth.get(period) ?? { orderCount: 0, quantity: 0, value: 0 };
+			agg.orderCount += 1;
+			agg.quantity += poQty;
+			agg.value += poValue;
+			byMonth.set(period, agg);
+		}
+
+		const monthly = [...byMonth.entries()]
+			.sort(([a], [b]) => (a < b ? -1 : 1))
+			.slice(-12) // 12 kỳ gần nhất
+			.map(([period, agg]) => ({
+				period,
+				orderCount: agg.orderCount,
+				quantity: Math.round(agg.quantity * 100) / 100,
+				value: Math.round(agg.value * 100) / 100
+			}));
+
+		return {
+			success: true,
+			orderCount,
+			totalQuantity: Math.round(totalQuantity * 100) / 100,
+			totalValue: Math.round(totalValue * 100) / 100,
+			monthly
+		};
+	}
+
+	/** Batch 56: tổng quan nhập hàng theo sản phẩm (variant list theo productId). */
+	static async productSummary(
+		actor: ActorContext,
+		options: { productId: string; from?: string; to?: string }
+	): Promise<SupplierSummaryResult> {
+		if (!options.productId) return this.entitySummary(actor, '', []);
+		const variantIds = await this.variantIdsOfProducts([options.productId]);
+		if (variantIds === null) return summaryEmpty(false, analyticsMessages.queryFailed);
+		return this.entitySummary(actor, options.productId, variantIds, options.from, options.to);
+	}
+
+	/** Batch 56: tổng quan nhập hàng theo variant. */
+	static async variantSummary(
+		actor: ActorContext,
+		options: { variantId: string; from?: string; to?: string }
+	): Promise<SupplierSummaryResult> {
+		return this.entitySummary(actor, options.variantId, options.variantId ? [options.variantId] : [], options.from, options.to);
+	}
+
+	/** Batch 56: tổng quan nhập hàng theo brand (products theo brandId → variants → PO). */
+	static async brandSummary(
+		actor: ActorContext,
+		options: { brandId: string; from?: string; to?: string }
+	): Promise<SupplierSummaryResult> {
+		if (!options.brandId) return this.entitySummary(actor, '', []);
+		const prodRes = await cbProducts.document.query({
+			statement: `SELECT META().id AS _id FROM ${productsKeyspace} WHERE brandId = $1 LIMIT 1000`,
+			args: [options.brandId],
+			readonly: true
+		});
+		if (!prodRes.ok) return summaryEmpty(false, analyticsMessages.queryFailed);
+		const productIds = ((prodRes.data?.results ?? []) as { _id: string }[]).map((r) => r._id);
+		const variantIds = await this.variantIdsOfProducts(productIds);
+		if (variantIds === null) return summaryEmpty(false, analyticsMessages.queryFailed);
+		return this.entitySummary(actor, options.brandId, variantIds, options.from, options.to);
+	}
+
+	/** Batch 56: tổng quan nhập hàng theo category — chỉ products gán categoryId trực tiếp (không gồm danh mục con). */
+	static async categorySummary(
+		actor: ActorContext,
+		options: { categoryId: string; from?: string; to?: string }
+	): Promise<SupplierSummaryResult> {
+		if (!options.categoryId) return this.entitySummary(actor, '', []);
+		const prodRes = await cbProducts.document.query({
+			statement: `SELECT META().id AS _id FROM ${productsKeyspace} WHERE categoryId = $1 LIMIT 1000`,
+			args: [options.categoryId],
+			readonly: true
+		});
+		if (!prodRes.ok) return summaryEmpty(false, analyticsMessages.queryFailed);
+		const productIds = ((prodRes.data?.results ?? []) as { _id: string }[]).map((r) => r._id);
+		const variantIds = await this.variantIdsOfProducts(productIds);
+		if (variantIds === null) return summaryEmpty(false, analyticsMessages.queryFailed);
+		return this.entitySummary(actor, options.categoryId, variantIds, options.from, options.to);
 	}
 }

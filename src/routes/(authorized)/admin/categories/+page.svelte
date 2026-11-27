@@ -120,7 +120,26 @@
 			},
 			deleteConfirm: { vi: 'Xoá', en: 'Delete' },
 			statsModal: { vi: 'Thống kê danh mục', en: 'Category statistics' },
-			statsChildren: { vi: 'Số danh mục con', en: 'Child categories' }
+			statsChildren: { vi: 'Số danh mục con', en: 'Child categories' },
+			// B56: cột bảng con trong stats modal (DataTable chuẩn).
+			statsChildrenCols: {
+				name: { vi: 'Tên', en: 'Name' },
+				slug: { vi: 'Slug', en: 'Slug' },
+				status: { vi: 'Trạng thái', en: 'Status' },
+				empty: { vi: 'Không có danh mục con', en: 'No child categories' }
+			},
+			// B56: analytics nhập hàng theo danh mục (clone suppliers more.analytics*).
+			analyticsTitle: { vi: 'Thống kê nhập hàng', en: 'Purchase statistics' },
+			analyticsLoading: { vi: 'Đang tải thống kê…', en: 'Loading statistics…' },
+			analyticsEmpty: { vi: 'Chưa có đơn nhập nào được ghi nhận', en: 'No purchase orders recorded yet' },
+			analyticsOrderCount: { vi: 'Số đơn đã nhập', en: 'Orders received' },
+			analyticsTotalQuantity: { vi: 'Tổng lượng hàng', en: 'Total quantity' },
+			analyticsTotalValue: { vi: 'Tổng giá trị', en: 'Total value' },
+			analyticsMonthly: { vi: 'Theo tháng', en: 'By month' },
+			analyticsColPeriod: { vi: 'Tháng', en: 'Period' },
+			analyticsColOrders: { vi: 'Đơn', en: 'Orders' },
+			analyticsColQty: { vi: 'Lượng', en: 'Quantity' },
+			analyticsColValue: { vi: 'Giá trị', en: 'Value' },
 		},
 		states: {
 			loadFailed: { vi: 'Không tải được danh sách danh mục', en: 'Failed to load categories' },
@@ -400,6 +419,31 @@
 			sortable: true,
 			accessor: (row) => formatDate((row as unknown as CategoryListItem).updatedAt),
 			noHighlight: true
+		}
+	]);
+
+	// ── B56: columns bảng con trong stats modal (Tên/Slug/Trạng thái).
+	const statsChildrenColumns = $derived<DataTableColumn<Record<string, unknown>>[]>([
+		{
+			id: 'name',
+			label: pageContents.more.statsChildrenCols.name[lang],
+			accessor: (row) => (row as unknown as CategoryListItem).name
+		},
+		{
+			id: 'slug',
+			label: pageContents.more.statsChildrenCols.slug[lang],
+			accessor: (row) => (row as unknown as CategoryListItem).slug
+		},
+		{
+			id: 'status',
+			label: pageContents.more.statsChildrenCols.status[lang],
+			accessor: (row) => (row as unknown as CategoryListItem).status,
+			status: (value) => {
+				const s = String(value ?? '');
+				if (s === 'active') return 'success';
+				if (s === 'inactive') return 'default';
+				return 'default';
+			}
 		}
 	]);
 
@@ -734,6 +778,9 @@
 		categoryMoreOpen = false;
 		categoryDeleteDisplay = false;
 		categoryStatsDisplay = false;
+		categoryAnalyticsDisplay = false;
+		categoryAnalyticsData = undefined;
+		categoryAnalyticsLoading = false;
 		resetForm();
 	}
 
@@ -742,15 +789,77 @@
 	let categoryMoreEl = $state<HTMLElement | null>(null);
 	let categoryDeleteDisplay = $state(false);
 	let categoryStatsDisplay = $state(false);
+	// B56: bảng con stats — lọc từ list ĐÃ load (đếm client, không fetch).
+	let categoryStatsChildren = $state<CategoryListItem[]>([]);
+	// B56: modal phân tích nhập hàng theo danh mục (clone suppliers).
+	let categoryAnalyticsDisplay = $state(false);
+	let categoryAnalyticsLoading = $state(false);
+	let categoryAnalyticsData = $state<undefined | {
+		orderCount: number;
+		totalQuantity: number;
+		totalValue: number;
+		monthly: Array<{ period: string; orderCount: number; quantity: number; value: number }>;
+	}>(undefined);
+	// B56: breadcrumb 3 nấc cho stats + analytics modal (state riêng).
+	let statsCrumbNavEl = $state<HTMLElement | null>(null);
+	let statsCrumbOverflow = $state(0);
+	let statsCrumbMoreOpen = $state(false);
+	let anaCrumbNavEl = $state<HTMLElement | null>(null);
+	let anaCrumbOverflow = $state(0);
+	let anaCrumbMoreOpen = $state(false);
 
 	function moreOpenStats() {
 		categoryMoreOpen = false;
 		categoryStatsDisplay = true;
+		categoryStatsChildren = categories.filter((c) => c.parentId === editingCategory?._id);
+	}
+	
+	// B56: mở modal phân tích — reset data + fetch (pattern suppliers moreOpenAnalytics).
+	function moreOpenAnalytics() {
+		categoryMoreOpen = false;
+		categoryAnalyticsDisplay = true;
+		categoryAnalyticsData = undefined;
+		void loadCategorySummary();
 	}
 
+	// B56: gọi API analytics/query type=category-summary (fetchSecure tự mã hoá).
+	async function loadCategorySummary() {
+		if (!encryptionKeys || !editingCategory || categoryAnalyticsLoading) return;
+		categoryAnalyticsLoading = true;
+		try {
+			const response = await encryption.fetchSecure(
+			'/api/admin/analytics/query',
+			{ method: 'POST', body: { type: 'category-summary', categoryId: editingCategory._id } },
+			encryptionKeys
+			);
+			if (response.ok) {
+				categoryAnalyticsData = response.data as {
+					orderCount: number;
+					totalQuantity: number;
+					totalValue: number;
+					monthly: Array<{ period: string; orderCount: number; quantity: number; value: number }>;
+				};
+			} else {
+				showToast(resolveServerMessage(response.message, lang, pageContents.states.operationFailed), 'error');
+				categoryAnalyticsDisplay = false;
+			}
+		} catch (err) {
+			showToast(pageContents.states.networkError[lang], 'error');
+			categoryAnalyticsDisplay = false;
+			if (import.meta.env.DEV) console.error('[admin/categories] summary failed:', err);
+		} finally {
+			categoryAnalyticsLoading = false;
+		}
+	}
+	
 	function moreOpenDelete() {
 		categoryMoreOpen = false;
 		categoryDeleteDisplay = true;
+	}
+	
+	// B56: format tiền (clone suppliers — Intl theo lang, không currency code).
+	function formatMoney(value?: number): string {
+		return new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(value ?? 0);
 	}
 
 	// Thống kê: số danh mục con — đếm client từ list đã load (không fetch).
@@ -868,6 +977,9 @@
 	// onWindowScroll qua document capture. ──
 	let wrapEl = $state<HTMLElement | undefined>(undefined);
 	let tableScrolled = $state(false);
+	// B56: đồng bộ suppliers — trạng thái đáy bảng + pop animation pagination.
+	let wrapAtBottom = $state(false);
+	let paginationPopped = $state(false);
 	let scrollRaf = 0;
 	let scrollActive = $state(false);
 	let scrollActiveTimer: ReturnType<typeof setTimeout>;
@@ -893,7 +1005,20 @@
 		scrollRaf = requestAnimationFrame(() => {
 			scrollRaf = 0;
 			markScrollActive(el.scrollTop, el.scrollHeight - el.clientHeight);
-			tableScrolled = el.scrollTop > 8;
+			const scrollTop = el.scrollTop;
+			// BẪY: nếu nội dung vừa màn (scrollHeight ≈ clientHeight) thì atBottom
+			// luôn true → kẹt trạng thái thu padding vĩnh viễn. Chỉ coi là "đáy"
+			// khi wrap thực sự scrollable (clone suppliers).
+			const scrollable = el.scrollHeight > el.clientHeight + 4;
+			const atBottom = scrollable && scrollTop + el.clientHeight >= el.scrollHeight - 4;
+			tableScrolled = scrollTop > 8;
+			wrapAtBottom = atBottom;
+			if (atBottom && !paginationPopped) {
+				paginationPopped = true;
+				setTimeout(() => (paginationPopped = false), 450);
+			} else if (!atBottom) {
+				paginationPopped = false;
+			}
 		});
 	}
 
@@ -922,6 +1047,13 @@
 			const totalH = sc ? sc.scrollHeight : document.documentElement.scrollHeight;
 			markScrollActive(top, totalH - viewH);
 			tableScrolled = top > 8;
+			wrapAtBottom = top + viewH >= totalH - 4;
+			if (wrapAtBottom && !paginationPopped) {
+				paginationPopped = true;
+				setTimeout(() => (paginationPopped = false), 450);
+			} else if (!wrapAtBottom) {
+				paginationPopped = false;
+			}
 		});
 	}
 
@@ -1010,6 +1142,63 @@
 			crumbMoreOpen = false;
 		}
 	});
+	
+	// B56: đo tràn breadcrumb stats modal sau render + resize (pattern B34).
+	$effect(() => {
+		void categoryStatsDisplay;
+		void editingCategory?.name;
+		void isMobile;
+		void lang;
+		const raf = requestAnimationFrame(() => void measureTitleCrumbs(statsCrumbNavEl, !isMobile, () => statsCrumbOverflow, (v) => (statsCrumbOverflow = v)));
+		const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureTitleCrumbs(statsCrumbNavEl, !isMobile, () => statsCrumbOverflow, (v) => (statsCrumbOverflow = v))));
+		if (statsCrumbNavEl) ro.observe(statsCrumbNavEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+	
+	// B56: đo tràn breadcrumb analytics modal (pattern suppliers B34).
+	$effect(() => {
+		void categoryAnalyticsDisplay;
+		void categoryAnalyticsLoading;
+		void editingCategory?.name;
+		void isMobile;
+		void lang;
+		const raf = requestAnimationFrame(() => void measureTitleCrumbs(anaCrumbNavEl, !isMobile, () => anaCrumbOverflow, (v) => (anaCrumbOverflow = v)));
+		const ro = new ResizeObserver(() => requestAnimationFrame(() => void measureTitleCrumbs(anaCrumbNavEl, !isMobile, () => anaCrumbOverflow, (v) => (anaCrumbOverflow = v))));
+		if (anaCrumbNavEl) ro.observe(anaCrumbNavEl);
+		return () => {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+		};
+	});
+	
+	// B56: outside-click đóng popover breadcrumb stats + analytics (mousedown).
+	$effect(() => {
+		if (!statsCrumbMoreOpen && !anaCrumbMoreOpen) return;
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as Node | null;
+			if (statsCrumbMoreOpen && statsCrumbNavEl && t && statsCrumbNavEl.contains(t)) return;
+			if (anaCrumbMoreOpen && anaCrumbNavEl && t && anaCrumbNavEl.contains(t)) return;
+			statsCrumbMoreOpen = false;
+			anaCrumbMoreOpen = false;
+		};
+		document.addEventListener('mousedown', onDocClick);
+		return () => document.removeEventListener('mousedown', onDocClick);
+	});
+	
+	// B56: modal con đóng → reset crumb riêng (element unmount, chỉ reset state).
+	$effect(() => {
+		if (!categoryStatsDisplay) {
+			statsCrumbOverflow = 0;
+			statsCrumbMoreOpen = false;
+		}
+		if (!categoryAnalyticsDisplay) {
+			anaCrumbOverflow = 0;
+			anaCrumbMoreOpen = false;
+		}
+	});
 
 	// Initial load
 	// B54: seed prefs sort + showDeleted TRƯỚC generateRSAKeyPair + load
@@ -1043,6 +1232,7 @@
 
 <section
 	class="admin-page admin-page--fullheight"
+	class:at-bottom={wrapAtBottom}
 	class:is-scrolled={tableScrolled && isMobile}
 	class:is-scrolling={scrollActive && isMobile}
 >
@@ -1294,7 +1484,11 @@
 	</div>
 
 	<!-- ── Pagination server-side ── -->
-	<footer class="admin-pagination">
+	<footer
+	class="admin-pagination"
+	class:pagination-collapsed={scrollActive && isMobile}
+	class:pagination-pop={paginationPopped && isMobile}
+	>
 		<span class="total-count">{pageContents.totalCount[lang].replace('{n}', String(total))}</span>
 		<div class="page-controls">
 			<Pagination
@@ -1469,6 +1663,17 @@
 									data-test="category-more-stats"
 								>
 									{pageContents.more.stats[lang]}
+								</button>
+									<!-- B56: item Phân tích (analytics) — mở modal thống kê nhập hàng. -->
+									<button
+									type="button"
+									class="category-more-popover__item"
+									role="menuitem"
+									disabled={formSubmitting}
+									onclick={moreOpenAnalytics}
+									data-test="category-more-analytics"
+								>
+									{pageContents.more.analyticsTitle[lang]}
 								</button>
 								<button
 									type="button"
@@ -1646,27 +1851,227 @@
 		</AlertDialog>
 	{/if}
 
-	<!-- ── B55 mục 6: AlertDialog thống kê (số danh mục con — đếm client) ── -->
+	<!-- ── B56: Modal thống kê (DataTable danh mục con — đếm client) ── -->
 	{#if categoryStatsDisplay}
-		<AlertDialog
-			bind:open={categoryStatsDisplay}
-			title={pageContents.more.statsModal[lang]}
+		<Modal
+			bind:display={categoryStatsDisplay}
+			onClose={() => (categoryStatsDisplay = false)}
+			size="lg"
+			class="supplier-modal-root"
 		>
-			<AlertDialog.Content>
-				<AlertDialog.Header variant="info">
-					<AlertDialog.Title>{pageContents.more.statsModal[lang]}</AlertDialog.Title>
-					<AlertDialog.Description>
-						«{editingCategory?.name ?? ''}» — {pageContents.more.statsChildren[lang]}:{' '}
-						{editingChildrenCount}
-					</AlertDialog.Description>
-				</AlertDialog.Header>
-				<AlertDialog.Footer>
-					<AlertDialog.Cancel data-test="category-more-stats-close">
-						{pageContents.cancel[lang]}
-					</AlertDialog.Cancel>
-				</AlertDialog.Footer>
-			</AlertDialog.Content>
-		</AlertDialog>
+		<ModalContainer>
+			<ModalHeader>
+				<div class="supplier-modal-title" bind:this={statsCrumbNavEl}>
+					{#if isMobile && statsCrumbOverflow > 0}
+						<button
+							type="button"
+							class="supplier-modal-title__more"
+							data-test="category-stats-crumb-more"
+							aria-label={pageContents.crumbMore[lang]}
+							aria-expanded={statsCrumbMoreOpen}
+							onclick={() => (statsCrumbMoreOpen = !statsCrumbMoreOpen)}
+							>
+								<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+							</button>
+							{#if statsCrumbMoreOpen}
+								<div class="supplier-crumb-popover" role="menu">
+									<button
+										type="button"
+										class="supplier-crumb-popover__item"
+										onclick={() => {
+											statsCrumbMoreOpen = false;
+											categoryStatsDisplay = false;
+											// B36: về datatable — đóng cả form (dirty-guard hỏi Discard khi dirty).
+											closeGuard.attemptClose();
+										}}
+										>
+											{pageContents.title[lang]}
+										</button>
+								</div>
+							{/if}
+						{/if}
+					{#if !isMobile || statsCrumbOverflow === 0}
+						{#if isMobile}
+							<button
+								type="button"
+								class="supplier-modal-title__label supplier-modal-title__crumb"
+								onclick={() => {
+									categoryStatsDisplay = false;
+									closeGuard.attemptClose();
+								}}
+								>
+									{pageContents.title[lang]}
+								</button>
+						{:else}
+							<span class="supplier-modal-title__label">
+								{pageContents.title[lang]}
+							</span>
+						{/if}
+					{/if}
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<button
+						type="button"
+						class="supplier-modal-title__name supplier-modal-title__crumb"
+						onclick={() => (categoryStatsDisplay = false)}
+						>
+							{editingCategory?.name ?? ''}
+						</button>
+					<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+					<span class="supplier-modal-title__name supplier-modal-title__name--active">
+						{pageContents.more.statsModal[lang]}
+					</span>
+				</div>
+			</ModalHeader>
+			<ModalBody class="modal-body">
+				<DataTable
+					data={categoryStatsChildren as unknown as Record<string, unknown>[]}
+					columns={statsChildrenColumns}
+					pageSize={20}
+					showIndex
+					visual={{ striped: true, hoverable: true }}
+					emptyLabel={pageContents.more.statsChildrenCols.empty[lang]}
+					caption={{ vi: 'Danh sách danh mục con', en: 'Child category list' }}
+				/>
+			</ModalBody>
+		</ModalContainer>
+		</Modal>
+	{/if}
+
+	<!-- ── B56: Modal phân tích nhập hàng theo danh mục (clone suppliers) ── -->
+	{#if categoryAnalyticsDisplay}
+		<Modal
+			bind:display={categoryAnalyticsDisplay}
+			onClose={() => (categoryAnalyticsDisplay = false)}
+			size="sm"
+			class="supplier-analytics-modal-root"
+		>
+		<ModalContainer>
+			<ModalHeader>
+				{#if isMobile}
+					<div class="supplier-modal-title" bind:this={anaCrumbNavEl}>
+						{#if anaCrumbOverflow > 0}
+							<button
+								type="button"
+								class="supplier-modal-title__more"
+								data-test="category-analytics-crumb-more"
+								aria-label={pageContents.crumbMore[lang]}
+								aria-expanded={anaCrumbMoreOpen}
+								onclick={() => (anaCrumbMoreOpen = !anaCrumbMoreOpen)}
+								>
+									<Icon icon={iconify['more-horiz-rounded']} size="sm" />
+								</button>
+								{#if anaCrumbMoreOpen}
+									<div class="supplier-crumb-popover" role="menu">
+										{#if anaCrumbOverflow >= 1}
+											<button
+												type="button"
+												class="supplier-crumb-popover__item"
+												onclick={() => {
+													anaCrumbMoreOpen = false;
+													categoryAnalyticsDisplay = false;
+													closeGuard.attemptClose();
+												}}
+												>
+													{pageContents.title[lang]}
+												</button>
+										{/if}
+										{#if anaCrumbOverflow >= 2}
+											<button
+												type="button"
+												class="supplier-crumb-popover__item"
+												onclick={() => {
+													anaCrumbMoreOpen = false;
+													categoryAnalyticsDisplay = false;
+													}}
+												>
+													{editingCategory?.name ?? ''}
+												</button>
+										{/if}
+									</div>
+								{/if}
+							{/if}
+							{#if anaCrumbOverflow < 1}
+								<button
+									type="button"
+									class="supplier-modal-title__label supplier-modal-title__crumb"
+									onclick={() => {
+										categoryAnalyticsDisplay = false;
+										closeGuard.attemptClose();
+									}}
+									>
+										{pageContents.title[lang]}
+									</button>
+							{/if}
+							{#if anaCrumbOverflow < 2}
+								<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+								<button
+									type="button"
+									class="supplier-modal-title__name supplier-modal-title__crumb"
+									onclick={() => (categoryAnalyticsDisplay = false)}
+									>
+										{editingCategory?.name ?? ''}
+									</button>
+							{/if}
+							<span class="supplier-modal-title__name" aria-hidden="true">›</span>
+							<span class="supplier-modal-title__name supplier-modal-title__name--active">
+								{pageContents.more.analyticsTitle[lang]}
+							</span>
+					</div>
+				{:else}
+					{pageContents.more.analyticsTitle[lang]}{editingCategory?.name ? ` — ${editingCategory.name}` : ''}
+				{/if}
+			</ModalHeader>
+			<ModalBody class="modal-body">
+				{#if categoryAnalyticsLoading}
+					<div class="history-state">{pageContents.more.analyticsLoading[lang]}</div>
+				{:else if !categoryAnalyticsData || categoryAnalyticsData.orderCount === 0}
+					<div class="history-state">{pageContents.more.analyticsEmpty[lang]}</div>
+				{:else}
+					<div class="supplier-analytics" data-test="categories-analytics-panel">
+						<div class="supplier-analytics__totals">
+							<div class="supplier-analytics__stat">
+								<span class="supplier-analytics__stat-value">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(categoryAnalyticsData.orderCount)}</span>
+								<span class="supplier-analytics__stat-label">{pageContents.more.analyticsOrderCount[lang]}</span>
+							</div>
+							<div class="supplier-analytics__stat">
+								<span class="supplier-analytics__stat-value">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(categoryAnalyticsData.totalQuantity)}</span>
+								<span class="supplier-analytics__stat-label">{pageContents.more.analyticsTotalQuantity[lang]}</span>
+							</div>
+							<div class="supplier-analytics__stat">
+								<span class="supplier-analytics__stat-value">{formatMoney(categoryAnalyticsData.totalValue)}</span>
+								<span class="supplier-analytics__stat-label">{pageContents.more.analyticsTotalValue[lang]}</span>
+							</div>
+						</div>
+						{#if categoryAnalyticsData.monthly.length > 0}
+							<div class="supplier-analytics__monthly">
+								<div class="supplier-analytics__monthly-title">{pageContents.more.analyticsMonthly[lang]}</div>
+								<table class="supplier-analytics__table">
+									<thead>
+										<tr>
+											<th>{pageContents.more.analyticsColPeriod[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColOrders[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColQty[lang]}</th>
+											<th class="num">{pageContents.more.analyticsColValue[lang]}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each categoryAnalyticsData.monthly as m (m.period)}
+											<tr>
+												<td>{m.period}</td>
+												<td class="num">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(m.orderCount)}</td>
+												<td class="num">{Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(m.quantity)}</td>
+												<td class="num">{formatMoney(m.value)}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</ModalBody>
+		</ModalContainer>
+		</Modal>
 	{/if}
 
 	<!-- ── B9: dialog hỏi khôi phục bản nháp ── -->
@@ -1750,6 +2155,38 @@
 
 		@media (max-width: 720px) {
 			padding: 1rem;
+		}
+	}
+
+	/* ── B56: Fullheight (clone suppliers) — ZERO 3 var sticky của layout: wrap
+	   tự scroll trong page (caption/th sticky bám wrap, không bám layout). ── */
+	.admin-page--fullheight {
+		height: 100%;
+		max-width: none;
+		gap: 0.75rem;
+		padding: 1rem 1.25rem;
+		transition: padding 200ms ease, gap 200ms ease;
+		--admin-header-h: 0px;
+		--admin-filters-h: 0px;
+		--admin-page-header-h: 0px;
+
+		@media (max-width: 767px) {
+			padding: 0.75rem;
+		}
+
+		@media (max-width: 767px) {
+			&.is-scrolled,
+			&.is-scrolling {
+				gap: 0.375rem;
+				padding-block: 0.5rem;
+			}
+		}
+	}
+
+	/* Cuộn tới đáy: bỏ padding block page — tối đa không gian row. */
+	.admin-page--fullheight.at-bottom {
+		@media (max-width: 767px) {
+			padding-block: 0;
 		}
 	}
 
@@ -2028,6 +2465,14 @@
 		}
 	}
 
+	/* B56: Fullheight — wrap tự cuộn dọc (scroll container của page). */
+	.admin-page--fullheight .admin-table-wrap {
+		overflow: auto;
+		/* Tắt scroll anchoring — anchor tự điều chỉnh scrollTop khi scroll-active
+		   co/giãn padding → LOOP co/giãn (bẫy suppliers Batch8). */
+		overflow-anchor: none;
+	}
+
 	/* Nút action trong cột actions DataTable (snippet actionsContent). */
 	.row-actions {
 		display: flex;
@@ -2085,6 +2530,7 @@
 		}
 	}
 
+
 	.admin-pagination {
 		display: flex;
 		flex-wrap: wrap;
@@ -2092,17 +2538,34 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 		padding-top: 0.25rem;
+	}
 
-		/* B5: sticky đáy viewport khi list dài hơn màn hình (mobile). */
-		@media (max-width: 767px) {
-			position: sticky;
-			bottom: 0;
-			z-index: 300;
-			background: var(--background, #fff);
-			padding-block: 0.5rem;
-			margin-block: -1rem;
-			/* B54: chừa chỗ phải cho FAB (không đè page-size select). */
-			padding-right: 4.75rem;
+	/* B56: pagination pop-anim (clone suppliers — flash khi hiện lại đáy). */
+	.admin-pagination {
+		transition: opacity 150ms ease;
+	}
+
+	.pagination-collapsed.admin-pagination {
+		opacity: 0;
+		pointer-events: none;
+	}
+	.pagination-pop.admin-pagination {
+		animation: pagination-pop-anim 450ms ease-out;
+	}
+	@keyframes pagination-pop-anim {
+		0% {
+			transform: scale(0.94);
+		}
+		60% {
+			transform: scale(1.04);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.pagination-pop.admin-pagination {
+			animation: none;
 		}
 	}
 
@@ -2199,6 +2662,25 @@
 	@media (max-width: 767px) {
 		.admin-page--fullheight {
 			padding-bottom: 12rem;
+		}
+
+		/* B56: chừa chỗ phải cho FAB (giữ rule cũ). */
+		.admin-pagination {
+			padding-right: 4.75rem;
+		}
+
+		/* B56: pagination LUÔN cố định sát đáy viewport mobile — clone suppliers
+		   Batch 25 (fixed bottom + background che nội dung cuộn; FAB z400 > 300). */
+		.admin-page--fullheight .admin-pagination {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 300;
+			padding: 0.5rem 0.75rem 0.75rem;
+			padding-right: 4.75rem;
+			background: var(--background);
+			border-top: 1px solid var(--default-300);
 		}
 	}
 
@@ -2389,5 +2871,115 @@
 		font-size: 0.75rem;
 		color: var(--danger, #ef4444);
 		margin-top: 0.25rem;
+	}
+
+	/* ── B56: analytics nhập hàng (clone suppliers .supplier-analytics*) ── */
+	.supplier-analytics {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.supplier-analytics__totals {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+
+	.supplier-analytics__stat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		padding: 0.5rem 0.6rem;
+		border: 1px solid var(--default-300, hsl(0 0% 88%));
+		border-radius: 0.625rem;
+		background: var(--default-50, hsl(0 0% 98%));
+		min-width: 0;
+	}
+
+	.supplier-analytics__stat-value {
+		/* Giá trị động dài (tiền tệ) — ellipsis nguyên tắc toàn hệ thống */
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-weight: 600;
+		font-size: 0.9375rem;
+		color: var(--foreground);
+	}
+
+	.supplier-analytics__stat-label {
+		font-size: 0.75rem;
+		color: var(--foreground-600);
+	}
+
+	.supplier-analytics__monthly-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--foreground);
+		margin-bottom: 0.35rem;
+	}
+
+	.supplier-analytics__table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8125rem;
+
+			th,
+			td {
+				padding: 0.3rem 0.45rem;
+				border-bottom: 1px solid var(--default-200, hsl(0 0% 92%));
+				text-align: left;
+				color: var(--foreground-600);
+			}
+
+			th {
+				font-weight: 600;
+				color: var(--foreground);
+			}
+
+			th.num,
+			td.num {
+				text-align: right;
+				font-variant-numeric: tabular-nums;
+			}
+
+			tbody tr:last-child td {
+				border-bottom: 0;
+			}
+	}
+
+	/* B56: state loading/empty cho analytics (clone suppliers .history-state).
+	   Tên class giữ nguyên — tương thích pattern chung, mỗi page scoped riêng. */
+	.history-state {
+		padding: 2rem 1rem;
+		text-align: center;
+		color: var(--color-text-muted, var(--muted, #6b7280));
+		font-size: 0.9rem;
+	}
+
+	/* B56: modal analytics full-size mobile — clone suppliers (class riêng
+	   .supplier-analytics-modal-root; desktop vẫn size sm giữa màn). */
+	@media (hover: none) and (pointer: coarse), (max-width: 640px) {
+		:global(.modal-root.supplier-analytics-modal-root) {
+			padding: 0;
+			align-items: stretch;
+		}
+		:global(.supplier-analytics-modal-root .modal-container-root) {
+			position: fixed;
+			inset: 0;
+			width: 100% !important; /* thắng .size-sm — scoped CSS load sau page CSS */
+			max-width: none;
+			max-height: none;
+			border-radius: 0;
+			margin: 0;
+		}
+		:global(.supplier-analytics-modal-root .modal-header-root) {
+			padding-block: 0.5rem;
+			justify-content: flex-start;
+		}
+		.supplier-modal-title {
+			flex: 1 1 auto;
+		}
 	}
 </style>
