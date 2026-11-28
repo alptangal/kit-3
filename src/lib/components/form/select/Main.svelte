@@ -321,7 +321,8 @@
 	const createValueDerived = $derived.by(() => configs.status.searchQuery?.trim() ?? '');
 	const showCreateOptionDerived = $derived.by(() => {
 		if (!createOptionEnabledDerived || !createValueDerived) return false;
-		if (remoteSearchDerived) return false; // remote search không ghép create-option
+		// B57 (m30031): remote search CŨNG cho create-option khi không tìm thấy
+		// (dedup trên tập option hiện có — remote trả rỗng/không khớp → hiện).
 		// Dedup EXACT (giữ dấu): chỉ so khớp khi value trùng đúng (kể cả dấu) — khác
 		// với search (nhạy dấu wildcard). foldSearch = NFD + lowercase, giữ dấu.
 		const q = foldSearch(createValueDerived);

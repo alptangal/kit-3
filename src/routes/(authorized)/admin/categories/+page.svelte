@@ -109,6 +109,15 @@
 			selected: { vi: 'Đã chọn {count}', en: 'Selected {count}' }
 		},
 		// B55 mục 6: more-menu footer modal (thống kê / xoá) — pattern suppliers.
+
+		// B57: quick-create category (pattern suppliers).
+		quickCreate: {
+			title: { vi: 'Tạo mới nhanh', en: 'Quick create' },
+			create: { vi: 'Tạo', en: 'Create' },
+			createNew: { vi: 'Tạo mới "{value}"', en: 'Create new "{value}"' },
+			nameLabel: { vi: 'Tên', en: 'Name' },
+			failed: { vi: 'Tạo mới thất bại. Vui lòng thử lại.', en: 'Failed to create. Please try again.' }
+		},
 		more: {
 			label: { vi: 'Tuỳ chọn khác', en: 'More options' },
 			stats: { vi: 'Thống kê', en: 'Statistics' },
@@ -181,6 +190,13 @@
 	let editingCategory = $state<CategoryListItem | null>(null);
 	let formErrors = $state<Record<string, string>>({});
 	let formSubmitting = $state(false);
+
+	// ── B57: quick-create category từ Select parent (pattern suppliers B49) ──
+	let quickCreateDisplay = $state(false);
+	let quickCreateName = $state('');
+	let quickCreateBusy = $state(false);
+	let quickCreateError = $state('');
+	let quickCreatePendingValue = $state('');
 
 	// ── B54: sort client (server listCategories KHÔNG sort) + prefs ──
 	const PREFS_KEY = '/admin/categories';
@@ -622,6 +638,48 @@
 			.replace(/[^\w\s-]/g, '')
 			.replace(/[\s_-]+/g, '-')
 			.replace(/^-+|-+$/g, '');
+	}
+
+	// ── B57: quick-create category từ Select parent (pattern suppliers B49) ──
+	function openQuickCreate(value: string) {
+		quickCreatePendingValue = value;
+		quickCreateName = value;
+		quickCreateError = '';
+		quickCreateDisplay = true;
+	}
+
+	function closeQuickCreate() {
+		quickCreateDisplay = false;
+		quickCreateName = '';
+		quickCreateError = '';
+	}
+
+	async function submitQuickCreate() {
+		const name = quickCreateName.trim();
+		if (!name || quickCreateBusy || !encryptionKeys) return;
+		quickCreateBusy = true;
+		quickCreateError = '';
+		try {
+			const response = await encryption.fetchSecure(
+				'/api/admin/categories/create',
+				{ method: 'POST', body: { name, slug: generateSlug(name) } },
+				encryptionKeys
+			);
+			if (response.ok) {
+				const data = response.data as { documentKey?: string } | undefined;
+				showToast(pageContents.quickCreate.title[lang]);
+				await fetchCategories();
+				if (data?.documentKey) formData.parentId = data.documentKey;
+				closeQuickCreate();
+			} else {
+				quickCreateError = resolveServerMessage(response.message, lang, pageContents.quickCreate.failed);
+			}
+		} catch (err) {
+			quickCreateError = pageContents.quickCreate.failed[lang];
+			if (import.meta.env.DEV) console.error('[categories] quick-create error:', err);
+		} finally {
+			quickCreateBusy = false;
+		}
 	}
 
 	// Auto-generate slug khi gõ name (Input không có prop oninput — theo dõi
@@ -1618,6 +1676,9 @@
 						clearable
 						placeholder={pageContents.parentNone[lang]}
 						name="category-parent"
+						allowCreate
+						createOptionLabel={pageContents.quickCreate.createNew[lang]}
+						onOptionCreate={(value) => openQuickCreate(value)}
 					/>
 				</TextField>
 
@@ -1709,9 +1770,53 @@
 		</ModalContainer>
 	</Modal>
 
+	<!-- ── B57: Quick-create category (Select parent allowCreate) ── -->
+	<Modal
+		bind:display={quickCreateDisplay}
+		onClose={closeQuickCreate}
+		onCloseAttempt={() => { if (!quickCreateBusy) closeQuickCreate(); }}
+		isDimissable
+		size="sm"
+		class="supplier-modal-root"
+	>
+		<ModalContainer>
+			<ModalHeader actionButtons={{ close: { display: !isMobile } }}>
+				{pageContents.quickCreate.title[lang]}
+			</ModalHeader>
+			<ModalBody>
+				{#if quickCreateError}
+					<div class="form-error-banner" role="alert">{quickCreateError}</div>
+				{/if}
+				<TextField name="quick-create-name">
+					<Label>{pageContents.quickCreate.nameLabel[lang]}</Label>
+					<Input
+						bind:value={quickCreateName}
+						disabled={quickCreateBusy}
+						data-test="quick-create-name"
+					/>
+				</TextField>
+			</ModalBody>
+			<ModalFooter class="modal-footer">
+				<Button
+					variant="solid"
+					color="success"
+					loading={quickCreateBusy}
+					disabled={quickCreateBusy || !quickCreateName.trim()}
+					onClick={submitQuickCreate}
+					data-test="quick-create-submit"
+				>
+					{pageContents.quickCreate.create[lang]}
+				</Button>
+				<Button variant="outline" disabled={quickCreateBusy} onClick={closeQuickCreate}>
+					{pageContents.cancel[lang]}
+				</Button>
+			</ModalFooter>
+		</ModalContainer>
+	</Modal>
+
 	<!-- ── B54: Setting modal (sort + showDeleted) — pattern suppliers B10 ── -->
 	{#if settingModalDisplay}
-		<Modal bind:display={settingModalDisplay} size="sm">
+		<Modal bind:display={settingModalDisplay} size="sm" class="supplier-modal-root">
 			<ModalContainer>
 				<ModalHeader>{pageContents.settings.title[lang]}</ModalHeader>
 				<ModalBody>
@@ -2218,8 +2323,8 @@
 		display: inline-flex;
 		align-items: center;
 		flex: 1;
-		min-width: 220px;
-		max-width: 320px;
+		min-width: 0;
+		max-width: none;
 	}
 
 	.admin-search-loading {
@@ -2430,6 +2535,17 @@
 	.setting-check {
 		display: flex;
 		align-items: center;
+	}
+
+	/* B57: banner lỗi trong quick-create modal (pattern suppliers). */
+	.form-error-banner {
+		background: var(--danger-soft, hsl(358, 62.5%, 90.6%));
+		color: var(--error);
+		border-left: 3px solid var(--error);
+		border-radius: 0.5rem;
+		padding: 0.6rem 0.85rem;
+		font-size: 0.85rem;
+		margin-bottom: 0.75rem;
 	}
 
 	.admin-state {

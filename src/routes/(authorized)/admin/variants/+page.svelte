@@ -121,8 +121,8 @@
 			product: { vi: 'Sản phẩm', en: 'Product' },
 			sortBy: { vi: 'Sắp xếp theo', en: 'Sort By' },
 			sortDirection: { vi: 'Hướng sắp xếp', en: 'Sort Direction' },
-			sortAsc: { vi: 'Tăng dần', en: 'Ascending' },
-			sortDesc: { vi: 'Giảm dần', en: 'Descending' },
+			asc: { vi: 'Tăng dần', en: 'Ascending' },
+			desc: { vi: 'Giảm dần', en: 'Descending' },
 			reset: { vi: 'Đặt lại', en: 'Reset' },
 			apply: { vi: 'Áp dụng', en: 'Apply' }
 		},
@@ -238,6 +238,8 @@
 	let settingModalDisplay = $state(false);
 	let settingSortField = $state('');
 	let settingSortDirection = $state<'asc' | 'desc'>('desc');
+	let settingProduct = $state('');
+	let settingShowDeleted = $state(false);
 	// Scroll state (ẩn bulk-bar / FAB khi cuộn)
 	let tableScrolled = $state(false);
 	// B56: at-bottom — cuộn tới đáy bảng → bỏ padding-block page (mở rộng row);
@@ -631,10 +633,14 @@
 		if (!settingModalDisplay) return;
 		settingSortField = sortField;
 		settingSortDirection = sortDirection;
+		settingProduct = selectedProduct;
+		settingShowDeleted = showDeleted;
 	});
 	const applySettingModal = () => {
 		sortField = settingSortField;
 		sortDirection = settingSortDirection === 'asc' ? 'asc' : 'desc';
+		selectedProduct = settingProduct;
+		showDeleted = settingShowDeleted;
 		settingModalDisplay = false;
 		saveDataTablePrefs(PREFS_KEY, {
 			filters: {
@@ -1684,13 +1690,14 @@
 			class:is-scrolling={scrollActive && isMobile}
 			data-suggest
 		>
-			<button type="button" class="fab fab--primary" aria-label={pageContents.addVariant[lang]} onclick={() => openCreateModal()}>
+			<button type="button" class="fab fab--primary" aria-label={pageContents.addVariant[lang]} data-test="variants-fab" onclick={() => openCreateModal()}>
 				<Icon icon={iconify['add-rounded']} size="md" />
 			</button>
 			<button
 				type="button"
 				class="fab fab--secondary"
 				aria-label={pageContents.settings.title[lang]}
+				data-test="variants-fab-setting"
 				onclick={() => {
 					settingModalDisplay = true;
 					scrollActive = false;
@@ -1702,6 +1709,7 @@
 				type="button"
 				class="fab fab--secondary"
 				aria-label={pageContents.searchPlaceholder[lang]}
+				data-test="variants-fab-search-btn"
 				onclick={() => {
 					flushSync(() => {
 						mobileSearchOpen = true;
@@ -2171,14 +2179,8 @@
 	{#if settingModalDisplay}
 		<Modal bind:display={settingModalDisplay} size="sm" class="supplier-modal-root">
 			<ModalContainer>
-				<ModalHeader actionButtons={{ close: { display: !isMobile } }}>
-					<div class="supplier-modal-title">
-						<span class="supplier-modal-title__label">{pageContents.title[lang]}</span>
-						<span class="supplier-modal-title__name" aria-hidden="true">›</span>
-						<span class="supplier-modal-title__name supplier-modal-title__name--active">
-							{pageContents.settings.title[lang]}
-						</span>
-					</div>
+				<ModalHeader>
+					<h2 class="modal-title">{pageContents.settings.title[lang]}</h2>
 				</ModalHeader>
 				<ModalBody class="modal-body">
 					<TextField name="variants-setting-product">
@@ -2186,14 +2188,14 @@
 						<Select
 							class="admin-filter-select"
 							size="sm"
-							bind:value={selectedProduct}
+							bind:value={settingProduct}
 							options={settingProductOptions}
 							remoteSearch
 							loadOptions={loadFormProductOptions}
 							searchable
 							clearable
 							placeholder={pageContents.allProducts[lang]}
-							fullscreen={isMobile}
+							fullscreen
 						/>
 					</TextField>
 					<TextField name="variants-setting-sort">
@@ -2204,7 +2206,8 @@
 							bind:value={settingSortField}
 							options={settingSortOptions}
 							clearable
-							fullscreen={isMobile}
+							placeholder={pageContents.settings.sortBy[lang]}
+							fullscreen
 						/>
 					</TextField>
 					<TextField name="variants-setting-direction">
@@ -2214,26 +2217,28 @@
 							size="sm"
 							bind:value={settingSortDirection}
 							options={[
-								{ value: 'asc', label: pageContents.settings.sortAsc[lang] },
-								{ value: 'desc', label: pageContents.settings.sortDesc[lang] }
+								{ value: 'asc', label: pageContents.settings.asc[lang] },
+								{ value: 'desc', label: pageContents.settings.desc[lang] }
 							]}
-							fullscreen={isMobile}
+							fullscreen
 						/>
 					</TextField>
-					<Checkbox bind:checked={showDeleted}>
-						{pageContents.showDeleted[lang]}
-					</Checkbox>
+					<div class="setting-check">
+						<Checkbox bind:checked={settingShowDeleted}>
+							{pageContents.showDeleted[lang]}
+						</Checkbox>
+					</div>
 				</ModalBody>
 				<ModalFooter class="modal-footer">
 					<Button
 						color="secondary"
 						variant="outline"
-						disabled={selectedProduct === '' && settingSortField === ''}
+						disabled={settingProduct === '' && settingSortField === '' && !settingShowDeleted}
 						onclick={() => {
 							settingSortField = '';
 							settingSortDirection = 'desc';
-							selectedProduct = '';
-							showDeleted = false;
+							settingProduct = '';
+							settingShowDeleted = false;
 						}}
 					>
 						{pageContents.settings.reset[lang]}
@@ -2673,6 +2678,9 @@
 		position: relative;
 		display: inline-flex;
 		align-items: center;
+		flex: 1;
+		min-width: 0;
+		max-width: none;
 	}
 
 	.admin-actions-group {
@@ -3428,6 +3436,11 @@
 	.supplier-modal-title__name[aria-hidden='true'] {
 		flex: none;
 		overflow: visible;
+	}
+	.modal-title {
+		font-size: 1.125rem;
+		font-weight: 600;
+		color: var(--foreground);
 	}
 	@media (hover: none), (pointer: coarse), (max-width: 640px) {
 		:global(.supplier-modal-root .modal-header-root) {

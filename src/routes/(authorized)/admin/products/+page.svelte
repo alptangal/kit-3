@@ -118,7 +118,11 @@ interface ProductListItem {
 			filterBrand: { vi: 'Thương hiệu', en: 'Brand' },
 			showDeleted: { vi: 'Hiện đã xoá', en: 'Show deleted' },
 			apply: { vi: 'Áp dụng', en: 'Apply' },
-			reset: { vi: 'Đặt lại', en: 'Reset' }
+			reset: { vi: 'Đặt lại', en: 'Reset' },
+			sortBy: { vi: 'Sắp xếp theo', en: 'Sort by' },
+			sortDirection: { vi: 'Chiều sắp xếp', en: 'Sort direction' },
+			sortAsc: { vi: 'Tăng dần', en: 'Ascending' },
+			sortDesc: { vi: 'Giảm dần', en: 'Descending' }
 		},
 		bulk: {
 			selected: { vi: 'Đã chọn {count}', en: '{count} selected' },
@@ -418,6 +422,10 @@ let searching = $state(false);
 	let settingCategory = $state('');
 	let settingBrand = $state('');
 	let settingShowDeleted = $state(false);
+	let settingSortField = $state('');
+	let settingSortDirection = $state<'asc' | 'desc'>('desc');
+	let sortField = $state('');
+	let sortDirection = $state<'asc' | 'desc'>('desc');
 
 	// ── B54: modal crumb more-popover state ──
 	// B56: breadcrumb modal Thống kê (state riêng — modal khác form modal).
@@ -705,6 +713,15 @@ let searching = $state(false);
 	});
 
 	// Fetch products — fetchSecure POST (endpoint mã hoá RSA).
+	// B57: sort client-side persist qua settings (pattern brands onBrandsSortChange).
+	function onProductsSortChange(field: string, direction: "asc" | "desc") {
+		sortField = field;
+		sortDirection = direction === "asc" ? "asc" : "desc";
+		saveDataTablePrefs('/admin/products', {
+			sort: sortField ? { field: sortField, direction: sortDirection } : undefined
+		});
+	}
+
 	async function fetchProducts() {
 		if (!encryptionKeys) return;
 		loading = true;
@@ -966,6 +983,30 @@ let searching = $state(false);
 			accessor: (row) => formatDate((row as unknown as ProductListItem).updatedAt),
 			noHighlight: true
 		}
+	]);
+
+	// B57: sort options cho settings modal — pattern brands settingSortOptions (L768).
+	const settingSortOptions = $derived(
+		['product', 'category', 'brand', 'price', 'status', 'updated'].map((id) => ({
+			value: id,
+			label:
+				id === 'product'
+					? pageContents.productCol[lang]
+					: id === 'category'
+						? pageContents.categoryLabel[lang]
+						: id === 'brand'
+							? pageContents.brandLabel[lang]
+							: id === 'price'
+								? pageContents.statsModal.priceCol[lang]
+								: id === 'status'
+									? pageContents.statsModal.statusCol[lang]
+									: pageContents.updated[lang]
+			})),
+	);
+
+	const sortDirectionOptions = $derived([
+		{ value: 'asc', label: pageContents.settings.sortAsc?.[lang] ?? 'Ascending' },
+		{ value: 'desc', label: pageContents.settings.sortDesc?.[lang] ?? 'Descending' }
 	]);
 
 	// Gộp class: defaultStyles snippet là (string|undefined)[] — lọc undefined
@@ -1350,8 +1391,11 @@ let searching = $state(false);
 			type="button"
 			class="fab fab--secondary"
 			aria-label={pageContents.settings.title[lang]}
+			data-test="products-fab-setting"
 			onclick={() => {
 				settingCategory = selectedCategory;
+		settingSortField = sortField;
+		settingSortDirection = sortDirection;
 				settingBrand = selectedBrand;
 				settingShowDeleted = showDeleted;
 				settingModalDisplay = true;
@@ -1364,6 +1408,7 @@ let searching = $state(false);
 			type="button"
 			class="fab fab--secondary"
 			aria-label={pageContents.search[lang]}
+			data-test="products-fab-search-btn"
 			onclick={() => {
 				flushSync(() => {
 					mobileSearchOpen = true;
@@ -1389,7 +1434,10 @@ let searching = $state(false);
 			pageSize={pageSize}
 			showPagination={false}
 			sortable
+			bind:sortColumn={sortField}
+			bind:sortDirection={sortDirection}
 			searchQuery={searchQuery ?? ''}
+			onSortChange={onProductsSortChange}
 			resizable={{ enabled: true, fit: true }}
 			loading={loading || searching}
 			visual={{ striped: true, hoverable: true }}
@@ -1980,6 +2028,7 @@ let searching = $state(false);
 								size="sm"
 								bind:value={settingCategory}
 								options={categorySelectOptions}
+								data-test="products-setting-category"
 								searchable
 								clearable
 								placeholder={pageContents.allCategories[lang]}
@@ -1993,10 +2042,34 @@ let searching = $state(false);
 								size="sm"
 								bind:value={settingBrand}
 								options={brandSelectOptions}
+								data-test="products-setting-brand"
 								searchable
 								clearable
 								placeholder={pageContents.allBrands[lang]}
 								fullscreen
+							/>
+						</TextField>
+						<TextField name="products-setting-sort">
+							<Label>{pageContents.settings.sortBy[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingSortField}
+								options={settingSortOptions}
+								clearable
+								placeholder={pageContents.settings.sortBy[lang]}
+								data-test="products-setting-sort"
+								fullscreen
+							/>
+						</TextField>
+						<TextField name="products-setting-direction">
+							<Label>{pageContents.settings.sortDirection[lang]}</Label>
+							<Select
+								class="admin-filter-select"
+								size="sm"
+								bind:value={settingSortDirection}
+								options={sortDirectionOptions}
+								data-test="products-setting-direction"
 							/>
 						</TextField>
 						<div class="setting-check">
@@ -2010,11 +2083,13 @@ let searching = $state(false);
 					<Button
 						color="secondary"
 						variant="outline"
-						disabled={settingCategory === '' && settingBrand === '' && !settingShowDeleted}
+						disabled={settingCategory === '' && settingBrand === '' && !settingShowDeleted && settingSortField === ''}
 						onClick={() => {
 							settingCategory = '';
 							settingBrand = '';
 							settingShowDeleted = false;
+								settingSortField = '';
+								settingSortDirection = 'desc';
 						}}
 						data-test="products-setting-reset"
 					>
@@ -2023,6 +2098,8 @@ let searching = $state(false);
 					<Button
 						color="primary"
 						onClick={() => {
+				sortField = settingSortField;
+				sortDirection = settingSortDirection === "asc" ? "asc" : "desc";
 							selectedCategory = settingCategory;
 							selectedBrand = settingBrand;
 							showDeleted = settingShowDeleted;

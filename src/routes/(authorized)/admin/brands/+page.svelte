@@ -10,7 +10,7 @@
 	// more-popover + skeleton. Sort CHỐT client-side (listBrands không sort server).
 	import { onMount, flushSync, tick } from 'svelte';
 	import { Button, DataTable, Pagination, AlertDialog, Spinner } from '$components/element';
-	import { ImageUpload, Input, Label, TextField, Select, Textarea } from '$components/form';
+	import { ImageUpload, Input, Label, TextField, Select, Textarea, Checkbox } from '$components/form';
 	import { Modal } from '$components/modal';
 	import { ModalContainer } from '$components/modal/Container';
 	import { ModalHeader } from '$components/modal/Header';
@@ -279,13 +279,12 @@
 	let settingModalDisplay = $state(false);
 	let settingSortField = $state('');
 	let settingSortDirection = $state<'asc' | 'desc'>('desc');
-	// Select value là string → draft showDeleted dạng 'true'/'false' (convert khi Apply).
-	let settingShowDeleted = $state<'true' | 'false'>('false');
+	let settingShowDeleted = $state(false);
 	$effect(() => {
 		if (settingModalDisplay) {
 			settingSortField = sortField;
 			settingSortDirection = sortDirection;
-			settingShowDeleted = showDeleted ? 'true' : 'false';
+			settingShowDeleted = showDeleted;
 		}
 	});
 
@@ -358,7 +357,7 @@
 	function applyBrandsSettings() {
 		sortField = settingSortField;
 		sortDirection = settingSortDirection === 'asc' ? 'asc' : 'desc';
-		showDeleted = settingShowDeleted === 'true';
+		showDeleted = settingShowDeleted;
 		settingModalDisplay = false;
 		saveDataTablePrefs(PREFS_KEY, {
 			filters: { showDeleted: showDeleted === true ? true : null },
@@ -1468,6 +1467,7 @@
 		class="fab-group"
 		class:fab-hidden={isMobile && !tableScrolled}
 		class:is-scrolling={scrollActive && isMobile}
+		data-suggest
 	>
 		<button
 			type="button"
@@ -1723,20 +1723,11 @@
 				<ModalHeader>{pageContents.settings.title[lang]}</ModalHeader>
 				<ModalBody>
 					<div class="setting-form" data-test="brands-setting-modal">
-						<TextField name="brands-setting-show-deleted">
-							<Label>{pageContents.settings.showDeleted[lang]}</Label>
-							<Select
-								class="admin-filter-select"
-								size="sm"
-								bind:value={settingShowDeleted}
-								fullscreen={isMobile}
-								options={[
-									{ value: 'false', label: lang === 'vi' ? 'Không' : 'No' },
-									{ value: 'true', label: lang === 'vi' ? 'Có' : 'Yes' }
-								]}
-								data-test="brands-setting-show-deleted"
-							/>
-						</TextField>
+						<div class="setting-check">
+							<Checkbox bind:checked={settingShowDeleted} data-test="brands-setting-show-deleted">
+								<Label>{pageContents.settings.showDeleted[lang]}</Label>
+							</Checkbox>
+						</div>
 						<TextField name="brands-setting-sort">
 							<Label>{pageContents.settings.sortBy[lang]}</Label>
 							<Select
@@ -1745,7 +1736,7 @@
 								bind:value={settingSortField}
 								options={settingSortOptions}
 								clearable
-								fullscreen={isMobile}
+								fullscreen
 								placeholder={pageContents.settings.sortBy[lang]}
 								data-test="brands-setting-sort"
 							/>
@@ -1760,7 +1751,7 @@
 									{ value: 'asc', label: pageContents.settings.asc[lang] },
 									{ value: 'desc', label: pageContents.settings.desc[lang] }
 								]}
-								fullscreen={isMobile}
+								fullscreen
 								data-test="brands-setting-direction"
 							/>
 						</TextField>
@@ -1770,11 +1761,11 @@
 					<Button
 						color="secondary"
 						variant="outline"
-						disabled={settingSortField === '' && settingShowDeleted !== 'true'}
+						disabled={settingSortField === '' && !settingShowDeleted}
 						onClick={() => {
 							settingSortField = '';
 							settingSortDirection = 'desc';
-							settingShowDeleted = 'false';
+							settingShowDeleted = false;
 						}}
 					>
 						{pageContents.settings.reset[lang]}
@@ -2382,7 +2373,7 @@
 		align-items: center;
 		flex: 1;
 		min-width: 0;
-		max-width: 420px;
+		max-width: none;
 	}
 
 	/* Select filter trong captionTools (brands chưa dùng — giữ pattern suppliers
@@ -2778,6 +2769,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+	}
+	.setting-check {
+		display: flex;
+		align-items: center;
 	}
 	/* ── B56: analytics nhập hàng (clone suppliers .supplier-analytics*) ── */
 	.supplier-analytics {
